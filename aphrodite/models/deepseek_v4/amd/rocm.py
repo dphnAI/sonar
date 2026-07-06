@@ -99,10 +99,7 @@ def _combine_topk_swa_indices_kernel(
 
         swa_offset = tl.arange(0, WINDOW_SIZE)
         tl.store(
-            combined_indices_ptr
-            + token_idx * combined_indices_stride
-            + topk_len
-            + swa_offset,
+            combined_indices_ptr + token_idx * combined_indices_stride + topk_len + swa_offset,
             M * batch_idx + N + swa_offset + pos - swa_len + 1 - gather_start,
             mask=swa_offset < swa_len,
         )
@@ -135,9 +132,7 @@ def combine_topk_swa_indices(
         dtype=torch.int32,
         device=topk_indices.device,
     )
-    combined_lens = torch.empty(
-        num_tokens, dtype=torch.int32, device=topk_indices.device
-    )
+    combined_lens = torch.empty(num_tokens, dtype=torch.int32, device=topk_indices.device)
 
     num_workers = 128
     _combine_topk_swa_indices_kernel[(num_reqs, num_workers)](
@@ -376,9 +371,7 @@ def combine_topk_swa_indices_ragged(
     topk_indices = topk_indices.reshape(topk_indices.shape[0], -1).contiguous()
     num_tokens = topk_indices.shape[0]
     num_reqs = seq_lens.shape[0]
-    combined_lens = torch.empty(
-        num_tokens, dtype=torch.int32, device=topk_indices.device
-    )
+    combined_lens = torch.empty(num_tokens, dtype=torch.int32, device=topk_indices.device)
 
     num_workers = 128
     _compute_combined_lens_kernel[(num_reqs, num_workers)](
@@ -398,9 +391,7 @@ def combine_topk_swa_indices_ragged(
     )
     if combined_ragged.numel() > 0:
         block = 128
-        _combine_topk_swa_indices_ragged_kernel[
-            (num_reqs, num_workers, triton.cdiv(topk + window_size, block))
-        ](
+        _combine_topk_swa_indices_ragged_kernel[(num_reqs, num_workers, triton.cdiv(topk + window_size, block))](
             combined_ragged,
             combined_indptr,
             topk_indices,
@@ -543,11 +534,7 @@ class DeepseekV4ROCMAiterSparseSWAMetadataBuilder(DeepseekSparseSWAMetadataBuild
 
         ragged_indices = None
         ragged_indptr = None
-        if (
-            base.num_decode_tokens > 0
-            and base.decode_swa_indices is not None
-            and base.decode_swa_lens is not None
-        ):
+        if base.num_decode_tokens > 0 and base.decode_swa_indices is not None and base.decode_swa_lens is not None:
             ragged_indices, ragged_indptr = build_ragged_indices_from_dense(
                 base.decode_swa_indices.reshape(base.num_decode_tokens, -1),
                 base.decode_swa_lens,
@@ -607,12 +594,8 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
         positions: torch.Tensor,
         output: torch.Tensor,
     ) -> None:
-        assert output.shape == q.shape, (
-            f"output buffer shape {output.shape} must match q shape {q.shape}"
-        )
-        assert output.dtype == q.dtype, (
-            f"output buffer dtype {output.dtype} must match q dtype {q.dtype}"
-        )
+        assert output.shape == q.shape, f"output buffer shape {output.shape} must match q shape {q.shape}"
+        assert output.dtype == q.dtype, f"output buffer dtype {output.dtype} must match q dtype {q.dtype}"
 
         forward_context = get_forward_context()
         attn_metadata = forward_context.attn_metadata
@@ -622,12 +605,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
             # gather workspace _forward_prefill would; the dequantize / topk
             # / sparse_fwd kernels are skipped this step.
             swa_only = self.compress_ratio <= 1
-            N = (
-                0
-                if swa_only
-                else (self.max_model_len + self.compress_ratio - 1)
-                // self.compress_ratio
-            )
+            N = 0 if swa_only else (self.max_model_len + self.compress_ratio - 1) // self.compress_ratio
             M = N + self.window_size + self.max_num_batched_tokens
             current_workspace_manager().get_simultaneous(
                 ((self.PREFILL_CHUNK_SIZE, M, q.shape[-1]), torch.bfloat16),
@@ -781,9 +759,7 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
             N = 0
 
         M = N + self.window_size + self.max_num_batched_tokens
-        num_chunks = (num_prefills + self.PREFILL_CHUNK_SIZE - 1) // (
-            self.PREFILL_CHUNK_SIZE
-        )
+        num_chunks = (num_prefills + self.PREFILL_CHUNK_SIZE - 1) // (self.PREFILL_CHUNK_SIZE)
 
         workspace_manager = current_workspace_manager()
         kv = workspace_manager.get_simultaneous(
@@ -821,18 +797,12 @@ class DeepseekV4ROCMAiterMLAAttention(DeepseekV4Attention):
                 use_fnuz=current_platform.is_fp8_fnuz(),
             )
 
-            query_start = (
-                query_start_loc_cpu[num_decodes + chunk_start] - prefill_token_base
-            )
-            query_end = (
-                query_start_loc_cpu[num_decodes + chunk_end] - prefill_token_base
-            )
+            query_start = query_start_loc_cpu[num_decodes + chunk_start] - prefill_token_base
+            query_end = query_start_loc_cpu[num_decodes + chunk_end] - prefill_token_base
 
             combined_indices, combined_lens = combine_topk_swa_indices(
                 topk_indices[query_start:query_end],
-                query_start_loc[
-                    num_decodes + chunk_start : num_decodes + chunk_end + 1
-                ],
+                query_start_loc[num_decodes + chunk_start : num_decodes + chunk_end + 1],
                 seq_lens[chunk_start:chunk_end],
                 gather_lens[chunk_start:chunk_end],
                 self.window_size,

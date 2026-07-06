@@ -50,8 +50,7 @@ def lmcache_get_or_create_config() -> V1Config:
                         " configurations from the environment variables."
                     )
                     logger.warning(
-                        "You can set the configuration file through "
-                        "the environment variable: LMCACHE_CONFIG_FILE"
+                        "You can set the configuration file through the environment variable: LMCACHE_CONFIG_FILE"
                     )
                     _config_instance = LMCacheEngineConfig.from_env()
                 else:
@@ -90,16 +89,10 @@ def apply_mm_hashes_to_token_ids(
 
 
 def mla_enabled(model_config: "ModelConfig") -> bool:
-    return (
-        hasattr(model_config, "use_mla")
-        and isinstance(model_config.use_mla, bool)
-        and model_config.use_mla
-    )
+    return hasattr(model_config, "use_mla") and isinstance(model_config.use_mla, bool) and model_config.use_mla
 
 
-def create_lmcache_metadata(
-    aphrodite_config=None, model_config=None, parallel_config=None, cache_config=None
-):
+def create_lmcache_metadata(aphrodite_config=None, model_config=None, parallel_config=None, cache_config=None):
     """
     Create LMCacheEngineMetadata from Aphrodite configuration.
 
@@ -195,9 +188,7 @@ def extract_mm_features(
         May be `([], [])` when no multimodal data is present.
     """
     if getattr(request, "mm_features", None):
-        mm_hashes, mm_positions = zip(
-            *((f.identifier, f.mm_position) for f in request.mm_features)
-        )
+        mm_hashes, mm_positions = zip(*((f.identifier, f.mm_position) for f in request.mm_features))
         return (list(mm_hashes), list(mm_positions))
     elif getattr(request, "mm_hashes", None):
         if modify:

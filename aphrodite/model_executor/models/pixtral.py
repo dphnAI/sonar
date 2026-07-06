@@ -186,15 +186,9 @@ class PixtralDummyInputsBuilder(BaseDummyInputsBuilder[PixtralProcessingInfo]):
         tokenizer = self.info.get_tokenizer()
 
         dummy_text = self.get_dummy_text(mm_counts)
-        dummy_mm_data = (
-            self.get_dummy_mm_data(seq_len, mm_counts, mm_options)
-            if mm_data is None
-            else mm_data
-        )
+        dummy_mm_data = self.get_dummy_mm_data(seq_len, mm_counts, mm_options) if mm_data is None else mm_data
         dummy_mm_items = self.info.parse_mm_data(dummy_mm_data)
-        dummy_images = (
-            [] if "image" not in dummy_mm_data else dummy_mm_items["image"].get_all()
-        )
+        dummy_images = [] if "image" not in dummy_mm_data else dummy_mm_items["image"].get_all()
 
         request = ChatCompletionRequest(
             messages=[
@@ -291,9 +285,7 @@ class PixtralMultiModalProcessor(BaseMultiModalProcessor[PixtralProcessingInfo])
     info=PixtralProcessingInfo,
     dummy_inputs=PixtralDummyInputsBuilder,
 )
-class PixtralForConditionalGeneration(
-    nn.Module, SupportsLoRA, SupportsEagle3, SupportsMultiModal, SupportsPP
-):
+class PixtralForConditionalGeneration(nn.Module, SupportsLoRA, SupportsEagle3, SupportsMultiModal, SupportsPP):
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
             "model.language_model.": "language_model.model.",
@@ -327,9 +319,7 @@ class PixtralForConditionalGeneration(
 
         dataclass_fields = {field.name for field in fields(VisionEncoderArgs)}
         vision_args = {
-            key: value
-            for key, value in self.config.vision_config.to_dict().items()
-            if key in dataclass_fields
+            key: value for key, value in self.config.vision_config.to_dict().items() if key in dataclass_fields
         }
 
         self.vision_args = VisionEncoderArgs(**vision_args)
@@ -361,17 +351,11 @@ class PixtralForConditionalGeneration(
                 if self.vision_args.mm_projector_id == PATCH_MERGE
                 else None
             )
-            self.vision_language_adapter = VisionLanguageAdapter(
-                self.vision_args, dim=config.text_config.hidden_size
-            )
+            self.vision_language_adapter = VisionLanguageAdapter(self.vision_args, dim=config.text_config.hidden_size)
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> PixtralImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> PixtralImagePixelInputs | None:
         images = kwargs.pop("images", None)
         if images is None:
             return None
@@ -394,17 +378,9 @@ class PixtralForConditionalGeneration(
         if self.patch_merger is not None:
             patch_size = self.vision_args.patch_size
             spatial_merge_size_square = self.vision_args.spatial_merge_size**2
-            img_patch_dims = [
-                (img.shape[1] // patch_size, img.shape[2] // patch_size)
-                for img in images
-            ]
-            feature_sizes = [
-                feature_size // spatial_merge_size_square
-                for feature_size in feature_sizes
-            ]
-            image_features = self.patch_merger(
-                image_features, image_sizes=img_patch_dims
-            )
+            img_patch_dims = [(img.shape[1] // patch_size, img.shape[2] // patch_size) for img in images]
+            feature_sizes = [feature_size // spatial_merge_size_square for feature_size in feature_sizes]
+            image_features = self.patch_merger(image_features, image_sizes=img_patch_dims)
         image_embeds = self.vision_language_adapter(image_features)
         image_embeds = torch.split(image_embeds, feature_sizes)
         return image_embeds
@@ -483,9 +459,7 @@ class PixtralForConditionalGeneration(
             return weight[0].startswith(("vision_encoder", "vision_tower"))
 
         def is_vision_lang_adapter_weights(weight: tuple[str, torch.Tensor]):
-            return weight[0].startswith(
-                ("vision_language_adapter", "multi_modal_projector")
-            )
+            return weight[0].startswith(("vision_language_adapter", "multi_modal_projector"))
 
         def is_patch_merger(weight: tuple[str, torch.Tensor]):
             return weight[0].startswith("patch_merger")
@@ -493,25 +467,13 @@ class PixtralForConditionalGeneration(
         def is_pre_mm_projector_norm(weight: tuple[str, torch.Tensor]):
             return weight[0].startswith("pre_mm_projector_norm")
 
-        vision_encoder_dict = (
-            dict(self.vision_encoder.named_parameters())
-            if self.vision_encoder is not None
-            else {}
-        )
-        patch_merger_dict = (
-            dict(self.patch_merger.named_parameters())
-            if self.patch_merger is not None
-            else {}
-        )
+        vision_encoder_dict = dict(self.vision_encoder.named_parameters()) if self.vision_encoder is not None else {}
+        patch_merger_dict = dict(self.patch_merger.named_parameters()) if self.patch_merger is not None else {}
         pre_mm_projector_norm_dict = (
-            dict(self.pre_mm_projector_norm.named_parameters())
-            if self.pre_mm_projector_norm is not None
-            else {}
+            dict(self.pre_mm_projector_norm.named_parameters()) if self.pre_mm_projector_norm is not None else {}
         )
         vision_lang_adapter_dict = (
-            dict(self.vision_language_adapter.named_parameters())
-            if self.vision_language_adapter is not None
-            else {}
+            dict(self.vision_language_adapter.named_parameters()) if self.vision_language_adapter is not None else {}
         )
 
         def llm_weights_generator():
@@ -539,18 +501,14 @@ class PixtralForConditionalGeneration(
 
                         param = vision_encoder_dict.get(trimmed_name)
                         if param is not None:
-                            weight_loader = getattr(
-                                param, "weight_loader", default_weight_loader
-                            )
+                            weight_loader = getattr(param, "weight_loader", default_weight_loader)
                             weight_loader(param, w)
                 elif is_patch_merger((name, w)):
                     if _is_layer_none_or_staged(self.patch_merger):
                         continue
                     trimmed_name = ".".join(name.split(".")[1:])
                     param = patch_merger_dict[trimmed_name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, w)
                 elif is_pre_mm_projector_norm((name, w)):
                     if _is_layer_none_or_staged(self.pre_mm_projector_norm):
@@ -565,9 +523,7 @@ class PixtralForConditionalGeneration(
                     trimmed_name = ".".join(name.split(".")[1:])
                     param = vision_lang_adapter_dict.get(trimmed_name)
                     if param is not None:
-                        weight_loader = getattr(
-                            param, "weight_loader", default_weight_loader
-                        )
+                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
                         weight_loader(param, w)
                 else:
                     name = name.removeprefix("language_model.")
@@ -805,9 +761,7 @@ class TransformerBlock(nn.Module):
         mask: torch.Tensor,
         freqs_cis: torch.Tensor,
     ) -> torch.Tensor:
-        r = self.attention.forward(
-            self.attention_norm(x), mask=mask, freqs_cis=freqs_cis
-        )
+        r = self.attention.forward(self.attention_norm(x), mask=mask, freqs_cis=freqs_cis)
         h = x + r
         r = self.feed_forward.forward(self.ffn_norm(h))
         out = h + r
@@ -933,9 +887,7 @@ class VisionTransformer(nn.Module):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [
-            self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in images
-        ]
+        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in images]
 
         patch_embeds = [p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list]
         embed_sizes = [p.shape[1] for p in patch_embeds]
@@ -958,9 +910,7 @@ class VisionTransformer(nn.Module):
                 generate_block_attention_mask,
             )
 
-            mask = generate_block_attention_mask(
-                [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
-            )
+            mask = generate_block_attention_mask([p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds)
         out = self.transformer(patch_embeds, mask=mask, freqs_cis=freqs_cis)
 
         # squeeze dim 0 and split into separate tensors for each image
@@ -978,9 +928,7 @@ class VisionLanguageAdapter(nn.Module):
             return_bias=False,
         )
         self.gelu = nn.GELU()
-        self.w_out = ReplicatedLinear(
-            dim, dim, bias=args.adapter_bias, return_bias=False
-        )
+        self.w_out = ReplicatedLinear(dim, dim, bias=args.adapter_bias, return_bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.w_out(self.gelu(self.w_in(x)))
@@ -1004,13 +952,9 @@ class PatchMerger(nn.Module):
         self.spatial_merge_size = spatial_merge_size
         self.mlp_input_dim = mlp_input_dim
 
-        self.merging_layer = ReplicatedLinear(
-            mlp_input_dim, vision_encoder_dim, bias=use_mlp_bias, return_bias=False
-        )
+        self.merging_layer = ReplicatedLinear(mlp_input_dim, vision_encoder_dim, bias=use_mlp_bias, return_bias=False)
 
-    def forward(
-        self, x: torch.Tensor, image_sizes: list[tuple[int, int]]
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, image_sizes: list[tuple[int, int]]) -> torch.Tensor:
         # image_sizes specified in tokens
         assert sum([h * w for h, w in image_sizes]) == len(x)
 
@@ -1047,12 +991,8 @@ class PatchMerger(nn.Module):
         permuted_tensor: list[torch.Tensor] = []
         for grid in sub_grids:
             n_patches = grid.shape[-1]
-            permuted_tensor.append(
-                grid.view(-1, n_patches).t()
-            )  # n_patches x d * sub_grid_size * sub_grid_size
-        return torch.cat(
-            permuted_tensor, dim=0
-        )  # (N / spatial_merge_size ** 2, d * spatial_merge_size ** 2)
+            permuted_tensor.append(grid.view(-1, n_patches).t())  # n_patches x d * sub_grid_size * sub_grid_size
+        return torch.cat(permuted_tensor, dim=0)  # (N / spatial_merge_size ** 2, d * spatial_merge_size ** 2)
 
 
 def get_sub_grids(
@@ -1069,12 +1009,8 @@ def get_sub_grids(
     for image_index, image_tokens in enumerate(x.split(tokens_per_image)):
         # Reshape image_tokens into a 2D grid
         h, w = image_sizes[image_index]
-        image_grid = image_tokens.view(h, w, d).permute(2, 0, 1)[
-            None, :, :, :
-        ]  # 1 x d x h x w
-        sub_grids = torch.nn.functional.unfold(
-            image_grid, kernel_size=sub_grid_size, stride=sub_grid_size
-        )
+        image_grid = image_tokens.view(h, w, d).permute(2, 0, 1)[None, :, :, :]  # 1 x d x h x w
+        sub_grids = torch.nn.functional.unfold(image_grid, kernel_size=sub_grid_size, stride=sub_grid_size)
         sub_grids = sub_grids.view(
             1, d, sub_grid_size, sub_grid_size, -1
         )  # 1 x d x sub_grid_size x sub_grid_size x n_patches
@@ -1217,9 +1153,7 @@ class PixtralHFAttention(nn.Module):
             disable_tp=use_data_parallel,
         )
 
-        self.tp_size = (
-            1 if use_data_parallel else get_tensor_model_parallel_world_size()
-        )
+        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
         self.n_heads = divide(config.num_attention_heads, self.tp_size)
 
     def forward(
@@ -1247,9 +1181,7 @@ class PixtralHFAttention(nn.Module):
             out = xops.memory_efficient_attention(q, k, v, attn_bias=attention_mask)
         else:
             v = v.transpose(1, 2)
-            out = nn.functional.scaled_dot_product_attention(
-                q, k, v, attn_mask=attention_mask
-            )
+            out = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attention_mask)
             out = out.transpose(1, 2)
 
         out = out.reshape(batch, patches, self.n_heads * self.head_dim)
@@ -1412,9 +1344,7 @@ class PixtralHFVisionModel(nn.Module):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [
-            self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in pixel_values
-        ]
+        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in pixel_values]
 
         patch_embeds = [p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list]
         embed_sizes = [p.shape[1] for p in patch_embeds]

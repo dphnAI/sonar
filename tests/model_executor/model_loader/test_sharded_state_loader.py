@@ -52,9 +52,7 @@ def test_filter_subtensors():
 
 @pytest.fixture(scope="module")
 def llama_3p2_1b_files():
-    input_dir = snapshot_download(
-        "meta-llama/Llama-3.2-1B-Instruct", ignore_patterns=["*.bin*", "original/*"]
-    )
+    input_dir = snapshot_download("meta-llama/Llama-3.2-1B-Instruct", ignore_patterns=["*.bin*", "original/*"])
 
     yield input_dir
 
@@ -68,9 +66,7 @@ def _run_writer(input_dir, output_dir, weights_patterns, **kwargs):
     # Copy metadata files to output directory
     for file in os.listdir(input_dir):
         if os.path.isdir(os.path.join(input_dir, file)):
-            shutil.copytree(
-                os.path.join(input_dir, file), os.path.join(output_dir, file)
-            )
+            shutil.copytree(os.path.join(input_dir, file), os.path.join(output_dir, file))
         elif not any(fnmatch.fnmatch(file, ext) for ext in weights_patterns):
             shutil.copy(os.path.join(input_dir, file), output_dir)
 
@@ -85,9 +81,7 @@ def _run_generate(input_dir, queue: mp.Queue, **kwargs):
 
 @pytest.mark.parametrize("enable_lora", [False, True])
 @pytest.mark.parametrize("tp_size", [1, 2])
-def test_sharded_state_loader(
-    enable_lora, tp_size, num_gpus_available, llama_3p2_1b_files
-):
+def test_sharded_state_loader(enable_lora, tp_size, num_gpus_available, llama_3p2_1b_files):
     if num_gpus_available < tp_size:
         pytest.skip(f"Not enough GPUs for tensor parallelism {tp_size}")
 

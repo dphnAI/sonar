@@ -6,17 +6,15 @@ import pytest
 import regex as re
 from transformers import AutoModel
 
-from tests.models.utils import check_logprobs_close
 from aphrodite.assets.image import ImageAsset
 from aphrodite.logprobs import Logprob, SampleLogprobs
 from aphrodite.tokenizers import TokenizerLike
+from tests.models.utils import check_logprobs_close
 
-from ....conftest import HfRunner, PromptImageInput, AphroditeRunner
+from ....conftest import AphroditeRunner, HfRunner, PromptImageInput
 
 IMAGE = ImageAsset("paper-11").pil_image_ext(ext="png").convert("RGB")
-PROMPT = (
-    "</s><s><predict_bbox><predict_classes><output_markdown><predict_no_text_in_pic>"
-)
+PROMPT = "</s><s><predict_bbox><predict_classes><output_markdown><predict_no_text_in_pic>"
 
 
 class DummyLogprobs(dict[int, Logprob]):
@@ -94,12 +92,8 @@ def run_test(
 
     for hf_outputs, aphrodite_outputs in zip(hf_outputs_per_case, aphrodite_outputs_per_case):
         check_logprobs_close(
-            outputs_0_lst=[
-                mask_bbox_tokens(output, tokenizer) for output in hf_outputs
-            ],
-            outputs_1_lst=[
-                mask_bbox_tokens(output, tokenizer) for output in aphrodite_outputs
-            ],
+            outputs_0_lst=[mask_bbox_tokens(output, tokenizer) for output in hf_outputs],
+            outputs_1_lst=[mask_bbox_tokens(output, tokenizer) for output in aphrodite_outputs],
             name_0="hf",
             name_1="aphrodite",
         )
@@ -108,9 +102,7 @@ def run_test(
 @pytest.mark.parametrize("model", ["nvidia/NVIDIA-Nemotron-Parse-v1.2"])
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 @pytest.mark.parametrize("num_logprobs", [5])
-def test_models(
-    hf_runner, aphrodite_runner, model: str, dtype: str, num_logprobs: int
-) -> None:
+def test_models(hf_runner, aphrodite_runner, model: str, dtype: str, num_logprobs: int) -> None:
     run_test(
         hf_runner,
         aphrodite_runner,

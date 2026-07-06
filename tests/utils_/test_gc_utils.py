@@ -24,18 +24,12 @@ class ListWrapper:
 
 
 def test_compute_detailed_type():
-    assert (
-        _compute_detailed_type(Normal(v=8))
-        == "<class 'tests.utils_.test_gc_utils.Normal'>"
-    )
+    assert _compute_detailed_type(Normal(v=8)) == "<class 'tests.utils_.test_gc_utils.Normal'>"
 
     assert _compute_detailed_type([1, 2, 3]) == "<class 'list'>(size:3)"
     assert _compute_detailed_type({4, 5}) == "<class 'set'>(size:2)"
     assert _compute_detailed_type({6: 7}) == "<class 'dict'>(size:1)"
-    assert (
-        _compute_detailed_type(ListWrapper(vs=[]))
-        == "<class 'tests.utils_.test_gc_utils.ListWrapper'>(size:0)"
-    )
+    assert _compute_detailed_type(ListWrapper(vs=[])) == "<class 'tests.utils_.test_gc_utils.ListWrapper'>(size:0)"
 
 
 def test_compute_top_gc_collected_objects():
@@ -52,10 +46,7 @@ def test_compute_top_gc_collected_objects():
     ]
     assert _compute_top_gc_collected_objects(objects, top=-1) == ""
     assert _compute_top_gc_collected_objects(objects, top=0) == ""
-    assert (
-        _compute_top_gc_collected_objects(objects, top=1)
-        == "    4:<class 'list'>(size:3)"
-    )
+    assert _compute_top_gc_collected_objects(objects, top=1) == "    4:<class 'list'>(size:3)"
     assert _compute_top_gc_collected_objects(objects, top=2) == "\n".join(
         [
             "    4:<class 'list'>(size:3)",

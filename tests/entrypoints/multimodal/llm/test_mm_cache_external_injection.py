@@ -15,11 +15,11 @@ import logging
 import pytest
 import regex as re
 
-from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
 from aphrodite import LLM, SamplingParams
 from aphrodite.renderers.params import ChatParams
 from aphrodite.v1.metrics import loggers as stat_loggers
 from aphrodite.v1.metrics.reader import Counter, Metric
+from tests.entrypoints.multimodal.conftest import TEST_IMAGE_ASSETS
 
 
 def _make_messages(image_url: str):
@@ -135,9 +135,7 @@ def test_inject_into_mm_cache(
 
     # Verify cache was queried and injection happened
     queries_after = _get_mm_cache_stats(llm.get_metrics())[0]
-    assert queries_after > queries_before, (
-        "Cache should have been queried for the injected item"
-    )
+    assert queries_after > queries_before, "Cache should have been queried for the injected item"
     mm_rate = _get_mm_cache_log(llm, caplog_aphrodite)
     assert mm_rate >= 0.0, "MM cache hit rate should be reported"
 

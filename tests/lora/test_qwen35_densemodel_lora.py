@@ -40,9 +40,7 @@ VL_EXPECTED_LORA_OUTPUT = [
 TOKENIZER = AutoTokenizer.from_pretrained(MODEL_PATH, trust_remote_code=True)
 
 
-def _assert_exact_outputs(
-    generated_texts: list[str], expected_outputs: list[str]
-) -> None:
+def _assert_exact_outputs(generated_texts: list[str], expected_outputs: list[str]) -> None:
     assert generated_texts == expected_outputs
 
 
@@ -53,8 +51,7 @@ def _assert_prefix_outputs(
     assert len(generated_texts) == len(expected_outputs)
     for generated_text, expected_text in zip(generated_texts, expected_outputs):
         assert expected_text.startswith(generated_text), (
-            f"Generated {generated_text!r} is not a prefix of expected "
-            f"{expected_text!r}"
+            f"Generated {generated_text!r} is not a prefix of expected {expected_text!r}"
         )
 
 
@@ -66,14 +63,9 @@ def _run_text_lora_sample(
     prompts = [
         TEXT_PROMPT_TEMPLATE.format(query="How many singers do we have?"),
         TEXT_PROMPT_TEMPLATE.format(
-            query=(
-                "What is the average, minimum, and maximum "
-                "age of all singers from France?"
-            )
+            query=("What is the average, minimum, and maximum age of all singers from France?")
         ),
-        TEXT_PROMPT_TEMPLATE.format(
-            query="What are the names of the stadiums without any concerts?"
-        ),
+        TEXT_PROMPT_TEMPLATE.format(query="What are the names of the stadiums without any concerts?"),
     ]
     input_templates = []
     for prompt_text in prompts:
@@ -130,11 +122,7 @@ def _run_vl_lora_sample(
     outputs = llm.generate(
         prompts,
         aphrodite.SamplingParams(temperature=0, max_tokens=128),
-        lora_request=(
-            LoRARequest(str(lora_id), lora_id, lora_path)
-            if lora_path is not None
-            else None
-        ),
+        lora_request=(LoRARequest(str(lora_id), lora_id, lora_path) if lora_path is not None else None),
     )
 
     generated_texts: list[str] = []
@@ -149,14 +137,9 @@ def _build_text_prompts() -> list[str]:
     prompts = [
         TEXT_PROMPT_TEMPLATE.format(query="How many singers do we have?"),
         TEXT_PROMPT_TEMPLATE.format(
-            query=(
-                "What is the average, minimum, and maximum "
-                "age of all singers from France?"
-            )
+            query=("What is the average, minimum, and maximum age of all singers from France?")
         ),
-        TEXT_PROMPT_TEMPLATE.format(
-            query="What are the names of the stadiums without any concerts?"
-        ),
+        TEXT_PROMPT_TEMPLATE.format(query="What are the names of the stadiums without any concerts?"),
     ]
     input_templates = []
     for prompt_text in prompts:
@@ -313,13 +296,9 @@ def _assert_qwen35_text_vl_and_mixed_lora(
     )
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @create_new_process_for_each_test()
-def test_qwen35_text_lora(
-    qwen35_text_lora_files, qwen35_vl_lora_files, maybe_enable_lora_dual_stream
-):
+def test_qwen35_text_lora(qwen35_text_lora_files, qwen35_vl_lora_files, maybe_enable_lora_dual_stream):
     llm = aphrodite.LLM(
         model=MODEL_PATH,
         max_model_len=4096,
@@ -342,9 +321,7 @@ def test_qwen35_text_lora(
 
 
 @multi_gpu_test(num_gpus=4)
-def test_qwen35_text_lora_tp4(
-    qwen35_text_lora_files, qwen35_vl_lora_files, maybe_enable_lora_dual_stream
-):
+def test_qwen35_text_lora_tp4(qwen35_text_lora_files, qwen35_vl_lora_files, maybe_enable_lora_dual_stream):
     llm = aphrodite.LLM(
         model=MODEL_PATH,
         max_model_len=4096,

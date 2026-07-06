@@ -16,12 +16,6 @@ from torch.nn import Parameter
 from torch.nn import functional as F
 
 import aphrodite.model_executor.layers.fused_moe  # noqa
-from tests.kernels.moe.utils import (
-    fused_moe,
-    make_dummy_moe_config,
-    modular_triton_fused_moe,
-)
-from tests.kernels.utils import opcheck, stack_and_dev, torch_experts, torch_moe
 from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import (
     MoEActivation,
@@ -55,6 +49,12 @@ from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import ScalarType, scalar_types
 from aphrodite.utils.math_utils import next_power_of_2
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.moe.utils import (
+    fused_moe,
+    make_dummy_moe_config,
+    modular_triton_fused_moe,
+)
+from tests.kernels.utils import opcheck, stack_and_dev, torch_experts, torch_moe
 
 
 def iterative_moe(
@@ -579,18 +579,12 @@ def test_fused_moe_wn16(
 
     w1_ref = w1.clone()
     w2_ref = w2.clone()
-    w1_qweight = torch.empty(
-        (e, 2 * n, k // pack_factor), device="cuda", dtype=torch.uint8
-    )
+    w1_qweight = torch.empty((e, 2 * n, k // pack_factor), device="cuda", dtype=torch.uint8)
     w2_qweight = torch.empty((e, k, n // pack_factor), device="cuda", dtype=torch.uint8)
     w1_scales = torch.empty((e, 2 * n, k // group_size), device="cuda", dtype=dtype)
     w2_scales = torch.empty((e, k, n // group_size), device="cuda", dtype=dtype)
-    w1_qzeros = torch.empty(
-        (e, 2 * n // pack_factor, k // group_size), device="cuda", dtype=torch.uint8
-    )
-    w2_qzeros = torch.empty(
-        (e, k // pack_factor, n // group_size), device="cuda", dtype=torch.uint8
-    )
+    w1_qzeros = torch.empty((e, 2 * n // pack_factor, k // group_size), device="cuda", dtype=torch.uint8)
+    w2_qzeros = torch.empty((e, k // pack_factor, n // group_size), device="cuda", dtype=torch.uint8)
 
     for i in range(e * 2):
         expert_id = i % e
@@ -610,9 +604,7 @@ def test_fused_moe_wn16(
                 w2_scales,
                 w2_qzeros,
             )
-        weight, qweight, scales, qzeros = quantize_weights(
-            w[expert_id].T, quant_type, group_size, has_zp, False
-        )
+        weight, qweight, scales, qzeros = quantize_weights(w[expert_id].T, quant_type, group_size, has_zp, False)
         weight = weight.T
         qweight = qweight.T.contiguous().to(torch.uint8)
         scales = scales.T
@@ -806,15 +798,11 @@ class MarlinMoEWeightData:
         for i in range(w.shape[0]):
             if quant_type == scalar_types.float4_e2m1f:
                 if group_size == 16:
-                    w_ref, qweight, scales, global_scale = (
-                        rand_marlin_weight_nvfp4_like(
-                            w[i], group_size, input_dtype=input_dtype
-                        )
-                    )
-                else:
-                    w_ref, qweight, scales = rand_marlin_weight_mxfp4_like(
+                    w_ref, qweight, scales, global_scale = rand_marlin_weight_nvfp4_like(
                         w[i], group_size, input_dtype=input_dtype
                     )
+                else:
+                    w_ref, qweight, scales = rand_marlin_weight_mxfp4_like(w[i], group_size, input_dtype=input_dtype)
                     global_scale = None
 
                 w_ref_l.append(w_ref.T)
@@ -823,9 +811,7 @@ class MarlinMoEWeightData:
                 if global_scale is not None:
                     global_scale_l.append(global_scale)
             elif quant_type == scalar_types.float8_e4m3fn:
-                w_ref, qweight, scales = marlin_quant_fp8_torch(
-                    w[i], group_size, input_dtype=input_dtype
-                )
+                w_ref, qweight, scales = marlin_quant_fp8_torch(w[i], group_size, input_dtype=input_dtype)
                 w_ref_l.append(w_ref.T)
                 qweight_l.append(qweight)
                 scales_l.append(scales)
@@ -891,10 +877,7 @@ class MarlinMoEWeightData:
 
 @pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize(
-    (
-        "a_type, b_type, c_type, group_blocks,"
-        "m, n, k, e, topk, ep_size, act_order, is_k_full"
-    ),
+    ("a_type, b_type, c_type, group_blocks,m, n, k, e, topk, ep_size, act_order, is_k_full"),
     marlin_moe_generate_valid_test_cases(),
 )
 @pytest.mark.skipif(current_platform.is_rocm(), reason="Skip for rocm")
@@ -1051,9 +1034,7 @@ def test_fused_marlin_moe_with_bias(m):
     topk_weights, topk_ids, _ = fused_topk(a, score, topk, False)
 
     with set_current_aphrodite_config(aphrodite_config):
-        torch_output = torch_moe(
-            a, w1_data.w_ref, w2_data.w_ref, score, topk, b_bias1, b_bias2
-        )
+        torch_output = torch_moe(a, w1_data.w_ref, w2_data.w_ref, score, topk, b_bias1, b_bias2)
 
     marlin_output = fused_marlin_moe(
         a,
@@ -1089,9 +1070,7 @@ def test_fused_marlin_moe_with_bias(m):
 @pytest.mark.parametrize("n,k", [(1024, 1024), (2048, 2048)])
 @pytest.mark.parametrize("e,topk", [(8, 2), (64, 4)])
 @pytest.mark.parametrize("activation", [MoEActivation.RELU2_NO_MUL])
-def test_fused_marlin_moe_non_gated(
-    m: int, n: int, k: int, e: int, topk: int, activation: MoEActivation
-):
+def test_fused_marlin_moe_non_gated(m: int, n: int, k: int, e: int, topk: int, activation: MoEActivation):
     """Test Marlin MoE with non-gated activation (relu2_no_mul).
 
     Non-gated activations like relu2 don't have the gate-up projection pattern,
@@ -1173,25 +1152,17 @@ def test_moe_align_block_size_opcheck(ep_size):
     expert_map = None
     if ep_size != 1:
         local_num_experts = num_experts // ep_size
-        expert_ids = torch.randint(
-            0, num_experts, (local_num_experts,), device="cuda", dtype=torch.int32
-        )
+        expert_ids = torch.randint(0, num_experts, (local_num_experts,), device="cuda", dtype=torch.int32)
         expert_map = torch.full((num_experts,), -1, device="cuda", dtype=torch.int32)
-        expert_map[expert_ids] = torch.arange(
-            local_num_experts, device="cuda", dtype=torch.int32
-        )
+        expert_map[expert_ids] = torch.arange(local_num_experts, device="cuda", dtype=torch.int32)
 
     topk_ids = torch.randint(0, num_experts, (3, 4), dtype=torch.int32, device="cuda")
 
     max_num_tokens_padded = topk_ids.numel() + num_experts * (block_size - 1)
-    sorted_ids = torch.empty(
-        (max_num_tokens_padded,), dtype=torch.int32, device=topk_ids.device
-    )
+    sorted_ids = torch.empty((max_num_tokens_padded,), dtype=torch.int32, device=topk_ids.device)
     sorted_ids.fill_(topk_ids.numel())
     max_num_m_blocks = max_num_tokens_padded // block_size
-    expert_ids = torch.empty(
-        (max_num_m_blocks,), dtype=torch.int32, device=topk_ids.device
-    )
+    expert_ids = torch.empty((max_num_m_blocks,), dtype=torch.int32, device=topk_ids.device)
     num_tokens_post_pad = torch.empty((1), dtype=torch.int32, device=topk_ids.device)
 
     opcheck(
@@ -1306,9 +1277,7 @@ def test_cpu_fused_moe_basic(
         b2 = torch.randn((e, k), device=device, dtype=dtype) / 10
 
     ref = (
-        torch_moe(a, w13, w2, router_logits, topk, b1, b2)
-        if with_bias
-        else torch_moe(a, w13, w2, router_logits, topk)
+        torch_moe(a, w13, w2, router_logits, topk, b1, b2) if with_bias else torch_moe(a, w13, w2, router_logits, topk)
     )
 
     class _Dummy(torch.nn.Module):
@@ -1363,9 +1332,7 @@ def _batched_fused_marlin_moe_cases() -> list[Any]:
             scalar_types.float4_e2m1f,
             None,
             1e-3,
-            id=(
-                f"m{m}-n128-k128-e{e}-topk{topk}-max_tokens{max_tokens_per_batch}-mxfp4"
-            ),
+            id=(f"m{m}-n128-k128-e{e}-topk{topk}-max_tokens{max_tokens_per_batch}-mxfp4"),
         )
         for m in [16, 32, 64]
         for e in [8, 12, 16, 32]
@@ -1467,9 +1434,7 @@ def test_batched_fused_marlin_moe(
             self.e = num_experts
             self.topk_ids_cpu = _topk_ids.to("cpu")
             self.topk_weights_cpu = _topk_weights.to("cpu")
-            self.expert_num_tokens_cpu = self._make_expert_num_tokens_cpu(
-                self.e, self.topk_ids_cpu
-            )
+            self.expert_num_tokens_cpu = self._make_expert_num_tokens_cpu(self.e, self.topk_ids_cpu)
 
         def is_valid(self):
             """
@@ -1496,9 +1461,7 @@ def test_batched_fused_marlin_moe(
             assert torch.allclose(counter_cpu, self.expert_num_tokens_cpu)
             return batched_hidden_states_cpu.to("cuda")
 
-        def _gather(
-            self, batched_outputs: torch.Tensor, gather_outputs: torch.Tensor
-        ) -> torch.Tensor:
+        def _gather(self, batched_outputs: torch.Tensor, gather_outputs: torch.Tensor) -> torch.Tensor:
             batched_outputs_cpu = batched_outputs.to("cpu")
             gather_outputs_cpu = torch.zeros_like(gather_outputs)
 
@@ -1506,9 +1469,7 @@ def test_batched_fused_marlin_moe(
             md = gather_outputs_cpu.size(0)
             for t_idx in range(md):
                 token = None
-                for topk_id, topk_weight in zip(
-                    self.topk_ids_cpu[t_idx], self.topk_weights_cpu[t_idx]
-                ):
+                for topk_id, topk_weight in zip(self.topk_ids_cpu[t_idx], self.topk_weights_cpu[t_idx]):
                     pos_in_batch = counter_cpu[topk_id]
                     t = batched_outputs_cpu[topk_id, pos_in_batch] * topk_weight
                     if token is None:
@@ -1521,9 +1482,7 @@ def test_batched_fused_marlin_moe(
             gather_outputs.copy_(gather_outputs_cpu)
             return gather_outputs
 
-        def run(
-            self, hidden_states: torch.Tensor, fused_marlin_moe_kwargs: dict[Any, Any]
-        ) -> torch.Tensor:
+        def run(self, hidden_states: torch.Tensor, fused_marlin_moe_kwargs: dict[Any, Any]) -> torch.Tensor:
             assert hidden_states.ndim == 2
             assert self.is_valid()
 
@@ -1642,14 +1601,12 @@ def test_unquantized_bf16_flashinfer_trtllm_backend(
         quant_method = UnquantizedFusedMoEMethod(moe_config)
 
         # Verify TRTLLM backend was selected
-        assert (
-            quant_method.unquantized_backend == UnquantizedMoeBackend.FLASHINFER_TRTLLM
-        ), f"Expected FLASHINFER_TRTLLM backend, got {quant_method.unquantized_backend}"
+        assert quant_method.unquantized_backend == UnquantizedMoeBackend.FLASHINFER_TRTLLM, (
+            f"Expected FLASHINFER_TRTLLM backend, got {quant_method.unquantized_backend}"
+        )
 
         # Verify it's using monolithic path
-        assert quant_method.is_monolithic, (
-            "FLASHINFER_TRTLLM backend should use monolithic forward"
-        )
+        assert quant_method.is_monolithic, "FLASHINFER_TRTLLM backend should use monolithic forward"
         layer = torch.nn.Module()
         layer.w13_weight = Parameter(w1.clone(), requires_grad=False)
         layer.w2_weight = Parameter(w2.clone(), requires_grad=False)
@@ -1671,12 +1628,8 @@ def test_unquantized_bf16_flashinfer_trtllm_backend(
 
         quant_method.process_weights_after_loading(layer)
 
-        assert quant_method.moe_kernel is not None, (
-            "moe_kernel should be set after process_weights_after_loading"
-        )
-        assert quant_method.supports_internal_mk, (
-            "supports_internal_mk should be True after setup"
-        )
+        assert quant_method.moe_kernel is not None, "moe_kernel should be set after process_weights_after_loading"
+        assert quant_method.supports_internal_mk, "supports_internal_mk should be True after setup"
 
         trtllm_output = quant_method.apply_monolithic(
             layer=layer,
@@ -1687,10 +1640,7 @@ def test_unquantized_bf16_flashinfer_trtllm_backend(
         # Compute torch baseline
         w1_original = w1.clone()
         w2_original = w2.clone()
-        baseline_output = (
-            torch_moe(a, w1_original, w2_original, router_logits, topk)
-            * layer.routed_scaling_factor
-        )
+        baseline_output = torch_moe(a, w1_original, w2_original, router_logits, topk) * layer.routed_scaling_factor
 
     close = torch.isclose(trtllm_output, baseline_output, atol=1e-1, rtol=0.85)
     assert close.float().mean() > 0.925

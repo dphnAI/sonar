@@ -27,7 +27,7 @@ from torch import nn
 from transformers import GemmaConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.activation import GeluAndMul
@@ -81,9 +81,7 @@ def _get_gemma_act_fn(
     elif hidden_activation == "gelu":
         return GeluAndMul(approximate="none")
     else:
-        raise ValueError(
-            f"Activation function {hidden_act} is not supported for Gemma models."
-        )
+        raise ValueError(f"Activation function {hidden_act} is not supported for Gemma models.")
 
 
 class GemmaMLP(nn.Module):
@@ -230,9 +228,7 @@ class GemmaDecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GemmaRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -274,9 +270,7 @@ class GemmaModel(nn.Module):
         )
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: GemmaDecoderLayer(
-                config, cache_config, quant_config, prefix=prefix
-            ),
+            lambda prefix: GemmaDecoderLayer(config, cache_config, quant_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -317,9 +311,7 @@ class GemmaModel(nn.Module):
                 residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -350,13 +342,9 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsQuant):
         assert config.tie_word_embeddings
 
         self.quant_config = quant_config
-        self.model = GemmaModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = GemmaModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -368,9 +356,7 @@ class GemmaForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsQuant):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

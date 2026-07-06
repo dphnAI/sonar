@@ -14,11 +14,11 @@ static const char* PYARGS_PARSE = "KKKK";
   #include <climits>
 
 // Default chunk size 256MB for ROCm. Can be overridden at runtime by the
-// environment variable APHRODITE_ROCM_SLEEP_MEM_CHUNK_SIZE, specified in megabytes
-// (MB). The env value is parsed with strtoull as an integer number of MB
-// (decimal or 0x hex). The parsed MB value is converted to bytes. If
-// parsing fails, the value is 0, or the multiplication would overflow,
-// the default (256MB) is used.
+// environment variable APHRODITE_ROCM_SLEEP_MEM_CHUNK_SIZE, specified in
+// megabytes (MB). The env value is parsed with strtoull as an integer number of
+// MB (decimal or 0x hex). The parsed MB value is converted to bytes. If parsing
+// fails, the value is 0, or the multiplication would overflow, the default
+// (256MB) is used.
 static const unsigned long long DEFAULT_MEMCREATE_CHUNK_SIZE =
     (256ULL * 1024ULL * 1024ULL);
 

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from __future__ import annotations
 
 import mlx.core as mx
@@ -34,8 +35,7 @@ class MLAPagedLatentCache:
         self.dtype = dtype
 
         self.latent_caches: list[mx.array] = [
-            mx.zeros((num_blocks, block_size, latent_dim), dtype=dtype)
-            for _ in range(num_layers)
+            mx.zeros((num_blocks, block_size, latent_dim), dtype=dtype) for _ in range(num_layers)
         ]
         # Force allocation so Metal buffers exist before use
         mx.eval(*self.latent_caches)

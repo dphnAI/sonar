@@ -28,9 +28,7 @@ class Gemma4EngineToolParser(Gemma4ParserToolAdapter):  # type: ignore[valid-typ
         """
         if request.tools:
             tc = request.tool_choice
-            if tc == "required" or isinstance(
-                tc, (ChatCompletionNamedToolChoiceParam, ToolChoiceFunction)
-            ):
+            if tc == "required" or isinstance(tc, (ChatCompletionNamedToolChoiceParam, ToolChoiceFunction)):
                 request.skip_special_tokens = False
                 return request
         return super().adjust_request(request)

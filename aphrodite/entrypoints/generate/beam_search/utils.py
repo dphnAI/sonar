@@ -60,9 +60,7 @@ class BeamSearchSequence:
             cache_salt=cache_salt,
         )
 
-    def _build_encoder_decoder_inputs(
-        self, prompt: EncoderDecoderInput
-    ) -> EncoderDecoderInput:
+    def _build_encoder_decoder_inputs(self, prompt: EncoderDecoderInput) -> EncoderDecoderInput:
         """Rebuild the encoder-decoder inputs with the current beam search
         sequence's tokens.
 
@@ -117,9 +115,7 @@ class BeamSearchInstance:
         logprobs: list[dict[int, Logprob]] | None = None,
         **kwargs,
     ):
-        decoder_prompt = (
-            prompt if prompt["type"] != "enc_dec" else prompt["decoder_prompt"]
-        )
+        decoder_prompt = prompt if prompt["type"] != "enc_dec" else prompt["decoder_prompt"]
         initial_tokens = decoder_prompt["prompt_token_ids"]
 
         self.beams: list[BeamSearchSequence] = [
@@ -155,8 +151,6 @@ def get_beam_search_score(
 
 def create_sort_beams_key_function(eos_token_id: int, length_penalty: float):
     def sort_beams_key(x: BeamSearchSequence) -> float:
-        return get_beam_search_score(
-            x.tokens, x.cum_logprob, eos_token_id, length_penalty
-        )
+        return get_beam_search_score(x.tokens, x.cum_logprob, eos_token_id, length_penalty)
 
     return sort_beams_key

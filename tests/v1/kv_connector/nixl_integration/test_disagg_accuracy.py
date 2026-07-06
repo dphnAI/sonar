@@ -43,26 +43,19 @@ def check_aphrodite_server(url: str, timeout=5, retries=3) -> bool:
             if response.status_code == 200:
                 return True
             else:
-                print(
-                    f"Attempt {attempt + 1}: Server returned status code "
-                    "{response.status_code}"
-                )
+                print(f"Attempt {attempt + 1}: Server returned status code {{response.status_code}}")
         except requests.exceptions.RequestException as e:
             print(f"Attempt {attempt + 1}: Error connecting to server: {e}")
         time.sleep(1)  # Wait before retrying
     return False
 
 
-def run_simple_prompt(
-    base_url: str, model_name: str, input_prompt: str, use_chat_endpoint: bool
-) -> str:
+def run_simple_prompt(base_url: str, model_name: str, input_prompt: str, use_chat_endpoint: bool) -> str:
     client = openai.OpenAI(api_key="EMPTY", base_url=base_url)
     if use_chat_endpoint:
         completion = client.chat.completions.create(
             model=model_name,
-            messages=[
-                {"role": "user", "content": [{"type": "text", "text": input_prompt}]}
-            ],
+            messages=[{"role": "user", "content": [{"type": "text", "text": input_prompt}]}],
             max_completion_tokens=MAX_OUTPUT_LEN,
             temperature=0.0,
             seed=42,
@@ -129,8 +122,7 @@ def main():
         health_check_url = f"{args.service_url}/healthcheck"
         if not os.path.exists(args.file_name):
             raise ValueError(
-                f"In disagg mode, the output file {args.file_name} from "
-                "non-disagg. baseline does not exist."
+                f"In disagg mode, the output file {args.file_name} from non-disagg. baseline does not exist."
             )
 
     service_url = f"{args.service_url}/v1"
@@ -171,9 +163,7 @@ def main():
         assert len(baseline_outputs) == len(output_strs)
         for prompt, output in baseline_outputs.items():
             assert prompt in output_strs, f"{prompt} not included"
-            assert output == output_strs[prompt], (
-                f"baseline_output: {output} != PD output: {output_strs[prompt]}"
-            )
+            assert output == output_strs[prompt], f"baseline_output: {output} != PD output: {output_strs[prompt]}"
 
 
 if __name__ == "__main__":

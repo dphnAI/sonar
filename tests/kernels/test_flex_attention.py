@@ -6,18 +6,18 @@ import pytest
 import torch
 from packaging import version
 
-from tests.utils import set_random_seed
-from tests.v1.attention.utils import (
-    BatchSpec,
-    create_common_attn_metadata,
-    create_standard_kv_cache_spec,
-    create_aphrodite_config,
-)
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.v1.attention.backends.flex_attention import (
     BlockSparsityHint,
     FlexAttentionMetadataBuilder,
     physical_to_logical_mapping,
+)
+from tests.utils import set_random_seed
+from tests.v1.attention.utils import (
+    BatchSpec,
+    create_aphrodite_config,
+    create_common_attn_metadata,
+    create_standard_kv_cache_spec,
 )
 
 from ..models.utils import check_embeddings_close, check_logprobs_close
@@ -53,9 +53,7 @@ def test_flex_attention_full_cudagraphs(aphrodite_runner):
         enforce_eager=True,
         attention_config={"backend": "FLEX_ATTENTION"},
     ) as llm_flex:
-        output_eager = llm_flex.generate_greedy_logprobs(
-            prompts, max_tokens, num_logprobs
-        )
+        output_eager = llm_flex.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
 
     # Run with flex attention compiled
     set_random_seed(seed)
@@ -68,9 +66,7 @@ def test_flex_attention_full_cudagraphs(aphrodite_runner):
         gpu_memory_utilization=0.85,
         attention_config={"backend": "FLEX_ATTENTION"},
     ) as llm_default:
-        output_compile = llm_default.generate_greedy_logprobs(
-            prompts, max_tokens, num_logprobs
-        )
+        output_compile = llm_default.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=output_eager,
@@ -116,9 +112,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(aphrodite_runner, monkeypatc
         enforce_eager=True,
         attention_config={"backend": "FLEX_ATTENTION"},
     ) as llm_eager:
-        output_eager = llm_eager.generate_greedy_logprobs(
-            prompts, max_tokens, num_logprobs
-        )
+        output_eager = llm_eager.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
 
     set_random_seed(seed)
     with aphrodite_runner(
@@ -134,9 +128,7 @@ def test_flex_attention_custom_mask_full_cudagraphs(aphrodite_runner, monkeypatc
         },
         attention_config={"backend": "FLEX_ATTENTION"},
     ) as llm_cudagraph:
-        output_cudagraph = llm_cudagraph.generate_greedy_logprobs(
-            prompts, max_tokens, num_logprobs
-        )
+        output_cudagraph = llm_cudagraph.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=output_eager,
@@ -176,9 +168,7 @@ def test_flex_attention_vs_default_backend(aphrodite_runner):
         enforce_eager=True,
         attention_config={"backend": "FLEX_ATTENTION"},
     ) as llm_flex:
-        output_flex = llm_flex.generate_greedy_logprobs(
-            prompts, max_tokens, num_logprobs
-        )
+        output_flex = llm_flex.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
 
     # Run with default backend
     set_random_seed(seed)
@@ -190,9 +180,7 @@ def test_flex_attention_vs_default_backend(aphrodite_runner):
         enforce_eager=True,
         gpu_memory_utilization=0.85,
     ) as llm_default:
-        output_default = llm_default.generate_greedy_logprobs(
-            prompts, max_tokens, num_logprobs
-        )
+        output_default = llm_default.generate_greedy_logprobs(prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=output_flex,
@@ -269,23 +257,15 @@ def test_block_mask_direct_vs_slow_path():
     kv_cache_spec = create_standard_kv_cache_spec(aphrodite_config)
 
     # Use a mixed batch that will create groups spanning multiple sequences
-    batch_spec = BatchSpec(
-        seq_lens=[35, 64, 128, 256], query_lens=[33, 5, 32, 64], name="test_mixed_batch"
-    )
+    batch_spec = BatchSpec(seq_lens=[35, 64, 128, 256], query_lens=[33, 5, 32, 64], name="test_mixed_batch")
 
-    common_attn_metadata = create_common_attn_metadata(
-        batch_spec, aphrodite_config.cache_config.block_size, device
-    )
+    common_attn_metadata = create_common_attn_metadata(batch_spec, aphrodite_config.cache_config.block_size, device)
 
     builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], aphrodite_config, device)
 
-    metadata_direct = builder.build(
-        common_prefix_len=0, common_attn_metadata=common_attn_metadata
-    )
+    metadata_direct = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
     builder.direct_build = False
-    metadata_slow = builder.build(
-        common_prefix_len=0, common_attn_metadata=common_attn_metadata
-    )
+    metadata_slow = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
     assert metadata_direct.block_mask is not None
     assert metadata_slow.block_mask is not None
@@ -308,14 +288,9 @@ def test_block_mask_direct_vs_slow_path():
         missing_blocks = slow_blocks - direct_blocks
         if missing_blocks:
             all_contained = False
-            missing_details.append(
-                f"Group {group_idx}: missing {sorted(missing_blocks)}"
-            )
+            missing_details.append(f"Group {group_idx}: missing {sorted(missing_blocks)}")
 
-    assert all_contained, (
-        "Direct path is missing blocks required by slow path:\n"
-        + "\n".join(missing_details)
-    )
+    assert all_contained, "Direct path is missing blocks required by slow path:\n" + "\n".join(missing_details)
 
 
 def test_physical_to_logical_mapping_handles_reused_blocks():
@@ -328,9 +303,7 @@ def test_physical_to_logical_mapping_handles_reused_blocks():
     # Padding should not make physical block 0 look live.
     block_table = torch.tensor([[6, 0, 0, 0]], dtype=torch.int32)
     seq_lens = torch.tensor([1 * 16], dtype=torch.int32)  # only 1 block valid
-    out = physical_to_logical_mapping(
-        block_table=block_table, seq_lens=seq_lens, block_size=16, total_blocks=10
-    )
+    out = physical_to_logical_mapping(block_table=block_table, seq_lens=seq_lens, block_size=16, total_blocks=10)
     assert out[0, 0].item() == -1
     assert out[0, 6].item() == 0
 
@@ -338,9 +311,7 @@ def test_physical_to_logical_mapping_handles_reused_blocks():
     # point to the latest logical block index.
     block_table2 = torch.tensor([[2, 2, 5]], dtype=torch.int32)
     seq_lens2 = torch.tensor([3 * 16], dtype=torch.int32)
-    out2 = physical_to_logical_mapping(
-        block_table=block_table2, seq_lens=seq_lens2, block_size=16, total_blocks=8
-    )
+    out2 = physical_to_logical_mapping(block_table=block_table2, seq_lens=seq_lens2, block_size=16, total_blocks=8)
     assert out2[0, 2].item() == 1
 
 
@@ -369,24 +340,18 @@ def test_block_sparsity_hint_prunes_blocks():
         name="test_sparsity_hint",
     )
 
-    common_attn_metadata = create_common_attn_metadata(
-        batch_spec, aphrodite_config.cache_config.block_size, device
-    )
+    common_attn_metadata = create_common_attn_metadata(batch_spec, aphrodite_config.cache_config.block_size, device)
 
     builder = FlexAttentionMetadataBuilder(kv_cache_spec, [], aphrodite_config, device)
 
-    metadata_no_hint = builder.build(
-        common_prefix_len=0, common_attn_metadata=common_attn_metadata
-    )
+    metadata_no_hint = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
     metadata_no_hint.block_mask = metadata_no_hint._build_block_mask_direct()
     assert metadata_no_hint.block_mask.kv_num_blocks.max().item() > 1
 
     def diagonal_hint(q_block_idx, kv_block_idx, block_size):
         return q_block_idx == kv_block_idx
 
-    metadata_with_hint = builder.build(
-        common_prefix_len=0, common_attn_metadata=common_attn_metadata
-    )
+    metadata_with_hint = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
     metadata_with_hint.block_sparsity_hint = BlockSparsityHint(
         hint_fn=diagonal_hint,
     )

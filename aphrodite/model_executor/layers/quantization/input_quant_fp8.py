@@ -77,8 +77,7 @@ class QuantFP8(CustomOp):
             self.use_per_token_if_dynamic = group_shape == GroupShape.PER_TOKEN
             if not static:
                 assert group_shape in (GroupShape.PER_TOKEN, GroupShape.PER_TENSOR), (
-                    "Only per-token or per-tensor scales are supported for dynamic "
-                    "non-group quantization."
+                    "Only per-token or per-tensor scales are supported for dynamic non-group quantization."
                 )
 
     def forward_cuda(
@@ -116,9 +115,7 @@ class QuantFP8(CustomOp):
 
         assert (scale is not None) == self.static
         assert scale_ub is None or (
-            not self.static
-            and self.group_shape == GroupShape.PER_TOKEN
-            and scale_ub.numel() == 1
+            not self.static and self.group_shape == GroupShape.PER_TOKEN and scale_ub.numel() == 1
         )
 
         return ops.scaled_fp8_quant(
@@ -127,9 +124,7 @@ class QuantFP8(CustomOp):
             num_token_padding=self.num_token_padding,
             scale_ub=scale_ub,
             use_per_token_if_dynamic=self.use_per_token_if_dynamic,
-            group_shape=(self.group_shape.row, self.group_shape.col)
-            if self.static
-            else None,
+            group_shape=(self.group_shape.row, self.group_shape.col) if self.static else None,
         )
 
     def forward_hip(
@@ -145,9 +140,7 @@ class QuantFP8(CustomOp):
             return torch.ops.aphrodite.triton_per_token_group_quant_fp8(x, self.group_size)
 
         use_aiter_quant = self.use_aiter and scale_ub is None and x.is_contiguous()
-        use_aiter_per_tensor_quant = (
-            use_aiter_quant and self.group_shape.is_per_tensor()
-        )
+        use_aiter_per_tensor_quant = use_aiter_quant and self.group_shape.is_per_tensor()
         use_aiter_per_token_quant = use_aiter_quant and self.group_shape.is_per_token()
 
         use_aiter_per_group_quant = use_aiter_quant and self.group_shape.is_per_group()
@@ -194,9 +187,7 @@ class QuantFP8(CustomOp):
 
         assert (scale is not None) == self.static
         assert scale_ub is None or (
-            not self.static
-            and self.group_shape == GroupShape.PER_TOKEN
-            and scale_ub.numel() == 1
+            not self.static and self.group_shape == GroupShape.PER_TOKEN and scale_ub.numel() == 1
         )
 
         if scale is None:
@@ -214,10 +205,7 @@ class QuantFP8(CustomOp):
 
         # Even for dynamic per-token scales,
         # reciprocal performs slightly better than division
-        out = (
-            x.to(torch.float32)
-            * group_broadcast(scale.to(torch.float32), x.shape[-2:]).reciprocal()
-        )
+        out = x.to(torch.float32) * group_broadcast(scale.to(torch.float32), x.shape[-2:]).reciprocal()
         out = out.clamp(_FP8_MIN, _FP8_MAX).to(_FP8_DTYPE)
 
         # This currently generates an extra Triton kernel in compilation.
@@ -230,9 +218,7 @@ class QuantFP8(CustomOp):
 
         return out, scale
 
-    def _quantize_group_native(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _quantize_group_native(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         orig_shape = x.shape
         hidden_dim = x.shape[-1]
         num_groups = (hidden_dim + self.group_size - 1) // self.group_size

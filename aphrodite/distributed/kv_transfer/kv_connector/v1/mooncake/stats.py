@@ -76,9 +76,7 @@ class MooncakeKVConnectorStats(KVConnectorStats):
         # Copy lists under the lock for length alignment; return a fresh
         # instance so the snapshot has its own _lock.
         with self._lock:
-            snapshot_data: dict[str, list[float | int]] = {
-                k: list(v) for k, v in self.data.items()
-            }
+            snapshot_data: dict[str, list[float | int]] = {k: list(v) for k, v in self.data.items()}
             self.reset()
         return MooncakeKVConnectorStats(data=snapshot_data)
 
@@ -125,9 +123,7 @@ class MooncakeKVConnectorStats(KVConnectorStats):
         total_mb = mb.sum()
         avg_mb = total_mb / n
         total_time_seconds = xfer_time.sum()
-        throughput_mb_s = (
-            total_mb / total_time_seconds if total_time_seconds > 0 else 0.0
-        )
+        throughput_mb_s = total_mb / total_time_seconds if total_time_seconds > 0 else 0.0
 
         return {
             "Num successful transfers": n,

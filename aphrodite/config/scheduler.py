@@ -240,10 +240,7 @@ class SchedulerConfig:
             self.disable_chunked_mm_input = True
             self.enable_chunked_prefill = False
             self.long_prefill_token_threshold = 0
-            logger.info(
-                "Encoder-decoder models do not support chunked prefill nor"
-                " prefix caching; disabling both."
-            )
+            logger.info("Encoder-decoder models do not support chunked prefill nor prefix caching; disabling both.")
 
         self.max_num_encoder_input_tokens = self.max_num_batched_tokens
         self.encoder_cache_size = self.max_num_batched_tokens
@@ -270,10 +267,7 @@ class SchedulerConfig:
         self.verify_max_model_len(max_model_len)
 
     def verify_max_model_len(self, max_model_len: int) -> Self:
-        if (
-            self.max_num_batched_tokens < max_model_len
-            and not self.enable_chunked_prefill
-        ):
+        if self.max_num_batched_tokens < max_model_len and not self.enable_chunked_prefill:
             raise ValueError(
                 f"max_num_batched_tokens ({self.max_num_batched_tokens}) is "
                 f"smaller than max_model_len ({max_model_len}). "
@@ -300,10 +294,7 @@ class SchedulerConfig:
 
         if self.max_num_partial_prefills > 1:
             if not self.enable_chunked_prefill:
-                raise ValueError(
-                    "Chunked prefill must be enabled to set "
-                    "max_num_partial_prefills > 1."
-                )
+                raise ValueError("Chunked prefill must be enabled to set max_num_partial_prefills > 1.")
 
             if self.long_prefill_token_threshold > max_model_len:
                 raise ValueError(
@@ -314,8 +305,7 @@ class SchedulerConfig:
 
         if self.max_long_partial_prefills > self.max_num_partial_prefills:
             raise ValueError(
-                f"{self.max_long_partial_prefills=} must be less than or equal to "
-                f"{self.max_num_partial_prefills=}."
+                f"{self.max_long_partial_prefills=} must be less than or equal to {self.max_num_partial_prefills=}."
             )
 
         return self

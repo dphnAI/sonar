@@ -8,16 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from tests.v1.kv_connector.unit.utils import (
-    EOS_TOKEN_ID,
-    create_model_runner_output,
-    create_aphrodite_config,
-)
 from aphrodite import SamplingParams
 from aphrodite.config import (
+    AphroditeConfig,
     KVEventsConfig,
     KVTransferConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
@@ -59,6 +54,11 @@ from aphrodite.v1.kv_offload.base import (
 )
 from aphrodite.v1.request import Request
 from aphrodite.v1.structured_output import StructuredOutputManager
+from tests.v1.kv_connector.unit.utils import (
+    EOS_TOKEN_ID,
+    create_aphrodite_config,
+    create_model_runner_output,
+)
 
 
 def to_key(int_hash: int) -> OffloadKey:
@@ -94,16 +94,12 @@ class MockOffloadingWorker(OffloadingWorker):
         self.completed_transfers = []
         return finished
 
-    def submit_store(
-        self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec
-    ) -> bool:  # type: ignore[override]
+    def submit_store(self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec) -> bool:  # type: ignore[override]
         self.transfer_specs[job_id] = (src_spec, dst_spec)
         self.waiting_jobs.add(job_id)
         return True
 
-    def submit_load(
-        self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec
-    ) -> bool:  # type: ignore[override]
+    def submit_load(self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec) -> bool:  # type: ignore[override]
         self.transfer_specs[job_id] = (src_spec, dst_spec)
         self.waiting_jobs.add(job_id)
         return True
@@ -146,17 +142,12 @@ class MockOffloadingSpec(OffloadingSpec):
         self.handler.complete_jobs(self.handler.waiting_jobs.copy())
 
     def get_completed_transfers(self) -> list[tuple[LoadStoreSpec, LoadStoreSpec]]:
-        specs = [
-            self.handler.transfer_specs[job_id]
-            for job_id in self.handler.completed_jobs
-        ]
+        specs = [self.handler.transfer_specs[job_id] for job_id in self.handler.completed_jobs]
         self.handler.completed_jobs.clear()
         return specs
 
     def get_flushed_transfers(self) -> list[tuple[LoadStoreSpec, LoadStoreSpec]]:
-        specs = [
-            self.handler.transfer_specs[job_id] for job_id in self.handler.flushed_jobs
-        ]
+        specs = [self.handler.transfer_specs[job_id] for job_id in self.handler.flushed_jobs]
         self.handler.flushed_jobs.clear()
         return specs
 
@@ -259,9 +250,7 @@ class RequestRunner:
         aphrodite_config.cache_config.num_gpu_blocks = num_gpu_blocks
         self.num_kv_groups = len(kv_cache_config.kv_cache_groups)
 
-        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(
-            kv_cache_config, aphrodite_config
-        )
+        scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
 
         scheduler_cls = AsyncScheduler if async_scheduling else Scheduler
         self.scheduler = scheduler_cls(
@@ -273,9 +262,7 @@ class RequestRunner:
             hash_block_size=hash_block_size,
         )
 
-        self.worker_connector = OffloadingConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
-        )
+        self.worker_connector = OffloadingConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
 
         # register worker kv_caches to enable OffloadingWorker creations
         # set_current_aphrodite_config is needed for get_kv_cache_layout() to work
@@ -318,9 +305,7 @@ class RequestRunner:
         ):
             gpu_block_size = kv_cache_group.kv_cache_spec.block_size
             assert group_config.gpu_block_size == gpu_block_size
-            assert (
-                group_config.offloaded_block_size == gpu_block_size * block_size_factor
-            )
+            assert group_config.offloaded_block_size == gpu_block_size * block_size_factor
 
         # extract OffloadingSpec of worker_connector
         connector_worker = self.worker_connector.connector_worker
@@ -416,23 +401,17 @@ class RequestRunner:
 
             gpu_block_offset = 0
             offload_address_offset = 0
-            for group_size, logical_offset in zip(
-                gpu_spec.group_sizes, gpu_spec.block_indices
-            ):
+            for group_size, logical_offset in zip(gpu_spec.group_sizes, gpu_spec.block_indices):
                 gpu_block_end_offset = gpu_block_offset + group_size
                 assert gpu_block_end_offset <= len(gpu_blocks)
 
                 offload_addresses_to_skip = logical_offset % block_size_factor
-                offload_addresses_end_offset = (
-                    offload_address_offset + offload_addresses_to_skip + group_size
-                )
+                offload_addresses_end_offset = offload_address_offset + offload_addresses_to_skip + group_size
                 assert offload_addresses_end_offset <= len(offload_addresses)
 
                 offload_addresses = (
                     offload_addresses[:offload_address_offset]
-                    + offload_addresses[
-                        offload_address_offset + offload_addresses_to_skip :
-                    ]
+                    + offload_addresses[offload_address_offset + offload_addresses_to_skip :]
                 )
 
                 gpu_block_offset += group_size
@@ -448,9 +427,7 @@ class RequestRunner:
                 self.completed_loads.append(transfer_summary)
 
     def _update_gpu_blocks(self):
-        for group_idx, manager in enumerate(
-            self.scheduler.kv_cache_manager.coordinator.single_type_managers
-        ):
+        for group_idx, manager in enumerate(self.scheduler.kv_cache_manager.coordinator.single_type_managers):
             for blocks in manager.req_to_blocks.values():
                 for block_idx, block in enumerate(blocks):
                     self.gpu_blocks[block.block_id] = GPUBlock(group_idx, block_idx)
@@ -499,13 +476,8 @@ class RequestRunner:
             if complete_transfers:
                 self.offloading_spec.complete_transfers()
 
-            finished_sending, finished_recving = self.worker_connector.get_finished(
-                scheduler_output.finished_req_ids
-            )
-            worker_meta = (
-                self.worker_connector.build_connector_worker_meta()
-                or OffloadingWorkerMetadata()
-            )
+            finished_sending, finished_recving = self.worker_connector.get_finished(scheduler_output.finished_req_ids)
+            worker_meta = self.worker_connector.build_connector_worker_meta() or OffloadingWorkerMetadata()
 
             self.worker_connector.clear_connector_metadata()
 
@@ -524,9 +496,7 @@ class RequestRunner:
             if self.async_scheduling:
                 # in async scheduling we update the output of the previous step
                 if prev_model_runner_output is not None:
-                    self.scheduler.update_from_output(
-                        prev_scheduler_output, prev_model_runner_output
-                    )
+                    self.scheduler.update_from_output(prev_scheduler_output, prev_model_runner_output)
                 prev_scheduler_output = scheduler_output
                 prev_model_runner_output = model_runner_output
             else:
@@ -546,9 +516,7 @@ class RequestRunner:
             if token_id is None:
                 if self.async_scheduling:
                     # sample last token
-                    self.scheduler.update_from_output(
-                        prev_scheduler_output, prev_model_runner_output
-                    )
+                    self.scheduler.update_from_output(prev_scheduler_output, prev_model_runner_output)
                 break
 
         self._parse_transfers()
@@ -556,21 +524,15 @@ class RequestRunner:
         if EOS_TOKEN_ID in decoded_tokens:
             assert not self.scheduler.running
 
-    def _to_gpu_blocks(
-        self, blocks: tuple[int | tuple[int, int], ...]
-    ) -> list[GPUBlock]:
+    def _to_gpu_blocks(self, blocks: tuple[int | tuple[int, int], ...]) -> list[GPUBlock]:
         gpu_blocks: list[GPUBlock] = []
         for block in blocks:
             if isinstance(block, int):
                 for group_idx in range(self.num_kv_groups):
-                    gpu_blocks.append(
-                        GPUBlock(group_idx=group_idx, request_block_offset=block)
-                    )
+                    gpu_blocks.append(GPUBlock(group_idx=group_idx, request_block_offset=block))
             else:
                 group_idx, offset = block
-                gpu_blocks.append(
-                    GPUBlock(group_idx=group_idx, request_block_offset=offset)
-                )
+                gpu_blocks.append(GPUBlock(group_idx=group_idx, request_block_offset=offset))
         return gpu_blocks
 
     def run(
@@ -610,9 +572,7 @@ class RequestRunner:
 
         loaded_gpu_blocks: set[GPUBlock] = set()
         for transfer in self.completed_loads:
-            for gpu_block, offloaded_address in zip(
-                transfer.gpu_blocks, transfer.offload_addresses
-            ):
+            for gpu_block, offloaded_address in zip(transfer.gpu_blocks, transfer.offload_addresses):
                 loaded_gpu_blocks.add(gpu_block)
                 assert gpu_block == self.offloaded[offloaded_address]
 
@@ -621,9 +581,7 @@ class RequestRunner:
 
         stored_gpu_blocks: set[GPUBlock] = set()
         for transfer in self.completed_stores:
-            for gpu_block, offloaded_address in zip(
-                transfer.gpu_blocks, transfer.offload_addresses
-            ):
+            for gpu_block, offloaded_address in zip(transfer.gpu_blocks, transfer.offload_addresses):
                 stored_gpu_blocks.add(gpu_block)
                 self.offloaded[offloaded_address] = gpu_block
 

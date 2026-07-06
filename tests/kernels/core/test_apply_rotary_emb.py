@@ -17,8 +17,8 @@ import pytest
 import torch
 
 from aphrodite.config import (
-    CompilationConfig,
     AphroditeConfig,
+    CompilationConfig,
     get_cached_compilation_config,
     set_current_aphrodite_config,
 )
@@ -109,9 +109,7 @@ def run_dispatch_test(
     device: str,
 ):
     """Run a dispatch test for a RotaryEmbedding class."""
-    aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(custom_ops=["all", "+apply_rotary_emb"])
-    )
+    aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=["all", "+apply_rotary_emb"]))
     get_cached_compilation_config.cache_clear()
 
     with set_current_aphrodite_config(aphrodite_config):
@@ -121,9 +119,9 @@ def run_dispatch_test(
 
         # Verify custom op is enabled
         if test_case.expect_forward_native:
-            assert (
-                apply_rotary_emb._forward_method != apply_rotary_emb.forward_native
-            ), "Test setup error: ApplyRotaryEmb custom op should be enabled"
+            assert apply_rotary_emb._forward_method != apply_rotary_emb.forward_native, (
+                "Test setup error: ApplyRotaryEmb custom op should be enabled"
+            )
 
         # Setup call tracking
         call_tracker = {"forward_native_called": False, "forward_called": False}
@@ -148,12 +146,8 @@ def run_dispatch_test(
             head_size = test_case.rope_kwargs["head_size"]
             max_position = test_case.rope_kwargs["max_position_embeddings"]
 
-            positions = torch.randint(
-                0, max_position // 4, test_case.positions_shape, device=device
-            )
-            query = torch.randn(
-                num_tokens, num_q_heads * head_size, dtype=torch.bfloat16, device=device
-            )
+            positions = torch.randint(0, max_position // 4, test_case.positions_shape, device=device)
+            query = torch.randn(num_tokens, num_q_heads * head_size, dtype=torch.bfloat16, device=device)
             key = torch.randn(
                 num_tokens,
                 num_kv_heads * head_size,
@@ -177,17 +171,13 @@ def run_dispatch_test(
                     "incorrectly dispatches to CUDA/HIP kernels."
                 )
             if test_case.expect_forward:
-                assert call_tracker["forward_called"], (
-                    f"{test_case.name} should call ApplyRotaryEmb.forward()"
-                )
+                assert call_tracker["forward_called"], f"{test_case.name} should call ApplyRotaryEmb.forward()"
         finally:
             apply_rotary_emb.forward_native = original_forward_native
             apply_rotary_emb.forward = original_forward
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda_alike(), reason="Skipping CUDA/ROCm only tests."
-)
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Skipping CUDA/ROCm only tests.")
 @pytest.mark.parametrize("test_case", get_test_cases(), ids=lambda tc: tc.name)
 @pytest.mark.parametrize("device", CUDA_DEVICES)
 def test_rotary_embedding_dispatch(

@@ -52,9 +52,7 @@ def merge_attn_states(
     # and the output is FP8 — both CUDA and Triton support this.
     # FP8 output requires output_scale to be set.
     if output.dtype not in (torch.float32, torch.half, torch.bfloat16):
-        assert output_scale is not None, (
-            f"output_scale is required when output is {output.dtype}"
-        )
+        assert output_scale is not None, f"output_scale is required when output is {output.dtype}"
 
     def supported_dtypes(prefix: torch.Tensor) -> bool:
         return prefix.dtype in [torch.float32, torch.half, torch.bfloat16]
@@ -69,11 +67,7 @@ def merge_attn_states(
             return headdim % 4 == 0
         return headdim % 8 == 0
 
-    if (
-        current_platform.is_cuda()
-        and supported_dtypes(prefix_output)
-        and supported_headdim(prefix_output)
-    ):
+    if current_platform.is_cuda() and supported_dtypes(prefix_output) and supported_headdim(prefix_output):
         from aphrodite._custom_ops import merge_attn_states
 
         return merge_attn_states(

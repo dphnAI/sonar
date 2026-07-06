@@ -8,8 +8,7 @@ import torch
 from aphrodite.tokenizers import TokenizerLike
 
 LogitsProcessor: TypeAlias = (
-    Callable[[list[int], torch.Tensor], torch.Tensor]
-    | Callable[[list[int], list[int], torch.Tensor], torch.Tensor]
+    Callable[[list[int], torch.Tensor], torch.Tensor] | Callable[[list[int], list[int], torch.Tensor], torch.Tensor]
 )
 """LogitsProcessor is a function that takes a list
 of previously generated tokens, the logits tensor
@@ -18,9 +17,7 @@ first argument, and returns a modified tensor of logits
 to sample from."""
 
 
-def get_bad_words_logits_processors(
-    bad_words: list[str], tokenizer: TokenizerLike
-) -> list[LogitsProcessor]:
+def get_bad_words_logits_processors(bad_words: list[str], tokenizer: TokenizerLike) -> list[LogitsProcessor]:
     bad_words_ids: list[list[int]] = list()
 
     for bad_word in bad_words:
@@ -78,9 +75,7 @@ class NoBadWordsLogitsProcessor:
             assert len(actual_prefix) == len(expected_prefix)
 
             is_match = tuple(actual_prefix) == tuple(expected_prefix)
-            last_token_bias[last_token_id] += (
-                self._SMALLEST_LOGIT if is_match else self._NEUTRAL_LOGIT
-            )
+            last_token_bias[last_token_id] += self._SMALLEST_LOGIT if is_match else self._NEUTRAL_LOGIT
 
         logits = logits + self.word_bias + last_token_bias
 
@@ -94,9 +89,7 @@ class NoBadWordsLogitsProcessor:
 
         self._check_token_ids_bounds(vocab_size=vocab_size)
 
-        self.word_bias = torch.zeros(
-            (vocab_size,), dtype=torch.float, device=logits.device
-        )
+        self.word_bias = torch.zeros((vocab_size,), dtype=torch.float, device=logits.device)
 
         for bad_word_ids in self.bad_words_ids:
             if len(bad_word_ids) == 1:

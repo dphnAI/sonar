@@ -35,9 +35,7 @@ class Conv2dSubsampling(nn.Module):
         left_context = right_context = 3  # both exclude current frame
         self.context = left_context + 1 + right_context  # 7
 
-    def forward(
-        self, x: torch.Tensor, x_mask: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         x = x.unsqueeze(1)
         x = self.conv(x)
         N, C, T, D = x.size()
@@ -58,10 +56,7 @@ class RelPositionalEncoding(nn.Module):
         pe_positive = torch.zeros(max_len, d_model, requires_grad=False)
         pe_negative = torch.zeros(max_len, d_model, requires_grad=False)
         position = torch.arange(0, max_len).unsqueeze(1).float()
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float()
-            * -(torch.log(torch.tensor(10000.0)).item() / d_model)
-        )
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(torch.log(torch.tensor(10000.0)).item() / d_model))
         pe_positive[:, 0::2] = torch.sin(position * div_term)
         pe_positive[:, 1::2] = torch.cos(position * div_term)
         pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
@@ -222,9 +217,7 @@ class ConformerConvolution(nn.Module):
         super().__init__()
         assert kernel_size % 2 == 1
         self.pre_layer_norm = nn.LayerNorm(d_model)
-        self.pointwise_conv1 = nn.Conv1d(
-            d_model, d_model * 4, kernel_size=1, bias=False
-        )
+        self.pointwise_conv1 = nn.Conv1d(d_model, d_model * 4, kernel_size=1, bias=False)
         self.padding = (kernel_size - 1) // 2
         self.depthwise_conv = nn.Conv1d(
             d_model * 2,
@@ -237,13 +230,9 @@ class ConformerConvolution(nn.Module):
         )
         self.batch_norm = nn.LayerNorm(d_model * 2)
         self.swish = Swish()
-        self.pointwise_conv2 = nn.Conv1d(
-            d_model * 2, d_model, kernel_size=1, bias=False
-        )
+        self.pointwise_conv2 = nn.Conv1d(d_model * 2, d_model, kernel_size=1, bias=False)
 
-    def forward(
-        self, x: torch.Tensor, mask: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
         residual = x
         out = self.pre_layer_norm(x)
         out = out.transpose(1, 2)
@@ -326,23 +315,17 @@ class ConformerEncoder(nn.Module):
             )
         src_mask = self.padding_position_is_0(padded_input, input_lengths)
 
-        embed_output, input_lengths, src_mask = self.input_preprocessor(
-            padded_input, src_mask
-        )
+        embed_output, input_lengths, src_mask = self.input_preprocessor(padded_input, src_mask)
         enc_output = embed_output
 
         pos_emb = self.positional_encoding(embed_output)
 
         for enc_layer in self.layer_stack:
-            enc_output = enc_layer(
-                enc_output, pos_emb, slf_attn_mask=src_mask, pad_mask=src_mask
-            )
+            enc_output = enc_layer(enc_output, pos_emb, slf_attn_mask=src_mask, pad_mask=src_mask)
 
         return enc_output, input_lengths, src_mask
 
-    def padding_position_is_0(
-        self, padded_input: torch.Tensor, input_lengths: torch.Tensor
-    ) -> torch.Tensor:
+    def padding_position_is_0(self, padded_input: torch.Tensor, input_lengths: torch.Tensor) -> torch.Tensor:
         N, T = padded_input.size()[:2]
         # Use broadcasting instead of a Python loop for efficiency.
         positions = torch.arange(T, device=padded_input.device).unsqueeze(0)

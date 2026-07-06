@@ -3,9 +3,9 @@
 
 import pytest
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 from aphrodite.tokenizers import get_tokenizer
+from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "step3p5"
 start_token = "<think>"
@@ -281,16 +281,10 @@ def test_reasoning(
 ):
     output = step3p5_tokenizer.tokenize(param_dict["output"])
     # decode everything to tokens
-    output_tokens: list[str] = [
-        step3p5_tokenizer.convert_tokens_to_string([token]) for token in output
-    ]
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        step3p5_tokenizer
-    )
+    output_tokens: list[str] = [step3p5_tokenizer.convert_tokens_to_string([token]) for token in output]
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(step3p5_tokenizer)
 
-    reasoning, content = run_reasoning_extraction(
-        parser, output_tokens, streaming=streaming
-    )
+    reasoning, content = run_reasoning_extraction(parser, output_tokens, streaming=streaming)
 
     print(f"reasoning: {reasoning}")
     print(f"content: {content}")
@@ -309,9 +303,7 @@ def test_reasoning(
     if param_dict["content"] is not None:
         content = parser.extract_content_ids(output_ids)
         # Fixed expected token ids for specific test cases
-        test_id = (
-            request.node.callspec.id if hasattr(request.node, "callspec") else None
-        )
+        test_id = request.node.callspec.id if hasattr(request.node, "callspec") else None
         # Match most specific first
         if test_id not in [
             "new_line_streaming_complex_content",
@@ -333,9 +325,7 @@ def test_step3p5_streaming_drops_leading_newline(step3p5_tokenizer):
     parser = parser_cls(step3p5_tokenizer)
     output = "<think>calc</think>\nAnswer"
     tokens = step3p5_tokenizer.tokenize(output)
-    output_tokens = [
-        step3p5_tokenizer.convert_tokens_to_string([token]) for token in tokens
-    ]
+    output_tokens = [step3p5_tokenizer.convert_tokens_to_string([token]) for token in tokens]
 
     _, content = run_reasoning_extraction(parser, output_tokens, streaming=True)
     assert content == "Answer"

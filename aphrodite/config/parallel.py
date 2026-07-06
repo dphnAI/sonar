@@ -237,9 +237,7 @@ class ParallelConfig:
     placement_group: PlacementGroup | None = None
     """ray distributed model workers placement group."""
 
-    distributed_executor_backend: (
-        str | DistributedExecutorBackend | type[Executor] | None
-    ) = None
+    distributed_executor_backend: str | DistributedExecutorBackend | type[Executor] | None = None
     """
     Backend to use for distributed model workers, either "ray" or "mp"
     (multiprocessing). If the product of pipeline_parallel_size and tensor_parallel_size
@@ -424,17 +422,14 @@ class ParallelConfig:
                 raise ValueError("numa_bind_cpus entries must not be empty.")
             if not _NUMACTL_CPUSET_PATTERN.fullmatch(cpuset):
                 raise ValueError(
-                    "numa_bind_cpus entries must use numactl CPU list syntax, "
-                    "for example '0-3' or '0,2,4-7'."
+                    "numa_bind_cpus entries must use numactl CPU list syntax, for example '0-3' or '0,2,4-7'."
                 )
             for part in cpuset.split(","):
                 if "-" not in part:
                     continue
                 start_str, end_str = part.split("-", 1)
                 if int(start_str) > int(end_str):
-                    raise ValueError(
-                        f"numa_bind_cpus ranges must be ascending, but got '{cpuset}'."
-                    )
+                    raise ValueError(f"numa_bind_cpus ranges must be ascending, but got '{cpuset}'.")
         return value
 
     @model_validator(mode="after")
@@ -448,8 +443,7 @@ class ParallelConfig:
 
         if self.all2all_backend in ["pplx", "naive"]:
             logger.warning(
-                "The '%s' all2all backend has been removed. "
-                "Falling back to 'allgather_reducescatter'.",
+                "The '%s' all2all backend has been removed. Falling back to 'allgather_reducescatter'.",
                 self.all2all_backend,
             )
             self.all2all_backend = "allgather_reducescatter"
@@ -461,22 +455,15 @@ class ParallelConfig:
             )
 
         if self.data_parallel_size <= 1 and self.data_parallel_external_lb:
-            raise ValueError(
-                "data_parallel_external_lb can only be set when data_parallel_size > 1"
-            )
+            raise ValueError("data_parallel_external_lb can only be set when data_parallel_size > 1")
 
-        if not self.numa_bind and (
-            self.numa_bind_nodes is not None or self.numa_bind_cpus is not None
-        ):
-            raise ValueError(
-                "numa_bind_nodes and numa_bind_cpus require numa_bind=True."
-            )
+        if not self.numa_bind and (self.numa_bind_nodes is not None or self.numa_bind_cpus is not None):
+            raise ValueError("numa_bind_nodes and numa_bind_cpus require numa_bind=True.")
 
         if self.enable_eplb:
             if not current_platform.is_cuda_alike():
                 raise ValueError(
-                    "Expert parallelism load balancing is only supported on "
-                    "CUDA devices or ROCm devices now."
+                    "Expert parallelism load balancing is only supported on CUDA devices or ROCm devices now."
                 )
             if not self.enable_expert_parallel:
                 raise ValueError("enable_expert_parallel must be True to use EPLB.")
@@ -502,14 +489,11 @@ class ParallelConfig:
         # tp_size//dcp_size DCP groups.
         if self.tensor_parallel_size % self.decode_context_parallel_size != 0:
             raise ValueError(
-                f"tp_size={self.tensor_parallel_size} must be divisible by"
-                f"dcp_size={self.decode_context_parallel_size}."
+                f"tp_size={self.tensor_parallel_size} must be divisible bydcp_size={self.decode_context_parallel_size}."
             )
 
         if self.dcp_comm_backend == "a2a" and self.decode_context_parallel_size <= 1:
-            raise ValueError(
-                "dcp_comm_backend='a2a' requires decode_context_parallel_size > 1."
-            )
+            raise ValueError("dcp_comm_backend='a2a' requires decode_context_parallel_size > 1.")
 
         return self
 
@@ -564,9 +548,7 @@ class ParallelConfig:
 
         from aphrodite.distributed.utils import get_cached_tcp_store_client
 
-        store = get_cached_tcp_store_client(
-            self.data_parallel_master_ip, self._coord_store_port
-        )
+        store = get_cached_tcp_store_client(self.data_parallel_master_ip, self._coord_store_port)
 
         key = "dp_master_port"
         if self.data_parallel_rank == 0:
@@ -580,16 +562,10 @@ class ParallelConfig:
             return int(store.get(key).decode()), None
 
     @overload
-    def stateless_init_dp_group(
-        self, return_store: Literal[False] = ...
-    ) -> ProcessGroup: ...
+    def stateless_init_dp_group(self, return_store: Literal[False] = ...) -> ProcessGroup: ...
     @overload
-    def stateless_init_dp_group(
-        self, return_store: Literal[True] = ...
-    ) -> tuple[ProcessGroup, Store]: ...
-    def stateless_init_dp_group(
-        self, return_store: bool = False
-    ) -> ProcessGroup | tuple[ProcessGroup, Store]:
+    def stateless_init_dp_group(self, return_store: Literal[True] = ...) -> tuple[ProcessGroup, Store]: ...
+    def stateless_init_dp_group(self, return_store: bool = False) -> ProcessGroup | tuple[ProcessGroup, Store]:
         # NOTE: In high-concurrency scenarios multiple processes
         # can pick the same (currently free) port through a race
         # condition when calling `get_open_port()`. When the first
@@ -675,9 +651,7 @@ class ParallelConfig:
     def nnodes_within_dp(self) -> int:
         if self.nnodes == 1:
             return 1
-        data_parallel_node_size = (
-            self.data_parallel_size // self.data_parallel_size_local
-        )
+        data_parallel_node_size = self.data_parallel_size // self.data_parallel_size_local
         return self.nnodes // data_parallel_node_size
 
     @property
@@ -696,9 +670,7 @@ class ParallelConfig:
         return aggregated_has_unfinished
 
     @staticmethod
-    def sync_dp_state(
-        dp_group: ProcessGroup, has_unfinished: bool, pending_pause: bool
-    ) -> tuple[bool, bool]:
+    def sync_dp_state(dp_group: ProcessGroup, has_unfinished: bool, pending_pause: bool) -> tuple[bool, bool]:
         """Combined all-reduce for DP state synchronization.
 
         Uses a single SUM all-reduce on a 2-element tensor:
@@ -713,9 +685,7 @@ class ParallelConfig:
         Returns:
             (has_unfinished_global, pause_consensus)
         """
-        tensor = torch.tensor(
-            [int(has_unfinished), int(pending_pause)], dtype=torch.int32, device="cpu"
-        )
+        tensor = torch.tensor([int(has_unfinished), int(pending_pause)], dtype=torch.int32, device="cpu")
         torch.distributed.all_reduce(tensor, op=ReduceOp.SUM, group=dp_group)
         dp_size = dp_group.size()
         pause_count = tensor[1].item()
@@ -790,11 +760,7 @@ class ParallelConfig:
 
     def __post_init__(self) -> None:
         # Continue with the rest of the initialization
-        self.world_size = (
-            self.pipeline_parallel_size
-            * self.tensor_parallel_size
-            * self.prefill_context_parallel_size
-        )
+        self.world_size = self.pipeline_parallel_size * self.tensor_parallel_size * self.prefill_context_parallel_size
 
         if self.distributed_executor_backend == "external_launcher":
             logger.info("Using external launcher for distributed inference.")
@@ -829,9 +795,7 @@ class ParallelConfig:
             if self.distributed_executor_backend == "external_launcher":
                 # For external launcher,
                 # we need to set the data parallel rank automatically
-                self.data_parallel_rank = int(os.environ["RANK"]) // (
-                    self.world_size // self.data_parallel_size
-                )
+                self.data_parallel_rank = int(os.environ["RANK"]) // (self.world_size // self.data_parallel_size)
                 logger.info(
                     "Set data_parallel_rank to %d automatically.",
                     self.data_parallel_rank,
@@ -839,9 +803,7 @@ class ParallelConfig:
             if not self.enable_elastic_ep:
                 if not self._data_parallel_master_port_list:
                     self._data_parallel_master_port_list = get_open_ports_list(5)
-                self.data_parallel_master_port = (
-                    self._data_parallel_master_port_list.pop()
-                )
+                self.data_parallel_master_port = self._data_parallel_master_port_list.pop()
 
             if not (0 <= self.data_parallel_rank < self.data_parallel_size):
                 raise ValueError(
@@ -857,10 +819,7 @@ class ParallelConfig:
             self.data_parallel_master_port = envs.APHRODITE_DP_MASTER_PORT
 
             if self.data_parallel_size > 1 and self.is_moe_model is False:
-                raise ValueError(
-                    "Offline data parallel mode is not supported/useful"
-                    " for dense models."
-                )
+                raise ValueError("Offline data parallel mode is not supported/useful for dense models.")
 
         self.data_parallel_index = self.data_parallel_rank
 
@@ -880,10 +839,7 @@ class ParallelConfig:
                 backend = "uni"
             elif current_platform.is_cuda() and self.nnodes > 1:
                 backend = "mp"
-            elif (
-                current_platform.is_cuda()
-                and current_platform.device_count() < self.world_size
-            ):
+            elif current_platform.is_cuda() and current_platform.device_count() < self.world_size:
                 gpu_count = current_platform.device_count()
                 raise ValueError(
                     f"World size ({self.world_size}) is larger than the number of "
@@ -893,10 +849,7 @@ class ParallelConfig:
                     "- multiprocessing, set '--nnodes' appropriately."
                 )
             elif self.data_parallel_backend == "ray":
-                logger.info(
-                    "Using ray distributed inference because "
-                    "data_parallel_backend is ray"
-                )
+                logger.info("Using ray distributed inference because data_parallel_backend is ray")
                 backend = "ray"
             elif ray_found:
                 if self.placement_group:
@@ -916,18 +869,11 @@ class ParallelConfig:
             self.distributed_executor_backend = "uni"
 
         if self.max_parallel_loading_workers is not None:
-            logger.warning(
-                "max_parallel_loading_workers is currently "
-                "not supported and will be ignored."
-            )
+            logger.warning("max_parallel_loading_workers is currently not supported and will be ignored.")
         allowed_backends = ("mp", "uni", "external_launcher")
-        if (
-            self.distributed_executor_backend not in allowed_backends
-            and self.nnodes > 1
-        ):
+        if self.distributed_executor_backend not in allowed_backends and self.nnodes > 1:
             raise ValueError(
-                "nnodes > 1 can only be set when distributed executor "
-                "backend is mp, uni or external_launcher."
+                "nnodes > 1 can only be set when distributed executor backend is mp, uni or external_launcher."
             )
 
         if self.enable_eplb and self.eplb_config.communicator is None:
@@ -984,18 +930,11 @@ class ParallelConfig:
 
         if not current_platform.use_custom_allreduce():
             self.disable_custom_all_reduce = True
-            logger.debug(
-                "Disabled the custom all-reduce kernel because it is not "
-                "supported on current platform."
-            )
+            logger.debug("Disabled the custom all-reduce kernel because it is not supported on current platform.")
         if self.nnodes > 1:
             self.disable_custom_all_reduce = True
-            logger.debug(
-                "Disabled the custom all-reduce since we are running on multi-node."
-            )
+            logger.debug("Disabled the custom all-reduce since we are running on multi-node.")
         if self.ray_workers_use_nsight and not self.use_ray:
-            raise ValueError(
-                "Unable to use nsight profiling unless workers run with Ray."
-            )
+            raise ValueError("Unable to use nsight profiling unless workers run with Ray.")
 
         return self

@@ -44,9 +44,7 @@ DTYPE = "half"
 GPU_MEMORY_UTILIZATION = 0.7
 
 
-def _make_base64_image(
-    width: int = 64, height: int = 64, color: tuple[int, int, int] = (255, 0, 0)
-) -> str:
+def _make_base64_image(width: int = 64, height: int = 64, color: tuple[int, int, int] = (255, 0, 0)) -> str:
     """Create a small solid-color PNG image and return its base64 data URI."""
     img = Image.new("RGB", (width, height), color)
     buf = BytesIO()

@@ -68,9 +68,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
     ):
         super().__init__(aphrodite_config, engine_id, kv_cache_config)
         if self.is_bidirectional_kv_xfer_enabled:
-            raise NotImplementedError(
-                "Bidirectional KV transfer is not supported for NIXL push connector."
-            )
+            raise NotImplementedError("Bidirectional KV transfer is not supported for NIXL push connector.")
 
         # D-side: registration data to pass to D workers via metadata on
         # the next ``build_connector_meta`` call.
@@ -98,9 +96,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             )
         )
 
-    def get_num_new_matched_tokens(
-        self, request: Request, num_computed_tokens: int
-    ) -> tuple[int, bool]:
+    def get_num_new_matched_tokens(self, request: Request, num_computed_tokens: int) -> tuple[int, bool]:
         """In push mode, D doesn't pull — it registers blocks and waits.
 
         However, we still need to handle the do_remote_prefill case where D
@@ -108,8 +104,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
         """
         params = request.kv_transfer_params
         logger.debug(
-            "NixlPushConnector get_num_new_matched_tokens: "
-            "num_computed_tokens=%s, kv_transfer_params=%s",
+            "NixlPushConnector get_num_new_matched_tokens: num_computed_tokens=%s, kv_transfer_params=%s",
             num_computed_tokens,
             params,
         )
@@ -126,16 +121,13 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
 
         return 0, False
 
-    def update_state_after_alloc(
-        self, request: Request, blocks: KVCacheBlocks, num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: Request, blocks: KVCacheBlocks, num_external_tokens: int):
         """In push mode, D stores registration data for the worker to send
         to P via NIXL notification (deferred to ``build_connector_meta``).
         """
         params = request.kv_transfer_params
         logger.debug(
-            "NixlPushConnector update_state_after_alloc: "
-            "num_external_tokens=%s, kv_transfer_params=%s",
+            "NixlPushConnector update_state_after_alloc: num_external_tokens=%s, kv_transfer_params=%s",
             num_external_tokens,
             params,
         )
@@ -187,9 +179,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             "remote_port": params["remote_port"],
             "remote_tp_size": params["tp_size"],
         }
-        self._push_registration_deadlines[request.request_id] = (
-            time.perf_counter() + self._push_registration_timeout
-        )
+        self._push_registration_deadlines[request.request_id] = time.perf_counter() + self._push_registration_timeout
         # In push mode D doesn't know P's blocks; P determines them
         # from the registration. We still track the request as
         # needing recv so the engine waits for P's WRITE completion.
@@ -214,8 +204,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
 
         params = request.kv_transfer_params
         logger.debug(
-            "NixlPushConnector request_finished(%s), request_status=%s, "
-            "kv_transfer_params=%s",
+            "NixlPushConnector request_finished(%s), request_status=%s, kv_transfer_params=%s",
             request.request_id,
             request.status,
             params,
@@ -259,14 +248,11 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
         remote_num_tokens = 0
         if delay_free_blocks:
             logger.debug(
-                "NixlPushConnector request_finished(%s) waiting for %d seconds "
-                "before releasing blocks",
+                "NixlPushConnector request_finished(%s) waiting for %d seconds before releasing blocks",
                 request.request_id,
                 self._kv_lease_duration,
             )
-            self._reqs_need_send[request.request_id] = (
-                time.perf_counter() + self._kv_lease_duration
-            )
+            self._reqs_need_send[request.request_id] = time.perf_counter() + self._kv_lease_duration
 
             block_ids = self.get_sw_clipped_blocks(block_ids)
             remote_num_tokens = request.num_computed_tokens
@@ -315,8 +301,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             # Avoid resending a registration that already timed out.
             self._push_pending_registrations.pop(rid, None)
             logger.warning(
-                "NixlPushConnector: registration for request %s timed out "
-                "after %.1fs without a push completion",
+                "NixlPushConnector: registration for request %s timed out after %.1fs without a push completion",
                 rid,
                 self._push_registration_timeout,
             )

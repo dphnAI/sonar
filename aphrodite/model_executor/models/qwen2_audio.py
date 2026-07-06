@@ -289,9 +289,7 @@ class Qwen2AudioMultiModalProcessor(BaseMultiModalProcessor[Qwen2AudioProcessing
             audio_output_lengths = []
         else:
             assert isinstance(feature_attention_mask, torch.Tensor)
-            _, audio_output_lens = _get_feat_extract_output_lengths(
-                feature_attention_mask.sum(-1)
-            )
+            _, audio_output_lens = _get_feat_extract_output_lengths(feature_attention_mask.sum(-1))
 
             audio_output_lengths = audio_output_lens.tolist()
 
@@ -307,10 +305,7 @@ class Qwen2AudioMultiModalProcessor(BaseMultiModalProcessor[Qwen2AudioProcessing
                 audios = mm_items.get_items("audio", AudioProcessorItems)
                 audio_len = audios.get_audio_length(item_idx)
 
-                raise ValueError(
-                    f"The audio (len={audio_len}) is too short "
-                    "to be represented inside the model"
-                )
+                raise ValueError(f"The audio (len={audio_len}) is too short to be represented inside the model")
 
             return [audio_token_id] * num_features
 
@@ -359,13 +354,9 @@ class Qwen2AudioForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
                 architectures=["Qwen2ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_audio_input(
-        self, **kwargs: object
-    ) -> Qwen2AudioInputs | None:
+    def _parse_and_validate_audio_input(self, **kwargs: object) -> Qwen2AudioInputs | None:
         input_features = kwargs.pop("input_features", None)
         audio_embeds = kwargs.pop("audio_embeds", None)
         feature_attention_mask = kwargs.pop("feature_attention_mask", None)
@@ -374,9 +365,7 @@ class Qwen2AudioForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
             return None
 
         if audio_embeds is not None:
-            return Qwen2AudioEmbeddingInputs(
-                type="audio_embeds", audio_embeds=audio_embeds
-            )
+            return Qwen2AudioEmbeddingInputs(type="audio_embeds", audio_embeds=audio_embeds)
 
         if input_features is not None:
             return Qwen2AudioFeatureInputs(
@@ -387,9 +376,7 @@ class Qwen2AudioForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
 
         raise AssertionError("This line should be unreachable.")
 
-    def _process_audio_input(
-        self, audio_input: Qwen2AudioInputs
-    ) -> torch.Tensor | tuple[torch.Tensor, ...]:
+    def _process_audio_input(self, audio_input: Qwen2AudioInputs) -> torch.Tensor | tuple[torch.Tensor, ...]:
         if audio_input["type"] == "audio_embeds":
             audio_embeds = audio_input["audio_embeds"]
             return tuple(audio_embeds)
@@ -397,10 +384,8 @@ class Qwen2AudioForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
         input_features = audio_input["input_features"]
         feature_attention_mask = audio_input["feature_attention_mask"]
 
-        audio_feat_lengths, audio_output_lengths = (
-            self.audio_tower._get_feat_extract_output_lengths(
-                feature_attention_mask.sum(-1)
-            )
+        audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
+            feature_attention_mask.sum(-1)
         )
 
         batch_size, _, max_mel_seq_len = input_features.shape
@@ -416,9 +401,7 @@ class Qwen2AudioForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
             .unsqueeze(0)
             .expand(batch_size, max_seq_len)
         )
-        lengths_expand = audio_feat_lengths.unsqueeze(-1).expand(
-            batch_size, max_seq_len
-        )
+        lengths_expand = audio_feat_lengths.unsqueeze(-1).expand(batch_size, max_seq_len)
         # Create mask
         padding_mask = seq_range >= lengths_expand
 
@@ -431,25 +414,19 @@ class Qwen2AudioForConditionalGeneration(nn.Module, SupportsMultiModal, Supports
         )
         audio_attention_mask[audio_attention_mask_] = float("-inf")
 
-        audio_outputs = self.audio_tower(
-            input_features, attention_mask=audio_attention_mask
-        )
+        audio_outputs = self.audio_tower(input_features, attention_mask=audio_attention_mask)
         selected_audio_feature = audio_outputs.last_hidden_state
         audio_features = self.multi_modal_projector(selected_audio_feature)
         num_audios, max_audio_tokens, embed_dim = audio_features.shape
         audio_output_lengths = audio_output_lengths.unsqueeze(1)
         audio_features_mask = (
-            torch.arange(max_audio_tokens, device=audio_output_lengths.device).expand(
-                num_audios, max_audio_tokens
-            )
+            torch.arange(max_audio_tokens, device=audio_output_lengths.device).expand(num_audios, max_audio_tokens)
             < audio_output_lengths
         )
         masked_audio_features = audio_features[audio_features_mask].view(-1, embed_dim)
 
         # Split to tuple of embeddings for individual audio input.
-        return torch.split(
-            masked_audio_features, audio_output_lengths.flatten().tolist()
-        )
+        return torch.split(masked_audio_features, audio_output_lengths.flatten().tolist())
 
     def embed_multimodal(self, **kwargs: object) -> MultiModalEmbeddings:
         audio_input = self._parse_and_validate_audio_input(**kwargs)

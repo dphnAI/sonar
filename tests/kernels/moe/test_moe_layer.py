@@ -18,17 +18,11 @@ import pytest
 import torch
 
 import aphrodite.model_executor.layers.quantization.utils.w8a8_utils
-from tests.kernels.moe.modular_kernel_tools.parallel_utils import (
-    ProcessGroupInfo,
-    _set_aphrodite_config,
-    parallel_launch_with_config,
-)
-from tests.kernels.moe.utils import TestMLP, make_test_weights, moe_quantize_weights
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     ParallelConfig,
     SchedulerConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.distributed import (
@@ -63,6 +57,12 @@ from aphrodite.v1.worker.workspace import (
     init_workspace_manager,
     is_workspace_manager_initialized,
 )
+from tests.kernels.moe.modular_kernel_tools.parallel_utils import (
+    ProcessGroupInfo,
+    _set_aphrodite_config,
+    parallel_launch_with_config,
+)
+from tests.kernels.moe.utils import TestMLP, make_test_weights, moe_quantize_weights
 
 fp8_dtype = torch.float8_e4m3fn  # current_platform.fp8_dtype
 
@@ -167,12 +167,12 @@ def mock_normalize_e4m3fn_to_e4m3fnuz(
 # _quantize_fp8_halves.
 # NOTE: Not able to use monkeypatch because of the spawned parallel workers.
 def override_normalize_e4m3fn_to_e4m3fnuz():
-    aphrodite.model_executor.layers.quantization.utils.w8a8_utils.normalize_e4m3fn_to_e4m3fnuz = mock_normalize_e4m3fn_to_e4m3fnuz  # noqa: E501
+    aphrodite.model_executor.layers.quantization.utils.w8a8_utils.normalize_e4m3fn_to_e4m3fnuz = (
+        mock_normalize_e4m3fn_to_e4m3fnuz  # noqa: E501
+    )
 
 
-def sp_wrapper(
-    fn: Callable | MoERunner, is_sequence_parallel: bool | None = None
-) -> Callable:
+def sp_wrapper(fn: Callable | MoERunner, is_sequence_parallel: bool | None = None) -> Callable:
     """Wrapper to handle sequence parallelism chunking and gathering.
 
     For SP with EP:
@@ -233,18 +233,14 @@ def maybe_roundup_layer_hidden_size(
             DeepEPHTPrepareAndFinalize,
         )
 
-        hidden_size = DeepEPHTPrepareAndFinalize.maybe_roundup_layer_hidden_size(
-            hidden_size, act_dtype
-        )
+        hidden_size = DeepEPHTPrepareAndFinalize.maybe_roundup_layer_hidden_size(hidden_size, act_dtype)
 
     if backend == "deepep_low_latency":
         from aphrodite.model_executor.layers.fused_moe.prepare_finalize.deepep_ll import (
             DeepEPLLPrepareAndFinalize,
         )
 
-        hidden_size = DeepEPLLPrepareAndFinalize.maybe_roundup_layer_hidden_size(
-            hidden_size
-        )
+        hidden_size = DeepEPLLPrepareAndFinalize.maybe_roundup_layer_hidden_size(hidden_size)
 
     return hidden_size
 
@@ -291,12 +287,8 @@ def tp_chunk_gate_up(
     """TP-chunk a combined [gate; up] weight, splitting each half separately
     so every rank gets a portion of both gate and up."""
     half = w.shape[dim] // 2
-    gate = chunk_by_rank(
-        w.narrow(dim, 0, half), tp_rank, tp_size, dim=dim, device=device
-    )
-    up = chunk_by_rank(
-        w.narrow(dim, half, half), tp_rank, tp_size, dim=dim, device=device
-    )
+    gate = chunk_by_rank(w.narrow(dim, 0, half), tp_rank, tp_size, dim=dim, device=device)
+    up = chunk_by_rank(w.narrow(dim, half, half), tp_rank, tp_size, dim=dim, device=device)
     return torch.cat([gate, up], dim=dim)
 
 
@@ -356,9 +348,7 @@ class MoETestConfig:
             else:
                 return ty(v)
 
-        values = tuple(
-            [convert(v, f.type) for v, f in zip(str_values, fields(MoETestConfig))]
-        )
+        values = tuple([convert(v, f.type) for v, f in zip(str_values, fields(MoETestConfig))])
         return MoETestConfig(*values)
 
 
@@ -431,8 +421,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
     if config.use_routed_input_transform and config.use_gate:
         return (
             False,
-            "routed_input_transform not supported with gate because of "
-            "padding problems",
+            "routed_input_transform not supported with gate because of padding problems",
         )
 
     # TODO: disable for now
@@ -442,28 +431,19 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
     ]:
         return (
             False,
-            "routed_input_transform not supported with DeepEP backends because "
-            "of padding problems",
+            "routed_input_transform not supported with DeepEP backends because of padding problems",
         )
 
     # routed_input_transform + quantization + high hidden dimensions
     # TODO: Disable >= 2048 for now due to insane errors.
-    if (
-        config.use_routed_input_transform
-        and config.quantization is not None
-        and config.k >= 2048
-    ):
+    if config.use_routed_input_transform and config.quantization is not None and config.k >= 2048:
         return (
             False,
-            "routed_input_transform + quantization + higher hidden dimensions "
-            "leads to large differences.",
+            "routed_input_transform + quantization + higher hidden dimensions leads to large differences.",
         )
 
     # Skip modelopt_fp4 if not on B100+ (compute capability 10.0+)
-    if (
-        config.quantization == "modelopt_fp4"
-        and not current_platform.has_device_capability(100)
-    ):
+    if config.quantization == "modelopt_fp4" and not current_platform.has_device_capability(100):
         return False, "modelopt_fp4 not supported on H100+ GPUs"
 
     # Skip flashinfer_nvlink if not on H100+ (compute capability 10.0+)
@@ -506,9 +486,7 @@ def is_valid_config(config: MoETestConfig) -> tuple[bool, str | None]:
                 )
 
     if config.backend is not None:
-        supports_ep_dp, supports_dp, supports_tp, supports_sp = (
-            BACKEND_EP_DP_TP_SUPPORT[config.backend]
-        )
+        supports_ep_dp, supports_dp, supports_tp, supports_sp = BACKEND_EP_DP_TP_SUPPORT[config.backend]
 
         if config.tp_size > 1 and not supports_tp and not config.is_sequence_parallel:
             return False, f"{config.backend} does not support TP."
@@ -686,20 +664,14 @@ def make_quant_config(
 
     if quantization == "fp8_blocked":
         block_shape = [128, 128]
-        return Fp8Config(True, weight_block_size=block_shape), _quantize_fp8_halves(
-            w1, w2, block_shape
-        )
+        return Fp8Config(True, weight_block_size=block_shape), _quantize_fp8_halves(w1, w2, block_shape)
 
     if quantization == "modelopt_fp8":
         qw = _quantize_fp8_halves(w1, w2)
         # why?
-        qw.w13_input_scale = torch.ones(
-            num_experts, dtype=torch.float32, device=w1.device
-        )
+        qw.w13_input_scale = torch.ones(num_experts, dtype=torch.float32, device=w1.device)
         # why?
-        qw.w2_input_scale = torch.ones(
-            num_experts, dtype=torch.float32, device=w2.device
-        )
+        qw.w2_input_scale = torch.ones(num_experts, dtype=torch.float32, device=w2.device)
         quant_config = ModelOptFp8Config(
             quant_method="FP8",
             is_checkpoint_fp8_serialized=True,
@@ -729,12 +701,8 @@ def make_quant_config(
             # Expand per-expert scalar to (E, 2) for the two shards.
             w13_weight_scale_2=(1.0 / w1gs).unsqueeze(1).expand(-1, 2).contiguous(),
             w2_weight_scale_2=1.0 / w2gs,
-            w13_input_scale=torch.ones(
-                (num_experts, 2), dtype=torch.float32, device=w1.device
-            ),
-            w2_input_scale=torch.ones(
-                num_experts, dtype=torch.float32, device=w2.device
-            ),
+            w13_input_scale=torch.ones((num_experts, 2), dtype=torch.float32, device=w1.device),
+            w2_input_scale=torch.ones(num_experts, dtype=torch.float32, device=w2.device),
         )
         quant_config = ModelOptNvFp4Config(
             is_checkpoint_nvfp4_serialized=True,
@@ -781,9 +749,7 @@ class SimpleGate(torch.nn.Module):
         device: str = "cuda",
     ):
         super().__init__()
-        self.weight = torch.nn.Parameter(
-            torch.randn(num_experts, hidden_size, device=device, dtype=dtype) / 10
-        )
+        self.weight = torch.nn.Parameter(torch.randn(num_experts, hidden_size, device=device, dtype=dtype) / 10)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, None]:
         """Returns (router_logits, None) to match expected signature."""
@@ -804,9 +770,7 @@ class SimpleRoutedInputTransform(torch.nn.Module):
         device: str = "cuda",
     ):
         super().__init__()
-        self.weight = torch.nn.Parameter(
-            torch.randn(out_features, in_features, device=device, dtype=dtype) / 10
-        )
+        self.weight = torch.nn.Parameter(torch.randn(out_features, in_features, device=device, dtype=dtype) / 10)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return torch.nn.functional.linear(x, self.weight)
@@ -912,26 +876,18 @@ def setup_moe_test_data(
 
     # Create routed input transform if needed
     routed_input_transform = (
-        SimpleRoutedInputTransform(k, latent_size, in_dtype, device=device)
-        if use_routed_input_transform
-        else None
+        SimpleRoutedInputTransform(k, latent_size, in_dtype, device=device) if use_routed_input_transform else None
     )
 
     # Create gate if needed
     # Note: gate is called AFTER routed_input_transform, so it should expect
     # the transformed dimension (latent_size) when routed_input_transform is used
     gate_input_dim = latent_size if use_routed_input_transform else k
-    gate = (
-        SimpleGate(gate_input_dim, num_experts, in_dtype, device=device)
-        if use_gate
-        else None
-    )
+    gate = SimpleGate(gate_input_dim, num_experts, in_dtype, device=device) if use_gate else None
 
     # Create routed output transform if needed (projects latent space back to original)
     routed_output_transform = (
-        SimpleRoutedInputTransform(latent_size, k, in_dtype, device=device)
-        if use_routed_input_transform
-        else None
+        SimpleRoutedInputTransform(latent_size, k, in_dtype, device=device) if use_routed_input_transform else None
     )
 
     # Create test inputs
@@ -1030,9 +986,7 @@ def make_fused_moe_layer(
         **kwargs,
     )
 
-    weight_scale_name = getattr(
-        layer._quant_method, "weight_scale_name", "weight_scale"
-    )
+    weight_scale_name = getattr(layer._quant_method, "weight_scale_name", "weight_scale")
 
     for name, value in [
         ("w13_weight", qw.w13_weight),
@@ -1045,9 +999,7 @@ def make_fused_moe_layer(
         ("w2_input_scale", qw.w2_input_scale),
     ]:
         if value is not None:
-            layer.routed_experts.register_parameter(
-                name, torch.nn.Parameter(value, requires_grad=False)
-            )
+            layer.routed_experts.register_parameter(name, torch.nn.Parameter(value, requires_grad=False))
 
     layer._quant_method.process_weights_after_loading(layer.routed_experts)
 
@@ -1308,9 +1260,7 @@ def _test_body_eplb(
     # Build logical_to_physical_map from shuffled_indices
     # shuffled_indices[physical] = logical, we need the inverse
     logical_to_physical = torch.empty(num_experts, dtype=torch.int32, device=device)
-    logical_to_physical[shuffled_indices.to(device)] = torch.arange(
-        num_experts, dtype=torch.int32, device=device
-    )
+    logical_to_physical[shuffled_indices.to(device)] = torch.arange(num_experts, dtype=torch.int32, device=device)
 
     eplb_moe_layer.set_eplb_state(
         moe_layer_idx=0,
@@ -1319,9 +1269,7 @@ def _test_body_eplb(
             dtype=torch.int32,
             device=device,
         ),
-        logical_to_physical_map=logical_to_physical.reshape(num_experts, 1).unsqueeze(
-            0
-        ),
+        logical_to_physical_map=logical_to_physical.reshape(num_experts, 1).unsqueeze(0),
         logical_replica_count=torch.ones(
             (1, num_experts),
             dtype=torch.int32,
@@ -1329,12 +1277,8 @@ def _test_body_eplb(
         ),
     )
 
-    eplb_moe_layer.router.eplb_state.should_record_tensor = torch.ones(
-        (), dtype=torch.bool, device=device
-    )
-    eplb_moe_layer.router.eplb_state.num_unpadded_tokens_tensors = [
-        torch.tensor(0, dtype=torch.int32, device=device)
-    ]
+    eplb_moe_layer.router.eplb_state.should_record_tensor = torch.ones((), dtype=torch.bool, device=device)
+    eplb_moe_layer.router.eplb_state.num_unpadded_tokens_tensors = [torch.tensor(0, dtype=torch.int32, device=device)]
 
     # Get "after" output with rearranged weights and EPLB routing
     with set_forward_context(
@@ -1447,9 +1391,7 @@ def _run_one_config(
         with set_current_aphrodite_config(aphrodite_config):
             # Compute baseline output with SP wrapper if needed
             # sp_wrapper handles sequence chunking/gathering for SP
-            baseline_output = sp_wrapper(baseline_layer, is_sequence_parallel)(
-                hidden_states, router_logits
-            )
+            baseline_output = sp_wrapper(baseline_layer, is_sequence_parallel)(hidden_states, router_logits)
 
         del baseline_layer
         torch.accelerator.empty_cache()
@@ -1627,9 +1569,7 @@ def test_moe_layer_no_parallel(
     compilation_config = CompilationConfig()
     compilation_config.pass_config.fuse_allreduce_rms = False
 
-    aphrodite_config = AphroditeConfig(
-        parallel_config=parallel_config, compilation_config=compilation_config
-    )
+    aphrodite_config = AphroditeConfig(parallel_config=parallel_config, compilation_config=compilation_config)
 
     # Initialize distributed environment for single GPU
     _set_aphrodite_config(aphrodite_config, 1, rank=0, local_rank=0)
@@ -1710,9 +1650,7 @@ def _parallel_worker(
                 test_config.top_k,
                 test_config.quantization,
                 test_config.backend,
-                functools.partial(
-                    _test_body_config, test_config=test_config, cpu_group=cpu_group
-                ),
+                functools.partial(_test_body_config, test_config=test_config, cpu_group=cpu_group),
                 use_shared_experts=test_config.use_shared_experts,
                 use_gate=test_config.use_gate,
                 use_routed_input_transform=test_config.use_routed_input_transform,
@@ -1753,18 +1691,14 @@ def _parallel_worker(
     sep = ", " if skips != "" or fails != "" else ""
     passes = f"{sep}{passed} passed" if passed > 0 else ""
 
-    report = (
-        f"============= {fails}{skips}{passes} of {total} total tests ============="
-    )
+    report = f"============= {fails}{skips}{passes} of {total} total tests ============="
 
     sep = "\n" if verbosity == 0 else ""
     print(f"{sep}{report}")
 
     if failed > 0:
         fail_ids_str = "\n".join(fail_ids)
-        raise RuntimeError(
-            f"\n============= Failed subtests =============\n{fail_ids_str}\n{report}"
-        )
+        raise RuntimeError(f"\n============= Failed subtests =============\n{fail_ids_str}\n{report}")
 
 
 # TODO: add cudagraphs/torch.compile tests
@@ -1827,14 +1761,10 @@ def test_moe_layer(
     aphrodite_config = AphroditeConfig(
         parallel_config=parallel_config,
         compilation_config=compilation_config,
-        scheduler_config=SchedulerConfig.default_factory(
-            max_num_batched_tokens=next_power_of_2(MAX_M)
-        ),
+        scheduler_config=SchedulerConfig.default_factory(max_num_batched_tokens=next_power_of_2(MAX_M)),
     )
 
-    test_configs = generate_valid_test_configs(
-        backend, ep_size, dp_size, tp_size, enable_eplb, verbosity
-    )
+    test_configs = generate_valid_test_configs(backend, ep_size, dp_size, tp_size, enable_eplb, verbosity)
 
     if subtests is not None:
         new_test_configs = []
@@ -1843,10 +1773,7 @@ def test_moe_layer(
             if sub_test_config in test_configs:
                 new_test_configs.append(sub_test_config)
             else:
-                pytest.skip(
-                    f"subtest config {subtest} does not match any valid test "
-                    "configuration"
-                )
+                pytest.skip(f"subtest config {subtest} does not match any valid test configuration")
         test_configs = new_test_configs
 
     if len(test_configs) == 0:

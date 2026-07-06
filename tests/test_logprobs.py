@@ -103,9 +103,7 @@ def test_append_logprobs_for_next_position_flat() -> None:
     assert logprobs.decoded_tokens == ["1", "2", "3"]
 
 
-LOGPROBS_ONE_POSITION_0: LogprobsOnePosition = {
-    1: Logprob(logprob=0.1, rank=10, decoded_token="10")
-}
+LOGPROBS_ONE_POSITION_0: LogprobsOnePosition = {1: Logprob(logprob=0.1, rank=10, decoded_token="10")}
 LOGPROBS_ONE_POSITION_1: LogprobsOnePosition = {
     2: Logprob(logprob=0.2, rank=20, decoded_token="20"),
     3: Logprob(logprob=0.3, rank=30, decoded_token="30"),
@@ -162,9 +160,7 @@ def test_flat_logprobs_extend() -> None:
 
 def test_flat_logprobs_access() -> None:
     logprobs = FlatLogprobs()
-    logprobs.extend(
-        [LOGPROBS_ONE_POSITION_1, LOGPROBS_ONE_POSITION_2, LOGPROBS_ONE_POSITION_0]
-    )
+    logprobs.extend([LOGPROBS_ONE_POSITION_1, LOGPROBS_ONE_POSITION_2, LOGPROBS_ONE_POSITION_0])
     assert logprobs.start_indices == [0, 2, 5]
     assert logprobs.end_indices == [2, 5, 6]
     assert logprobs.token_ids == [2, 3, 4, 5, 6, 1]

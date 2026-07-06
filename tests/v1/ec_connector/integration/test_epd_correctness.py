@@ -85,9 +85,7 @@ SAMPLE_PROMPTS_TEXT: list[dict] = [
         "description": "Simple text-only query",
     },
     {
-        "messages": [
-            {"role": "user", "content": "Explain quantum computing in simple terms."}
-        ],
+        "messages": [{"role": "user", "content": "Explain quantum computing in simple terms."}],
         "description": "Text-only explanation request",
     },
 ]
@@ -111,10 +109,7 @@ def check_aphrodite_server(url: str, timeout=5, retries=10) -> bool:
                 print(f"Server is ready at {url}")
                 return True
             else:
-                print(
-                    f"Attempt {attempt + 1}/{retries}: Server returned "
-                    f"status code {response.status_code}"
-                )
+                print(f"Attempt {attempt + 1}/{retries}: Server returned status code {response.status_code}")
         except requests.exceptions.RequestException as e:
             print(f"Attempt {attempt + 1}/{retries}: Error connecting: {e}")
         time.sleep(2)  # Wait before retrying
@@ -153,9 +148,7 @@ def run_chat_completion(
 
 def main():
     """Main test function."""
-    parser = argparse.ArgumentParser(
-        description="EPD correctness test - compare disagg vs baseline"
-    )
+    parser = argparse.ArgumentParser(description="EPD correctness test - compare disagg vs baseline")
 
     parser.add_argument(
         "--service_url",
@@ -232,10 +225,7 @@ def main():
     output_strs = {}
 
     for i, prompt_data in enumerate(test_prompts):
-        print(
-            f"\nRunning prompt {i + 1}/{len(test_prompts)}: "
-            f"{prompt_data['description']}"
-        )
+        print(f"\nRunning prompt {i + 1}/{len(test_prompts)}: {prompt_data['description']}")
 
         output_str = run_chat_completion(
             base_url=service_url,
@@ -274,8 +264,7 @@ def main():
         print("\nComparing disagg outputs with baseline...")
         assert isinstance(baseline_outputs, dict), "Baseline outputs should be a dict"
         assert len(baseline_outputs) == len(output_strs), (
-            f"Length mismatch: baseline has {len(baseline_outputs)}, "
-            f"disagg has {len(output_strs)}"
+            f"Length mismatch: baseline has {len(baseline_outputs)}, disagg has {len(output_strs)}"
         )
 
         all_match = True

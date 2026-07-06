@@ -20,11 +20,7 @@ from torch.utils.hipify.hipify_python import get_hip_file_path, hipify
 def _expected_hip_build_path(source_abs: str, output_directory: str) -> str:
     """Match torch.utils.hipify.hipify_python.preprocessor fout_path naming."""
     rel = os.path.relpath(source_abs, output_directory)
-    return os.path.abspath(
-        os.path.join(
-            output_directory, get_hip_file_path(rel, is_pytorch_extension=True)
-        )
-    )
+    return os.path.abspath(os.path.join(output_directory, get_hip_file_path(rel, is_pytorch_extension=True)))
 
 
 if __name__ == "__main__":
@@ -45,9 +41,7 @@ if __name__ == "__main__":
     )
 
     # Source files to convert.
-    parser.add_argument(
-        "sources", help="Source files to hipify.", nargs="*", default=[]
-    )
+    parser.add_argument("sources", help="Source files to hipify.", nargs="*", default=[])
 
     args = parser.parse_args()
 

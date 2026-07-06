@@ -60,9 +60,7 @@ async def tokenize(request: TokenizeRequest, raw_request: Request):
     generator = await handler.create_tokenize(request, raw_request)
 
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(
-            content=generator.model_dump(), status_code=generator.error.code
-        )
+        return JSONResponse(content=generator.model_dump(), status_code=generator.error.code)
     elif isinstance(generator, TokenizeResponse):
         return JSONResponse(content=generator.model_dump())
 
@@ -96,14 +94,10 @@ async def detokenize(request: DetokenizeRequest, raw_request: Request):
     except OverflowError as e:
         raise RequestValidationError(errors=[str(e)]) from e
     except Exception as e:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)) from e
 
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(
-            content=generator.model_dump(), status_code=generator.error.code
-        )
+        return JSONResponse(content=generator.model_dump(), status_code=generator.error.code)
     elif isinstance(generator, DetokenizeResponse):
         return JSONResponse(content=generator.model_dump())
 
@@ -120,9 +114,7 @@ def attach_router(app: FastAPI):
             result = await tokenization(raw_request).get_tokenizer_info()
             return JSONResponse(
                 content=result.model_dump(),
-                status_code=result.error.code
-                if isinstance(result, ErrorResponse)
-                else 200,
+                status_code=result.error.code if isinstance(result, ErrorResponse) else 200,
             )
 
     app.include_router(router)

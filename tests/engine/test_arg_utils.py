@@ -339,9 +339,7 @@ def test_compilation_config():
     # set to string form of a dict
     args = parser.parse_args(
         [
-            "--compilation-config="
-            '{"mode": 3, "cudagraph_capture_sizes": [1, 2, 4, 8], '
-            '"backend": "inductor"}',
+            '--compilation-config={"mode": 3, "cudagraph_capture_sizes": [1, 2, 4, 8], "backend": "inductor"}',
         ]
     )
     assert (
@@ -593,9 +591,7 @@ def test_ir_op_priority():
 
     ir_op_priority = IrOpPriorityConfig(rms_norm=["aphrodite_c"])
     cfg1 = EngineArgs(ir_op_priority=ir_op_priority).create_engine_config()
-    cfg2 = EngineArgs(
-        kernel_config=KernelConfig(ir_op_priority=ir_op_priority)
-    ).create_engine_config()
+    cfg2 = EngineArgs(kernel_config=KernelConfig(ir_op_priority=ir_op_priority)).create_engine_config()
     assert cfg1.kernel_config.ir_op_priority == cfg2.kernel_config.ir_op_priority
 
     with pytest.raises(ValueError, match="rms_norm"):
@@ -691,9 +687,7 @@ class TestDeviceIds:
         monkeypatch.setattr(
             type(current_platform),
             "device_control_id_to_physical_device_id",
-            classmethod(
-                lambda cls, device_id: {"GPU-abcd1234": 4, "GPU-ef567890": 5}[device_id]
-            ),
+            classmethod(lambda cls, device_id: {"GPU-abcd1234": 4, "GPU-ef567890": 5}[device_id]),
         )
 
         args = EngineArgs(model="m", device_ids=[0, 1])
@@ -734,9 +728,7 @@ class TestDeviceIds:
         """--device-ids parses comma-separated UUID strings from CLI."""
         parser = FlexibleArgumentParser()
         EngineArgs.add_cli_args(parser)
-        parsed = parser.parse_args(
-            ["--model", "m", "--device-ids", "GPU-abcd1234,GPU-ef567890"]
-        )
+        parsed = parser.parse_args(["--model", "m", "--device-ids", "GPU-abcd1234,GPU-ef567890"])
         assert parsed.device_ids == ["GPU-abcd1234", "GPU-ef567890"]
 
     def test_assigned_physical_gpu_ids_are_physical_with_cvd(self, monkeypatch):
@@ -765,9 +757,7 @@ class TestDeviceIds:
         monkeypatch.setattr(
             type(current_platform),
             "device_control_id_to_physical_device_id",
-            classmethod(
-                lambda cls, device_id: {"GPU-abcd1234": 4, "GPU-ef567890": 5}[device_id]
-            ),
+            classmethod(lambda cls, device_id: {"GPU-abcd1234": 4, "GPU-ef567890": 5}[device_id]),
         )
 
         assert current_platform.logical_device_id_to_visible_device_id(0) == 1
@@ -819,9 +809,7 @@ class TestDpDeviceIdSharding:
 
         from aphrodite.entrypoints.openai.dp_supervisor import _build_device_ids
 
-        args = argparse.Namespace(
-            tensor_parallel_size=2, pipeline_parallel_size=1, device_ids=None
-        )
+        args = argparse.Namespace(tensor_parallel_size=2, pipeline_parallel_size=1, device_ids=None)
         assert _build_device_ids(args, local_rank=0) == [0, 1]
         assert _build_device_ids(args, local_rank=1) == [2, 3]
 
@@ -831,9 +819,7 @@ class TestDpDeviceIdSharding:
 
         from aphrodite.entrypoints.openai.dp_supervisor import _build_device_ids
 
-        args = argparse.Namespace(
-            tensor_parallel_size=2, pipeline_parallel_size=1, device_ids=[4, 5, 6, 7]
-        )
+        args = argparse.Namespace(tensor_parallel_size=2, pipeline_parallel_size=1, device_ids=[4, 5, 6, 7])
         assert _build_device_ids(args, local_rank=0) == [4, 5]
         assert _build_device_ids(args, local_rank=1) == [6, 7]
         with pytest.raises(ValueError, match="needs devices"):

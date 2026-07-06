@@ -17,10 +17,10 @@ import os
 import pytest
 import torch
 
-from tests.kernels.quantization.nvfp4_utils import get_nvfp4_global_scale
 from aphrodite import _custom_ops as ops
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.quantization.nvfp4_utils import get_nvfp4_global_scale
 
 if not current_platform.has_device_capability(100):
     pytest.skip(

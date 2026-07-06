@@ -16,8 +16,8 @@ import pytest
 import pytest_asyncio
 from PIL import Image
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.multimodal.utils import encode_image_url
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-VL-2B-Instruct"
 GEN_ENDPOINT = "/inference/v1/generate"
@@ -153,6 +153,4 @@ async def test_render_to_generate_roundtrip(client, test_image):
     text = detok_data["prompt"]
     assert isinstance(text, str)
     assert len(text) > 0
-    assert "red" in text.lower(), (
-        f"Expected model to identify the red image, got: {text!r}"
-    )
+    assert "red" in text.lower(), f"Expected model to identify the red image, got: {text!r}"

@@ -39,9 +39,7 @@ def _create_random_request(
     num_mm_item = random.randint(*num_mm_item_range)
 
     mm_positions: list[PlaceholderRange] = []
-    for mm_start in sorted(
-        random.sample(range(num_tokens), min(num_mm_item, num_tokens))
-    ):
+    for mm_start in sorted(random.sample(range(num_tokens), min(num_mm_item, num_tokens))):
         if mm_start + 10 > num_tokens:
             continue
         mm_positions.append(PlaceholderRange(offset=mm_start, length=10))
@@ -64,13 +62,9 @@ def _create_random_request(
 
     prompt_token_ids = random.choices(range(100), k=num_tokens)
 
-    caching_hash_fn = get_hash_fn_by_name(
-        aphrodite_config.cache_config.prefix_caching_hash_algo
-    )
+    caching_hash_fn = get_hash_fn_by_name(aphrodite_config.cache_config.prefix_caching_hash_algo)
     init_none_hash(caching_hash_fn)
-    block_hasher = get_request_block_hasher(
-        aphrodite_config.cache_config.block_size, caching_hash_fn
-    )
+    block_hasher = get_request_block_hasher(aphrodite_config.cache_config.block_size, caching_hash_fn)
 
     request = Request(
         request_id=request_id,
@@ -93,13 +87,8 @@ def _mock_execute_model(
     request_ids.extend(scheduler_output.scheduled_cached_reqs.req_ids)
     random.shuffle(request_ids)
 
-    num_output_tokens = [
-        random.randint(*num_output_tokens_range) for _ in range(len(request_ids))
-    ]
-    sampled_token_ids = [
-        [random.randint(0, 100) for _ in range(num_tokens)]
-        for num_tokens in num_output_tokens
-    ]
+    num_output_tokens = [random.randint(*num_output_tokens_range) for _ in range(len(request_ids))]
+    sampled_token_ids = [[random.randint(0, 100) for _ in range(num_tokens)] for num_tokens in num_output_tokens]
 
     return ModelRunnerOutput(
         req_ids=request_ids,
@@ -124,9 +113,7 @@ def _mock_draft_token_ids(
         if request.num_computed_tokens >= seen_request_prompt_length[request.req_id]:
             num_tokens = random.randint(*num_output_tokens_range)
             request_ids.append(request.req_id)
-            sampled_token_ids.append(
-                [random.randint(0, 100) for _ in range(num_tokens)]
-            )
+            sampled_token_ids.append([random.randint(0, 100) for _ in range(num_tokens)])
     for req_id, num_computed_tokens in zip(
         scheduler_output.scheduled_cached_reqs.req_ids,
         scheduler_output.scheduled_cached_reqs.num_computed_tokens,
@@ -134,9 +121,7 @@ def _mock_draft_token_ids(
         if num_computed_tokens >= seen_request_prompt_length[req_id]:
             num_tokens = random.randint(*num_output_tokens_range)
             request_ids.append(req_id)
-            sampled_token_ids.append(
-                [random.randint(0, 100) for _ in range(num_tokens)]
-            )
+            sampled_token_ids.append([random.randint(0, 100) for _ in range(num_tokens)])
     return DraftTokenIds(req_ids=request_ids, draft_token_ids=sampled_token_ids)
 
 
@@ -156,10 +141,7 @@ def _check_valid_scheduler_output(
     req_ids.update(scheduler_output.scheduled_cached_reqs.req_ids)
 
     assert set(scheduler_output.num_scheduled_tokens.keys()) == req_ids
-    assert (
-        sum(scheduler_output.num_scheduled_tokens.values())
-        == scheduler_output.total_num_scheduled_tokens
-    )
+    assert sum(scheduler_output.num_scheduled_tokens.values()) == scheduler_output.total_num_scheduled_tokens
 
     assert set(scheduler_output.scheduled_spec_decode_tokens.keys()) <= req_ids
     assert set(scheduler_output.scheduled_encoder_inputs.keys()) <= req_ids
@@ -242,9 +224,7 @@ def test_priority_scheduling_blast(
                 )
                 scheduler.add_request(req)
         scheduler_output = scheduler.schedule()
-        _check_valid_scheduler_output(
-            scheduler_output, seen_request_ids, seen_mm_hashes
-        )
+        _check_valid_scheduler_output(scheduler_output, seen_request_ids, seen_mm_hashes)
         model_output = _mock_execute_model(
             scheduler_output,
             num_output_tokens_range=(1, 1 + (num_speculative_tokens or 0)),

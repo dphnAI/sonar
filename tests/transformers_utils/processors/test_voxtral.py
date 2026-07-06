@@ -36,9 +36,7 @@ def feature_extractor() -> MistralCommonFeatureExtractor:
     ],
     ids=["numpy_array", "torch_tensor", "list_of_floats"],
 )
-def test_fetch_audio_passes_through(
-    feature_extractor: MistralCommonFeatureExtractor, audio
-):
+def test_fetch_audio_passes_through(feature_extractor: MistralCommonFeatureExtractor, audio):
     result = feature_extractor.fetch_audio(audio)
     assert result is audio
 
@@ -55,9 +53,7 @@ def test_fetch_audio_recurses_over_list_of_arrays(
     assert result[1] is b
 
 
-def test_fetch_audio_uses_self_sampling_rate_when_none(
-    monkeypatch, feature_extractor: MistralCommonFeatureExtractor
-):
+def test_fetch_audio_uses_self_sampling_rate_when_none(monkeypatch, feature_extractor: MistralCommonFeatureExtractor):
     """If ``sampling_rate`` is None, ``self.sampling_rate`` must be used.
 
     Verified indirectly via the recursion path: when we pass a list of arrays
@@ -78,9 +74,7 @@ def test_fetch_audio_uses_self_sampling_rate_when_none(
     assert captured[1] == 16000
 
 
-def test_fetch_audio_explicit_sampling_rate_propagates(
-    monkeypatch, feature_extractor: MistralCommonFeatureExtractor
-):
+def test_fetch_audio_explicit_sampling_rate_propagates(monkeypatch, feature_extractor: MistralCommonFeatureExtractor):
     captured: list[int | None] = []
     original = feature_extractor.fetch_audio
 
@@ -101,9 +95,7 @@ def test_fetch_audio_rejects_unsupported_type(
         feature_extractor.fetch_audio(42)  # type: ignore[arg-type]
 
 
-def test_fetch_audio_str_delegates_to_load_audio(
-    monkeypatch, feature_extractor: MistralCommonFeatureExtractor
-):
+def test_fetch_audio_str_delegates_to_load_audio(monkeypatch, feature_extractor: MistralCommonFeatureExtractor):
     """A str input must round-trip through ``transformers.audio_utils.load_audio``.
 
     We monkey-patch ``load_audio`` so the test stays offline (no real URL/path

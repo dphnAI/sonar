@@ -55,9 +55,7 @@ class BlockHashToBlockMap:
     """
 
     def __init__(self):
-        self._cache: dict[
-            BlockHashWithGroupId, KVCacheBlock | dict[int, KVCacheBlock]
-        ] = {}
+        self._cache: dict[BlockHashWithGroupId, KVCacheBlock | dict[int, KVCacheBlock]] = {}
 
     def get_one_block(self, key: BlockHashWithGroupId) -> KVCacheBlock | None:
         """
@@ -173,9 +171,7 @@ class BlockPool:
         self.enable_caching = enable_caching
         self.hash_block_size = hash_block_size
         # All kv-cache blocks.
-        self.blocks: list[KVCacheBlock] = [
-            KVCacheBlock(idx) for idx in range(num_gpu_blocks)
-        ]
+        self.blocks: list[KVCacheBlock] = [KVCacheBlock(idx) for idx in range(num_gpu_blocks)]
         # Free block queue that constructs and manipulates a doubly linked
         # list of free blocks (including eviction candidates when caching is
         # enabled).
@@ -196,9 +192,7 @@ class BlockPool:
 
         self.metrics_collector = metrics_collector
 
-    def get_cached_block(
-        self, block_hash: BlockHash, kv_cache_group_ids: list[int]
-    ) -> list[KVCacheBlock] | None:
+    def get_cached_block(self, block_hash: BlockHash, kv_cache_group_ids: list[int]) -> list[KVCacheBlock] | None:
         """Get the cached block by the block hash for each group in
         `kv_cache_group_ids`, or None if cache miss for any group.
         If there are duplicated blocks, we return the first block in the cache.
@@ -212,12 +206,8 @@ class BlockPool:
         """
         cached_blocks = []
         for group_id in kv_cache_group_ids:
-            block_hash_with_group_id = make_block_hash_with_group_id(
-                block_hash, group_id
-            )
-            block = self.cached_block_hash_to_block.get_one_block(
-                block_hash_with_group_id
-            )
+            block_hash_with_group_id = make_block_hash_with_group_id(block_hash, group_id)
+            block = self.cached_block_hash_to_block.get_one_block(block_hash_with_group_id)
             if not block:
                 return None
             cached_blocks.append(block)
@@ -268,15 +258,11 @@ class BlockPool:
             # block_size is a multiple of hash_block_size. This happens when
             # different KV cache groups have different block sizes.
             assert block_size % self.hash_block_size == 0
-            block_hashes = BlockHashListWithBlockSize(
-                request.block_hashes, self.hash_block_size, block_size
-            )
+            block_hashes = BlockHashListWithBlockSize(request.block_hashes, self.hash_block_size, block_size)
         assert len(block_hashes) >= num_full_blocks
 
         new_block_hashes = block_hashes[num_cached_blocks:]
-        new_hashes: list[ExternalBlockHash] | None = (
-            [] if self.enable_kv_cache_events else None
-        )
+        new_hashes: list[ExternalBlockHash] | None = [] if self.enable_kv_cache_events else None
         for i, blk in enumerate(new_full_blocks):
             # Some blocks may be null or masked out when enabling sparse attention
             # like sliding window attention, or Mamba models with prefix-caching
@@ -287,16 +273,11 @@ class BlockPool:
             num_hash_tokens = (num_cached_blocks + i + 1) * block_size
 
             # Update and added the full block to the cache.
-            block_hash_with_group_id = make_block_hash_with_group_id(
-                block_hash, kv_cache_group_id
-            )
+            block_hash_with_group_id = make_block_hash_with_group_id(block_hash, kv_cache_group_id)
             if blk.block_hash is not None:
                 # The only valid case where a "new full block" already has a
                 # hash is partial->full promotion of the same cache block.
-                assert (
-                    blk.block_hash_num_tokens is not None
-                    and blk.block_hash_num_tokens < num_hash_tokens
-                )
+                assert blk.block_hash_num_tokens is not None and blk.block_hash_num_tokens < num_hash_tokens
                 removed_hashes = self._remove_cached_block_hashes(blk)
                 self._emit_block_removed_events(removed_hashes)
             self._insert_block_hash(
@@ -311,9 +292,7 @@ class BlockPool:
             if num_cached_blocks == 0:
                 parent_block_hash: ExternalBlockHash | None = None
             else:
-                parent_block_hash = maybe_convert_block_hash(
-                    block_hashes[num_cached_blocks - 1]
-                )
+                parent_block_hash = maybe_convert_block_hash(block_hashes[num_cached_blocks - 1])
 
             # Calculate token range for the blocks being cached
             start_token_idx = num_cached_blocks * block_size
@@ -332,9 +311,7 @@ class BlockPool:
                     continue
                 block_start = i * block_size
                 block_end = block_start + block_size
-                extra_keys, curr_mm_idx = generate_block_hash_extra_keys(
-                    request, block_start, block_end, curr_mm_idx
-                )
+                extra_keys, curr_mm_idx = generate_block_hash_extra_keys(request, block_start, block_end, curr_mm_idx)
                 extra_keys_list.append(extra_keys)
 
             self.kv_event_queue.append(
@@ -343,13 +320,9 @@ class BlockPool:
                     parent_block_hash=parent_block_hash,
                     token_ids=request.all_token_ids[start_token_idx:end_token_idx],
                     block_size=block_size,
-                    lora_id=request.lora_request.adapter_id
-                    if request.lora_request
-                    else None,
+                    lora_id=request.lora_request.adapter_id if request.lora_request else None,
                     medium=MEDIUM_GPU,
-                    lora_name=request.lora_request.name
-                    if request.lora_request
-                    else None,
+                    lora_name=request.lora_request.name if request.lora_request else None,
                     extra_keys=extra_keys_list if extra_keys_list else None,
                     group_idx=kv_cache_group_id,
                 )
@@ -402,13 +375,9 @@ class BlockPool:
         assert num_tokens % block_size != 0
         block_hash = self._get_partial_block_hash(request, num_tokens)
         num_hash_blocks = num_tokens // self.hash_block_size
-        block_hash_with_group_id = make_block_hash_with_group_id(
-            block_hash, kv_cache_group_id
-        )
+        block_hash_with_group_id = make_block_hash_with_group_id(block_hash, kv_cache_group_id)
         already_cached = block.block_hash == block_hash_with_group_id or (
-            self.cached_block_hash_to_block.contain(
-                block_hash_with_group_id, block.block_id
-            )
+            self.cached_block_hash_to_block.contain(block_hash_with_group_id, block.block_id)
         )
         if (
             not already_cached
@@ -424,32 +393,20 @@ class BlockPool:
             num_tokens=num_hash_blocks * self.hash_block_size,
         )
         if self.enable_kv_cache_events and not already_cached:
-            parent_hash, block_start = self._get_partial_block_parent_hash_and_start(
-                request, num_tokens
-            )
-            parent_block_hash = (
-                maybe_convert_block_hash(parent_hash)
-                if parent_hash is not None
-                else None
-            )
+            parent_hash, block_start = self._get_partial_block_parent_hash_and_start(request, num_tokens)
+            parent_block_hash = maybe_convert_block_hash(parent_hash) if parent_hash is not None else None
             block_end = num_tokens
             curr_mm_idx = -1 if block_start > 0 else 0
-            extra_keys, _ = generate_block_hash_extra_keys(
-                request, block_start, block_end, curr_mm_idx
-            )
+            extra_keys, _ = generate_block_hash_extra_keys(request, block_start, block_end, curr_mm_idx)
             self.kv_event_queue.append(
                 BlockStored(
                     block_hashes=[maybe_convert_block_hash(block_hash)],
                     parent_block_hash=parent_block_hash,
                     token_ids=request.all_token_ids[block_start:block_end],
                     block_size=block_end - block_start,
-                    lora_id=request.lora_request.adapter_id
-                    if request.lora_request
-                    else None,
+                    lora_id=request.lora_request.adapter_id if request.lora_request else None,
                     medium=MEDIUM_GPU,
-                    lora_name=request.lora_request.name
-                    if request.lora_request
-                    else None,
+                    lora_name=request.lora_request.name if request.lora_request else None,
                     extra_keys=[extra_keys],
                     group_idx=kv_cache_group_id,
                 )
@@ -475,9 +432,7 @@ class BlockPool:
         num_tokens: int,
     ) -> tuple[BlockHash | None, int]:
         num_hash_blocks = num_tokens // self.hash_block_size
-        parent_hash = (
-            request.block_hashes[num_hash_blocks - 2] if num_hash_blocks > 1 else None
-        )
+        parent_hash = request.block_hashes[num_hash_blocks - 2] if num_hash_blocks > 1 else None
         block_start = (num_hash_blocks - 1) * self.hash_block_size
         return parent_hash, block_start
 
@@ -494,10 +449,7 @@ class BlockPool:
 
         removed_hashes: list[BlockHashWithGroupId] = []
         for block_hash in block_hashes:
-            if (
-                self.cached_block_hash_to_block.pop(block_hash, block.block_id)
-                is not None
-            ):
+            if self.cached_block_hash_to_block.pop(block_hash, block.block_id) is not None:
                 removed_hashes.append(block_hash)
         block.reset_hash()
         return removed_hashes
@@ -526,17 +478,13 @@ class BlockPool:
         if block.block_hash == block_hash_with_group_id:
             return
 
-        if self.cached_block_hash_to_block.contain(
-            block_hash_with_group_id, block.block_id
-        ):
+        if self.cached_block_hash_to_block.contain(block_hash_with_group_id, block.block_id):
             return
 
         if block.block_hash is None:
             block.set_block_hash(block_hash_with_group_id, num_tokens=num_tokens)
         else:
-            self.cached_block_hashes_by_block.setdefault(block.block_id, set()).add(
-                block_hash_with_group_id
-            )
+            self.cached_block_hashes_by_block.setdefault(block.block_id, set()).add(block_hash_with_group_id)
         self.cached_block_hash_to_block.insert(block_hash_with_group_id, block)
 
     def get_new_blocks(self, num_blocks: int) -> list[KVCacheBlock]:
@@ -665,8 +613,7 @@ class BlockPool:
         num_used_blocks = self.num_gpu_blocks - self.get_num_free_blocks()
         if num_used_blocks != 1:  # The null block is always marked as used
             logger.warning(
-                "Failed to reset prefix cache because some "
-                "blocks (%d) are not freed yet",
+                "Failed to reset prefix cache because some blocks (%d) are not freed yet",
                 num_used_blocks - 1,
             )
             return False

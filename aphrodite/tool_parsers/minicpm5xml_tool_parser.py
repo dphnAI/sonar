@@ -42,9 +42,7 @@ except Exception:  # pragma: no cover
     _HAS_LXML = False
 
 _FUNC_NAME_V1_REGEX = re.compile(r"<function\s+name=['\"]([^'\"]+)['\"][^>]*>")
-_PARAM_WITH_NAME_REGEX = re.compile(
-    r"<param\s+name=['\"]([^'\"]+)['\"]>([\s\S]*?)</param>", re.DOTALL
-)
+_PARAM_WITH_NAME_REGEX = re.compile(r"<param\s+name=['\"]([^'\"]+)['\"]>([\s\S]*?)</param>", re.DOTALL)
 _PARAM_MISSING_NAME_REGEX = re.compile(r"<param(?![^>]*\bname=)[^>]*>", re.DOTALL)
 _FUNC_BLOCK_REGEX = re.compile(r"<function.*?</function>", re.DOTALL)
 
@@ -86,9 +84,7 @@ def _streaming_args_snapshot(args_json: str, *, is_complete: bool) -> str:
     return args_json[:-1]
 
 
-def _streaming_args_diff(
-    prev_args: str, args_json: str, *, is_complete: bool
-) -> str | None:
+def _streaming_args_diff(prev_args: str, args_json: str, *, is_complete: bool) -> str | None:
     """Compute the next arguments fragment for OpenAI-style streaming accumulation."""
     if prev_args == "{}":
         prev_args = ""
@@ -143,9 +139,7 @@ def _coerce_argument_value(
 ) -> Any:
     arg_type = _get_argument_type(func_name, arg_key, name_to_tool)
     if arg_type == "string":
-        return (
-            value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-        )
+        return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     if isinstance(value, str):
         parsed_val, _ = _parse_arguments(value)
         return parsed_val
@@ -165,11 +159,7 @@ def _add_argument(
     # MiniCPM5 can emit OpenAI-style wrappers, e.g.
     # <param name="properties">{'id': '...'}</param>. Keep known fields and
     # ignore extra fields so valid tool calls do not fall back to long text.
-    if (
-        key in {"properties", "arguments"}
-        and allowed_props
-        and key not in allowed_props
-    ):
+    if key in {"properties", "arguments"} and allowed_props and key not in allowed_props:
         parsed_val, parsed_ok = _parse_arguments(val_text)
         if not parsed_ok or not isinstance(parsed_val, dict):
             return False
@@ -180,9 +170,7 @@ def _add_argument(
             if wrapped_key in seen_keys:
                 return False
             seen_keys.add(wrapped_key)
-            arguments[wrapped_key] = _coerce_argument_value(
-                func_name, wrapped_key, wrapped_value, name_to_tool
-            )
+            arguments[wrapped_key] = _coerce_argument_value(func_name, wrapped_key, wrapped_value, name_to_tool)
             added = True
         return added
 
@@ -249,16 +237,10 @@ def _normalize_alias_tool_call(
         if line_id is not None:
             return "toggle_roaming", {"line_id": line_id, "enabled": False}
 
-    if (
-        func_name in {"add_refueled_data", "add_data_to_line"}
-        and "refuel_data" in tool_names
-    ):
+    if func_name in {"add_refueled_data", "add_data_to_line"} and "refuel_data" in tool_names:
         line_id = arguments.get("line_id") or arguments.get("id")
         amount = (
-            arguments.get("amount_gb")
-            or arguments.get("gb")
-            or arguments.get("gb_amount")
-            or arguments.get("amount")
+            arguments.get("amount_gb") or arguments.get("gb") or arguments.get("gb_amount") or arguments.get("amount")
         )
         mapped = {}
         if "customer_id" in arguments:
@@ -298,8 +280,7 @@ def _build_tool_maps(
             name_to_required[name] = set(required)
         except TypeError:
             logger.warning(
-                "Failed to parse 'required' field for tool %s. "
-                "It should be a list of strings. Got: %s",
+                "Failed to parse 'required' field for tool %s. It should be a list of strings. Got: %s",
                 name,
                 required,
             )
@@ -502,9 +483,7 @@ class MiniCPM5XMLToolParser(ToolParser):
                 content=_strip_thinking_content(model_output),
             )
 
-        tool_names, name_to_allowed_props, name_to_required, name_to_tool = (
-            _build_tool_maps(request.tools)
-        )
+        tool_names, name_to_allowed_props, name_to_required, name_to_tool = _build_tool_maps(request.tools)
 
         tool_calls: list[ToolCall] = []
         normal_parts: list[str] = []
@@ -573,11 +552,7 @@ class MiniCPM5XMLToolParser(ToolParser):
         *,
         is_complete: bool = False,
     ) -> DeltaMessage | None:
-        prev_args = (
-            self.streamed_args_for_tool[tool_index]
-            if tool_index < len(self.streamed_args_for_tool)
-            else ""
-        )
+        prev_args = self.streamed_args_for_tool[tool_index] if tool_index < len(self.streamed_args_for_tool) else ""
         arg_diff = _streaming_args_diff(
             prev_args,
             args_json,
@@ -625,9 +600,7 @@ class MiniCPM5XMLToolParser(ToolParser):
         block: str,
         request: ChatCompletionRequest,
     ) -> DeltaMessage | None:
-        tool_names, name_to_allowed_props, name_to_required, name_to_tool = (
-            _build_tool_maps(request.tools)
-        )
+        tool_names, name_to_allowed_props, name_to_required, name_to_tool = _build_tool_maps(request.tools)
         parsed = _parse_function_block(
             block,
             tool_names,
@@ -688,9 +661,7 @@ class MiniCPM5XMLToolParser(ToolParser):
         block: str,
         request: ChatCompletionRequest,
     ) -> DeltaMessage | None:
-        tool_names, name_to_allowed_props, _, name_to_tool = _build_tool_maps(
-            request.tools
-        )
+        tool_names, name_to_allowed_props, _, name_to_tool = _build_tool_maps(request.tools)
         if _PARAM_MISSING_NAME_REGEX.search(block):
             return None
 
@@ -763,11 +734,7 @@ class MiniCPM5XMLToolParser(ToolParser):
 
             remainder = current_text[self._processed_len :]
             if not remainder:
-                if (
-                    not delta_text
-                    and self.current_tool_id >= 0
-                    and not self.current_tool_name_sent
-                ):
+                if not delta_text and self.current_tool_id >= 0 and not self.current_tool_name_sent:
                     return DeltaMessage(content="")
                 return None
 
@@ -787,9 +754,7 @@ class MiniCPM5XMLToolParser(ToolParser):
             partial_block = remainder[func_idx:]
             if self.tool_call_end_token in partial_block:
                 end_idx = partial_block.rfind(self.tool_call_end_token)
-                complete_block = partial_block[
-                    : end_idx + len(self.tool_call_end_token)
-                ]
+                complete_block = partial_block[: end_idx + len(self.tool_call_end_token)]
                 delta = self._process_complete_block_streaming(complete_block, request)
                 self._processed_len += func_idx + len(complete_block)
                 if delta is not None:
@@ -807,7 +772,5 @@ class MiniCPM5XMLToolParser(ToolParser):
 
             return self._process_partial_block_streaming(partial_block, request)
         except Exception:
-            logger.exception(
-                "Error in MiniCPM5XMLToolParser.extract_tool_calls_streaming"
-            )
+            logger.exception("Error in MiniCPM5XMLToolParser.extract_tool_calls_streaming")
             return None

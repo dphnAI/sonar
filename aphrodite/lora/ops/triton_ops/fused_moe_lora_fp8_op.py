@@ -67,9 +67,7 @@ def _get_token_offs(
     else:
         offs_token_id = pid_m * BLOCK_SIZE_M + offs
         token_ind = stride_tl * lora_id + offs_token_id
-        return tl.load(
-            sorted_token_ids_ptr + token_ind, token_ind < max_loras * stride_tl, 0
-        )
+        return tl.load(sorted_token_ids_ptr + token_ind, token_ind < max_loras * stride_tl, 0)
 
 
 _LORA_PTR_DICT: dict[tuple[int, ...], torch.tensor] = {}
@@ -273,10 +271,7 @@ def _fused_moe_lora_kernel_fp8(
     token_mask = offs_token < num_valid_tokens
 
     # get a_ptrs,b_ptrs
-    a_ptrs = cur_a_ptr + (
-        offs_token[:, None] // token_mapping_factor * stride_am
-        + offs_k[None, :] * stride_ak
-    )
+    a_ptrs = cur_a_ptr + (offs_token[:, None] // token_mapping_factor * stride_am + offs_k[None, :] * stride_ak)
 
     b_ptrs = (
         cur_b_ptr
@@ -344,9 +339,7 @@ def _fused_moe_lora_shrink_fp8(
     a_intermediate_cache1: torch.Tensor,
     # (num_slices, num_tokens, top_k_num, max_lora_rank)
     qcurr_hidden_states: torch.Tensor,  # (num_tokens, K,)
-    lora_a_stacked: list[
-        torch.Tensor
-    ],  # [(max_loras, num_experts, max_lora_rank, K,),...]
+    lora_a_stacked: list[torch.Tensor],  # [(max_loras, num_experts, max_lora_rank, K,),...]
     topk_weights: torch.Tensor,  # (num_tokens, top_k_num)
     sorted_token_ids: torch.Tensor | None,  # (max_loras, _)
     expert_ids: torch.Tensor,  # (max_loras, _ ,) or (num_tokens * top_k,)
@@ -383,26 +376,16 @@ def _fused_moe_lora_shrink_fp8(
     block_shape: List[int] | None = None,  # noqa: UP006, UP007
 ) -> None:
     if use_fp8_w8a8 or use_int8_w8a8:
-        assert lora_a_scale_stacked is not None, (
-            "lora_a_scale_stacked must be provided for w8a8 quantization"
-        )
-        assert block_shape is None or triton.cdiv(
-            lora_a_stacked[0].size(-2), block_shape[0]
-        ) == lora_a_scale_stacked[0].size(-2), (
-            "Incompatible block shape for lora_a_scale_stacked.size(-2) "
-        )
-        assert block_shape is None or triton.cdiv(
-            lora_a_stacked[0].size(-1), block_shape[1]
-        ) == lora_a_scale_stacked[0].size(-1), (
-            "Incompatible block shape for lora_a_scale_stacked.size(-1) "
-        )
+        assert lora_a_scale_stacked is not None, "lora_a_scale_stacked must be provided for w8a8 quantization"
+        assert block_shape is None or triton.cdiv(lora_a_stacked[0].size(-2), block_shape[0]) == lora_a_scale_stacked[
+            0
+        ].size(-2), "Incompatible block shape for lora_a_scale_stacked.size(-2) "
+        assert block_shape is None or triton.cdiv(lora_a_stacked[0].size(-1), block_shape[1]) == lora_a_scale_stacked[
+            0
+        ].size(-1), "Incompatible block shape for lora_a_scale_stacked.size(-1) "
     elif use_int8_w8a16:
-        assert lora_a_scale_stacked is not None, (
-            "lora_a_scale_stacked must be provided for w8a16 quantization"
-        )
-        assert block_shape is None or block_shape[0] == 0, (
-            "Block shape for activation must be 0 for w8a16"
-        )
+        assert lora_a_scale_stacked is not None, "lora_a_scale_stacked must be provided for w8a16 quantization"
+        assert block_shape is None or block_shape[0] == 0, "Block shape for activation must be 0 for w8a16"
     else:
         assert act_scale is None
         assert lora_a_scale_stacked is None
@@ -429,14 +412,10 @@ def _fused_moe_lora_shrink_fp8(
 
     b_ptr = _get_ptr(lora_a_stacked, device)
 
-    grid_lora_dim, stride_tl, stride_el = _adjust_kernel_inputs(
-        num_active_loras, sorted_token_ids, expert_ids
-    )
+    grid_lora_dim, stride_tl, stride_el = _adjust_kernel_inputs(num_active_loras, sorted_token_ids, expert_ids)
 
     grid = lambda META: (
-        split_k
-        * triton.cdiv(EM, META["BLOCK_SIZE_M"])
-        * triton.cdiv(N, META["BLOCK_SIZE_N"]),
+        split_k * triton.cdiv(EM, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
         len(lora_a_stacked),
         grid_lora_dim,
     )
@@ -508,9 +487,7 @@ def _fused_moe_lora_shrink_fp8(
 def _fused_moe_lora_expand_fp8(
     output: torch.Tensor,  # (num_tokens, top_k_num, N*len(lora_a_stacked),)
     a_intermediate_cache1: torch.Tensor,  # (num_slices, M, top_k_num, max_lora_rank)
-    lora_b_stacked: list[
-        torch.Tensor
-    ],  # [(max_loras, num_experts, max_lora_rank, K,),...]
+    lora_b_stacked: list[torch.Tensor],  # [(max_loras, num_experts, max_lora_rank, K,),...]
     topk_weights: torch.Tensor,  # (num_tokens, top_k_num)
     sorted_token_ids: torch.Tensor | None,  # (max_loras, _)
     expert_ids: torch.Tensor,  # (max_loras, _ ,) or (num_tokens * top_k,)
@@ -550,26 +527,16 @@ def _fused_moe_lora_expand_fp8(
     block_shape: List[int] | None = None,  # noqa: UP006, UP007
 ) -> None:
     if use_fp8_w8a8 or use_int8_w8a8:
-        assert lora_b_scale_stacked is not None, (
-            "lora_b_scale_stacked must be provided for w8a8 quantization"
-        )
-        assert block_shape is None or triton.cdiv(
-            lora_b_stacked[0].size(-2), block_shape[0]
-        ) == lora_b_scale_stacked[0].size(-2), (
-            "Incompatible block shape for lora_b_scale_stacked.size(-2) "
-        )
-        assert block_shape is None or triton.cdiv(
-            lora_b_stacked[0].size(-1), block_shape[1]
-        ) == lora_b_scale_stacked[0].size(-1), (
-            "Incompatible block shape for lora_b_scale_stacked.size(-1) "
-        )
+        assert lora_b_scale_stacked is not None, "lora_b_scale_stacked must be provided for w8a8 quantization"
+        assert block_shape is None or triton.cdiv(lora_b_stacked[0].size(-2), block_shape[0]) == lora_b_scale_stacked[
+            0
+        ].size(-2), "Incompatible block shape for lora_b_scale_stacked.size(-2) "
+        assert block_shape is None or triton.cdiv(lora_b_stacked[0].size(-1), block_shape[1]) == lora_b_scale_stacked[
+            0
+        ].size(-1), "Incompatible block shape for lora_b_scale_stacked.size(-1) "
     elif use_int8_w8a16:
-        assert lora_b_scale_stacked is not None, (
-            "lora_b_scale_stacked must be provided for w8a16 quantization"
-        )
-        assert block_shape is None or block_shape[0] == 0, (
-            "Block shape for activation must be 0 for w8a16"
-        )
+        assert lora_b_scale_stacked is not None, "lora_b_scale_stacked must be provided for w8a16 quantization"
+        assert block_shape is None or block_shape[0] == 0, "Block shape for activation must be 0 for w8a16"
     else:
         assert act_scale is None
         assert lora_b_scale_stacked is None
@@ -587,9 +554,7 @@ def _fused_moe_lora_expand_fp8(
 
     w1_lora_b_stacked = lora_b_stacked[0]
 
-    a_intermediate_cache1 = a_intermediate_cache1.view(
-        -1, a_intermediate_cache1.shape[3]
-    )
+    a_intermediate_cache1 = a_intermediate_cache1.view(-1, a_intermediate_cache1.shape[3])
 
     expand_config = {
         "BLOCK_SIZE_M": block_size_m,
@@ -603,9 +568,7 @@ def _fused_moe_lora_expand_fp8(
         "launch_pdl": use_gdc,  # triton kernel metadata
     }
 
-    grid_lora_dim, stride_tl, stride_el = _adjust_kernel_inputs(
-        num_active_loras, sorted_token_ids, expert_ids
-    )
+    grid_lora_dim, stride_tl, stride_el = _adjust_kernel_inputs(num_active_loras, sorted_token_ids, expert_ids)
 
     grid = lambda META: (
         triton.cdiv(EM, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
@@ -685,12 +648,8 @@ def _fused_moe_lora_expand_fp8(
 def _fused_moe_lora_fp8(
     output: torch.Tensor,  # (num_tokens, top_k_num, N*len(lora_a_stacked),)
     qcurr_hidden_states: torch.Tensor,  # (num_tokens, K,)
-    lora_a_stacked: list[
-        torch.Tensor
-    ],  # [(max_loras, num_experts, max_lora_rank, K,),...]
-    lora_b_stacked: list[
-        torch.Tensor
-    ],  # [(max_loras, num_experts, N, max_lora_rank,),...]
+    lora_a_stacked: list[torch.Tensor],  # [(max_loras, num_experts, max_lora_rank, K,),...]
+    lora_b_stacked: list[torch.Tensor],  # [(max_loras, num_experts, N, max_lora_rank,),...]
     topk_weights: torch.Tensor,  # (num_tokens, top_k_num)
     sorted_token_ids: torch.Tensor | None,  # (max_loras, _)
     expert_ids: torch.Tensor,  # (max_loras, _ ,) or (num_tokens * top_k,)
@@ -735,18 +694,8 @@ def _fused_moe_lora_fp8(
     else:
         assert sorted_token_ids is not None
         assert num_tokens_post_padded is not None
-        assert (
-            sorted_token_ids.dim()
-            == expert_ids.dim()
-            == topk_weights.dim()
-            == qcurr_hidden_states.dim()
-            == 2
-        )
-        assert (
-            sorted_token_ids.shape[0]
-            == expert_ids.shape[0]
-            == num_tokens_post_padded.shape[0]
-        )
+        assert sorted_token_ids.dim() == expert_ids.dim() == topk_weights.dim() == qcurr_hidden_states.dim() == 2
+        assert sorted_token_ids.shape[0] == expert_ids.shape[0] == num_tokens_post_padded.shape[0]
     assert output.shape[0] == topk_weights.shape[0]
     assert top_k_num == topk_weights.shape[1]
     device = qcurr_hidden_states.device
@@ -759,11 +708,7 @@ def _fused_moe_lora_fp8(
     num_tokens = M * top_k_num
     w1_output_dim_size = w1_lora_b_stacked.shape[2]
     assert shrink_block_size_m == expand_block_size_m
-    EM = (
-        sorted_token_ids.shape[1]
-        if sorted_token_ids is not None
-        else num_tokens * shrink_block_size_m
-    )
+    EM = sorted_token_ids.shape[1] if sorted_token_ids is not None else num_tokens * shrink_block_size_m
 
     a_intermediate_cache1 = torch.zeros(
         (num_slices, M, top_k_num, max_lora_rank),
@@ -814,13 +759,9 @@ def _fused_moe_lora_fp8(
 
     if fully_sharded:
         if max_lora_rank == w1_lora_b_stacked.shape[-1]:
-            a_intermediate_cache1 = tensor_model_parallel_all_reduce(
-                a_intermediate_cache1
-            )
+            a_intermediate_cache1 = tensor_model_parallel_all_reduce(a_intermediate_cache1)
         else:
-            a_intermediate_cache1 = tensor_model_parallel_all_gather(
-                a_intermediate_cache1
-            )
+            a_intermediate_cache1 = tensor_model_parallel_all_gather(a_intermediate_cache1)
 
             # reset max_lora_rank to the full rank after allgather
             max_lora_rank = a_intermediate_cache1.shape[-1]

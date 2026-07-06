@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Configuration for Aphrodite Metal plugin via environment variables."""
 
 import os
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import aphrodite.metal.envs as envs
+
+if TYPE_CHECKING:
+    from aphrodite.config import SchedulerConfig
 
 # Sentinel value indicating auto memory calculation
 AUTO_MEMORY_FRACTION = -1.0
@@ -25,14 +29,10 @@ TURBOQUANT_VALID_K_QUANTS: frozenset[str] = frozenset(
 
 # Valid value quantization types for TurboQuant.
 # V uses Lloyd-Max quantization with FWHT rotation.
-TURBOQUANT_VALID_V_QUANTS: frozenset[str] = frozenset(
-    {"q2_0", "q3_0", "q4_0", "q5_0", "q8_0"}
-)
+TURBOQUANT_VALID_V_QUANTS: frozenset[str] = frozenset({"q2_0", "q3_0", "q4_0", "q5_0", "q8_0"})
 
 MultimodalMode = Literal["auto", "text-only-compat", "multimodal-native"]
-VALID_MULTIMODAL_MODES: frozenset[MultimodalMode] = frozenset(
-    {"auto", "text-only-compat", "multimodal-native"}
-)
+VALID_MULTIMODAL_MODES: frozenset[MultimodalMode] = frozenset({"auto", "text-only-compat", "multimodal-native"})
 
 
 @dataclass
@@ -66,18 +66,16 @@ class MetalConfig:
                 "APHRODITE_METAL_KV_SHARING_FAST_PREFILL=0."
             )
 
-        if self.use_paged_attention and not self.is_auto_memory:
-            if not (0 < self.memory_fraction <= 1):
-                raise ValueError(
-                    f"Invalid APHRODITE_METAL_MEMORY_FRACTION={self.memory_fraction}. "
-                    "Must be a finite value in (0, 1] when paged attention is enabled."
-                )
+        if self.use_paged_attention and not self.is_auto_memory and not (0 < self.memory_fraction <= 1):
+            raise ValueError(
+                f"Invalid APHRODITE_METAL_MEMORY_FRACTION={self.memory_fraction}. "
+                "Must be a finite value in (0, 1] when paged attention is enabled."
+            )
 
         if self.multimodal_mode not in VALID_MULTIMODAL_MODES:
             available = ", ".join(sorted(VALID_MULTIMODAL_MODES))
             raise ValueError(
-                f"Invalid APHRODITE_METAL_MULTIMODAL_MODE={self.multimodal_mode!r}. "
-                f"Available modes: {available}."
+                f"Invalid APHRODITE_METAL_MULTIMODAL_MODE={self.multimodal_mode!r}. Available modes: {available}."
             )
 
         self._validate_turboquant()
@@ -92,16 +90,10 @@ class MetalConfig:
                 )
             if self.k_quant not in TURBOQUANT_VALID_K_QUANTS:
                 available = ", ".join(sorted(TURBOQUANT_VALID_K_QUANTS))
-                raise ValueError(
-                    f"Invalid k_quant={self.k_quant!r}. "
-                    f"Available quantization types: {available}"
-                )
+                raise ValueError(f"Invalid k_quant={self.k_quant!r}. Available quantization types: {available}")
             if self.v_quant not in TURBOQUANT_VALID_V_QUANTS:
                 available = ", ".join(sorted(TURBOQUANT_VALID_V_QUANTS))
-                raise ValueError(
-                    f"Invalid v_quant={self.v_quant!r}. "
-                    f"Available quantization types: {available}"
-                )
+                raise ValueError(f"Invalid v_quant={self.v_quant!r}. Available quantization types: {available}")
 
     @property
     def is_auto_memory(self) -> bool:
@@ -125,10 +117,7 @@ class MetalConfig:
 
         use_paged_attention = envs.APHRODITE_METAL_USE_PAGED_ATTENTION
         kv_sharing_fast_prefill = envs.APHRODITE_METAL_KV_SHARING_FAST_PREFILL
-        if (
-            not use_paged_attention
-            and "APHRODITE_METAL_KV_SHARING_FAST_PREFILL" not in os.environ
-        ):
+        if not use_paged_attention and "APHRODITE_METAL_KV_SHARING_FAST_PREFILL" not in os.environ:
             kv_sharing_fast_prefill = False
 
         # TurboQuant config is set via --additional-config, not env vars.
@@ -166,7 +155,7 @@ def should_use_contiguous_kv_fast_path(
     config: MetalConfig,
     *,
     model_config: object | None,
-    scheduler_config: object,
+    scheduler_config: "SchedulerConfig",
 ) -> bool:
     """Return whether Metal should prefer MLX's contiguous KV cache.
 
@@ -182,7 +171,7 @@ def should_use_contiguous_kv_fast_path(
         and not config.turboquant
         and model_config is not None
         and not getattr(model_config, "is_hybrid", False)
-        and getattr(scheduler_config, "max_num_seqs") <= 2
+        and scheduler_config.max_num_seqs <= 2
     )
 
 

@@ -149,8 +149,8 @@ def _make_forward_context(rank, world_size, num_tokens_per_rank):
     by set_forward_context from num_tokens_across_dp; the attn_metadata
     placeholder just satisfies the "attn_metadata is not None" guard.
     """
-    from aphrodite.config.parallel import ParallelConfig
     from aphrodite.config.aphrodite import AphroditeConfig
+    from aphrodite.config.parallel import ParallelConfig
     from aphrodite.forward_context import set_forward_context
 
     class _AttnMeta:
@@ -170,9 +170,7 @@ def _make_forward_context(rank, world_size, num_tokens_per_rank):
         _AttnMeta(),
         aphrodite_config,
         num_tokens=num_tokens_per_rank,
-        num_tokens_across_dp=torch.tensor(
-            [num_tokens_per_rank] * world_size, dtype=torch.int
-        ),
+        num_tokens_across_dp=torch.tensor([num_tokens_per_rank] * world_size, dtype=torch.int),
     )
 
 
@@ -180,9 +178,7 @@ def _make_forward_context(rank, world_size, num_tokens_per_rank):
 # Skip conditions
 # ---------------------------------------------------------------------------
 
-requires_multi_gpu = pytest.mark.skipif(
-    torch.accelerator.device_count() < 2, reason="Need >= 2 GPUs"
-)
+requires_multi_gpu = pytest.mark.skipif(torch.accelerator.device_count() < 2, reason="Need >= 2 GPUs")
 requires_two_sided = pytest.mark.skipif(
     not has_flashinfer_nvlink_two_sided(),
     reason="FlashInfer NVLink two-sided not available",
@@ -643,19 +639,17 @@ def _two_sided_data_worker(rank, world_size):
             local_sizes = dp_metadata.get_chunk_sizes_across_dp_rank()
 
             # --- FlashInfer two-sided dispatch ---
-            alltoall_info, fi_topk_ids, fi_topk_weights, fi_hidden, fi_scale = (
-                flashinfer_alltoall_dispatch(
-                    manager,
-                    local_sizes,
-                    hidden.clone(),
-                    None,  # no global scale
-                    topk_ids.clone(),
-                    topk_weights.clone(),
-                    experts_per_token,
-                    num_experts,
-                    quant_config,
-                    defer_input_quant=True,
-                )
+            alltoall_info, fi_topk_ids, fi_topk_weights, fi_hidden, fi_scale = flashinfer_alltoall_dispatch(
+                manager,
+                local_sizes,
+                hidden.clone(),
+                None,  # no global scale
+                topk_ids.clone(),
+                topk_weights.clone(),
+                experts_per_token,
+                num_experts,
+                quant_config,
+                defer_input_quant=True,
             )
             assert fi_scale is None  # deferred quant: no scale produced
             assert fi_hidden is not None

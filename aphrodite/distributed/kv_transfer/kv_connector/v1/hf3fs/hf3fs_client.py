@@ -69,9 +69,7 @@ class Hf3fsClient:
             entries: Maximum number of concurrent operations
         """
         if not HF3FS_AVAILABLE:
-            raise ImportError(
-                "hf3fs_fuse.io is not available. Please install the hf3fs_fuse package."
-            )
+            raise ImportError("hf3fs_fuse.io is not available. Please install the hf3fs_fuse package.")
 
         self.path = path
         self.size = size
@@ -95,12 +93,8 @@ class Hf3fsClient:
 
             self.hf3fs_mount_point = extract_mount_point(path)
             self.bs = self.bytes_per_page
-            self.shm_r = multiprocessing.shared_memory.SharedMemory(
-                size=self.bs * self.entries, create=True
-            )
-            self.shm_w = multiprocessing.shared_memory.SharedMemory(
-                size=self.bs * self.entries, create=True
-            )
+            self.shm_r = multiprocessing.shared_memory.SharedMemory(size=self.bs * self.entries, create=True)
+            self.shm_w = multiprocessing.shared_memory.SharedMemory(size=self.bs * self.entries, create=True)
 
             self.shm_r_tensor = torch.frombuffer(self.shm_r.buf, dtype=torch.uint8)
             self.shm_w_tensor = torch.frombuffer(self.shm_w.buf, dtype=torch.uint8)
@@ -149,9 +143,7 @@ class Hf3fsClient:
             self._release_resources()
             raise
 
-        logger.debug(
-            "Initialized HF3FS client with file: %s, size: %s bytes", path, size
-        )
+        logger.debug("Initialized HF3FS client with file: %s, size: %s bytes", path, size)
 
     def _release_resources(self) -> None:
         """Release all acquired resources safely"""
@@ -201,9 +193,7 @@ class Hf3fsClient:
         current = 0
         for offset, tensor in zip(offsets, tensors):
             size = tensor.numel() * tensor.itemsize
-            self.ior_r.prepare(
-                self.iov_r[current : current + size], True, self.file, offset
-            )
+            self.ior_r.prepare(self.iov_r[current : current + size], True, self.file, offset)
             current += size
 
         # submit
@@ -212,17 +202,13 @@ class Hf3fsClient:
 
         # results
         with torch.cuda.stream(self.stream):
-            hf3fs_utils.read_shm(
-                self.shm_r_tensor, self.r_pinned, tensors, self.stream_ptr_int
-            )
+            hf3fs_utils.read_shm(self.shm_r_tensor, self.r_pinned, tensors, self.stream_ptr_int)
         results = [res.result for res in resv]
 
         return results
 
     @wsynchronized()
-    def batch_write(
-        self, offsets: list[int], tensors: list[torch.Tensor], event: torch.Event
-    ) -> list[int]:
+    def batch_write(self, offsets: list[int], tensors: list[torch.Tensor], event: torch.Event) -> list[int]:
         """Write data from tensors to the file at specified offsets.
 
         Args:
@@ -240,16 +226,12 @@ class Hf3fsClient:
         # prepare
         with torch.cuda.stream(self.stream):
             self.stream.wait_event(event)
-            hf3fs_utils.write_shm(
-                tensors, self.shm_w_tensor, self.w_pinned, self.stream_ptr_int
-            )
+            hf3fs_utils.write_shm(tensors, self.shm_w_tensor, self.w_pinned, self.stream_ptr_int)
 
         current = 0
         for offset, tensor in zip(offsets, tensors):
             size = tensor.numel() * tensor.itemsize
-            self.ior_w.prepare(
-                self.iov_w[current : current + size], False, self.file, offset
-            )
+            self.ior_w.prepare(self.iov_w[current : current + size], False, self.file, offset)
             current += size
 
         # submit
@@ -267,10 +249,7 @@ class Hf3fsClient:
             [
                 len(offsets) > self.entries,
                 len(offsets) != len(sizes),
-                any(
-                    offset < 0 or offset + size > self.size
-                    for offset, size in zip(offsets, sizes)
-                ),
+                any(offset < 0 or offset + size > self.size for offset, size in zip(offsets, sizes)),
                 any(size > self.bytes_per_page for size in sizes),
             ]
         ):

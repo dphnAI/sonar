@@ -63,9 +63,7 @@ def test_resolve_tokenizer_args_idempotent(runner_type):
         runner_type=runner_type,
     )
 
-    assert (tokenizer_mode, tokenizer_name, args, kwargs) == resolve_tokenizer_args(
-        tokenizer_name, *args, **kwargs
-    )
+    assert (tokenizer_mode, tokenizer_name, args, kwargs) == resolve_tokenizer_args(tokenizer_name, *args, **kwargs)
 
 
 def test_customized_tokenizer():

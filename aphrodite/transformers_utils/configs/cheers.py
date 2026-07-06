@@ -92,13 +92,9 @@ class CheersConfig(PretrainedConfig):
             self.text_config = text_config or CheersTextConfig()
 
         if isinstance(vision_representation_config, dict):
-            self.vision_representation_config = SiglipVisionConfig(
-                **vision_representation_config
-            )
+            self.vision_representation_config = SiglipVisionConfig(**vision_representation_config)
         else:
-            self.vision_representation_config = (
-                vision_representation_config or SiglipVisionConfig()
-            )
+            self.vision_representation_config = vision_representation_config or SiglipVisionConfig()
 
         self.vae_encoder_config = vae_encoder_config or {"resolution": 512}
         self.vae_decoder_config = vae_decoder_config or {"resolution": 512}

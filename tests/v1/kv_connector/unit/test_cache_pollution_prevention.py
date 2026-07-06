@@ -17,10 +17,10 @@ from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.request import Request, RequestStatus
 
 from .utils import (
+    create_aphrodite_config,
     create_model_runner_output,
     create_request,
     create_scheduler,
-    create_aphrodite_config,
 )
 
 pytestmark = pytest.mark.cpu_test
@@ -62,9 +62,7 @@ def test_invalid_blocks_evicted_prevents_cache_pollution(
     invalid_block_idx = 50
 
     num_prompt_tokens = num_prompt_blocks * fail_scheduler.block_size
-    num_external_computed_tokens = (
-        num_external_computed_blocks * fail_scheduler.block_size
-    )
+    num_external_computed_tokens = num_external_computed_blocks * fail_scheduler.block_size
 
     # request 1: will have invalid blocks
     request1 = create_request(num_tokens=num_prompt_tokens, request_id=1)
@@ -76,8 +74,8 @@ def test_invalid_blocks_evicted_prevents_cache_pollution(
 
     # mock connector indicating sync load
     fail_scheduler.connector = Mock()
-    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = (
-        _make_get_num_new_matched_tokens(req_num_new_matched_tokens, False)
+    fail_scheduler.connector.get_num_new_matched_tokens.side_effect = _make_get_num_new_matched_tokens(
+        req_num_new_matched_tokens, False
     )
     fail_scheduler.connector.request_finished.return_value = (False, None)
     fail_scheduler.connector.take_events.return_value = ()
@@ -102,8 +100,7 @@ def test_invalid_blocks_evicted_prevents_cache_pollution(
 
     # verify block has a hash (is cached) before reporting invalid blocks
     assert block.block_hash is not None, (
-        f"block {invalid_block_id} should be cached (have a hash) before "
-        f"eviction test, but hash is None"
+        f"block {invalid_block_id} should be cached (have a hash) before eviction test, but hash is None"
     )
 
     # report invalid blocks
@@ -145,15 +142,11 @@ def test_invalid_blocks_evicted_prevents_cache_pollution(
         )
 
     # invalid blocks: verify they're not in the cached_block_hash_to_block map
-    cached_blocks = (
-        fail_scheduler.kv_cache_manager.block_pool.cached_block_hash_to_block
-    )
+    cached_blocks = fail_scheduler.kv_cache_manager.block_pool.cached_block_hash_to_block
     cached_block_ids = {
         b.block_id
         for blocks_val in cached_blocks._cache.values()
-        for b in (
-            [blocks_val] if not isinstance(blocks_val, dict) else blocks_val.values()
-        )
+        for b in ([blocks_val] if not isinstance(blocks_val, dict) else blocks_val.values())
     }
 
     for idx in range(invalid_block_idx, len(req_block_ids)):

@@ -61,13 +61,9 @@ def postprocess_mamba(
         num_draft_tokens = len(scheduled_spec_decode_tokens_dict.get(req_id, []))
         num_scheduled_tokens = num_scheduled_tokens_dict[req_id]
         num_accepted_tokens = num_accepted_tokens_cpu[i]
-        num_tokens_running_state = (
-            num_computed_tokens + num_scheduled_tokens - num_draft_tokens
-        )
+        num_tokens_running_state = num_computed_tokens + num_scheduled_tokens - num_draft_tokens
         new_num_computed_tokens = num_tokens_running_state + num_accepted_tokens - 1
-        aligned_new_computed_tokens = (
-            new_num_computed_tokens // mamba_spec.block_size * mamba_spec.block_size
-        )
+        aligned_new_computed_tokens = new_num_computed_tokens // mamba_spec.block_size * mamba_spec.block_size
         if aligned_new_computed_tokens >= num_tokens_running_state:
             accept_token_bias = aligned_new_computed_tokens - num_tokens_running_state
             src_block_idx = mamba_state_idx_cpu[i]
@@ -208,9 +204,7 @@ def _make_postprocess_scheduler_output(
     )
 
 
-def _make_mock_attention(
-    conv_state: torch.Tensor, temporal_state: torch.Tensor
-) -> MagicMock:
+def _make_mock_attention(conv_state: torch.Tensor, temporal_state: torch.Tensor) -> MagicMock:
     """Create a mock attention object with kv_cache."""
     attention = MagicMock()
     attention.kv_cache = [conv_state, temporal_state]
@@ -248,20 +242,11 @@ def _make_dual_states(
         )
         for _ in layer_names
     ]
-    temporal_py = [
-        torch.randn(n_blocks, cfg.temporal_state_dim, dtype=cfg.dtype, device=device)
-        for _ in layer_names
-    ]
+    temporal_py = [torch.randn(n_blocks, cfg.temporal_state_dim, dtype=cfg.dtype, device=device) for _ in layer_names]
     conv_gpu = [s.clone() for s in conv_py]
     temporal_gpu = [s.clone() for s in temporal_py]
-    fwd_py = {
-        name: _make_mock_attention(c, t)
-        for name, c, t in zip(layer_names, conv_py, temporal_py)
-    }
-    fwd_gpu = {
-        name: _make_mock_attention(c, t)
-        for name, c, t in zip(layer_names, conv_gpu, temporal_gpu)
-    }
+    fwd_py = {name: _make_mock_attention(c, t) for name, c, t in zip(layer_names, conv_py, temporal_py)}
+    fwd_gpu = {name: _make_mock_attention(c, t) for name, c, t in zip(layer_names, conv_gpu, temporal_gpu)}
     return conv_py, temporal_py, conv_gpu, temporal_gpu, fwd_py, fwd_gpu
 
 
@@ -338,9 +323,7 @@ def _make_requests(
     return requests
 
 
-def _make_copy_bufs(
-    cfg: _TestConfig, kv_cache_config: KVCacheConfig, device: torch.device
-) -> MambaCopyBuffers:
+def _make_copy_bufs(cfg: _TestConfig, kv_cache_config: KVCacheConfig, device: torch.device) -> MambaCopyBuffers:
     """Create MambaCopyBuffers for the Python path."""
 
     def make_buffer(n, dtype):
@@ -354,9 +337,7 @@ def _make_copy_bufs(
     )
 
 
-def _make_gpu_ctx(
-    cfg: _TestConfig, kv_cache_config: KVCacheConfig, device: torch.device
-) -> MambaSpecDecodeGPUContext:
+def _make_gpu_ctx(cfg: _TestConfig, kv_cache_config: KVCacheConfig, device: torch.device) -> MambaSpecDecodeGPUContext:
     """Create MambaSpecDecodeGPUContext for the GPU path."""
 
     def make_buffer(n, dtype):
@@ -392,9 +373,7 @@ def _run_gpu_postprocess(
     def t(values):
         return torch.tensor(values, dtype=torch.int32, device=device)
 
-    gpu_ctx.initialize_from_forward_context(
-        kv_cache_config, forward_context, copy_funcs, [block_table]
-    )
+    gpu_ctx.initialize_from_forward_context(kv_cache_config, forward_context, copy_funcs, [block_table])
     gpu_ctx.run_fused_postprocess(
         num_reqs=len(req_ids),
         num_accepted_tokens_gpu=t(num_accepted_tokens),
@@ -476,9 +455,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -498,13 +475,9 @@ class TestPostprocessMambaFusedKernel:
 
         num_reqs = len(req_ids)
         max_blocks = max(len(b) for b in block_ids_per_req)
-        block_table_gpu = torch.zeros(
-            num_reqs, max_blocks, dtype=torch.int32, device=device
-        )
+        block_table_gpu = torch.zeros(num_reqs, max_blocks, dtype=torch.int32, device=device)
         for i, block_ids in enumerate(block_ids_per_req):
-            block_table_gpu[i, : len(block_ids)] = torch.tensor(
-                block_ids, dtype=torch.int32
-            )
+            block_table_gpu[i, : len(block_ids)] = torch.tensor(block_ids, dtype=torch.int32)
         _run_gpu_postprocess(
             gpu_ctx,
             kv_cache_config=kv_cache_config,
@@ -572,9 +545,7 @@ class TestPostprocessMambaFusedKernel:
             dtype=cfg.dtype,
             device=device,
         )
-        temporal_state = torch.randn(
-            cfg.num_blocks, cfg.temporal_state_dim, dtype=cfg.dtype, device=device
-        )
+        temporal_state = torch.randn(cfg.num_blocks, cfg.temporal_state_dim, dtype=cfg.dtype, device=device)
 
         # Clone to verify no modification
         conv_state_orig = conv_state.clone()
@@ -645,9 +616,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -666,13 +635,9 @@ class TestPostprocessMambaFusedKernel:
         gpu_ctx = _make_gpu_ctx(cfg, kv_cache_config, device)
 
         max_blocks_per_req = 8
-        block_table_gpu = torch.zeros(
-            num_reqs, max_blocks_per_req, dtype=torch.int32, device=device
-        )
+        block_table_gpu = torch.zeros(num_reqs, max_blocks_per_req, dtype=torch.int32, device=device)
         for i, block_ids in enumerate(block_ids_per_req):
-            block_table_gpu[i, : len(block_ids)] = torch.tensor(
-                block_ids, dtype=torch.int32
-            )
+            block_table_gpu[i, : len(block_ids)] = torch.tensor(block_ids, dtype=torch.int32)
 
         _run_gpu_postprocess(
             gpu_ctx,
@@ -690,12 +655,8 @@ class TestPostprocessMambaFusedKernel:
         )
 
         # Compare results
-        torch.testing.assert_close(
-            conv_state_gpu, conv_state_py, msg="Conv state mismatch"
-        )
-        torch.testing.assert_close(
-            temporal_state_gpu, temporal_state_py, msg="Temporal state mismatch"
-        )
+        torch.testing.assert_close(conv_state_gpu, conv_state_py, msg="Conv state mismatch")
+        torch.testing.assert_close(temporal_state_gpu, temporal_state_py, msg="Temporal state mismatch")
 
     def test_block_table_with_realistic_stride(self, device, test_config):
         """
@@ -726,8 +687,7 @@ class TestPostprocessMambaFusedKernel:
         # Each request uses only 8 blocks, but we allocate much more
         blocks_used_per_req = 8
         block_ids_per_req = [
-            list(range(i * blocks_used_per_req, (i + 1) * blocks_used_per_req))
-            for i in range(num_reqs)
+            list(range(i * blocks_used_per_req, (i + 1) * blocks_used_per_req)) for i in range(num_reqs)
         ]
 
         total_blocks = num_reqs * blocks_used_per_req
@@ -751,9 +711,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -777,15 +735,11 @@ class TestPostprocessMambaFusedKernel:
         max_blocks_per_req_full = 512  # Much larger than blocks_used_per_req=8
 
         # Allocate full-size table (simulates pre-allocated CpuGpuBuffer)
-        block_table_full = torch.zeros(
-            max_num_reqs_full, max_blocks_per_req_full, dtype=torch.int32, device=device
-        )
+        block_table_full = torch.zeros(max_num_reqs_full, max_blocks_per_req_full, dtype=torch.int32, device=device)
 
         # Fill in actual block IDs (only first few columns used)
         for i, block_ids in enumerate(block_ids_per_req):
-            block_table_full[i, : len(block_ids)] = torch.tensor(
-                block_ids, dtype=torch.int32
-            )
+            block_table_full[i, : len(block_ids)] = torch.tensor(block_ids, dtype=torch.int32)
 
         # Slice like real code: block_table.gpu[:num_reqs]
         # This preserves stride(0) = 512, not 8!
@@ -793,8 +747,7 @@ class TestPostprocessMambaFusedKernel:
 
         # Verify stride is large (the key property we're testing)
         assert block_table_gpu.stride(0) == max_blocks_per_req_full, (
-            f"Expected stride {max_blocks_per_req_full}, "
-            f"got {block_table_gpu.stride(0)}"
+            f"Expected stride {max_blocks_per_req_full}, got {block_table_gpu.stride(0)}"
         )
 
         _run_gpu_postprocess(
@@ -824,9 +777,7 @@ class TestPostprocessMambaFusedKernel:
             msg="Temporal state mismatch - possible stride bug in kernel",
         )
 
-    def test_src_addr_equals_dst_addr_skips_copy_and_sets_accepted_to_1(
-        self, device, test_config
-    ):
+    def test_src_addr_equals_dst_addr_skips_copy_and_sets_accepted_to_1(self, device, test_config):
         """
         Test the ``src_addr == dst_addr`` early-return path in
         postprocess_mamba_fused_kernel matches Python behavior.
@@ -889,9 +840,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -942,8 +891,7 @@ class TestPostprocessMambaFusedKernel:
         )
         # num_accepted_tokens should be 1
         assert input_batch_py.num_accepted_tokens_cpu[0] == 1, (
-            f"Python: num_accepted_tokens should be 1, "
-            f"got {input_batch_py.num_accepted_tokens_cpu[0]}"
+            f"Python: num_accepted_tokens should be 1, got {input_batch_py.num_accepted_tokens_cpu[0]}"
         )
 
         # --- Verify GPU matches Python ---
@@ -968,9 +916,7 @@ class TestPostprocessMambaFusedKernel:
             msg="GPU num_accepted_tokens should match Python",
         )
 
-    def test_same_block_idx_with_offset_copies_then_sets_accepted_to_1(
-        self, device, test_config
-    ):
+    def test_same_block_idx_with_offset_copies_then_sets_accepted_to_1(self, device, test_config):
         """
         Test the ``src_block_idx == dest_block_idx`` post-copy update in
         postprocess_mamba_fused_kernel matches Python behavior.
@@ -1030,9 +976,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -1073,12 +1017,8 @@ class TestPostprocessMambaFusedKernel:
         dest_block_id = block_ids_per_req[0][1]  # dest_block_idx = 1
 
         # Conv state should be modified (shifted copy within block)
-        conv_changed = not torch.allclose(
-            conv_state_py[dest_block_id], conv_state_orig[dest_block_id]
-        )
-        assert conv_changed, (
-            "Python: Conv state should be modified when accept_token_bias > 0"
-        )
+        conv_changed = not torch.allclose(conv_state_py[dest_block_id], conv_state_orig[dest_block_id])
+        assert conv_changed, "Python: Conv state should be modified when accept_token_bias > 0"
 
         # Temporal state should be modified (copy from different block)
         src_block_id_temporal = block_ids_per_req[0][2]  # actual_src_block_idx = 2
@@ -1091,8 +1031,7 @@ class TestPostprocessMambaFusedKernel:
 
         # num_accepted_tokens should be 1
         assert input_batch_py.num_accepted_tokens_cpu[0] == 1, (
-            f"Python: num_accepted_tokens should be 1, "
-            f"got {input_batch_py.num_accepted_tokens_cpu[0]}"
+            f"Python: num_accepted_tokens should be 1, got {input_batch_py.num_accepted_tokens_cpu[0]}"
         )
 
         # --- Verify GPU matches Python ---
@@ -1117,9 +1056,7 @@ class TestPostprocessMambaFusedKernel:
             msg="GPU num_accepted_tokens should match Python",
         )
 
-    def test_different_block_idx_copies_without_setting_accepted_to_1(
-        self, device, test_config
-    ):
+    def test_different_block_idx_copies_without_setting_accepted_to_1(self, device, test_config):
         """
         Test that neither special-case path triggers when
         src_block_idx != dest_block_idx, and GPU matches Python behavior.
@@ -1174,9 +1111,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -1217,9 +1152,7 @@ class TestPostprocessMambaFusedKernel:
         dest_block_id = block_ids_per_req[0][3]  # dest_block_idx = 3
 
         # Copy DID happen (dest block should be modified)
-        conv_changed = not torch.allclose(
-            conv_state_py[dest_block_id], conv_state_orig[dest_block_id]
-        )
+        conv_changed = not torch.allclose(conv_state_py[dest_block_id], conv_state_orig[dest_block_id])
         assert conv_changed, "Python: Conv state copy should have happened"
 
         # num_accepted_tokens should NOT be changed to 1
@@ -1250,9 +1183,7 @@ class TestPostprocessMambaFusedKernel:
             msg="GPU num_accepted_tokens should match Python",
         )
 
-    def test_prefix_caching_shared_block_does_not_set_accepted_to_1(
-        self, device, test_config
-    ):
+    def test_prefix_caching_shared_block_does_not_set_accepted_to_1(self, device, test_config):
         """
         Regression test: with prefix caching, different logical block indices
         can map to the same physical block. The kernel must NOT set
@@ -1307,9 +1238,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -1461,9 +1390,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(local_cfg, kv_cache_config, device)
 
@@ -1482,13 +1409,9 @@ class TestPostprocessMambaFusedKernel:
         gpu_ctx = _make_gpu_ctx(local_cfg, kv_cache_config, device)
         num_reqs = len(req_ids)
         max_blocks = max(len(b) for b in block_ids_per_req)
-        block_table_gpu = torch.zeros(
-            num_reqs, max_blocks, dtype=torch.int32, device=device
-        )
+        block_table_gpu = torch.zeros(num_reqs, max_blocks, dtype=torch.int32, device=device)
         for i, block_ids in enumerate(block_ids_per_req):
-            block_table_gpu[i, : len(block_ids)] = torch.tensor(
-                block_ids, dtype=torch.int32
-            )
+            block_table_gpu[i, : len(block_ids)] = torch.tensor(block_ids, dtype=torch.int32)
 
         _run_gpu_postprocess(
             gpu_ctx,
@@ -1515,10 +1438,7 @@ class TestPostprocessMambaFusedKernel:
             torch.testing.assert_close(
                 temporal_states_gpu[i],
                 temporal_states_py[i],
-                msg=(
-                    f"Temporal state mismatch at layer {i} "
-                    f"with non-sequential block IDs"
-                ),
+                msg=(f"Temporal state mismatch at layer {i} with non-sequential block IDs"),
             )
 
         expected_accepted = torch.tensor(
@@ -1615,9 +1535,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(local_cfg, kv_cache_config, device)
 
@@ -1636,13 +1554,9 @@ class TestPostprocessMambaFusedKernel:
         gpu_ctx = _make_gpu_ctx(local_cfg, kv_cache_config, device)
         num_reqs = len(req_ids)
         max_blocks = max(len(b) for b in block_ids_per_req)
-        block_table_gpu = torch.zeros(
-            num_reqs, max_blocks, dtype=torch.int32, device=device
-        )
+        block_table_gpu = torch.zeros(num_reqs, max_blocks, dtype=torch.int32, device=device)
         for i, block_ids in enumerate(block_ids_per_req):
-            block_table_gpu[i, : len(block_ids)] = torch.tensor(
-                block_ids, dtype=torch.int32
-            )
+            block_table_gpu[i, : len(block_ids)] = torch.tensor(block_ids, dtype=torch.int32)
 
         _run_gpu_postprocess(
             gpu_ctx,
@@ -1664,18 +1578,12 @@ class TestPostprocessMambaFusedKernel:
             torch.testing.assert_close(
                 conv_states_gpu[i],
                 conv_states_py[i],
-                msg=(
-                    f"Conv state mismatch at layer {i} — "
-                    f"mixed PC batch with shared/distinct blocks"
-                ),
+                msg=(f"Conv state mismatch at layer {i} — mixed PC batch with shared/distinct blocks"),
             )
             torch.testing.assert_close(
                 temporal_states_gpu[i],
                 temporal_states_py[i],
-                msg=(
-                    f"Temporal state mismatch at layer {i} — "
-                    f"mixed PC batch with shared/distinct blocks"
-                ),
+                msg=(f"Temporal state mismatch at layer {i} — mixed PC batch with shared/distinct blocks"),
             )
 
         # --- Compare num_accepted_tokens ---
@@ -1700,9 +1608,7 @@ class TestPostprocessMambaFusedKernel:
         # req_3: src==dest -> set to 1
         assert input_batch_py.num_accepted_tokens_cpu[3] == 1
 
-    def test_pc_aliased_blocks_skip_must_use_logical_idx_not_addr(
-        self, device, test_config
-    ):
+    def test_pc_aliased_blocks_skip_must_use_logical_idx_not_addr(self, device, test_config):
         """
         Regression test for 6466ce0d vs 959ca0fd: the kernel's early-return
         guard must compare logical block indices, not physical addresses.
@@ -1763,9 +1669,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        input_batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        input_batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -1782,8 +1686,7 @@ class TestPostprocessMambaFusedKernel:
 
         # Python reference: src_block_idx(0) != dest_block_idx(1) -> no change
         assert input_batch_py.num_accepted_tokens_cpu[0] == 3, (
-            f"Python: num_accepted_tokens should remain 3, "
-            f"got {input_batch_py.num_accepted_tokens_cpu[0]}"
+            f"Python: num_accepted_tokens should remain 3, got {input_batch_py.num_accepted_tokens_cpu[0]}"
         )
 
         # --- Run GPU path ---
@@ -1890,9 +1793,7 @@ class TestPostprocessMambaFusedKernel:
             "Test requires padded stride; page must be larger than one state"
         )
 
-        raw_py = torch.randn(
-            cfg.num_blocks * num_element_per_page, dtype=dtype, device=device
-        )
+        raw_py = torch.randn(cfg.num_blocks * num_element_per_page, dtype=dtype, device=device)
         raw_gpu = raw_py.clone()
 
         def make_views(raw):
@@ -1927,9 +1828,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -2056,9 +1955,7 @@ class TestPostprocessMambaFusedKernel:
             num_scheduled_tokens,
             {k: [None] * v for k, v in num_draft_tokens.items() if v > 0},
         )
-        batch_py = _make_input_batch(
-            req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy()
-        )
+        batch_py = _make_input_batch(req_ids, num_accepted_tokens.copy(), mamba_state_idx.copy())
         requests = _make_requests(req_ids, num_computed_tokens, block_ids_per_req)
         copy_bufs = _make_copy_bufs(cfg, kv_cache_config, device)
 
@@ -2100,10 +1997,7 @@ class TestPostprocessMambaFusedKernel:
         torch.testing.assert_close(
             temporal_state_py[dest_block_id],
             temporal_state_orig[actual_src_block_id],
-            msg=(
-                "Python reference did not copy from block_ids[src+bias]=3; "
-                "test preconditions are wrong"
-            ),
+            msg=("Python reference did not copy from block_ids[src+bias]=3; test preconditions are wrong"),
         )
 
         # --- GPU kernel must match Python byte-for-byte ---
@@ -2133,9 +2027,7 @@ class TestPostprocessMambaFusedKernel:
             msg="num_accepted_tokens mismatch at accept_token_bias=2",
         )
 
-    def test_ds_conv_layout_bias_gt_0_byte_equal_to_sd(
-        self, device, test_config, monkeypatch
-    ):
+    def test_ds_conv_layout_bias_gt_0_byte_equal_to_sd(self, device, test_config, monkeypatch):
         """DS conv postprocess should match SD when accept_token_bias > 0."""
         from aphrodite.model_executor.layers.mamba import mamba_utils as model_mamba_utils
 
@@ -2166,9 +2058,7 @@ class TestPostprocessMambaFusedKernel:
             device=device,
         )
         ds_source_conv = sd_source_conv.permute(0, 2, 1).contiguous()
-        sd_source_temporal = torch.randn(
-            cfg.num_blocks, cfg.temporal_state_dim, dtype=cfg.dtype, device=device
-        )
+        sd_source_temporal = torch.randn(cfg.num_blocks, cfg.temporal_state_dim, dtype=cfg.dtype, device=device)
 
         # SD GPU path. Default layout is SD.
         model_mamba_utils.get_conv_state_layout.cache_clear()
@@ -2195,9 +2085,7 @@ class TestPostprocessMambaFusedKernel:
         torch.accelerator.synchronize()
 
         # Sanity: SD path actually modified the state (copy was performed).
-        assert not torch.equal(sd_conv, sd_source_conv), (
-            "SD baseline did not modify conv state; test setup is wrong"
-        )
+        assert not torch.equal(sd_conv, sd_source_conv), "SD baseline did not modify conv state; test setup is wrong"
 
         # DS GPU path on the DS twin.
         monkeypatch.setenv("APHRODITE_SSM_CONV_STATE_LAYOUT", "DS")

@@ -38,20 +38,12 @@ import torch
 
 from aphrodite.platforms import current_platform
 
-if not (
-    current_platform.is_cuda() and current_platform.is_device_capability_family(100)
-):
+if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
     pytest.skip(
-        reason="GDN _forward_core split test uses the CuteDSL prefill backend "
-        "(requires CUDA SM10x).",
+        reason="GDN _forward_core split test uses the CuteDSL prefill backend (requires CUDA SM10x).",
         allow_module_level=True,
     )
 
-from tests.v1.attention.utils import (  # noqa: E402
-    BatchSpec,
-    create_common_attn_metadata,
-    create_aphrodite_config,
-)
 from aphrodite.config import set_current_aphrodite_config  # noqa: E402
 from aphrodite.model_executor.layers.fla.ops.index import (  # noqa: E402
     prepare_chunk_indices,
@@ -70,6 +62,11 @@ from aphrodite.v1.attention.backends.gdn_attn import (  # noqa: E402
     GDNAttentionMetadataBuilder,
 )
 from aphrodite.v1.kv_cache_interface import MambaSpec  # noqa: E402
+from tests.v1.attention.utils import (  # noqa: E402
+    BatchSpec,
+    create_aphrodite_config,
+    create_common_attn_metadata,
+)
 
 # Small GDN dims; head_k_dim/head_v_dim=128 keeps the chunk/update kernels happy.
 H = 4  # num key heads
@@ -100,9 +97,7 @@ def _make_aphrodite_config():
     return cfg
 
 
-def _build_layer(
-    aphrodite_config, conv_state, ssm_state, A_log, dt_bias, conv_weight, conv_bias
-):
+def _build_layer(aphrodite_config, conv_state, ssm_state, A_log, dt_bias, conv_weight, conv_bias):
     """A minimal object that runs the real ``_forward_core`` bound to it."""
     layer = types.SimpleNamespace()
     layer.prefix = PREFIX
@@ -134,9 +129,7 @@ def _build_layer(
 
 
 def _run_forward_core(layer, meta, mixed_qkv, b, a, num_tokens):
-    core_attn_out = torch.zeros(
-        num_tokens, HV, V, dtype=mixed_qkv.dtype, device=mixed_qkv.device
-    )
+    core_attn_out = torch.zeros(num_tokens, HV, V, dtype=mixed_qkv.dtype, device=mixed_qkv.device)
     ctx = types.SimpleNamespace(attn_metadata={PREFIX: meta})
     with patch.object(qwen_gdn_linear_attn, "get_forward_context", return_value=ctx):
         layer._forward_core(
@@ -163,25 +156,18 @@ def test_forward_core_split_matches_unified(
 
     # Decode-first batch: D 1-token decodes (with context), then the prefills.
     decode_seq_lens = [64] * num_decodes
-    prefill_seq_lens = [
-        pl if (fresh_prefill and i == 0) else pl + 37
-        for i, pl in enumerate(prefill_lens)
-    ]
+    prefill_seq_lens = [pl if (fresh_prefill and i == 0) else pl + 37 for i, pl in enumerate(prefill_lens)]
     seq_lens = decode_seq_lens + prefill_seq_lens
     query_lens = [1] * num_decodes + list(prefill_lens)
     batch = BatchSpec(seq_lens=seq_lens, query_lens=query_lens)
 
     builder = GDNAttentionMetadataBuilder(
-        kv_cache_spec=MambaSpec(
-            block_size=BLOCK_SIZE, shapes=((16, 64),), dtypes=(torch.float16,)
-        ),
+        kv_cache_spec=MambaSpec(block_size=BLOCK_SIZE, shapes=((16, 64),), dtypes=(torch.float16,)),
         layer_names=[PREFIX],
         aphrodite_config=aphrodite_config,
         device=device,
     )
-    common = create_common_attn_metadata(
-        batch, BLOCK_SIZE, device, arange_block_indices=True
-    )
+    common = create_common_attn_metadata(batch, BLOCK_SIZE, device, arange_block_indices=True)
     with set_current_aphrodite_config(aphrodite_config):
         meta_split = builder.build(common_prefix_len=0, common_attn_metadata=common)
 
@@ -201,9 +187,7 @@ def test_forward_core_split_matches_unified(
             prepare_metadata_cutedsl,
         )
 
-        full_ci, full_co = prepare_metadata_cutedsl(
-            cu_full, int(cu_full[-1].item()), FLA_CHUNK_SIZE
-        )
+        full_ci, full_co = prepare_metadata_cutedsl(cu_full, int(cu_full[-1].item()), FLA_CHUNK_SIZE)
     else:
         cu_full_cpu = cu_full.cpu()
         full_ci = prepare_chunk_indices(cu_full_cpu, FLA_CHUNK_SIZE).to(device)
@@ -213,9 +197,7 @@ def test_forward_core_split_matches_unified(
         num_decodes=0,
         num_decode_tokens=0,
         num_prefills=meta_split.num_decodes + meta_split.num_prefills,
-        num_prefill_tokens=(
-            meta_split.num_decode_tokens + meta_split.num_prefill_tokens
-        ),
+        num_prefill_tokens=(meta_split.num_decode_tokens + meta_split.num_prefill_tokens),
         chunk_indices=full_ci,
         chunk_offsets=full_co,
         # Unified path: the chunk kernel processes the full non-spec batch.
@@ -226,30 +208,18 @@ def test_forward_core_split_matches_unified(
 
     # Size the state pools from the indices the builder actually produced.
     pool_size = int(meta_split.non_spec_state_indices_tensor.max().item()) + 1
-    conv_state_shape, temporal_state_shape = (
-        MambaStateShapeCalculator.gated_delta_net_state_shape(
-            1, H, HV, K, V, CONV_KERNEL, num_spec=0
-        )
+    conv_state_shape, temporal_state_shape = MambaStateShapeCalculator.gated_delta_net_state_shape(
+        1, H, HV, K, V, CONV_KERNEL, num_spec=0
     )
-    conv_state0 = (
-        torch.randn(pool_size, *conv_state_shape, dtype=torch.bfloat16, device=device)
-        * 0.05
-    )
-    ssm_state0 = (
-        torch.randn(pool_size, *temporal_state_shape, dtype=state_dtype, device=device)
-        * 0.05
-    )
+    conv_state0 = torch.randn(pool_size, *conv_state_shape, dtype=torch.bfloat16, device=device) * 0.05
+    ssm_state0 = torch.randn(pool_size, *temporal_state_shape, dtype=state_dtype, device=device) * 0.05
 
     A_log = torch.randn(HV, dtype=torch.float32, device=device) * 0.1
     dt_bias = torch.randn(HV, dtype=torch.float32, device=device) * 0.1
-    conv_weight = (
-        torch.randn(CONV_DIM, 1, CONV_KERNEL, dtype=torch.bfloat16, device=device) * 0.1
-    )
+    conv_weight = torch.randn(CONV_DIM, 1, CONV_KERNEL, dtype=torch.bfloat16, device=device) * 0.1
     conv_bias = torch.randn(CONV_DIM, dtype=torch.bfloat16, device=device) * 0.1
 
-    mixed_qkv = (
-        torch.randn(num_tokens, CONV_DIM, dtype=torch.bfloat16, device=device) * 0.1
-    )
+    mixed_qkv = torch.randn(num_tokens, CONV_DIM, dtype=torch.bfloat16, device=device) * 0.1
     a = torch.randn(num_tokens, HV, dtype=torch.bfloat16, device=device) * 0.1
     b = torch.randn(num_tokens, HV, dtype=torch.bfloat16, device=device) * 0.1
 
@@ -279,9 +249,7 @@ def test_forward_core_split_matches_unified(
         conv_weight,
         conv_bias,
     )
-    out_unified = _run_forward_core(
-        layer_unified, meta_unified, mixed_qkv, b, a, num_tokens
-    )
+    out_unified = _run_forward_core(layer_unified, meta_unified, mixed_qkv, b, a, num_tokens)
 
     # Conv is unified in both paths, so the conv-state update must be identical.
     torch.testing.assert_close(conv_state_split, conv_state_unified, atol=0, rtol=0)

@@ -22,9 +22,7 @@ class ReplicatedLinearWithLoRA(BaseLinearLayerWithLoRA):
         self.output_size = self.base_layer.output_size
         self.n_slices = 1
 
-    def forward(
-        self, input_: torch.Tensor
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor | None]:
+    def forward(self, input_: torch.Tensor) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor | None]:
         """Forward of ReplicatedLinearWithLoRA
 
         Args:

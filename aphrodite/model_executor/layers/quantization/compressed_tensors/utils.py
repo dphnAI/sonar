@@ -67,17 +67,12 @@ def should_ignore_layer(
         shard_proj_names = fused_mapping[proj_name]
 
         # Convert fused_name --> [shard_names]
-        shard_names = [
-            layer_name.replace(proj_name, shard_proj_name)
-            for shard_proj_name in shard_proj_names
-        ]
+        shard_names = [layer_name.replace(proj_name, shard_proj_name) for shard_proj_name in shard_proj_names]
 
         # Layer should be ignored if shards are ignored.
         should_ignore_layer = None
         for shard_name in shard_names:
-            should_ignore_shard = check_equal_or_regex_match(
-                layer_name=shard_name, targets=ignore
-            )
+            should_ignore_shard = check_equal_or_regex_match(layer_name=shard_name, targets=ignore)
 
             # If shard_idx=0, set layer ignore to match shard.
             if should_ignore_layer is None:
@@ -94,9 +89,7 @@ def should_ignore_layer(
     # Unfused layers like down_proj and o_proj will match
     # the safetensors checkpoint already.
     else:
-        should_ignore_layer = check_equal_or_regex_match(
-            layer_name=layer_name, targets=ignore
-        )
+        should_ignore_layer = check_equal_or_regex_match(layer_name=layer_name, targets=ignore)
 
     assert should_ignore_layer is not None
     return should_ignore_layer
@@ -152,9 +145,7 @@ def find_matched_target(
     return matched_target
 
 
-def _find_first_match(
-    value: str, targets: Iterable[str], check_contains: bool = False
-) -> str | None:
+def _find_first_match(value: str, targets: Iterable[str], check_contains: bool = False) -> str | None:
     """
     Returns first element of target that matches value either
     exactly or as a regex after 're:'. If check_contains is set to True,
@@ -172,9 +163,7 @@ def _find_first_match(
     return None
 
 
-def _is_equal_or_regex_match(
-    value: str, target: str, check_contains: bool = False
-) -> bool:
+def _is_equal_or_regex_match(value: str, target: str, check_contains: bool = False) -> bool:
     """
     Checks whether a value is exactly equal or a regex match for target
     if target starts with 're:'. If check_contains is set to True,
@@ -222,9 +211,7 @@ def _match_fused_layer(
         return None
 
     # expand path of unfused components
-    unfused_paths = [
-        layer_name.replace(fused, unfused) for unfused in fused_mapping[fused]
-    ]
+    unfused_paths = [layer_name.replace(fused, unfused) for unfused in fused_mapping[fused]]
 
     # for each unfused component, find a match in targets
     unfused_matches: list[str | None] = []

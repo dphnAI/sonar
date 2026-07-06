@@ -125,9 +125,7 @@ def test_tiering_spec_collects_secondary_metric_definitions(monkeypatch):
         lambda: MetricsSecondaryTierManager,
     )
 
-    metrics = TieringOffloadingSpec.build_metric_definitions(
-        {"secondary_tiers": [{"type": "test_metrics"}]}
-    )
+    metrics = TieringOffloadingSpec.build_metric_definitions({"secondary_tiers": [{"type": "test_metrics"}]})
 
     metadata = metrics[MetricsSecondaryTierManager.MY_TIER_METRIC]
     assert metadata.documentation == "Number of bytes served by the test tier."
@@ -136,18 +134,14 @@ def test_tiering_spec_collects_secondary_metric_definitions(monkeypatch):
 
 def test_tiering_manager_aggregates_secondary_stats():
     mock_region = _mock_mmap_region(5)
-    primary_tier = CPUPrimaryTierOffloadingManager(
-        num_blocks=5, mmap_region=mock_region
-    )
+    primary_tier = CPUPrimaryTierOffloadingManager(num_blocks=5, mmap_region=mock_region)
     secondary_tier = MetricsSecondaryTierManager(
         offloading_spec=_MOCK_OFFLOADING_SPEC,
         primary_kv_view=mock_region.create_kv_memoryview(),
         tier_type="test_metrics",
     )
     secondary_stats = OffloadingConnectorStats()
-    secondary_stats.increase_counter(
-        MetricsSecondaryTierManager.MY_TIER_METRIC, 7, ("test_metrics",)
-    )
+    secondary_stats.increase_counter(MetricsSecondaryTierManager.MY_TIER_METRIC, 7, ("test_metrics",))
     secondary_tier.stats = secondary_stats
     manager = TieringOffloadingManager(
         primary_tier=primary_tier,
@@ -157,12 +151,7 @@ def test_tiering_manager_aggregates_secondary_stats():
     stats = manager.get_stats()
 
     assert stats is not None
-    assert (
-        stats.data["data"][MetricsSecondaryTierManager.MY_TIER_METRIC][
-            ("test_metrics",)
-        ]
-        == 7
-    )
+    assert stats.data["data"][MetricsSecondaryTierManager.MY_TIER_METRIC][("test_metrics",)] == 7
 
     # The primary tier's cache-usage gauge is always reported, so get_stats()
     # never returns None, but the secondary tier has nothing new to report
@@ -208,9 +197,7 @@ class TestTieringOffloadingManager:
     def manager_setup(self):
         # Create primary tier (CPU-based)
         mock_region = _mock_mmap_region(5)
-        self.primary_tier = CPUPrimaryTierOffloadingManager(
-            num_blocks=5, mmap_region=mock_region
-        )
+        self.primary_tier = CPUPrimaryTierOffloadingManager(num_blocks=5, mmap_region=mock_region)
 
         mock_view = mock_region.create_kv_memoryview()
 
@@ -262,12 +249,8 @@ class TestTieringOffloadingManager:
         """Test that blocks are cascaded to ALL secondary tiers."""
         blocks = to_keys(range(3))
 
-        self.secondary_tier1.submit_store = MagicMock(
-            wraps=self.secondary_tier1.submit_store
-        )
-        self.secondary_tier2.submit_store = MagicMock(
-            wraps=self.secondary_tier2.submit_store
-        )
+        self.secondary_tier1.submit_store = MagicMock(wraps=self.secondary_tier1.submit_store)
+        self.secondary_tier2.submit_store = MagicMock(wraps=self.secondary_tier2.submit_store)
 
         # Store to primary
         self._start_request()
@@ -286,12 +269,8 @@ class TestTieringOffloadingManager:
         assert self.secondary_tier2.get_num_blocks() == 3
 
         # Verify blocks are present
-        assert all(
-            self.secondary_tier1.lookup(b, _CTX) is LookupResult.HIT for b in blocks
-        )
-        assert all(
-            self.secondary_tier2.lookup(b, _CTX) is LookupResult.HIT for b in blocks
-        )
+        assert all(self.secondary_tier1.lookup(b, _CTX) is LookupResult.HIT for b in blocks)
+        assert all(self.secondary_tier2.lookup(b, _CTX) is LookupResult.HIT for b in blocks)
 
     def test_ref_cnt_protection_during_cascade(self, manager_setup):
         """Test that ref_cnt protects blocks during cascade."""
@@ -441,12 +420,8 @@ class TestTieringOffloadingManager:
         """Test that failed GPU→primary store doesn't cascade."""
         blocks = to_keys(range(3))
 
-        self.secondary_tier1.submit_store = MagicMock(
-            wraps=self.secondary_tier1.submit_store
-        )
-        self.secondary_tier2.submit_store = MagicMock(
-            wraps=self.secondary_tier2.submit_store
-        )
+        self.secondary_tier1.submit_store = MagicMock(wraps=self.secondary_tier1.submit_store)
+        self.secondary_tier2.submit_store = MagicMock(wraps=self.secondary_tier2.submit_store)
 
         # Prepare store
         self._start_request()
@@ -470,9 +445,7 @@ class TestTieringOffloadingManager:
         for block in blocks:
             self.secondary_tier1.blocks[block] = True
 
-        self.secondary_tier1.submit_load = MagicMock(
-            wraps=self.secondary_tier1.submit_load
-        )
+        self.secondary_tier1.submit_load = MagicMock(wraps=self.secondary_tier1.submit_load)
 
         ctx_a = ReqContext(req_id="req_a")
         ctx_b = ReqContext(req_id="req_b")
@@ -508,9 +481,7 @@ class TestTieringOffloadingManager:
         shared_block = to_keys([0])[0]
         self.secondary_tier1.blocks[shared_block] = True
 
-        self.secondary_tier1.submit_load = MagicMock(
-            wraps=self.secondary_tier1.submit_load
-        )
+        self.secondary_tier1.submit_load = MagicMock(wraps=self.secondary_tier1.submit_load)
 
         ctx_a = ReqContext(req_id="req_a")
         ctx_b = ReqContext(req_id="req_b")
@@ -535,9 +506,7 @@ class TestTieringOffloadingManager:
         """complete_store cascades to secondary tiers with the correct req_context."""
         blocks = to_keys(range(2))
 
-        self.secondary_tier1.submit_store = MagicMock(
-            wraps=self.secondary_tier1.submit_store
-        )
+        self.secondary_tier1.submit_store = MagicMock(wraps=self.secondary_tier1.submit_store)
 
         ctx = ReqContext(req_id="req_ctx", kv_transfer_params={"key": "value"})
 
@@ -549,18 +518,14 @@ class TestTieringOffloadingManager:
         job_metadata = self.secondary_tier1.submit_store.call_args.args[0]
         assert job_metadata.req_context is ctx
 
-    def test_on_request_finished_delays_secondary_until_store_submitted(
-        self, manager_setup
-    ):
+    def test_on_request_finished_delays_secondary_until_store_submitted(self, manager_setup):
         """Manager hook is eager; secondary hooks wait for cascade submission."""
         blocks = to_keys(range(2))
         ctx = ReqContext(req_id="req_delayed_secondary")
         calls: list[tuple[str, str]] = []
 
         self.primary_tier.on_request_finished = MagicMock(
-            side_effect=lambda req_context: calls.append(
-                ("primary_finish", req_context.req_id)
-            )
+            side_effect=lambda req_context: calls.append(("primary_finish", req_context.req_id))
         )
 
         original_submit_store1 = self.secondary_tier1.submit_store
@@ -577,14 +542,10 @@ class TestTieringOffloadingManager:
         self.secondary_tier1.submit_store = MagicMock(side_effect=submit_store1)
         self.secondary_tier2.submit_store = MagicMock(side_effect=submit_store2)
         self.secondary_tier1.on_request_finished = MagicMock(
-            side_effect=lambda req_context: calls.append(
-                ("secondary_finish_1", req_context.req_id)
-            )
+            side_effect=lambda req_context: calls.append(("secondary_finish_1", req_context.req_id))
         )
         self.secondary_tier2.on_request_finished = MagicMock(
-            side_effect=lambda req_context: calls.append(
-                ("secondary_finish_2", req_context.req_id)
-            )
+            side_effect=lambda req_context: calls.append(("secondary_finish_2", req_context.req_id))
         )
 
         self._start_request(ctx)
@@ -610,18 +571,10 @@ class TestTieringOffloadingManager:
         blocks = to_keys(range(2))
         ctx = ReqContext(req_id="req_failed_store_finalize")
 
-        self.secondary_tier1.submit_store = MagicMock(
-            wraps=self.secondary_tier1.submit_store
-        )
-        self.secondary_tier2.submit_store = MagicMock(
-            wraps=self.secondary_tier2.submit_store
-        )
-        self.secondary_tier1.on_request_finished = MagicMock(
-            wraps=self.secondary_tier1.on_request_finished
-        )
-        self.secondary_tier2.on_request_finished = MagicMock(
-            wraps=self.secondary_tier2.on_request_finished
-        )
+        self.secondary_tier1.submit_store = MagicMock(wraps=self.secondary_tier1.submit_store)
+        self.secondary_tier2.submit_store = MagicMock(wraps=self.secondary_tier2.submit_store)
+        self.secondary_tier1.on_request_finished = MagicMock(wraps=self.secondary_tier1.on_request_finished)
+        self.secondary_tier2.on_request_finished = MagicMock(wraps=self.secondary_tier2.on_request_finished)
 
         self._start_request(ctx)
         self.manager.prepare_store(blocks, ctx)
@@ -642,12 +595,8 @@ class TestTieringOffloadingManager:
         """Requests with no pending stores finalize secondary tiers immediately."""
         ctx = ReqContext(req_id="req_zero_store_finalize")
 
-        self.secondary_tier1.on_request_finished = MagicMock(
-            wraps=self.secondary_tier1.on_request_finished
-        )
-        self.secondary_tier2.on_request_finished = MagicMock(
-            wraps=self.secondary_tier2.on_request_finished
-        )
+        self.secondary_tier1.on_request_finished = MagicMock(wraps=self.secondary_tier1.on_request_finished)
+        self.secondary_tier2.on_request_finished = MagicMock(wraps=self.secondary_tier2.on_request_finished)
 
         self._start_request(ctx)
         self.manager.on_request_finished(ctx)
@@ -661,12 +610,8 @@ class TestTieringOffloadingManager:
         blocks = to_keys(range(2))
         ctx = ReqContext(req_id="req_reset_finalize_secondary")
 
-        self.secondary_tier1.on_request_finished = MagicMock(
-            wraps=self.secondary_tier1.on_request_finished
-        )
-        self.secondary_tier2.on_request_finished = MagicMock(
-            wraps=self.secondary_tier2.on_request_finished
-        )
+        self.secondary_tier1.on_request_finished = MagicMock(wraps=self.secondary_tier1.on_request_finished)
+        self.secondary_tier2.on_request_finished = MagicMock(wraps=self.secondary_tier2.on_request_finished)
 
         self._start_request(ctx)
         self.manager.prepare_store(blocks, ctx)
@@ -681,20 +626,14 @@ class TestTieringOffloadingManager:
         self.secondary_tier2.on_request_finished.assert_called_once_with(ctx)
         assert self.manager._req_state == {}
 
-    def test_reset_cache_clears_pending_primary_stores_for_active_request(
-        self, manager_setup
-    ):
+    def test_reset_cache_clears_pending_primary_stores_for_active_request(self, manager_setup):
         """reset_cache drops active pending stores so resumed requests finalize."""
         initial_blocks = to_keys(range(2))
         resumed_blocks = to_keys(range(2, 4))
         ctx = ReqContext(req_id="req_reset_resume")
 
-        self.secondary_tier1.on_request_finished = MagicMock(
-            wraps=self.secondary_tier1.on_request_finished
-        )
-        self.secondary_tier2.on_request_finished = MagicMock(
-            wraps=self.secondary_tier2.on_request_finished
-        )
+        self.secondary_tier1.on_request_finished = MagicMock(wraps=self.secondary_tier1.on_request_finished)
+        self.secondary_tier2.on_request_finished = MagicMock(wraps=self.secondary_tier2.on_request_finished)
 
         self._start_request(ctx)
         self.manager.prepare_store(initial_blocks, ctx)
@@ -734,17 +673,13 @@ class TestTieringOffloadingManager:
         ctx = ReqContext(req_id="req_policy_lifecycle_2")
         result = self.manager.on_new_request(ctx)
         assert result.policy == OffloadPolicy.REQUEST_LEVEL
-        assert self.manager._req_state[ctx.req_id].request_level_tiers == {
-            self.secondary_tier1
-        }
+        assert self.manager._req_state[ctx.req_id].request_level_tiers == {self.secondary_tier1}
 
         # Cleanup
         self.manager.on_request_finished(ctx)
         assert ctx.req_id not in self.manager._req_state
 
-    def test_prepare_store_cascades_existing_blocks_to_request_level_tiers(
-        self, manager_setup
-    ):
+    def test_prepare_store_cascades_existing_blocks_to_request_level_tiers(self, manager_setup):
         """prepare_store cascades hit blocks to request-level tiers only."""
         # Store some blocks to primary first
         existing_blocks = to_keys(range(3))
@@ -764,12 +699,8 @@ class TestTieringOffloadingManager:
         self.manager.on_new_request(ctx)
 
         # Spy on submit_store
-        self.secondary_tier1.submit_store = MagicMock(
-            wraps=self.secondary_tier1.submit_store
-        )
-        self.secondary_tier2.submit_store = MagicMock(
-            wraps=self.secondary_tier2.submit_store
-        )
+        self.secondary_tier1.submit_store = MagicMock(wraps=self.secondary_tier1.submit_store)
+        self.secondary_tier2.submit_store = MagicMock(wraps=self.secondary_tier2.submit_store)
 
         # Call prepare_store with existing + new blocks
         new_blocks = to_keys(range(3, 5))
@@ -804,10 +735,7 @@ class TestTieringOffloadingManager:
         # the lookup that staged it).
         promo_block = to_keys([99])[0]
         self.secondary_tier1.blocks[promo_block] = True
-        assert (
-            self.manager.lookup(promo_block, ReqContext(req_id="pending"))
-            is LookupResult.RETRY
-        )
+        assert self.manager.lookup(promo_block, ReqContext(req_id="pending")) is LookupResult.RETRY
         assert self.manager._pending_load_submissions
 
         # Request-level tier registration.
@@ -816,17 +744,13 @@ class TestTieringOffloadingManager:
         )
         rl_ctx = ReqContext(req_id="rl")
         self.manager.on_new_request(rl_ctx)
-        assert self.manager._req_state[rl_ctx.req_id].request_level_tiers == {
-            self.secondary_tier1
-        }
+        assert self.manager._req_state[rl_ctx.req_id].request_level_tiers == {self.secondary_tier1}
 
         # Mark this step as already polled (reset_cache must clear it).
         self.manager._processed_jobs_this_step = True
 
         # Spy: pending submission must NOT reach the tier.
-        self.secondary_tier1.submit_load = MagicMock(
-            wraps=self.secondary_tier1.submit_load
-        )
+        self.secondary_tier1.submit_load = MagicMock(wraps=self.secondary_tier1.submit_load)
 
         self.manager.reset_cache()
 
@@ -852,12 +776,8 @@ class TestTieringOffloadingManager:
         read junk from, a primary slot that the post-reset path has
         reallocated.
         """
-        self.secondary_tier1.drain_jobs = MagicMock(
-            wraps=self.secondary_tier1.drain_jobs
-        )
-        self.secondary_tier2.drain_jobs = MagicMock(
-            wraps=self.secondary_tier2.drain_jobs
-        )
+        self.secondary_tier1.drain_jobs = MagicMock(wraps=self.secondary_tier1.drain_jobs)
+        self.secondary_tier2.drain_jobs = MagicMock(wraps=self.secondary_tier2.drain_jobs)
 
         # Drive a cascade so a job lands in _transfer_jobs.
         blocks = to_keys(range(3))
@@ -878,14 +798,10 @@ class TestTieringOffloadingWithoutSecondaryTiers:
 
     def test_works_without_secondary_tiers(self):
         """Test that manager works with empty secondary_tiers list."""
-        primary_tier = CPUPrimaryTierOffloadingManager(
-            num_blocks=5, mmap_region=_mock_mmap_region(5)
-        )
+        primary_tier = CPUPrimaryTierOffloadingManager(num_blocks=5, mmap_region=_mock_mmap_region(5))
 
         # Create manager with no secondary tiers
-        manager = TieringOffloadingManager(
-            primary_tier=primary_tier, secondary_tiers=[]
-        )
+        manager = TieringOffloadingManager(primary_tier=primary_tier, secondary_tiers=[])
 
         blocks = to_keys(range(3))
 

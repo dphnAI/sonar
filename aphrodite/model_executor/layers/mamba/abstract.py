@@ -53,9 +53,7 @@ class MambaBase(AttentionLayerBase):
             mamba_type=self.mamba_type,
             mamba_cache_mode=aphrodite_config.cache_config.mamba_cache_mode,
             num_speculative_blocks=(
-                aphrodite_config.speculative_config.num_speculative_tokens
-                if aphrodite_config.speculative_config
-                else 0
+                aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
             ),
         )
 

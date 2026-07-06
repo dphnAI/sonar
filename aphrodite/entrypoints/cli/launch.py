@@ -76,18 +76,14 @@ class LaunchSubcommand(CLISubcommand):
     def validate(self, args: argparse.Namespace) -> None:
         validate_parsed_serve_args(args)
 
-    def subparser_init(
-        self, subparsers: argparse._SubParsersAction
-    ) -> FlexibleArgumentParser:
+    def subparser_init(self, subparsers: argparse._SubParsersAction) -> FlexibleArgumentParser:
         launch_parser = subparsers.add_parser(
             self.name,
             help=DESCRIPTION,
             description=DESCRIPTION,
             usage=f"aphrodite {self.name} <component> [options]",
         )
-        launch_subparsers = launch_parser.add_subparsers(
-            required=True, dest="launch_component"
-        )
+        launch_subparsers = launch_parser.add_subparsers(required=True, dest="launch_component")
 
         for cmd_cls in LaunchSubcommandBase.__subclasses__():
             cmd_subparser = launch_subparsers.add_parser(
@@ -98,9 +94,7 @@ class LaunchSubcommand(CLISubcommand):
             )
             cmd_subparser.set_defaults(launch_command=cmd_cls.cmd)
             cmd_cls.add_cli_args(cmd_subparser)
-            cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(
-                subcmd=f"{self.name} {cmd_cls.name}"
-            )
+            cmd_subparser.epilog = APHRODITE_SUBCMD_PARSER_EPILOG.format(subcmd=f"{self.name} {cmd_cls.name}")
 
         return launch_parser
 
@@ -135,9 +129,7 @@ async def run_launch_fastapi(args: argparse.Namespace) -> None:
     envs.APHRODITE_CPU_KVCACHE_SPACE = 0
 
     aphrodite_config = AphroditeConfig(model_config=model_config)
-    shutdown_task = await build_and_serve_renderer(
-        aphrodite_config, listen_address, sock, args
-    )
+    shutdown_task = await build_and_serve_renderer(aphrodite_config, listen_address, sock, args)
     try:
         await shutdown_task
     finally:

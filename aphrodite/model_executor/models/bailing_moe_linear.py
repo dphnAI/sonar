@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from transformers.configuration_utils import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -177,9 +177,7 @@ class BailingMoeV25MLAAttention(nn.Module):
         rope_parameters = _build_rope_parameters(config) or {}
         # MLA rotates the full qk_rope_head_dim,
         # partial_rotary_factor is for the linear-attn head only.
-        rope_parameters = {
-            k: v for k, v in rope_parameters.items() if k != "partial_rotary_factor"
-        }
+        rope_parameters = {k: v for k, v in rope_parameters.items() if k != "partial_rotary_factor"}
         rope_parameters["rope_dim"] = self.qk_rope_head_dim
         max_position = getattr(config, "max_position_embeddings", 8192)
         self.rotary_emb = get_rope(
@@ -254,9 +252,7 @@ class BailingMoEGate(nn.Module):
             self.expert_bias = None
 
     def forward(self, hidden_states):
-        logits = F.linear(hidden_states.to(self.weight.dtype), self.weight, None).to(
-            hidden_states.dtype
-        )
+        logits = F.linear(hidden_states.to(self.weight.dtype), self.weight, None).to(hidden_states.dtype)
         return logits
 
 
@@ -301,16 +297,11 @@ class BailingMoeV25(nn.Module):
             params_dtype=self.router_dtype,
             prefix=f"{prefix}.gate",
         )
-        correction_bias = (
-            self.gate.expert_bias if self.gate.expert_bias is not None else None
-        )
+        correction_bias = self.gate.expert_bias if self.gate.expert_bias is not None else None
         if self.score_function is not None:
             assert (self.score_function == "softmax" and correction_bias is None) or (
                 self.score_function == "sigmoid" and correction_bias is not None
-            ), (
-                "score_function and correction_bias should be "
-                "(softmax, None) or (sigmoid, not None)"
-            )
+            ), "score_function and correction_bias should be (softmax, None) or (sigmoid, not None)"
 
         # Shared experts (using BailingMLP)
         if self.num_shared_experts > 0:
@@ -358,9 +349,7 @@ class BailingMoeV25(nn.Module):
         router_logits = self.gate(hidden_states.to(self.router_dtype))
         router_logits = router_logits.to(hidden_states.dtype)
 
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
         return final_hidden_states.view(num_tokens, hidden_size)
 
@@ -398,9 +387,7 @@ class BailingMoeV25DecoderLayer(nn.Module):
             )
 
         # MLP/MoE
-        is_moe_layer = config.num_experts > 1 and layer_id >= getattr(
-            config, "first_k_dense_replace", 0
-        )
+        is_moe_layer = config.num_experts > 1 and layer_id >= getattr(config, "first_k_dense_replace", 0)
 
         if is_moe_layer:
             self.mlp = BailingMoeV25(
@@ -450,9 +437,7 @@ class BailingMoeV25DecoderLayer(nn.Module):
             # Full attention
             self_attention_output = self.self_attn(hidden_states, positions)
 
-        hidden_states, residual = self.post_attention_layernorm(
-            self_attention_output, residual
-        )
+        hidden_states, residual = self.post_attention_layernorm(self_attention_output, residual)
         hidden_states = self.mlp(hidden_states)
         return hidden_states, residual
 
@@ -486,8 +471,7 @@ class BailingMoeV25Model(nn.Module):
 
         # decoder_attention_types: 0 = linear, 1 = full
         self.decoder_attention_types = [
-            0 if is_linear_layer(i, self.layer_group_size) else 1
-            for i in range(self.num_layers)
+            0 if is_linear_layer(i, self.layer_group_size) else 1 for i in range(self.num_layers)
         ]
 
         # Embeddings
@@ -563,9 +547,7 @@ class BailingMoeV25Model(nn.Module):
             )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         else:
             if residual is not None:
                 hidden_states, _ = self.norm(hidden_states, residual)
@@ -617,9 +599,7 @@ class BailingMoeV25Model(nn.Module):
                 weight_loader(param, tensor, shard_id)
             else:
                 # Expert param: (expert_id, shard_id)
-                weight_loader(
-                    param, tensor, name, expert_id=shard_id[0], shard_id=shard_id[1]
-                )
+                weight_loader(param, tensor, name, expert_id=shard_id[0], shard_id=shard_id[1])
 
             loaded_params.add(name)
             return True
@@ -634,11 +614,7 @@ class BailingMoeV25Model(nn.Module):
             name = name.removeprefix("model.")
             # Map attention.dense based on layer type
             if "attention.dense" in name:
-                layer_idx = (
-                    int(name.split("layers.")[1].split(".")[0])
-                    if "layers." in name
-                    else 0
-                )
+                layer_idx = int(name.split("layers.")[1].split(".")[0]) if "layers." in name else 0
                 attn_name = (
                     "self_attn.dense"
                     if is_linear_layer(layer_idx, self.config.layer_group_size)
@@ -648,9 +624,7 @@ class BailingMoeV25Model(nn.Module):
 
             # Standard mappings
             name = name.replace("attention.", "self_attn.")
-            name = name.replace(
-                "mlp.gate.e_score_correction_bias", "mlp.gate.expert_bias"
-            )
+            name = name.replace("mlp.gate.e_score_correction_bias", "mlp.gate.expert_bias")
 
             return maybe_remap_kv_scale_name(name, params_dict)
 
@@ -664,9 +638,7 @@ class BailingMoeV25Model(nn.Module):
             for param_suf, weight_suf, shard_id in stacked_mappings:
                 if weight_suf not in norm_name:
                     continue
-                mapped = norm_name.replace(weight_suf, param_suf).replace(
-                    "attention.", "self_attn."
-                )
+                mapped = norm_name.replace(weight_suf, param_suf).replace("attention.", "self_attn.")
                 if load_param(mapped, weight, shard_id):
                     loaded = True
                     break
@@ -676,13 +648,10 @@ class BailingMoeV25Model(nn.Module):
             # Handle expert weights
             if "mlp.experts" in norm_name:
                 # Expert bias
-                if (
-                    "mlp.experts.e_score_correction_bias" in norm_name
-                    or "mlp.experts.expert_bias" in norm_name
-                ):
-                    alt = norm_name.replace(
-                        "mlp.experts.e_score_correction_bias", "mlp.gate.expert_bias"
-                    ).replace("mlp.experts.expert_bias", "mlp.gate.expert_bias")
+                if "mlp.experts.e_score_correction_bias" in norm_name or "mlp.experts.expert_bias" in norm_name:
+                    alt = norm_name.replace("mlp.experts.e_score_correction_bias", "mlp.gate.expert_bias").replace(
+                        "mlp.experts.expert_bias", "mlp.gate.expert_bias"
+                    )
                     if load_param(alt, weight) or load_param(norm_name, weight):
                         continue
 
@@ -766,12 +735,8 @@ class BailingMoeV25ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
     ) -> IntermediateTensors:
         return IntermediateTensors(
             {
-                "hidden_states": torch.zeros(
-                    (batch_size, self.config.hidden_size), dtype=dtype, device=device
-                ),
-                "residual": torch.zeros(
-                    (batch_size, self.config.hidden_size), dtype=dtype, device=device
-                ),
+                "hidden_states": torch.zeros((batch_size, self.config.hidden_size), dtype=dtype, device=device),
+                "residual": torch.zeros((batch_size, self.config.hidden_size), dtype=dtype, device=device),
             }
         )
 
@@ -784,9 +749,7 @@ class BailingMoeV25ForCausalLM(nn.Module, HasInnerState, IsHybrid, SupportsPP):
         config = aphrodite_config.model_config.hf_config
         tp_size = aphrodite_config.parallel_config.tensor_parallel_size
 
-        head_dim = getattr(
-            config, "head_dim", config.hidden_size // config.num_attention_heads
-        )
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
 
         # Return base state shape from linear attention (no padding)
         return MambaStateShapeCalculator.linear_attention_state_shape(

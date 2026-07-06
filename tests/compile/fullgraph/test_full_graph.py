@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 import torch
 
-from tests.quantization.utils import is_quant_method_supported
 from aphrodite import LLM, SamplingParams
 from aphrodite.config import CompilationConfig, CompilationMode, CUDAGraphMode, PassConfig
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from tests.quantization.utils import is_quant_method_supported
 
 from ...utils import create_new_process_for_each_test
 
@@ -40,9 +40,7 @@ def models_list(*, all: bool = True, keywords: list[str] | None = None):
         )
 
         if is_quant_method_supported("gptq"):
-            TEST_MODELS.append(
-                ("TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ", {"quantization": "gptq"})
-            )
+            TEST_MODELS.append(("TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ", {"quantization": "gptq"}))
 
         if is_quant_method_supported("gptq_marlin"):
             TEST_MODELS.append(
@@ -53,9 +51,7 @@ def models_list(*, all: bool = True, keywords: list[str] | None = None):
             )
 
         if not current_platform.is_rocm() and is_quant_method_supported("awq"):
-            TEST_MODELS.append(
-                ("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ", {"quantization": "AWQ"})
-            )
+            TEST_MODELS.append(("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ", {"quantization": "AWQ"}))
 
     if keywords is None:
         return TEST_MODELS
@@ -77,11 +73,7 @@ def test_full_graph(
     model_kwargs: dict[str, Any],
     compilation_mode: int,
 ):
-    if (
-        "w8a8" in model
-        or "w8w8" in model
-        and current_platform.has_device_capability((10, 0))
-    ):
+    if "w8a8" in model or "w8w8" in model and current_platform.has_device_capability((10, 0)):
         # int8 removed on Blackwell:
         pytest.skip("int8 support removed on Blackwell")
 
@@ -108,9 +100,7 @@ def test_full_graph(
             CompilationConfig(
                 mode=CompilationMode.APHRODITE_COMPILE,
                 custom_ops=["+rms_norm"],
-                pass_config=PassConfig(
-                    fuse_norm_quant=True, fuse_act_quant=True, eliminate_noops=True
-                ),
+                pass_config=PassConfig(fuse_norm_quant=True, fuse_act_quant=True, eliminate_noops=True),
             ),
             *model_info,
         )
@@ -165,17 +155,11 @@ def test_custom_compile_config(
     model: str,
     model_kwargs: dict[str, Any],
 ):
-    if (
-        "w8a8" in model
-        or "w8w8" in model
-        and current_platform.has_device_capability((10, 0))
-    ):
+    if "w8a8" in model or "w8w8" in model and current_platform.has_device_capability((10, 0)):
         # int8 removed on Blackwell:
         pytest.skip("int8 support removed on Blackwell")
 
-    if compilation_config.use_inductor_graph_partition and not is_torch_equal_or_newer(
-        "2.9.0.dev"
-    ):
+    if compilation_config.use_inductor_graph_partition and not is_torch_equal_or_newer("2.9.0.dev"):
         pytest.skip("inductor graph partition is only available in PyTorch 2.9+")
 
     print(f"MODEL={model}")
@@ -215,9 +199,7 @@ def test_fp8_kv_scale_compile(
 
 def run_model(compile_config: int | CompilationConfig, model: str, **model_kwargs):
     compilation_config = (
-        compile_config
-        if isinstance(compile_config, CompilationConfig)
-        else CompilationConfig(mode=compile_config)
+        compile_config if isinstance(compile_config, CompilationConfig) else CompilationConfig(mode=compile_config)
     )
 
     prompts = [

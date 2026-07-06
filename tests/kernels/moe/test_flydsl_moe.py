@@ -41,9 +41,7 @@ RoutingBuffers = tuple[
 ]
 
 
-@pytest.mark.parametrize(
-    "num_tokens", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
-)
+@pytest.mark.parametrize("num_tokens", [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384])
 @pytest.mark.parametrize("inter_dim", [256, 512])
 def test_flydsl_moe(num_tokens: int, inter_dim: int):
     device = "cuda"
@@ -82,9 +80,7 @@ def test_flydsl_moe(num_tokens: int, inter_dim: int):
         dtype=params_dtype,
         device=device,
     )
-    w2_scale = scale_factor * torch.randn(
-        num_experts, num_groups_w2, hidden_size, dtype=params_dtype, device=device
-    )
+    w2_scale = scale_factor * torch.randn(num_experts, num_groups_w2, hidden_size, dtype=params_dtype, device=device)
 
     w13_weight_packed = w13_weight.transpose(1, 2).contiguous().view(torch.uint8)
     w2_weight_packed = w2_weight.transpose(1, 2).contiguous().view(torch.uint8)
@@ -128,25 +124,13 @@ def test_flydsl_moe(num_tokens: int, inter_dim: int):
 
     if group_size > 0 and w13_scale.dim() == 3 and w13_scale.shape[1] > 1:
         E, G, N = w13_scale.shape
-        w13_scale_flydsl = (
-            w13_scale_flydsl.view(E, G // 2, 2, N)
-            .permute(0, 1, 3, 2)
-            .contiguous()
-            .view(-1)
-            .contiguous()
-        )
+        w13_scale_flydsl = w13_scale_flydsl.view(E, G // 2, 2, N).permute(0, 1, 3, 2).contiguous().view(-1).contiguous()
     elif w13_scale.dim() == 3 and w13_scale.shape[1] == 1:
         w13_scale_flydsl = w13_scale_flydsl.squeeze(1)
 
     if group_size > 0 and w2_scale.dim() == 3 and w2_scale.shape[1] > 1:
         E, G, N = w2_scale.shape
-        w2_scale_flydsl = (
-            w2_scale_flydsl.view(E, G // 2, 2, N)
-            .permute(0, 1, 3, 2)
-            .contiguous()
-            .view(-1)
-            .contiguous()
-        )
+        w2_scale_flydsl = w2_scale_flydsl.view(E, G // 2, 2, N).permute(0, 1, 3, 2).contiguous().view(-1).contiguous()
     elif w2_scale.dim() == 3 and w2_scale.shape[1] == 1:
         w2_scale_flydsl = w2_scale_flydsl.squeeze(1)
 

@@ -50,9 +50,7 @@ class ExpertsInt8Config(QuantizationConfig):
     def from_config(cls, config: dict[str, Any]) -> "ExpertsInt8Config":
         return cls()
 
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> "QuantizeMethodBase | None":
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         if isinstance(layer, LinearBase):
             return UnquantizedLinearMethod()
         elif isinstance(layer, RoutedExperts):

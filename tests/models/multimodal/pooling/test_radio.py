@@ -37,10 +37,7 @@ def run_radio_test(
     # Using `self.get_nearest_supported_resolution`, for assets 432x642 the
     # nearest supported resolution is 432x640.
     pixel_values = [
-        img_processor(image, return_tensors="pt").pixel_values.to(torch_dtype)[
-            :, :, :, :640
-        ]
-        for image in images
+        img_processor(image, return_tensors="pt").pixel_values.to(torch_dtype)[:, :, :, :640] for image in images
     ]
 
     hf_config = AutoConfig.from_pretrained(model_id, trust_remote_code=True)
@@ -64,9 +61,7 @@ def run_radio_test(
     # affects evaluation benchmarks.
     hf_model.make_preprocessor_external()
 
-    hf_outputs_per_image = [
-        hf_model(pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values
-    ]
+    hf_outputs_per_image = [hf_model(pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values]
 
     aphrodite_config = RadioConfig(
         model_name=hf_config.args["model"],
@@ -77,8 +72,7 @@ def run_radio_test(
     aphrodite_model = aphrodite_model.to(DEVICE_TYPE, torch_dtype)
 
     aphrodite_outputs_per_image = [
-        aphrodite_model(pixel_values=pixel_value.to(DEVICE_TYPE))
-        for pixel_value in pixel_values
+        aphrodite_model(pixel_values=pixel_value.to(DEVICE_TYPE)) for pixel_value in pixel_values
     ]
     del aphrodite_model, hf_model
     cleanup_dist_env_and_memory()
@@ -96,9 +90,7 @@ def run_radio_test(
     ],
 )
 @pytest.mark.parametrize("dtype", ["half", "bfloat16"])
-def test_radio(
-    default_aphrodite_config, dist_init, image_assets, model_id, dtype: str
-) -> None:
+def test_radio(default_aphrodite_config, dist_init, image_assets, model_id, dtype: str) -> None:
     run_radio_test(
         image_assets,
         model_id,

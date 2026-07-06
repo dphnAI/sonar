@@ -546,10 +546,7 @@ class AphroditeConfig:
             return False
 
         architectures = getattr(model_config, "architectures", [])
-        return (
-            any(arch in DEFAULT_V2_MODEL_RUNNER_ARCHITECTURES for arch in architectures)
-            or not model_config.is_moe
-        )
+        return any(arch in DEFAULT_V2_MODEL_RUNNER_ARCHITECTURES for arch in architectures) or not model_config.is_moe
 
     @property
     def needs_dp_coordinator(self) -> bool:

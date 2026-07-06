@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from aphrodite.config import AttentionConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, AttentionConfig, ModelConfig
 from aphrodite.platforms.interface import DeviceCapability
 from aphrodite.v1.attention.backends.mla.prefill.base import MLADimensions
 from aphrodite.v1.attention.backends.mla.prefill.registry import MLAPrefillBackendEnum
@@ -78,9 +78,7 @@ class TestGetMLAPrefillBackend:
         )
 
         with patch("aphrodite.platforms.current_platform") as mock_platform:
-            mock_platform.get_device_capability.return_value = DeviceCapability(
-                major=9, minor=0
-            )
+            mock_platform.get_device_capability.return_value = DeviceCapability(major=9, minor=0)
 
             with patch.object(
                 flash_attn_cls,
@@ -96,9 +94,7 @@ class TestGetMLAPrefillBackend:
         )
 
         with patch("aphrodite.platforms.current_platform") as mock_platform:
-            mock_platform.get_device_capability.return_value = DeviceCapability(
-                major=9, minor=0
-            )
+            mock_platform.get_device_capability.return_value = DeviceCapability(major=9, minor=0)
 
             with pytest.raises(ValueError, match="is not valid"):
                 get_mla_prefill_backend(aphrodite_config)
@@ -109,9 +105,7 @@ class TestGetMLAPrefillBackend:
         )
 
         with patch("aphrodite.platforms.current_platform") as mock_platform:
-            mock_platform.get_device_capability.return_value = DeviceCapability(
-                major=10, minor=0
-            )
+            mock_platform.get_device_capability.return_value = DeviceCapability(major=10, minor=0)
 
             with (
                 patch.object(
@@ -133,9 +127,7 @@ class TestGetMLAPrefillBackend:
         aphrodite_config = _make_aphrodite_config()
 
         with patch("aphrodite.platforms.current_platform") as mock_platform:
-            mock_platform.get_device_capability.return_value = DeviceCapability(
-                major=9, minor=0
-            )
+            mock_platform.get_device_capability.return_value = DeviceCapability(major=9, minor=0)
 
             with patch.object(
                 flash_attn_cls,
@@ -266,9 +258,7 @@ class TestBackendValidation:
             ),
         )
 
-        with patch.object(
-            TrtllmRaggedPrefillBackend, "is_available", return_value=True
-        ):
+        with patch.object(TrtllmRaggedPrefillBackend, "is_available", return_value=True):
             invalid_reasons = TrtllmRaggedPrefillBackend.validate_configuration(
                 capability,
                 selector_config_glm5,
@@ -283,9 +273,7 @@ class TestROCmAiterFAPrefillSelection:
         """On ROCm, ROCM_AITER_FA is tried first, FLASH_ATTN as fallback."""
         with patch("aphrodite.platforms.current_platform") as mock_platform:
             mock_platform.is_rocm.return_value = True
-            priorities = _get_mla_prefill_backend_priorities(
-                DeviceCapability(major=9, minor=5)
-            )
+            priorities = _get_mla_prefill_backend_priorities(DeviceCapability(major=9, minor=5))
 
         assert priorities == [
             MLAPrefillBackendEnum.ROCM_AITER_FA,
@@ -309,25 +297,19 @@ class TestROCmAiterFAPrefillSelection:
         capability = MagicMock()
 
         with patch.object(mod.current_platform, "is_rocm", return_value=False):
-            assert not mod.AiterFlashAttnPrefillBackend.supports_compute_capability(
-                capability
-            )
+            assert not mod.AiterFlashAttnPrefillBackend.supports_compute_capability(capability)
 
         with (
             patch.object(mod.current_platform, "is_rocm", return_value=True),
             patch("aphrodite.platforms.rocm.on_mi3xx", return_value=False),
         ):
-            assert not mod.AiterFlashAttnPrefillBackend.supports_compute_capability(
-                capability
-            )
+            assert not mod.AiterFlashAttnPrefillBackend.supports_compute_capability(capability)
 
         with (
             patch.object(mod.current_platform, "is_rocm", return_value=True),
             patch("aphrodite.platforms.rocm.on_mi3xx", return_value=True),
         ):
-            assert mod.AiterFlashAttnPrefillBackend.supports_compute_capability(
-                capability
-            )
+            assert mod.AiterFlashAttnPrefillBackend.supports_compute_capability(capability)
 
     def test_is_available_delegates_to_rocm_aiter_ops(self):
         from aphrodite._aiter_ops import rocm_aiter_ops

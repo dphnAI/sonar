@@ -29,8 +29,7 @@ class CaseKey(dict[str, Any]):
         super().__init__(*args, **kwargs)
         if not self and not _allow_empty:
             raise TypeError(
-                "CaseKey requires at least one key-value pair. "
-                "Use CaseKey.default() for the default config key."
+                "CaseKey requires at least one key-value pair. Use CaseKey.default() for the default config key."
             )
         self._str: str | None = None
         self._hash: int | None = None

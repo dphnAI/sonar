@@ -9,8 +9,8 @@ from torch.fx.experimental.symbolic_shapes import statically_known_true
 
 from aphrodite.logger import init_logger
 
-from ..fx_utils import is_func
 from ..aphrodite_inductor_pass import AphroditeInductorPass
+from ..fx_utils import is_func
 
 logger = init_logger(__name__)
 
@@ -82,9 +82,7 @@ class NoOpEliminationPass(AphroditeInductorPass):
                         count += 1
 
             # remove reshape/slice if it produces the original shape
-            if is_func(node, torch.ops.aten.reshape.default) or is_func(
-                node, torch.ops.aten.slice.Tensor
-            ):
+            if is_func(node, torch.ops.aten.reshape.default) or is_func(node, torch.ops.aten.slice.Tensor):
                 input = node.args[0]
                 input_shape = input.meta["val"].shape
                 output_shape = node.meta["val"].shape
@@ -123,9 +121,7 @@ class NoOpEliminationPass(AphroditeInductorPass):
         # Case 1
         return statically_known_true(dim == i_dim)  # type: ignore[no-any-return]
 
-    def all_dims_equivalent(
-        self, dims: Iterable[int | SymInt], i_dims: Iterable[int | SymInt]
-    ) -> bool:
+    def all_dims_equivalent(self, dims: Iterable[int | SymInt], i_dims: Iterable[int | SymInt]) -> bool:
         dims_ = list(dims)
         i_dims_ = list(i_dims)
         if len(dims_) != len(i_dims_):

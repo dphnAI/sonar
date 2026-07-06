@@ -34,8 +34,7 @@ def prompt_to_seq(
 
 @overload
 def prompt_to_seq(  # type: ignore[misc]
-    prompt_or_prompts: ExplicitEncoderDecoderPrompt
-    | Sequence[ExplicitEncoderDecoderPrompt],
+    prompt_or_prompts: ExplicitEncoderDecoderPrompt | Sequence[ExplicitEncoderDecoderPrompt],
 ) -> Sequence[ExplicitEncoderDecoderPrompt]: ...
 
 
@@ -57,12 +56,9 @@ def prompt_to_seq(
 
 
 def conversation_to_seq(
-    conversation_or_conversations: list["ChatCompletionMessageParam"]
-    | Sequence[list["ChatCompletionMessageParam"]],
+    conversation_or_conversations: list["ChatCompletionMessageParam"] | Sequence[list["ChatCompletionMessageParam"]],
 ) -> Sequence[list["ChatCompletionMessageParam"]]:
-    if len(conversation_or_conversations) > 0 and is_list_of(
-        conversation_or_conversations, dict
-    ):
+    if len(conversation_or_conversations) > 0 and is_list_of(conversation_or_conversations, dict):
         return [conversation_or_conversations]  # type: ignore[list-item]
 
     return conversation_or_conversations  # type: ignore[return-value]
@@ -100,9 +96,7 @@ class EncoderDecoderDictPrompt(TypedDict):
     decoder_prompt: DecoderDictPrompt | None
 
 
-SingletonDictPrompt: TypeAlias = (
-    DecoderOnlyDictPrompt | EncoderDictPrompt | DecoderDictPrompt
-)
+SingletonDictPrompt: TypeAlias = DecoderOnlyDictPrompt | EncoderDictPrompt | DecoderDictPrompt
 """
 A [`SingletonPrompt`][aphrodite.inputs.llm.SingletonPrompt]
 that has been standardized into a dictionary.
@@ -118,11 +112,7 @@ that has been standardized into a dictionary.
 
 def _validate_prompt_dict(prompt: Mapping[str, object]) -> None:
     """Reject malformed dict prompts before renderer tokenization."""
-    if (
-        "prompt" not in prompt
-        or "prompt_token_ids" in prompt
-        or "prompt_embeds" in prompt
-    ):
+    if "prompt" not in prompt or "prompt_token_ids" in prompt or "prompt_embeds" in prompt:
         return
 
     if not isinstance(prompt["prompt"], str):
@@ -148,11 +138,7 @@ def parse_dec_only_prompt(prompt: PromptType | object) -> DecoderOnlyDictPrompt:
 
         _validate_prompt_dict(prompt)
 
-        if (
-            "prompt" in prompt
-            or "prompt_token_ids" in prompt
-            or "prompt_embeds" in prompt
-        ):
+        if "prompt" in prompt or "prompt_token_ids" in prompt or "prompt_embeds" in prompt:
             return prompt  # type: ignore[return-value]
 
         raise TypeError("Prompt dictionary must contain text, tokens, or embeddings")
@@ -200,11 +186,7 @@ def _parse_dec_prompt(prompt: PromptType | object) -> DecoderDictPrompt:
         if "prompt_embeds" in prompt:
             raise TypeError("Cannot pass embeddings prompt to encoder-decoder models")
 
-        if (
-            "multi_modal_data" in prompt
-            or "mm_processor_kwargs" in prompt
-            or "multi_modal_uuids" in prompt
-        ):
+        if "multi_modal_data" in prompt or "mm_processor_kwargs" in prompt or "multi_modal_uuids" in prompt:
             raise TypeError("Cannot pass multi-modal inputs to decoder prompt")
 
         if "prompt" in prompt or "prompt_token_ids" in prompt:

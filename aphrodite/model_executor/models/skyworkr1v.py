@@ -81,9 +81,7 @@ class SkyworkR1VImageEmbeddingInputs(TensorSchema):
     ]
 
 
-SkyworkR1VImageInputs: TypeAlias = (
-    SkyworkR1VImagePixelInputs | SkyworkR1VImageEmbeddingInputs
-)
+SkyworkR1VImageInputs: TypeAlias = SkyworkR1VImagePixelInputs | SkyworkR1VImageEmbeddingInputs
 
 
 class SkyworkR1VProcessingInfo(BaseInternVLProcessingInfo):
@@ -171,9 +169,7 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
         image_size = config.force_image_size or config.vision_config.image_size
         patch_size = config.vision_config.patch_size
         self.patch_size = patch_size
-        self.num_image_token = int(
-            (image_size // patch_size) ** 2 * (config.downsample_ratio**2)
-        )
+        self.num_image_token = int((image_size // patch_size) ** 2 * (config.downsample_ratio**2))
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.ps_version
 
@@ -183,9 +179,7 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
                 quant_config=quant_config,
                 prefix=maybe_prefix(prefix, "vision_model"),
             )
-            self.mlp1 = self._init_mlp1(
-                config, quant_config, prefix=maybe_prefix(prefix, "mlp1")
-            )
+            self.mlp1 = self._init_mlp1(config, quant_config, prefix=maybe_prefix(prefix, "mlp1"))
 
         with self._mark_language_model(aphrodite_config):
             self.language_model = init_aphrodite_registered_model(
@@ -196,21 +190,15 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
 
         self.img_context_token_id = None
         self.visual_token_mask = None
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _patch_quant_config(
-        self, config: PretrainedConfig, quant_config: QuantizationConfig
-    ):
+    def _patch_quant_config(self, config: PretrainedConfig, quant_config: QuantizationConfig):
         # the awq models from OpenGVLab missing `modules_to_not_convert`
         # patch the quant_config to add `modules_to_not_convert` back
         if isinstance(quant_config, AutoAWQConfig):
             text_config = config.text_config
             llm_quant_config = getattr(text_config, "quantization_config", None)
-            if (not quant_config.modules_to_not_convert) and (
-                llm_quant_config is not None
-            ):
+            if (not quant_config.modules_to_not_convert) and (llm_quant_config is not None):
                 quant_config.modules_to_not_convert.append("vision_model")
 
     def _init_vision_model(
@@ -222,9 +210,7 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
     ):
         vision_feature_layer = config.select_layer
         if vision_feature_layer < 0:
-            num_hidden_layers = (
-                config.vision_config.num_hidden_layers + vision_feature_layer + 1
-            )
+            num_hidden_layers = config.vision_config.num_hidden_layers + vision_feature_layer + 1
         else:
             num_hidden_layers = vision_feature_layer + 1
 
@@ -292,9 +278,7 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
         vit_embeds = self.mlp1(vit_embeds)
         return vit_embeds
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> SkyworkR1VImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> SkyworkR1VImageInputs | None:
         pixel_values_flat = kwargs.pop("pixel_values_flat", None)
         image_num_patches = kwargs.pop("image_num_patches", None)
         image_embeds = kwargs.pop("image_embeds", None)
@@ -341,17 +325,13 @@ class SkyworkR1VChatModel(nn.Module, SupportsMultiModal, SupportsPP):
 
         # Only one image in the current batch
         if len(num_patches) == 1:
-            return image_embeds.view(-1, self.config.text_config.hidden_size).unsqueeze(
-                0
-            )
+            return image_embeds.view(-1, self.config.text_config.hidden_size).unsqueeze(0)
 
         # NOTE: Image embeddings are split into separate tensors for each image
         # by the size of each embedding.
         feature_size = image_embeds.shape[1]
         image_embeds = image_embeds.view(-1, self.config.text_config.hidden_size)
-        image_feature_sizes = [
-            num_patches * feature_size for num_patches in num_patches
-        ]
+        image_feature_sizes = [num_patches * feature_size for num_patches in num_patches]
         return image_embeds.split(image_feature_sizes)
 
     def embed_multimodal(self, **kwargs: object) -> MultiModalEmbeddings:

@@ -112,9 +112,7 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
             requires_grad=False,
         )
 
-        self.shared_head = SharedHead(
-            config=config, prefix=prefix, quant_config=quant_config
-        )
+        self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
         self.mtp_block = DeepseekV4DecoderLayer(
             aphrodite_config,
             prefix,
@@ -136,9 +134,7 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
         # Target stashes pre-hc_head residual as flat (T, hc_mult * D);
         # reshape to (T, hc_mult, D) — the training-time layout — before
         # the fused norm pass so both inputs are 3D-friendly.
-        previous_hidden_states = previous_hidden_states.view(
-            -1, self.hc_mult, self.config.hidden_size
-        )
+        previous_hidden_states = previous_hidden_states.view(-1, self.hc_mult, self.config.hidden_size)
         # Fused: mask inputs at position 0 (not needed by MTP), enorm, hnorm.
         inputs_embeds, previous_hidden_states = fused_mtp_input_rmsnorm(
             inputs_embeds,
@@ -149,16 +145,12 @@ class DeepSeekV4MultiTokenPredictorLayer(nn.Module):
             self.enorm.variance_epsilon,
             self.hc_mult,
         )
-        hidden_states = self.h_proj(previous_hidden_states) + self.e_proj(
-            inputs_embeds
-        ).unsqueeze(-2)
+        hidden_states = self.h_proj(previous_hidden_states) + self.e_proj(inputs_embeds).unsqueeze(-2)
         hidden_states, residual, post_mix, res_mix = self.mtp_block(
             positions=positions, x=hidden_states, input_ids=None
         )
         if self.mtp_block.use_fused_mhc:
-            hidden_states = self.mtp_block.hc_post(
-                hidden_states, residual, post_mix, res_mix
-            )
+            hidden_states = self.mtp_block.hc_post(hidden_states, residual, post_mix, res_mix)
         # Return the flat pre-hc_head residual so it can be re-fed as the
         # next spec step's `previous_hidden_states` when
         # num_speculative_tokens > 1. hc_head is deferred to compute_logits.
@@ -183,11 +175,7 @@ class DeepSeekV4MultiTokenPredictor(nn.Module):
 
         # Three aux streams shared across all MTP layers, mirroring
         # DeepseekV4Model. ROCm runs the same work serially for now.
-        aux_stream_list = (
-            None
-            if current_platform.is_rocm()
-            else [torch.cuda.Stream() for _ in range(3)]
-        )
+        aux_stream_list = None if current_platform.is_rocm() else [torch.cuda.Stream() for _ in range(3)]
 
         # to map the exact layer index from weights
         self.layers = torch.nn.ModuleDict(
@@ -242,9 +230,7 @@ class DeepSeekV4MultiTokenPredictor(nn.Module):
         mtp_layer = self.layers[str(self.mtp_start_layer_idx + current_step_idx)]
         # MTP forward returns the pre-hc_head residual (T, hc_mult * D); apply
         # hc_head here so logits are computed from the dense hidden state.
-        hidden_states = hidden_states.view(
-            -1, mtp_layer.hc_mult, mtp_layer.config.hidden_size
-        )
+        hidden_states = hidden_states.view(-1, mtp_layer.hc_mult, mtp_layer.config.hidden_size)
         hidden_states = mtp_layer.hc_head_op(
             hidden_states,
             mtp_layer.hc_head_fn,
@@ -283,9 +269,7 @@ class DeepSeekV4MTP(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
-        hidden_states = self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        hidden_states = self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
         return hidden_states
 
     def compute_logits(
@@ -352,9 +336,7 @@ class DeepSeekV4MTP(nn.Module):
         # FP4/MXFP4 experts register ``..._weight_scale``. Choose the suffix
         # for the rename below based on the model's expert dtype.
         expert_scale_suffix = (
-            ".weight_scale"
-            if getattr(self.config, "expert_dtype", "fp4") == "fp4"
-            else ".weight_scale_inv"
+            ".weight_scale" if getattr(self.config, "expert_dtype", "fp4") == "fp4" else ".weight_scale_inv"
         )
 
         for name, loaded_weight in weights:
@@ -377,11 +359,7 @@ class DeepSeekV4MTP(nn.Module):
             if spec_layer != self.model.mtp_start_layer_idx and ".layers" not in name:
                 continue
             if name.endswith(".scale"):
-                suffix = (
-                    expert_scale_suffix
-                    if _EXPERT_SCALE_RE.search(name)
-                    else ".weight_scale_inv"
-                )
+                suffix = expert_scale_suffix if _EXPERT_SCALE_RE.search(name) else ".weight_scale_inv"
                 name = name.removesuffix(".scale") + suffix
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 # Skip non-stacked layers and experts (experts handled below).
@@ -401,10 +379,7 @@ class DeepSeekV4MTP(nn.Module):
                     # Reinterpret E8M0 scales as uint8 to preserve raw
                     # exponent bytes; numeric copy_() would zero them.
                     # Mirrors the main DeepseekV4 loader.
-                    if (
-                        "weight_scale" in name
-                        and loaded_weight.dtype == torch.float8_e8m0fnu
-                    ):
+                    if "weight_scale" in name and loaded_weight.dtype == torch.float8_e8m0fnu:
                         loaded_weight = loaded_weight.view(torch.uint8)
                     for mapping in expert_mapping:
                         param_name, weight_name, expert_id, expert_shard_id = mapping
@@ -415,9 +390,7 @@ class DeepSeekV4MTP(nn.Module):
                         # We should ask the weight loader to return success or not
                         # here since otherwise we may skip experts with other
                         # available replicas.
-                        weight_loader = typing.cast(
-                            Callable[..., bool], param.weight_loader
-                        )
+                        weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                         success = weight_loader(
                             param,
                             loaded_weight,
@@ -439,15 +412,11 @@ class DeepSeekV4MTP(nn.Module):
                     continue
                 else:
                     if ".shared_experts.w2" in name:
-                        name = name.replace(
-                            ".shared_experts.w2", ".shared_experts.down_proj"
-                        )
+                        name = name.replace(".shared_experts.w2", ".shared_experts.down_proj")
                     if name.endswith(".ffn.gate.bias"):
                         name = name.replace(".bias", ".e_score_correction_bias")
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
                     loaded_params.add(name)
                     continue
@@ -500,9 +469,7 @@ class DeepSeekV4MTP(nn.Module):
                 break
         if not spec_layer_weight:
             # treat rest weights as weights for transformer layer block
-            name = name.replace(
-                f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block."
-            )
+            name = name.replace(f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block.")
         elif shared_weight:
             # treat shared weights as top level weights
             name = name.replace(f"model.layers.{spec_layer}.", "model.")

@@ -19,9 +19,7 @@ class FlashInferMxFp4LinearKernel(MxFp4LinearKernel):
     """MXFP4 W4A4 GEMM via FlashInfer CUTLASS (SM100+)."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if current_platform.has_device_capability(100) and has_flashinfer_cutedsl():
             return True, None
         return False, "FlashInfer + >=sm_100 (Blackwell) required"

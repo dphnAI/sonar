@@ -34,9 +34,7 @@ class VoyageQwen3BidirectionalEmbedModel(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         self.config = aphrodite_config.model_config.hf_config
-        self.model = Qwen3Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         # Embedding head (hidden_size -> num_labels, bias=False)
         self.linear = nn.Linear(
@@ -45,9 +43,7 @@ class VoyageQwen3BidirectionalEmbedModel(nn.Module):
             bias=False,
         )
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)

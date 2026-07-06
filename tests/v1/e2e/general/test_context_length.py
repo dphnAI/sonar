@@ -13,9 +13,9 @@ This test ensures:
 
 import pytest
 
+from aphrodite.exceptions import APHRODITEValidationError
 from tests.conftest import AphroditeRunner
 from tests.utils import create_new_process_for_each_test
-from aphrodite.exceptions import APHRODITEValidationError
 
 
 @create_new_process_for_each_test()
@@ -89,14 +89,11 @@ def test_auto_fit_max_model_len_rejects_oversized_input(
         kv_cache_memory_bytes=kv_cache_bytes,
         load_format="dummy",
     ) as aphrodite_model:
-        auto_fitted_len = (
-            aphrodite_model.llm.llm_engine.aphrodite_config.model_config.max_model_len
-        )
+        auto_fitted_len = aphrodite_model.llm.llm_engine.aphrodite_config.model_config.max_model_len
         # Sanity check: auto-fit should have reduced it well below the
         # model's native context length.
         assert auto_fitted_len < 2048, (
-            f"Expected auto-fit to reduce max_model_len significantly, "
-            f"but got {auto_fitted_len}"
+            f"Expected auto-fit to reduce max_model_len significantly, but got {auto_fitted_len}"
         )
 
         # A prompt longer than the auto-fitted length must be rejected.

@@ -40,10 +40,7 @@ class TestExtractToolCalls:
         assert result.content == model_output
 
     def test_single_tool_call(self, parser, mock_request):
-        model_output = (
-            "<start_function_call>call:get_weather{location:<escape>London<escape>}"
-            "<end_function_call>"
-        )
+        model_output = "<start_function_call>call:get_weather{location:<escape>London<escape>}<end_function_call>"
         result = parser.extract_tool_calls(model_output, mock_request)
 
         assert result.tools_called is True

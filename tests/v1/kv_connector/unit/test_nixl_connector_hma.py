@@ -8,17 +8,17 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from tests.v1.attention.utils import MockMambaBuilder
 from aphrodite import LLM, SamplingParams
 from aphrodite.config import KVTransferConfig
 from aphrodite.v1.core.single_type_kv_cache_manager import (
     FullAttentionManager,
     SlidingWindowManager,
 )
+from tests.v1.attention.utils import MockMambaBuilder
 
 from .utils import (
-    create_request,
     create_aphrodite_config,
+    create_request,
     make_kv_cache_config,
     make_nixl_scheduler,
 )
@@ -34,9 +34,7 @@ from .utils import (
         (False, [0]),
     ],
 )
-@patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform"
-)
+@patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
 def test_sw_sizes(mock_platform, swa_enabled, expected_sw_sizes):
     """Test sw_sizes is correctly computed based on SWA enabled/disabled."""
     from aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.scheduler import (
@@ -48,9 +46,7 @@ def test_sw_sizes(mock_platform, swa_enabled, expected_sw_sizes):
     block_size = 16
     aphrodite_config = create_aphrodite_config(block_size=block_size)
     # SW 2048 tokens=>128 blocks
-    kv_cache_config = make_kv_cache_config(
-        block_size=block_size, swa_enabled=swa_enabled, sw_size=2048
-    )
+    kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=swa_enabled, sw_size=2048)
 
     scheduler = NixlConnectorScheduler(
         aphrodite_config=aphrodite_config,
@@ -212,9 +208,7 @@ def test_read_blocks_for_req_expands_remote_ids(
 
     has_mamba = any(t is MambaSpec for t in resolved_types)
     has_swa = any(t is SlidingWindowSpec for t in resolved_types)
-    worker.kv_cache_config = make_kv_cache_config(
-        block_size=16, swa_enabled=has_swa, mamba_enabled=has_mamba
-    )
+    worker.kv_cache_config = make_kv_cache_config(block_size=16, swa_enabled=has_swa, mamba_enabled=has_mamba)
 
     remote_engine_id = "remote-engine"
 
@@ -314,12 +308,8 @@ def test_apply_prefix_caching_mamba_hybrid(
         local_block_ids, remote_block_ids, remote_physical_per_logical
     )
 
-    assert aligned_local == expected_local, (
-        f"Expected local {expected_local}, got {aligned_local}"
-    )
-    assert aligned_remote == expected_remote, (
-        f"Expected remote {expected_remote}, got {aligned_remote}"
-    )
+    assert aligned_local == expected_local, f"Expected local {expected_local}, got {aligned_local}"
+    assert aligned_remote == expected_remote, f"Expected remote {expected_remote}, got {aligned_remote}"
 
 
 @pytest.mark.cpu_test
@@ -391,12 +381,8 @@ def test_apply_prefix_caching_ssm_prefix_cache_hit(
         local_block_ids, remote_block_ids, remote_physical_per_logical
     )
 
-    assert aligned_local == expected_local, (
-        f"Expected local {expected_local}, got {aligned_local}"
-    )
-    assert aligned_remote == expected_remote, (
-        f"Expected remote {expected_remote}, got {aligned_remote}"
-    )
+    assert aligned_local == expected_local, f"Expected local {expected_local}, got {aligned_local}"
+    assert aligned_remote == expected_remote, f"Expected remote {expected_remote}, got {aligned_remote}"
 
 
 @pytest.mark.cpu_test
@@ -470,9 +456,7 @@ def test_mismatched_physical_per_logical_fails_with_prefix_caching(
         mamba_enabled=True,
     )
     worker._has_mamba = True
-    worker._group_spec_types = tuple(
-        type(g.kv_cache_spec) for g in worker.kv_cache_config.kv_cache_groups
-    )
+    worker._group_spec_types = tuple(type(g.kv_cache_spec) for g in worker.kv_cache_config.kv_cache_groups)
 
     local_block_ids = (local_fa_blocks, ssm_blocks)
     remote_block_ids = (remote_fa_blocks, ssm_blocks)
@@ -483,9 +467,7 @@ def test_mismatched_physical_per_logical_fails_with_prefix_caching(
         remote_physical_per_logical,
     )
 
-    assert (
-        aligned_remote[0] != correct_remote_fa or aligned_local[0] != correct_local_fa
-    ), (
+    assert aligned_remote[0] != correct_remote_fa or aligned_local[0] != correct_local_fa, (
         f"Prefix caching with mismatched physical_per_logical should not "
         f"produce correct transfer ids: "
         f"remote={aligned_remote[0]}, local={aligned_local[0]}, "
@@ -548,11 +530,7 @@ def test_fewer_blocks_with_hma(monkeypatch, model_name, sw_size):
         # +1 to account for overlapping window across blocks.
         expected_num_remote_blocks = sw_size // block_size + 1
         remote_block_ids = kv_params["remote_block_ids"]
-        assert (
-            len(remote_block_ids[0])
-            == expected_num_remote_blocks
-            < len(remote_block_ids[-1])
-        )
+        assert len(remote_block_ids[0]) == expected_num_remote_blocks < len(remote_block_ids[-1])
         for group_block_ids in remote_block_ids[:-1]:
             assert len(group_block_ids) == expected_num_remote_blocks
 
@@ -643,9 +621,7 @@ def _make_mock_worker_for_desc_ids(
             conv_dtype_size=2,
             ssm_sizes=(0, 0),
         )
-    worker._compute_desc_ids = NixlConnectorWorker._compute_desc_ids.__get__(
-        worker, NixlConnectorWorker
-    )
+    worker._compute_desc_ids = NixlConnectorWorker._compute_desc_ids.__get__(worker, NixlConnectorWorker)
     return worker
 
 
@@ -777,9 +753,7 @@ def test_mamba_n1_d_side_builds_decode_metadata():
     req = create_request(num_tokens=10, do_remote_prefill=True)
     sched = make_nixl_scheduler(has_mamba=True, is_hma_required=True)
 
-    num_computed_tokens, is_async = sched.get_num_new_matched_tokens(
-        req, num_computed_tokens=0
-    )
+    num_computed_tokens, is_async = sched.get_num_new_matched_tokens(req, num_computed_tokens=0)
 
     assert num_computed_tokens == req.num_prompt_tokens - 1
     assert is_async is True
@@ -841,9 +815,7 @@ def test_mamba_n1_p_side_truncation():
     ],
     ids=["fa_swa_mamba", "fa_swa_only", "fa_only"],
 )
-@patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform"
-)
+@patch("aphrodite.distributed.kv_transfer.kv_connector.v1.nixl.base_scheduler.current_platform")
 def test_has_mamba_init(
     mock_platform,
     swa_enabled,
@@ -1172,6 +1144,4 @@ def test_logical_to_remote_kernel_block_ids(
         logical_block_ids,
         remote_physical_per_logical,
     )
-    assert list(result) == expected_kernel_block_ids, (
-        f"Expected {expected_kernel_block_ids}, got {result}"
-    )
+    assert list(result) == expected_kernel_block_ids, f"Expected {expected_kernel_block_ids}, got {result}"

@@ -43,9 +43,7 @@ RERANK_MODELS = [
 
 
 class MxbaiRerankerHfRunner(MtebCrossEncoderMixin, HfRunner):
-    def __init__(
-        self, model_name: str, dtype: str = "auto", *args: Any, **kwargs: Any
-    ) -> None:
+    def __init__(self, model_name: str, dtype: str = "auto", *args: Any, **kwargs: Any) -> None:
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         HfRunner.__init__(

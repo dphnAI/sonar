@@ -41,9 +41,7 @@ def get_kv_connector_cache_layout():
         required_kvcache_layout = connector_cls.get_required_kvcache_layout(aphrodite_config)
         if required_kvcache_layout is not None:
             return required_kvcache_layout
-        logger.info_once(
-            "Connectors do not specify a kv cache layout, defaulting to NHD."
-        )
+        logger.info_once("Connectors do not specify a kv cache layout, defaulting to NHD.")
     return "NHD"
 
 
@@ -62,9 +60,7 @@ class KVOutputAggregator:
     def from_connector(cls, connector: "KVConnectorBase", world_size: int):
         return cls(connector.get_finished_count() or world_size)
 
-    def aggregate(
-        self, outputs: list[ModelRunnerOutput | None], output_rank: int = 0
-    ) -> ModelRunnerOutput | None:
+    def aggregate(self, outputs: list[ModelRunnerOutput | None], output_rank: int = 0) -> ModelRunnerOutput | None:
         if not outputs[output_rank]:
             return None
 
@@ -76,9 +72,7 @@ class KVOutputAggregator:
             finished_set: set[str],
         ) -> None:
             for req_id in req_ids or ():
-                remaining_count = remaining_count_dict.get(
-                    req_id, self._expected_finished_count
-                )
+                remaining_count = remaining_count_dict.get(req_id, self._expected_finished_count)
                 remaining_count_dict[req_id] = remaining_count - 1
                 if remaining_count_dict[req_id] == 0:
                     finished_set.add(req_id)
@@ -108,34 +102,24 @@ class KVOutputAggregator:
                 )
                 self._expected_finished_count = kv_output.expected_finished_count
 
-            update_finished_set(
-                kv_output.finished_sending, self._send_remaining_count, finished_sending
-            )
-            update_finished_set(
-                kv_output.finished_recving, self._recv_remaining_count, finished_recving
-            )
+            update_finished_set(kv_output.finished_sending, self._send_remaining_count, finished_sending)
+            update_finished_set(kv_output.finished_recving, self._recv_remaining_count, finished_recving)
 
             # Aggregate kv_connector_stats from all workers.
             if aggregated_kv_connector_stats is None:
                 # Use the first worker's kv_connector_stats as accumulator.
                 aggregated_kv_connector_stats = kv_output.kv_connector_stats
             elif kv_connector_stats := kv_output.kv_connector_stats:
-                assert isinstance(
-                    aggregated_kv_connector_stats, type(kv_connector_stats)
-                )
-                aggregated_kv_connector_stats = aggregated_kv_connector_stats.aggregate(
-                    kv_connector_stats
-                )
+                assert isinstance(aggregated_kv_connector_stats, type(kv_connector_stats))
+                aggregated_kv_connector_stats = aggregated_kv_connector_stats.aggregate(kv_connector_stats)
 
             # Aggregate kv_connector_worker_meta from all workers.
             if aggregated_kv_connector_worker_meta is None:
                 # Use the first worker's kv_connector_worker_meta as accumulator.
                 aggregated_kv_connector_worker_meta = kv_output.kv_connector_worker_meta
             elif kv_connector_worker_meta := kv_output.kv_connector_worker_meta:
-                aggregated_kv_connector_worker_meta = (
-                    aggregated_kv_connector_worker_meta.aggregate(
-                        kv_connector_worker_meta
-                    )
+                aggregated_kv_connector_worker_meta = aggregated_kv_connector_worker_meta.aggregate(
+                    kv_connector_worker_meta
                 )
 
             # Combine kv_cache_events from all workers.
@@ -339,9 +323,7 @@ def get_current_attn_backends(
         return list(seen.values())
 
     # Fallback for tests, when static_forward_context is empty.
-    logger.debug(
-        "No layers found in the Aphrodite config. Falling back to default attention backend."
-    )
+    logger.debug("No layers found in the Aphrodite config. Falling back to default attention backend.")
     from aphrodite.v1.attention.selector import get_attn_backend
 
     return [
@@ -429,15 +411,11 @@ class TransferTopology:
         # Non-MLA backends caches have 5 dims [num_blocks, 2, H,N,D],
         # we just mock num_blocks to 1 for the dimension check below.
         # Hybrid SSM models assume a single blocks_first layout
-        self._is_kv_layout_blocks_first = self.is_mamba or (
-            len(kv_cache_shape) == 5 and kv_cache_shape[0] == 1
-        )
+        self._is_kv_layout_blocks_first = self.is_mamba or (len(kv_cache_shape) == 5 and kv_cache_shape[0] == 1)
 
         self._cross_layers_blocks = False
         if self.tensor_shape is not None:
-            self._cross_layers_blocks = (
-                len(self.tensor_shape) == len(kv_cache_shape) + 1
-            )
+            self._cross_layers_blocks = len(self.tensor_shape) == len(kv_cache_shape) + 1
 
         if self._cross_layers_blocks:
             logger.debug("Using cross-layer KV cache")
@@ -467,8 +445,7 @@ class TransferTopology:
         the transfer policy.  This method only stores and deduplicates.
         """
         assert remote_engine_id != self.engine_id, (
-            f"Cannot register local engine {self.engine_id} as remote. "
-            f"Local identity is set via __init__ params."
+            f"Cannot register local engine {self.engine_id} as remote. Local identity is set via __init__ params."
         )
         engine_key = (remote_engine_id, info.remote_pp_rank)
         if engine_key in self._engines:
@@ -476,9 +453,7 @@ class TransferTopology:
         self._engines[engine_key] = info
         return info
 
-    def get_engine_info(
-        self, remote_engine_id: EngineId, remote_pp_rank: int = 0
-    ) -> EngineTransferInfo:
+    def get_engine_info(self, remote_engine_id: EngineId, remote_pp_rank: int = 0) -> EngineTransferInfo:
         return self._engines[(remote_engine_id, remote_pp_rank)]
 
     def unregister_remote_engine(self, remote_engine_id: EngineId) -> None:
@@ -510,9 +485,7 @@ class TransferTopology:
     @property
     def split_k_and_v(self) -> bool:
         # Whether to register regions for K and V separately (when present).
-        return not (
-            self._cross_layers_blocks or self.is_mla or self.is_kv_layout_blocks_first
-        )
+        return not (self._cross_layers_blocks or self.is_mla or self.is_kv_layout_blocks_first)
 
     # ============================================================
     # Common methods
@@ -545,20 +518,13 @@ class TransferTopology:
         )
         return self.block_size // remote_block_size
 
-    def is_kv_replicated(
-        self, remote_engine_id: EngineId, remote_pp_rank: int = 0
-    ) -> bool:
+    def is_kv_replicated(self, remote_engine_id: EngineId, remote_pp_rank: int = 0) -> bool:
         """Whether the KV cache is replicated across TP workers due to the
         number of TP workers being greater than the number of KV heads.
         """
-        return (
-            self._engines[(remote_engine_id, remote_pp_rank)].remote_tp_size
-            > self.total_num_kv_heads
-        )
+        return self._engines[(remote_engine_id, remote_pp_rank)].remote_tp_size > self.total_num_kv_heads
 
-    def replicates_kv_cache(
-        self, remote_engine_id: EngineId, remote_pp_rank: int = 0
-    ) -> bool:
+    def replicates_kv_cache(self, remote_engine_id: EngineId, remote_pp_rank: int = 0) -> bool:
         # MLA is always replicated as the hidden dim can't be split.
         return self.is_mla or self.is_kv_replicated(remote_engine_id, remote_pp_rank)
 
@@ -579,9 +545,7 @@ class TransferTopology:
         abs_ratio = -tp_ratio
         return [self.tp_rank * abs_ratio + i for i in range(abs_ratio)]
 
-    def target_remote_ranks(
-        self, remote_engine_id: EngineId, remote_pp_rank: int = 0
-    ) -> list[int]:
+    def target_remote_ranks(self, remote_engine_id: EngineId, remote_pp_rank: int = 0) -> list[int]:
         """Get the remote TP rank(s) that the current local TP rank will
         read from.  When remote tp_size > local tp_size, reads from
         multiple remote ranks.

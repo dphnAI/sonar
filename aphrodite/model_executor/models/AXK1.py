@@ -32,7 +32,7 @@ from torch import nn
 
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -115,10 +115,7 @@ class AXK1MoE(nn.Module):
         self.is_sequence_parallel = parallel_config.use_sequence_parallel_moe
 
         if config.hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {config.hidden_act}. "
-                "Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {config.hidden_act}. Only silu is supported for now.")
 
         self.gate = ReplicatedLinear(
             config.hidden_size,
@@ -128,9 +125,7 @@ class AXK1MoE(nn.Module):
             prefix=f"{prefix}.gate",
         )
         if config.topk_method == "noaux_tc":
-            self.gate.e_score_correction_bias = nn.Parameter(
-                torch.empty(config.n_routed_experts, dtype=torch.float32)
-            )
+            self.gate.e_score_correction_bias = nn.Parameter(torch.empty(config.n_routed_experts, dtype=torch.float32))
         else:
             self.gate.e_score_correction_bias = None
 
@@ -144,14 +139,10 @@ class AXK1MoE(nn.Module):
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
 
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = (
-            self.physical_expert_start + self.n_local_physical_experts
-        )
+        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
 
         self.is_rocm_aiter_moe_enabled = rocm_aiter_ops.is_fused_moe_enabled()
-        self.is_fusion_moe_shared_experts_enabled = (
-            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        )
+        self.is_fusion_moe_shared_experts_enabled = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
         if config.n_shared_experts is None or self.is_fusion_moe_shared_experts_enabled:
             self.shared_experts = None
         else:
@@ -189,9 +180,7 @@ class AXK1MoE(nn.Module):
             enable_eplb=self.enable_eplb,
             num_redundant_experts=self.n_redundant_experts,
             is_sequence_parallel=self.is_sequence_parallel,
-            n_shared_experts=config.n_shared_experts
-            if self.is_fusion_moe_shared_experts_enabled
-            else None,
+            n_shared_experts=config.n_shared_experts if self.is_fusion_moe_shared_experts_enabled else None,
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -206,19 +195,13 @@ class AXK1MoE(nn.Module):
             hidden_states = sequence_parallel_chunk(hidden_states)
 
         if self.experts.is_internal_router:
-            final_hidden_states = self.experts(
-                hidden_states=hidden_states, router_logits=hidden_states
-            )
+            final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=hidden_states)
         else:
             router_logits, _ = self.gate(hidden_states)
-            final_hidden_states = self.experts(
-                hidden_states=hidden_states, router_logits=router_logits
-            )
+            final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
         if self.is_sequence_parallel:
-            final_hidden_states = tensor_model_parallel_all_gather(
-                final_hidden_states, 0
-            )
+            final_hidden_states = tensor_model_parallel_all_gather(final_hidden_states, 0)
             final_hidden_states = final_hidden_states[:num_tokens]
 
         return final_hidden_states.view(num_tokens, hidden_dim)
@@ -227,9 +210,7 @@ class AXK1MoE(nn.Module):
 def _get_llama_4_scaling(
     original_max_position_embeddings: int, scaling_beta: float, positions: torch.Tensor
 ) -> torch.Tensor:
-    scaling = 1 + scaling_beta * torch.log(
-        1 + torch.floor(positions / original_max_position_embeddings)
-    )
+    scaling = 1 + scaling_beta * torch.log(1 + torch.floor(positions / original_max_position_embeddings))
     # Broadcast over num_heads and head_dim
     return scaling[..., None, None]
 
@@ -321,9 +302,7 @@ class AXK1Attention(nn.Module):
         )
         if config.rope_parameters["rope_type"] != "default":
             config.rope_parameters["rope_type"] = (
-                "deepseek_yarn"
-                if config.rope_parameters.get("apply_yarn_scaling", True)
-                else "deepseek_llama_scaling"
+                "deepseek_yarn" if config.rope_parameters.get("apply_yarn_scaling", True) else "deepseek_llama_scaling"
             )
 
         self.rotary_emb = get_rope(
@@ -360,9 +339,7 @@ class AXK1Attention(nn.Module):
             q = self.q_a_layernorm(q)
             q = self.q_b_proj(q)[0].view(-1, self.num_local_heads, self.qk_head_dim)
         else:
-            q = self.q_proj(hidden_states)[0].view(
-                -1, self.num_local_heads, self.qk_head_dim
-            )
+            q = self.q_proj(hidden_states)[0].view(-1, self.num_local_heads, self.qk_head_dim)
         q_nope, q_pe = q.split([self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
         latent_cache = self.kv_a_proj_with_mqa(hidden_states)[0]
         kv_a, _ = latent_cache.split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
@@ -385,13 +362,13 @@ class AXK1Attention(nn.Module):
             q *= llama_4_scaling
 
         # padding value to qk_head_dim for alignment
-        v = torch.nn.functional.pad(
-            v, [0, self.qk_head_dim - self.v_head_dim], value=0
-        ).view(-1, self.num_local_heads * self.qk_head_dim)
+        v = torch.nn.functional.pad(v, [0, self.qk_head_dim - self.v_head_dim], value=0).view(
+            -1, self.num_local_heads * self.qk_head_dim
+        )
         attn_output = self.attn(q, k, v)
-        attn_output = attn_output.view(-1, self.num_local_heads, self.qk_head_dim)[
-            ..., : self.v_head_dim
-        ].reshape(-1, self.num_local_heads * self.v_head_dim)
+        attn_output = attn_output.view(-1, self.num_local_heads, self.qk_head_dim)[..., : self.v_head_dim].reshape(
+            -1, self.num_local_heads * self.v_head_dim
+        )
         output, _ = self.o_proj(attn_output)
         return output
 
@@ -493,9 +470,7 @@ class AXK1MLAAttention(nn.Module):
 
         if config.rope_parameters["rope_type"] != "default":
             config.rope_parameters["rope_type"] = (
-                "deepseek_yarn"
-                if config.rope_parameters.get("apply_yarn_scaling", True)
-                else "deepseek_llama_scaling"
+                "deepseek_yarn" if config.rope_parameters.get("apply_yarn_scaling", True) else "deepseek_llama_scaling"
             )
 
         self.rotary_emb = get_rope(
@@ -516,12 +491,8 @@ class AXK1MLAAttention(nn.Module):
             kv_b_proj=self.kv_b_proj,
             rotary_emb=self.rotary_emb,
             o_proj=self.o_proj,
-            fused_qkv_a_proj=self.fused_qkv_a_proj
-            if self.q_lora_rank is not None
-            else None,
-            kv_a_proj_with_mqa=self.kv_a_proj_with_mqa
-            if self.q_lora_rank is None
-            else None,
+            fused_qkv_a_proj=self.fused_qkv_a_proj if self.q_lora_rank is not None else None,
+            kv_a_proj_with_mqa=self.kv_a_proj_with_mqa if self.q_lora_rank is None else None,
             q_a_layernorm=self.q_a_layernorm if self.q_lora_rank is not None else None,
             q_b_proj=self.q_b_proj if self.q_lora_rank is not None else None,
             q_proj=self.q_proj if self.q_lora_rank is None else None,
@@ -627,9 +598,7 @@ class AXK1DecoderLayer(nn.Module):
                 prefix=f"{prefix}.mlp",
             )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.routed_scaling_factor = config.routed_scaling_factor
 
@@ -662,10 +631,7 @@ class AXK1DecoderLayer(nn.Module):
             attn_kwargs["llama_4_scaling"] = llama_4_scaling
         hidden_states = self.self_attn(**attn_kwargs)
 
-        if (
-            not isinstance(self.self_attn, DeepseekAttention)
-            and hidden_states.dtype == torch.float16
-        ):
+        if not isinstance(self.self_attn, DeepseekAttention) and hidden_states.dtype == torch.float16:
             # Fix FP16 overflow
             # We scale both hidden_states and residual before
             # rmsnorm, and rmsnorm result would not affect by scale.
@@ -728,13 +694,9 @@ class AXK1Model(nn.Module):
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
         )
-        self.use_mha = all(
-            dim == 0 for dim in (config.qk_nope_head_dim, config.qk_rope_head_dim)
-        )
+        self.use_mha = all(dim == 0 for dim in (config.qk_nope_head_dim, config.qk_rope_head_dim))
         self.fuse_qkv_a_proj = config.q_lora_rank is not None
-        self.num_redundant_experts = (
-            aphrodite_config.parallel_config.eplb_config.num_redundant_experts
-        )
+        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -762,9 +724,7 @@ class AXK1Model(nn.Module):
         llama_4_scaling: torch.Tensor | None
         if llama_4_scaling_config is not None:
             llama_4_scaling = _get_llama_4_scaling(
-                original_max_position_embeddings=llama_4_scaling_config[
-                    "original_max_position_embeddings"
-                ],
+                original_max_position_embeddings=llama_4_scaling_config["original_max_position_embeddings"],
                 scaling_beta=llama_4_scaling_config["beta"],
                 positions=positions,
             )
@@ -772,22 +732,16 @@ class AXK1Model(nn.Module):
             llama_4_scaling = None
 
         for layer in islice(self.layers, self.start_layer, self.end_layer):
-            hidden_states, residual = layer(
-                positions, hidden_states, residual, llama_4_scaling
-            )
+            hidden_states, residual = layer(positions, hidden_states, residual, llama_4_scaling)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        rocm_aiter_moe_shared_expert_enabled = (
-            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        )
+        rocm_aiter_moe_shared_expert_enabled = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
         stacked_params_mapping = [
             # (param_name, shard_name, shard_id)
             ("gate_up_proj", "gate_proj", 0),
@@ -815,11 +769,7 @@ class AXK1Model(nn.Module):
             ckpt_down_proj_name="down_proj",
             ckpt_up_proj_name="up_proj",
             num_experts=self.config.n_routed_experts
-            + (
-                self.config.n_shared_experts
-                if rocm_aiter_moe_shared_expert_enabled
-                else 0
-            ),
+            + (self.config.n_shared_experts if rocm_aiter_moe_shared_expert_enabled else 0),
             num_redundant_experts=self.num_redundant_experts,
         )
 
@@ -833,9 +783,7 @@ class AXK1Model(nn.Module):
             if spec_layer is not None:
                 continue  # skip spec decode layers for main model
 
-            is_fusion_moe_shared_experts_layer = (
-                rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
-            )
+            is_fusion_moe_shared_experts_layer = rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
 
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 # Skip non-stacked layers and experts (experts handled below).
@@ -856,9 +804,7 @@ class AXK1Model(nn.Module):
                 # QKV fusion is optional, fall back to normal
                 # weight loading if it's not enabled
                 # if go with fusion option, then update name
-                if (
-                    param_name == "fused_qkv_a_proj"
-                ) and name_mapped not in params_dict:
+                if (param_name == "fused_qkv_a_proj") and name_mapped not in params_dict:
                     continue
                 else:
                     name = name_mapped
@@ -890,15 +836,10 @@ class AXK1Model(nn.Module):
                     # Determine split axis based on op type
                     # gate/up: ColumnParallel → split along dim 0
                     # down: RowParallel → split along dim 1
-                    split_dim = (
-                        1
-                        if ("down_proj.weight" in name and loaded_weight.ndim > 1)
-                        else 0
-                    )
+                    split_dim = 1 if ("down_proj.weight" in name and loaded_weight.ndim > 1) else 0
                     total = loaded_weight.shape[split_dim]
                     assert total % num_chunks == 0, (
-                        f"Shared expert weight dim {total} "
-                        f"not divisible by num_chunks {num_chunks}"
+                        f"Shared expert weight dim {total} not divisible by num_chunks {num_chunks}"
                     )
                     chunk_size = total // num_chunks
 
@@ -944,9 +885,7 @@ class AXK1Model(nn.Module):
                         # We should ask the weight loader to return success or
                         # not here since otherwise we may skip experts with
                         # other available replicas.
-                        weight_loader = typing.cast(
-                            Callable[..., bool], param.weight_loader
-                        )
+                        weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                         success = weight_loader(
                             param,
                             weight_to_load,
@@ -981,9 +920,7 @@ class AXK1Model(nn.Module):
                             continue
 
                         param = params_dict[name]
-                        weight_loader = getattr(
-                            param, "weight_loader", default_weight_loader
-                        )
+                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
                         weight_loader(param, loaded_weight)
             if not is_fusion_moe_shared_experts_layer:
                 loaded_params.add(name)
@@ -1032,9 +969,7 @@ class AXK1MixtureOfExperts(MixtureOfExperts):
             moe.experts.update_expert_map()
 
 
-class AXK1ForCausalLM(
-    nn.Module, SupportsPP, AXK1MixtureOfExperts, SupportsLoRA, SupportsEagle
-):
+class AXK1ForCausalLM(nn.Module, SupportsPP, AXK1MixtureOfExperts, SupportsLoRA, SupportsEagle):
     packed_modules_mapping = {
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
@@ -1065,9 +1000,7 @@ class AXK1ForCausalLM(
                 "kv_a_proj_with_mqa",
             ]
 
-        self.model = self.model_cls(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = self.model_cls(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1078,13 +1011,9 @@ class AXK1ForCausalLM(
         else:
             self.lm_head = PPMissingLayer()
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
         # Set MoE hyperparameters
-        self.num_moe_layers = (
-            self.config.num_hidden_layers - self.config.first_k_dense_replace
-        )
+        self.num_moe_layers = self.config.num_hidden_layers - self.config.first_k_dense_replace
         self.set_moe_parameters()
 
     def set_moe_parameters(self):
@@ -1116,9 +1045,7 @@ class AXK1ForCausalLM(
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(
@@ -1145,14 +1072,12 @@ class AXK1ForCausalLM(
         return loader.load_weights(weights)
 
 
-def get_spec_layer_idx_from_weight_name(
-    config: AXK1Config, weight_name: str
-) -> int | None:
+def get_spec_layer_idx_from_weight_name(config: AXK1Config, weight_name: str) -> int | None:
     if config.num_nextn_predict_layers and config.num_nextn_predict_layers > 0:
         layer_idx = config.num_hidden_layers
         for i in range(config.num_nextn_predict_layers):
-            if weight_name.startswith(
-                f"model.layers.{layer_idx + i}."
-            ) or weight_name.startswith(f"layers.{layer_idx + i}."):
+            if weight_name.startswith(f"model.layers.{layer_idx + i}.") or weight_name.startswith(
+                f"layers.{layer_idx + i}."
+            ):
                 return layer_idx + i
     return None

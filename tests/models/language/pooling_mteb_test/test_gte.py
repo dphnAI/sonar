@@ -3,12 +3,12 @@
 
 import pytest
 
+from aphrodite.platforms import current_platform
 from tests.models.language.pooling.embed_utils import correctness_test_embed_models
 from tests.models.utils import (
     EmbedModelInfo,
     RerankModelInfo,
 )
-from aphrodite.platforms import current_platform
 
 from .mteb_embed_utils import mteb_test_embed_models
 from .mteb_score_utils import mteb_test_rerank_models
@@ -27,13 +27,9 @@ MODELS = [
     ),
     EmbedModelInfo("thenlper/gte-base", architecture="BertModel", enable_test=False),
     EmbedModelInfo("thenlper/gte-small", architecture="BertModel", enable_test=False),
-    EmbedModelInfo(
-        "thenlper/gte-large-zh", architecture="BertModel", enable_test=False
-    ),
+    EmbedModelInfo("thenlper/gte-large-zh", architecture="BertModel", enable_test=False),
     EmbedModelInfo("thenlper/gte-base-zh", architecture="BertModel", enable_test=False),
-    EmbedModelInfo(
-        "thenlper/gte-small-zh", architecture="BertModel", enable_test=False
-    ),
+    EmbedModelInfo("thenlper/gte-small-zh", architecture="BertModel", enable_test=False),
     ########### NewModel
     # These three architectures are almost the same, but not exactly the same.
     # For example,
@@ -136,9 +132,7 @@ def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelIn
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_correctness(
-    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
-) -> None:
+def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
     correctness_test_embed_models(hf_runner, aphrodite_runner, model_info, example_prompts)
 
 
@@ -147,6 +141,4 @@ def test_rerank_models_mteb(aphrodite_runner, model_info: RerankModelInfo) -> No
     aphrodite_extra_kwargs = {}
     if current_platform.is_rocm():
         aphrodite_extra_kwargs["attention_backend"] = "TRITON_ATTN"
-    mteb_test_rerank_models(
-        aphrodite_runner, model_info, aphrodite_extra_kwargs=aphrodite_extra_kwargs
-    )
+    mteb_test_rerank_models(aphrodite_runner, model_info, aphrodite_extra_kwargs=aphrodite_extra_kwargs)

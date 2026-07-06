@@ -7,8 +7,6 @@ import torch
 import torch.nn as nn
 from torch.multiprocessing import spawn
 
-from tests.kernels.utils import opcheck
-from tests.utils import ensure_current_aphrodite_config, init_test_distributed_environment
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.model_executor.layers.minimax_rms_norm import (
     MiniMaxText01RMSNormTP,
@@ -18,6 +16,8 @@ from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import HAS_TRITON
 from aphrodite.utils.network_utils import get_open_port
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.utils import opcheck
+from tests.utils import ensure_current_aphrodite_config, init_test_distributed_environment
 
 
 @ensure_current_aphrodite_config()
@@ -39,9 +39,7 @@ def _worker_forward_qk(
         return
     device = torch.device(f"cuda:{local_rank}")
     torch.accelerator.set_device_index(device)
-    init_test_distributed_environment(
-        world_size, 1, local_rank, port, local_rank=local_rank
-    )
+    init_test_distributed_environment(world_size, 1, local_rank, port, local_rank=local_rank)
 
     hq = hidden_q_full // world_size
     hk = hidden_k_full // world_size
@@ -177,9 +175,7 @@ def test_minimax_reduce_rms_qk(
 @pytest.mark.parametrize("tp_world", [1, 4, 8])
 @pytest.mark.parametrize("eps", [1e-6])
 @pytest.mark.parametrize("seed", [42])
-def test_minimax_qk_norm_triton_fallback(
-    monkeypatch, num_tokens, hidden_dims, dtype, tp_world, eps, seed
-):
+def test_minimax_qk_norm_triton_fallback(monkeypatch, num_tokens, hidden_dims, dtype, tp_world, eps, seed):
     """Single-GPU check: Triton fallback kernels vs the pure-torch reference.
 
     The all-reduce is a TP communication barrier, so it is monkeypatched to
@@ -200,9 +196,7 @@ def test_minimax_qk_norm_triton_fallback(
     q_triton, k_triton = rms_norm_tp._minimax_qk_norm_tp_fallback(
         qkv, q_weight, k_weight, q_size, kv_size, 0, tp_world, eps
     )
-    q_ref, k_ref = rms_norm_tp._minimax_qk_norm_tp_eager(
-        qkv, q_weight, k_weight, q_size, kv_size, tp_world, eps
-    )
+    q_ref, k_ref = rms_norm_tp._minimax_qk_norm_tp_eager(qkv, q_weight, k_weight, q_size, kv_size, tp_world, eps)
 
     torch.testing.assert_close(q_triton, q_ref, atol=3e-2, rtol=3e-2)
     torch.testing.assert_close(k_triton, k_ref, atol=3e-2, rtol=3e-2)

@@ -221,9 +221,7 @@ class TestNixlTransportWithMockedAgent:
         transport.add_remote_peer("peer:1", b"meta", 0x1000, 8, 1024)
 
         tid = transport.write_blocks("peer:1", [0], [1])
-        transport._agent.release_xfer_handle.side_effect = RuntimeError(
-            "NIXL_ERR_REPOST_ACTIVE"
-        )
+        transport._agent.release_xfer_handle.side_effect = RuntimeError("NIXL_ERR_REPOST_ACTIVE")
 
         result = transport.cancel([tid], mode="wait")
         assert result == [tid]
@@ -289,9 +287,7 @@ class TestNixlAgentConfigSelection:
         config_fn = MagicMock(return_value=MagicMock(name="cfg"))
         with (
             patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
-            patch(
-                "aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn
-            ),
+            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
         ):
             NixlTransport("test:1", self._make_view(), backends=["MOONCAKE"])
 
@@ -305,9 +301,7 @@ class TestNixlAgentConfigSelection:
         config_fn = MagicMock(return_value=MagicMock(name="cfg"))
         with (
             patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
-            patch(
-                "aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn
-            ),
+            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
         ):
             NixlTransport("test:1", self._make_view(), num_threads=8)
 
@@ -320,9 +314,7 @@ class TestNixlAgentConfigSelection:
         config_fn = MagicMock(return_value=MagicMock(name="cfg"))
         with (
             patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgent", agent_cls),
-            patch(
-                "aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn
-            ),
+            patch("aphrodite.v1.kv_offload.tiering.p2p.data.nixl._NixlAgentConfig", config_fn),
         ):
             NixlTransport("test:1", self._make_view())
 

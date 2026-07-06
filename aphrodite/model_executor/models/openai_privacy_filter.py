@@ -12,7 +12,7 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.model_executor.layers.attention.encoder_only_attention import (
     EncoderOnlyAttention,
 )
@@ -68,11 +68,7 @@ def _interleave_gate_up_concat_to_pairs(
         if name.endswith(".gate_up_proj") or name.endswith(".gate_up_proj_bias"):
             *lead, two_i = weight.shape
             i = two_i // 2
-            weight = (
-                torch.stack([weight[..., :i], weight[..., i:]], dim=-1)
-                .reshape(*lead, two_i)
-                .contiguous()
-            )
+            weight = torch.stack([weight[..., :i], weight[..., i:]], dim=-1).reshape(*lead, two_i).contiguous()
         yield name, weight
 
 
@@ -92,9 +88,7 @@ class OpenAIPrivacyFilterForTokenClassification(nn.Module):
             aphrodite_config=aphrodite_config,
             prefix=maybe_prefix(prefix, "model"),
         )
-        self.score = nn.Linear(
-            config.hidden_size, config.num_labels, dtype=self.head_dtype
-        )
+        self.score = nn.Linear(config.hidden_size, config.num_labels, dtype=self.head_dtype)
 
         pooler_config = aphrodite_config.model_config.pooler_config
         assert pooler_config is not None

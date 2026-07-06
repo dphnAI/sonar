@@ -51,8 +51,7 @@ if has_triton_kernels():
         from triton_kernels.matmul_ogs import PrecisionConfig
     except (ImportError, AttributeError) as e:
         logger.error(
-            "Failed to import Triton kernels. Please make sure your triton "
-            "version is compatible. Error: %s",
+            "Failed to import Triton kernels. Please make sure your triton version is compatible. Error: %s",
             e,
         )
 
@@ -296,8 +295,7 @@ def map_mxfp4_backend(runner_backend: MoEBackend) -> list[Mxfp4MoeBackend]:
     if backends := mapping.get(runner_backend):
         return backends
     raise ValueError(
-        f"moe_backend='{runner_backend}' is not supported for MXFP4 MoE. "
-        f"Expected one of {list(mapping.keys())}."
+        f"moe_backend='{runner_backend}' is not supported for MXFP4 MoE. Expected one of {list(mapping.keys())}."
     )
 
 
@@ -392,10 +390,7 @@ def _make_log_backend(backend: Mxfp4MoeBackend) -> str:
 
 
 def _make_log_unsupported(backend: Mxfp4MoeBackend, reason: str | None) -> str:
-    base = (
-        f"Mxfp4 MoE backend '{backend.value}' does not support the "
-        f"deployment configuration"
-    )
+    base = f"Mxfp4 MoE backend '{backend.value}' does not support the deployment configuration"
     return f"{base} since {reason}." if reason else f"{base}."
 
 
@@ -409,9 +404,7 @@ def _return_or_raise(
 ) -> tuple[Mxfp4MoeBackend, type[mk.FusedMoEExperts]]:
     reason: str | None = None
     for k_cls in backend_to_kernel_cls(backend):
-        supported, reason = k_cls.is_supported_config(
-            k_cls, config, weight_key, activation_key, activation_format
-        )
+        supported, reason = k_cls.is_supported_config(k_cls, config, weight_key, activation_key, activation_format)
         if supported:
             logger.info_once(_make_log_backend(backend), scope=scope)
             return backend, k_cls
@@ -429,8 +422,7 @@ def _filter_by_activation(
         return [
             b
             for b in backends
-            if _backend_activation_key(b) == requested_activation_key
-            or b == Mxfp4MoeBackend.EMULATION
+            if _backend_activation_key(b) == requested_activation_key or b == Mxfp4MoeBackend.EMULATION
         ]
     bf16 = [b for b in backends if _backend_activation_key(b) is None]
     return bf16 if bf16 else backends
@@ -464,8 +456,7 @@ def select_mxfp4_moe_backend(
         requested_backends = map_mxfp4_backend(runner_backend)
         if activation_format == mk.FusedMoEActivationFormat.BatchedExperts:
             requested_backends = [
-                Mxfp4MoeBackend.BATCHED_MARLIN if b == Mxfp4MoeBackend.MARLIN else b
-                for b in requested_backends
+                Mxfp4MoeBackend.BATCHED_MARLIN if b == Mxfp4MoeBackend.MARLIN else b for b in requested_backends
             ]
         candidates = _filter_by_activation(requested_backends, requested_activation_key)
         if not candidates:
@@ -495,21 +486,13 @@ def select_mxfp4_moe_backend(
         raise last_error
 
     # Select kernels in order of backend.
-    AVAILABLE_BACKENDS = _filter_by_activation(
-        _get_priority_backends_for_gpt_oss(), requested_activation_key
-    )
+    AVAILABLE_BACKENDS = _filter_by_activation(_get_priority_backends_for_gpt_oss(), requested_activation_key)
 
     for backend in AVAILABLE_BACKENDS:
         # Use requested_activation_key if provided, otherwise use backend default
-        act_key = (
-            requested_activation_key
-            if requested_activation_key is not None
-            else _backend_activation_key(backend)
-        )
+        act_key = requested_activation_key if requested_activation_key is not None else _backend_activation_key(backend)
         for k_cls in backend_to_kernel_cls(backend):
-            supported, reason = k_cls.is_supported_config(
-                k_cls, config, kMxfp4Static, act_key, activation_format
-            )
+            supported, reason = k_cls.is_supported_config(k_cls, config, kMxfp4Static, act_key, activation_format)
             if supported:
                 logger.info_once(_make_log_backend(backend))
                 return backend, k_cls
@@ -580,8 +563,7 @@ def select_deepseek_v4_mxfp4_moe_backend(
         requested_backends = map_mxfp4_backend(runner_backend)
         if activation_format == mk.FusedMoEActivationFormat.BatchedExperts:
             requested_backends = [
-                Mxfp4MoeBackend.BATCHED_MARLIN if b == Mxfp4MoeBackend.MARLIN else b
-                for b in requested_backends
+                Mxfp4MoeBackend.BATCHED_MARLIN if b == Mxfp4MoeBackend.MARLIN else b for b in requested_backends
             ]
         last_error: Exception | None = None
         for requested_backend in requested_backends:
@@ -600,10 +582,7 @@ def select_deepseek_v4_mxfp4_moe_backend(
 
     # DeepSeek-V4 on ROCm: prefer AITER FlyDSL MoE (better perf + accuracy
     # after shuffle/TP-offset fixes), with Triton-unfused as fallback.
-    if (
-        current_platform.is_rocm()
-        and config.routing_method == RoutingMethodType.DeepseekV4
-    ):
+    if current_platform.is_rocm() and config.routing_method == RoutingMethodType.DeepseekV4:
         priority_backends = [
             Mxfp4MoeBackend.AITER_MXFP4_BF16,
             Mxfp4MoeBackend.TRITON_UNFUSED,
@@ -624,9 +603,7 @@ def select_deepseek_v4_mxfp4_moe_backend(
             else:
                 logger.debug_once(_make_log_unsupported(backend, reason), scope="local")
 
-    raise NotImplementedError(
-        "No MXFP4 MoE backend supports the deployment configuration."
-    )
+    raise NotImplementedError("No MXFP4 MoE backend supports the deployment configuration.")
 
 
 def mxfp4_round_up_hidden_size_and_intermediate_size(
@@ -714,9 +691,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             convert_to_humming_moe_kernel_format,
         )
 
-        convert_to_humming_moe_kernel_format(
-            layer, quant_config={"quant_method": "gpt_oss_mxfp4"}
-        )
+        convert_to_humming_moe_kernel_format(layer, quant_config={"quant_method": "gpt_oss_mxfp4"})
         return (
             layer.w13_weight,
             layer.w2_weight,
@@ -792,9 +767,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
                 epilogue_tile_m,
             )
             gemm1_weights_shuffled.append(
-                w13_weight[i]
-                .view(torch.uint8)[permute_indices.to(w13_weight.device)]
-                .contiguous()
+                w13_weight[i].view(torch.uint8)[permute_indices.to(w13_weight.device)].contiguous()
             )
             # w13 scale
             permute_sf_indices = get_w2_permute_indices_with_cache(
@@ -805,9 +778,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             )
             gemm1_scales_shuffled.append(
                 nvfp4_block_scale_interleave(
-                    w13_weight_scale[i]
-                    .view(torch.uint8)[permute_sf_indices.to(w13_weight_scale.device)]
-                    .contiguous()
+                    w13_weight_scale[i].view(torch.uint8)[permute_sf_indices.to(w13_weight_scale.device)].contiguous()
                 )
             )
             # w13 bias
@@ -817,10 +788,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
                 epilogue_tile_m,
             )
             gemm1_bias_shuffled.append(
-                w13_bias[i]
-                .clone()
-                .reshape(-1, 1)[permute_bias_indices.to(w13_bias.device)]
-                .contiguous()
+                w13_bias[i].clone().reshape(-1, 1)[permute_bias_indices.to(w13_bias.device)].contiguous()
             )
             # w2 weight
             permute_indices = get_w2_permute_indices_with_cache(
@@ -829,9 +797,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
                 epilogue_tile_m,
             )
             gemm2_weights_shuffled.append(
-                w2_weight[i]
-                .view(torch.uint8)[permute_indices.to(w2_weight.device)]
-                .contiguous()
+                w2_weight[i].view(torch.uint8)[permute_indices.to(w2_weight.device)].contiguous()
             )
             # w2 scale
             permute_sf_indices = get_w2_permute_indices_with_cache(
@@ -842,9 +808,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             )
             gemm2_scales_shuffled.append(
                 nvfp4_block_scale_interleave(
-                    w2_weight_scale[i]
-                    .view(torch.uint8)[permute_sf_indices.to(w2_weight_scale.device)]
-                    .contiguous()
+                    w2_weight_scale[i].view(torch.uint8)[permute_sf_indices.to(w2_weight_scale.device)].contiguous()
                 )
             )
             # w2 bias
@@ -854,10 +818,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
                 epilogue_tile_m,
             )
             gemm2_bias_shuffled.append(
-                w2_bias[i]
-                .clone()
-                .reshape(-1, 1)[permute_indices.to(w2_bias.device)]
-                .contiguous()
+                w2_bias[i].clone().reshape(-1, 1)[permute_indices.to(w2_bias.device)].contiguous()
             )
 
         w13_weight = torch.stack(gemm1_weights_shuffled)
@@ -912,15 +873,11 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             from flashinfer import block_scale_interleave
 
             orig_shape = w13_scale_swapped.shape
-            w13_scale_interleaved = block_scale_interleave(
-                w13_scale_swapped.view(torch.uint8)
-            ).reshape(orig_shape)
+            w13_scale_interleaved = block_scale_interleave(w13_scale_swapped.view(torch.uint8)).reshape(orig_shape)
 
             w2_s = w2_weight_scale.data
             orig_shape = w2_s.shape
-            w2_scale_interleaved = block_scale_interleave(
-                w2_s.view(torch.uint8)
-            ).reshape(orig_shape)
+            w2_scale_interleaved = block_scale_interleave(w2_s.view(torch.uint8)).reshape(orig_shape)
 
             return (
                 w13_weight_swapped,
@@ -939,18 +896,10 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
                 interleave_moe_weights_for_sm90_mixed_gemm,
             )
 
-            w13_weight_interleaved = interleave_moe_weights_for_sm90_mixed_gemm(
-                w13_weight_swapped.contiguous(), "fp4"
-            )
-            w2_weight_interleaved = interleave_moe_weights_for_sm90_mixed_gemm(
-                w2_weight.contiguous(), "fp4"
-            )
-            w31_scales_interleaved = interleave_moe_scales_for_sm90_mixed_gemm(
-                w13_scale_swapped.to(torch.uint8)
-            )
-            w2_scale_interleaved = interleave_moe_scales_for_sm90_mixed_gemm(
-                w2_weight_scale.data.to(torch.uint8)
-            )
+            w13_weight_interleaved = interleave_moe_weights_for_sm90_mixed_gemm(w13_weight_swapped.contiguous(), "fp4")
+            w2_weight_interleaved = interleave_moe_weights_for_sm90_mixed_gemm(w2_weight.contiguous(), "fp4")
+            w31_scales_interleaved = interleave_moe_scales_for_sm90_mixed_gemm(w13_scale_swapped.to(torch.uint8))
+            w2_scale_interleaved = interleave_moe_scales_for_sm90_mixed_gemm(w2_weight_scale.data.to(torch.uint8))
 
             return (
                 w13_weight_interleaved,
@@ -973,14 +922,10 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
         from aiter.utility.fp4_utils import e8m0_shuffle
 
         s0, s1, _ = w13_weight_scale.shape
-        w13_weight_scale.data = e8m0_shuffle(w13_weight_scale.view(s0 * s1, -1)).view(
-            s0, s1, -1
-        )
+        w13_weight_scale.data = e8m0_shuffle(w13_weight_scale.view(s0 * s1, -1)).view(s0, s1, -1)
 
         s0, s1, _ = w2_weight_scale.shape
-        w2_weight_scale.data = e8m0_shuffle(w2_weight_scale.view(s0 * s1, -1)).view(
-            s0, s1, -1
-        )
+        w2_weight_scale.data = e8m0_shuffle(w2_weight_scale.view(s0 * s1, -1)).view(s0, s1, -1)
 
         # View as native FP4 dtype
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
@@ -989,9 +934,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             w2_weight.data = w2_weight.data.view(fp4_dtype)
 
         # Shuffle weights for AITER CK kernel
-        shuffled_w13, shuffled_w2 = rocm_aiter_ops.shuffle_weights(
-            w13_weight, w2_weight
-        )
+        shuffled_w13, shuffled_w2 = rocm_aiter_ops.shuffle_weights(w13_weight, w2_weight)
         shuffled_w13.is_shuffled = True
         shuffled_w2.is_shuffled = True
 
@@ -1016,17 +959,10 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
 
         # De-interleave w13 rows: gate/up pairs -> contiguous gate, up blocks
         w13_weight.view(torch.uint8).copy_(
-            w13_weight.data.view(torch.uint8)
-            .view(e, n // 2, 2, k)
-            .permute(0, 2, 1, 3)
-            .contiguous()
-            .view(e, n, k)
+            w13_weight.data.view(torch.uint8).view(e, n // 2, 2, k).permute(0, 2, 1, 3).contiguous().view(e, n, k)
         )
         w13_weight_scale.data = (
-            w13_weight_scale.data.view(e, n // 2, 2, -1)
-            .permute(0, 2, 1, 3)
-            .contiguous()
-            .view(e, n, -1)
+            w13_weight_scale.data.view(e, n // 2, 2, -1).permute(0, 2, 1, 3).contiguous().view(e, n, -1)
         )
 
         # View as native FP4 dtype for AITER shuffle
@@ -1050,12 +986,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
 
         # Permute bias to match de-interleaved weight layout
         if w13_bias is not None:
-            w13_bias = (
-                w13_bias.data.view(-1, n // 2, 2)
-                .permute(0, 2, 1)
-                .contiguous()
-                .view(-1, n)
-            )
+            w13_bias = w13_bias.data.view(-1, n // 2, 2).permute(0, 2, 1).contiguous().view(-1, n)
 
         return (
             w13_weight,
@@ -1140,12 +1071,8 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             w2_weight_scale,
         )
 
-        w13_precision_config = PrecisionConfig(
-            weight_scale=w13_scale, flex_ctx=FlexCtx(rhs_data=w13_flex)
-        )
-        w2_precision_config = PrecisionConfig(
-            weight_scale=w2_scale, flex_ctx=FlexCtx(rhs_data=w2_flex)
-        )
+        w13_precision_config = PrecisionConfig(weight_scale=w13_scale, flex_ctx=FlexCtx(rhs_data=w13_flex))
+        w2_precision_config = PrecisionConfig(weight_scale=w2_scale, flex_ctx=FlexCtx(rhs_data=w2_flex))
 
         # The original mxfp4 block scales have been swizzled into the
         # precision configs above and are no longer read by the kernel, so
@@ -1178,13 +1105,11 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             prepare_mxfp4_moe_layer_for_cpu,
         )
 
-        packed_w13, packed_w2, packed_w13_scale, packed_w2_scale = (
-            prepare_mxfp4_moe_layer_for_cpu(
-                w13_weight.data,
-                w2_weight.data,
-                w13_weight_scale.data,
-                w2_weight_scale.data,
-            )
+        packed_w13, packed_w2, packed_w13_scale, packed_w2_scale = prepare_mxfp4_moe_layer_for_cpu(
+            w13_weight.data,
+            w2_weight.data,
+            w13_weight_scale.data,
+            w2_weight_scale.data,
         )
         if w13_bias is not None:
             w13_bias = w13_bias.data.to(torch.float32)
@@ -1200,14 +1125,10 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
         )
     elif mxfp4_backend == Mxfp4MoeBackend.EMULATION:
         w13_has_per_expert_scale = (
-            w13_input_scale is not None
-            and w13_input_scale.ndim == 1
-            and not all_close_1d(w13_input_scale)
+            w13_input_scale is not None and w13_input_scale.ndim == 1 and not all_close_1d(w13_input_scale)
         )
         w2_has_per_expert_scale = (
-            w2_input_scale is not None
-            and w2_input_scale.ndim == 1
-            and not all_close_1d(w2_input_scale)
+            w2_input_scale is not None and w2_input_scale.ndim == 1 and not all_close_1d(w2_input_scale)
         )
         if w13_has_per_expert_scale or w2_has_per_expert_scale:
             logger.warning_once(
@@ -1215,13 +1136,9 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
                 "emulation. Using the maximum across experts for each layer."
             )
         if w13_input_scale is not None:
-            layer.w13_input_scale = torch.nn.Parameter(
-                w13_input_scale.max().to(torch.float32), requires_grad=False
-            )
+            layer.w13_input_scale = torch.nn.Parameter(w13_input_scale.max().to(torch.float32), requires_grad=False)
         if w2_input_scale is not None:
-            layer.w2_input_scale = torch.nn.Parameter(
-                w2_input_scale.max().to(torch.float32), requires_grad=False
-            )
+            layer.w2_input_scale = torch.nn.Parameter(w2_input_scale.max().to(torch.float32), requires_grad=False)
         return (
             w13_weight,
             w2_weight,
@@ -1231,10 +1148,7 @@ def convert_gpt_oss_weight_to_mxfp4_moe_kernel_format(
             w2_bias,
         )
     else:
-        raise ValueError(
-            f"Unsupported mxfp4_backend: {mxfp4_backend}: "
-            f"should be one of: {list(Mxfp4MoeBackend)}."
-        )
+        raise ValueError(f"Unsupported mxfp4_backend: {mxfp4_backend}: should be one of: {list(Mxfp4MoeBackend)}.")
 
 
 def convert_weight_to_mxfp4_moe_kernel_format(
@@ -1282,9 +1196,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
             convert_to_humming_moe_kernel_format,
         )
 
-        convert_to_humming_moe_kernel_format(
-            layer, quant_config={"quant_method": "mxfp4"}
-        )
+        convert_to_humming_moe_kernel_format(layer, quant_config={"quant_method": "mxfp4"})
         return (
             layer.w13_weight,
             layer.w2_weight,
@@ -1334,15 +1246,11 @@ def convert_weight_to_mxfp4_moe_kernel_format(
         # TRTLLM kernel expects interleaved [w3_0, w1_0, w3_1, w1_1, ...].
         w1_weight = w13_weight[:, :intermediate_size, :]
         w3_weight = w13_weight[:, intermediate_size:, :]
-        w13_weight = torch.stack([w3_weight, w1_weight], dim=2).reshape(
-            w13_weight.shape
-        )
+        w13_weight = torch.stack([w3_weight, w1_weight], dim=2).reshape(w13_weight.shape)
 
         w1_scale = w13_weight_scale[:, :intermediate_size, :]
         w3_scale = w13_weight_scale[:, intermediate_size:, :]
-        w13_weight_scale = torch.stack([w3_scale, w1_scale], dim=2).reshape(
-            w13_weight_scale.shape
-        )
+        w13_weight_scale = torch.stack([w3_scale, w1_scale], dim=2).reshape(w13_weight_scale.shape)
 
         if w13_bias is not None:
             b1 = w13_bias[:, :intermediate_size]
@@ -1407,9 +1315,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
                 w13_bias[0].reshape(-1, 1),
                 epilogue_tile_m,
             ).to(w13_bias.device)
-            w13_bias = w13_bias.reshape(num_experts, -1, 1)[:, w13_b_perm].reshape(
-                num_experts, -1
-            )
+            w13_bias = w13_bias.reshape(num_experts, -1, 1)[:, w13_b_perm].reshape(num_experts, -1)
 
         # w2 bias permute
         if w2_bias is not None:
@@ -1418,9 +1324,7 @@ def convert_weight_to_mxfp4_moe_kernel_format(
                 w2_bias[0].reshape(-1, 1),
                 epilogue_tile_m,
             ).to(w2_bias.device)
-            w2_bias = w2_bias.reshape(num_experts, -1, 1)[:, w2_b_perm].reshape(
-                num_experts, -1
-            )
+            w2_bias = w2_bias.reshape(num_experts, -1, 1)[:, w2_b_perm].reshape(num_experts, -1)
 
         return (
             w13_weight,
@@ -1522,12 +1426,8 @@ def convert_weight_to_mxfp4_moe_kernel_format(
             w2_weight_scale,
         )
 
-        w13_precision_config = PrecisionConfig(
-            weight_scale=w13_scale, flex_ctx=FlexCtx(rhs_data=w13_flex)
-        )
-        w2_precision_config = PrecisionConfig(
-            weight_scale=w2_scale, flex_ctx=FlexCtx(rhs_data=w2_flex)
-        )
+        w13_precision_config = PrecisionConfig(weight_scale=w13_scale, flex_ctx=FlexCtx(rhs_data=w13_flex))
+        w2_precision_config = PrecisionConfig(weight_scale=w2_scale, flex_ctx=FlexCtx(rhs_data=w2_flex))
 
         # The original mxfp4 block scales have been swizzled into the
         # precision configs above and are no longer read by the kernel, so

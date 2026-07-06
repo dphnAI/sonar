@@ -101,9 +101,7 @@ tools = [
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("tool_choice", ["auto", "required"])
-async def test_function_tool_use(
-    client: openai.AsyncOpenAI, model_name: str, tool_choice: str
-):
+async def test_function_tool_use(client: openai.AsyncOpenAI, model_name: str, tool_choice: str):
     prompt = [
         {
             "role": "user",
@@ -139,9 +137,7 @@ async def test_function_tool_use(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_max_tokens_with_tool_choice_required(
-    client: openai.AsyncOpenAI, model_name: str
-):
+async def test_max_tokens_with_tool_choice_required(client: openai.AsyncOpenAI, model_name: str):
     prompt = [
         {
             "role": "user",
@@ -178,9 +174,7 @@ async def test_named_tool_use(client: openai.AsyncOpenAI):
         {
             "type": "function",
             "name": "get_weather",
-            "description": (
-                "Get current temperature for provided coordinates in celsius."
-            ),
+            "description": ("Get current temperature for provided coordinates in celsius."),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -194,9 +188,7 @@ async def test_named_tool_use(client: openai.AsyncOpenAI):
         }
     ]
 
-    input_messages = [
-        {"role": "user", "content": "What's the weather like in Paris today?"}
-    ]
+    input_messages = [{"role": "user", "content": "What's the weather like in Paris today?"}]
 
     response = await client.responses.create(
         model=MODEL_NAME,
@@ -232,9 +224,7 @@ async def test_named_tool_use(client: openai.AsyncOpenAI):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_function_calling_with_streaming_expected_arguments(
-    client: openai.AsyncOpenAI, model_name: str
-):
+async def test_function_calling_with_streaming_expected_arguments(client: openai.AsyncOpenAI, model_name: str):
     tools = [
         {
             "type": "function",
@@ -268,10 +258,7 @@ async def test_function_calling_with_streaming_expected_arguments(
 
     stream_response = await client.responses.create(
         model=model_name,
-        input=(
-            "Use tools only. Call get_weather for Berlin and get_time for Tokyo. "
-            "Do not answer directly."
-        ),
+        input=("Use tools only. Call get_weather for Berlin and get_time for Tokyo. Do not answer directly."),
         tools=tools,
         stream=True,
     )
@@ -280,20 +267,14 @@ async def test_function_calling_with_streaming_expected_arguments(
     arguments_done_events = {}
     completed_events = {}
     async for event in stream_response:
-        if (
-            event.type == "response.output_item.added"
-            and event.item.type == "function_call"
-        ):
+        if event.type == "response.output_item.added" and event.item.type == "function_call":
             tool_call_items[event.output_index] = event.item
         elif event.type == "response.function_call_arguments.delta":
             tool_call_item = tool_call_items[event.output_index]
             tool_call_item.arguments += event.delta
         elif event.type == "response.function_call_arguments.done":
             arguments_done_events[event.output_index] = event
-        elif (
-            event.type == "response.output_item.done"
-            and event.item.type == "function_call"
-        ):
+        elif event.type == "response.output_item.done" and event.item.type == "function_call":
             completed_events[event.output_index] = event
     assert len(tool_call_items) >= 2
     assert len(arguments_done_events) >= 2
@@ -501,19 +482,13 @@ async def test_function_calling_with_streaming_forced_tool_choice(
     completed_event = None
     text_deltas = []
     async for event in stream_response:
-        if (
-            event.type == "response.output_item.added"
-            and event.item.type == "function_call"
-        ):
+        if event.type == "response.output_item.added" and event.item.type == "function_call":
             tool_call_item = event.item
         elif event.type == "response.output_text.delta":
             text_deltas.append(event.delta)
         elif event.type == "response.function_call_arguments.delta" and tool_call_item:
             tool_call_item.arguments += event.delta
-        elif (
-            event.type == "response.output_item.done"
-            and event.item.type == "function_call"
-        ):
+        elif event.type == "response.output_item.done" and event.item.type == "function_call":
             completed_event = event
 
     assert tool_call_item is not None

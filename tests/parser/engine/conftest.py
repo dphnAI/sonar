@@ -35,9 +35,7 @@ def make_mock_tokenizer(
     tokenizer = MagicMock()
     tokenizer.encode.return_value = [1, 2, 3]
     tokenizer.get_vocab.return_value = dict(vocab)
-    tokenizer.decode.side_effect = lambda ids: "".join(
-        id_to_text.get(i, chr(i) if i < 128 else f"<{i}>") for i in ids
-    )
+    tokenizer.decode.side_effect = lambda ids: "".join(id_to_text.get(i, chr(i) if i < 128 else f"<{i}>") for i in ids)
     st = special_tokens if special_tokens is not None else list(vocab.keys())
     tokenizer.all_special_tokens = st
     tokenizer.all_special_ids = [vocab[t] for t in st if t in vocab]

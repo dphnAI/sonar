@@ -89,9 +89,7 @@ async def test_load(
         # TODO(NickLucche) Re-enable when async scheduling is supported
         pytest.skip("Async scheduling is not supported with ray")
     elif data_parallel_backend == "ray" and current_platform.is_rocm():
-        pytest.skip(
-            "Ray as the distributed executor backend is not supported with ROCm."
-        )
+        pytest.skip("Ray as the distributed executor backend is not supported with ROCm.")
     stats_loggers = {}
 
     @dataclass
@@ -126,9 +124,7 @@ async def test_load(
             data_parallel_backend=data_parallel_backend,
             async_scheduling=async_scheduling,
         )
-        engine = AsyncLLM.from_engine_args(
-            engine_args, stat_loggers=[SimpleStatsLogger]
-        )
+        engine = AsyncLLM.from_engine_args(engine_args, stat_loggers=[SimpleStatsLogger])
         after.callback(engine.shutdown)
 
         NUM_REQUESTS = 100
@@ -139,13 +135,7 @@ async def test_load(
         # Create concurrent requests.
         tasks = []
         for request_id in request_ids:
-            tasks.append(
-                asyncio.create_task(
-                    generate(
-                        engine, request_id, prompt, output_kind, NUM_EXPECTED_TOKENS
-                    )
-                )
-            )
+            tasks.append(asyncio.create_task(generate(engine, request_id, prompt, output_kind, NUM_EXPECTED_TOKENS)))
             # Short sleep to ensure that requests are distributed.
             await asyncio.sleep(0.01)
         # Confirm that we got all the EXPECTED tokens from the requests.
@@ -155,8 +145,7 @@ async def test_load(
         for task in done:
             num_generated_tokens, request_id = await task
             assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
-                f"{request_id} generated {num_generated_tokens} but "
-                f"expected {NUM_EXPECTED_TOKENS}"
+                f"{request_id} generated {num_generated_tokens} but expected {NUM_EXPECTED_TOKENS}"
             )
 
         assert not engine.output_processor.has_unfinished_requests()
@@ -240,8 +229,7 @@ async def test_dp_prefill_schedule_interval(prefill_schedule_interval: int):
         for task in done:
             num_generated_tokens, request_id = await task
             assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
-                f"{request_id} generated {num_generated_tokens} but "
-                f"expected {NUM_EXPECTED_TOKENS}"
+                f"{request_id} generated {num_generated_tokens} but expected {NUM_EXPECTED_TOKENS}"
             )
 
         assert not engine.output_processor.has_unfinished_requests()
@@ -397,9 +385,7 @@ async def test_dp_pause_keep_then_resume(expert_parallel: bool):
         assert await engine.is_paused() is False
         assert pause_token_idx >= min_tokens_before_pause
         if pause_token_idx > 0 and pause_token_idx < len(token_times):
-            pause_gap = (
-                token_times[pause_token_idx][1] - token_times[pause_token_idx - 1][1]
-            )
+            pause_gap = token_times[pause_token_idx][1] - token_times[pause_token_idx - 1][1]
             assert pause_gap >= pause_duration * 0.8, (
                 f"Expected gap ~{pause_duration}s after pause, got {pause_gap:.3f}s"
             )
@@ -428,9 +414,7 @@ async def test_dp_pause_keep_race_staggered_engines():
                 return await original_call_utility(method, *args)
             # Fire pause(keep) to engine 0 (don't await — with DP
             # two-phase pause, consensus requires all ranks).
-            pause_0 = asyncio.create_task(
-                client._call_utility_async(method, *args, engine=client.core_engines[0])
-            )
+            pause_0 = asyncio.create_task(client._call_utility_async(method, *args, engine=client.core_engines[0]))
             # Let the event loop send the message to engine 0.
             await asyncio.sleep(0.5)
             # In the middle: send two requests (race window)
@@ -450,9 +434,7 @@ async def test_dp_pause_keep_race_staggered_engines():
             await asyncio.sleep(3)
             # Fire pause(keep) to engine 1, then await both so
             # consensus can be reached.
-            pause_1 = asyncio.create_task(
-                client._call_utility_async(method, *args, engine=client.core_engines[1])
-            )
+            pause_1 = asyncio.create_task(client._call_utility_async(method, *args, engine=client.core_engines[1]))
             results = await asyncio.gather(pause_0, pause_1)
             return results[0]
 
@@ -507,9 +489,7 @@ async def test_dp_pause_barrier_request_deadlock():
 
             # Send barrier to engine 0 only — it blocks in
             # dist.barrier(dp_group) waiting for engine 1.
-            barrier_0 = asyncio.create_task(
-                client._call_utility_async(method, *args, engine=client.core_engines[0])
-            )
+            barrier_0 = asyncio.create_task(client._call_utility_async(method, *args, engine=client.core_engines[0]))
             await asyncio.sleep(1)
 
             # While engine 0 is blocked, send a request routed
@@ -551,9 +531,7 @@ async def test_dp_pause_barrier_request_deadlock():
             # Now send barrier to engine 1.  In buggy code engine 1
             # is stuck in execute_dummy_batch (EP all-to-all) while
             # engine 0 is stuck in dist.barrier(dp_group) — deadlock.
-            result = await client._call_utility_async(
-                method, *args, engine=client.core_engines[1]
-            )
+            result = await client._call_utility_async(method, *args, engine=client.core_engines[1])
             await barrier_0
             return result
 

@@ -81,9 +81,7 @@ def test_audio_resampler_pyav_calls_resample(dummy_audio):
     with patch("aphrodite.multimodal.audio.resample_audio_pyav") as mock_resample:
         mock_resample.return_value = dummy_audio
         out = resampler.resample(dummy_audio, orig_sr=44100)
-        mock_resample.assert_called_once_with(
-            dummy_audio, orig_sr=44100, target_sr=22050
-        )
+        mock_resample.assert_called_once_with(dummy_audio, orig_sr=44100, target_sr=22050)
         assert np.all(out == dummy_audio)
 
 
@@ -92,9 +90,7 @@ def test_audio_resampler_scipy_calls_resample(dummy_audio):
     with patch("aphrodite.multimodal.audio.resample_audio_scipy") as mock_resample:
         mock_resample.return_value = dummy_audio
         out = resampler.resample(dummy_audio, orig_sr=44100)
-        mock_resample.assert_called_once_with(
-            dummy_audio, orig_sr=44100, target_sr=22050
-        )
+        mock_resample.assert_called_once_with(dummy_audio, orig_sr=44100, target_sr=22050)
         assert np.all(out == dummy_audio)
 
 
@@ -501,9 +497,7 @@ class TestAudioPipelineE2E:
 
         # Verify channel averaging: mean of [1,2,3,4,5,6] = 3.5
         expected_value = (1.0 + 2.0 + 3.0 + 4.0 + 5.0 + 6.0) / 6
-        np.testing.assert_array_almost_equal(
-            audio_output, np.full(8000, expected_value), decimal=5
-        )
+        np.testing.assert_array_almost_equal(audio_output, np.full(8000, expected_value), decimal=5)
 
     def test_torch_tensor_input_e2e(self):
         """Full pipeline: torch.Tensor stereo input → mono numpy output."""

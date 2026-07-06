@@ -129,9 +129,7 @@ class SingleWriterShmRingBuffer:
             logger.debug("Creating new shared memory buffer: %s", name)
             # we are creating a buffer
             self.metadata: dict[int, int] = {}  # monotonic_id -> start address
-            self.shared_memory = shared_memory.SharedMemory(
-                create=True, size=self.data_buffer_size, name=name
-            )
+            self.shared_memory = shared_memory.SharedMemory(create=True, size=self.data_buffer_size, name=name)
         else:
             # we are opening an existing buffer
             # fix to https://stackoverflow.com/q/62748654/9191338
@@ -202,9 +200,7 @@ class SingleWriterShmRingBuffer:
         # reset to beginning if the buffer does have enough contiguous space
         buffer_end_reset = self.data_buffer_end % self.data_buffer_size
         if buffer_end_reset + size > self.data_buffer_size:
-            buffer_end_reset = (
-                self.data_buffer_end // self.data_buffer_size + 1
-            ) * self.data_buffer_size
+            buffer_end_reset = (self.data_buffer_end // self.data_buffer_size + 1) * self.data_buffer_size
         else:  # no reset needed
             buffer_end_reset = self.data_buffer_end
 
@@ -213,21 +209,14 @@ class SingleWriterShmRingBuffer:
         # exceeds the start of the data buffer
         occupied_size_new = buffer_end_reset + size - self.data_buffer_start
         if occupied_size_new > self.data_buffer_size:
-            raise MemoryError(
-                "Not enough space in the data buffer, "
-                "try calling free_buf() to free up space"
-            )
+            raise MemoryError("Not enough space in the data buffer, try calling free_buf() to free up space")
         self.data_buffer_end = buffer_end_reset
 
         # first 4 bytes as the monotonic id
         buf_idx = self.data_buffer_end % self.data_buffer_size
-        self.shared_memory.buf[buf_idx : buf_idx + self.ID_NBYTES] = self.int2byte(
-            self.monotonic_id_end
-        )
+        self.shared_memory.buf[buf_idx : buf_idx + self.ID_NBYTES] = self.int2byte(self.monotonic_id_end)
         # next 4 bytes as the size of the data buffer
-        self.shared_memory.buf[buf_idx + self.ID_NBYTES : buf_idx + self.MD_SIZE] = (
-            self.int2byte(size)
-        )
+        self.shared_memory.buf[buf_idx + self.ID_NBYTES : buf_idx + self.MD_SIZE] = self.int2byte(size)
 
         # record metadata
         self.metadata[self.monotonic_id_end % self.ID_MAX] = self.data_buffer_end
@@ -275,8 +264,7 @@ class SingleWriterShmRingBuffer:
 
         assert self.is_writer, "Only the writer can free buffers."
         logger.debug(
-            "Freeing up space in the ring buffer, "
-            "monotonic_id_start: %d, monotonic_id_end: %d",
+            "Freeing up space in the ring buffer, monotonic_id_start: %d, monotonic_id_end: %d",
             self.monotonic_id_start,
             self.monotonic_id_end,
         )
@@ -291,14 +279,11 @@ class SingleWriterShmRingBuffer:
                 if is_free_fn(self.monotonic_id_start, data_buff):
                     # check passed, we can free the buffer
                     del self.metadata[self.monotonic_id_start]
-                    self.monotonic_id_start = (
-                        self.monotonic_id_start + 1
-                    ) % self.ID_MAX
+                    self.monotonic_id_start = (self.monotonic_id_start + 1) % self.ID_MAX
                     if self.monotonic_id_start in self.metadata:
                         # pointing to the start addr of next allocation
                         self.data_buffer_start += (
-                            self.metadata[self.monotonic_id_start]
-                            - self.data_buffer_start
+                            self.metadata[self.monotonic_id_start] - self.data_buffer_start
                         ) % self.data_buffer_size
                     else:
                         # no remaining allocation, reset to zero
@@ -309,8 +294,7 @@ class SingleWriterShmRingBuffer:
                     break
 
         logger.debug(
-            "Freed %d bytes from the ring buffer, "
-            "monotonic_id_start: %d, monotonic_id_end: %d",
+            "Freed %d bytes from the ring buffer, monotonic_id_start: %d, monotonic_id_end: %d",
             freed_bytes,
             self.monotonic_id_start,
             self.monotonic_id_end,
@@ -326,9 +310,7 @@ class SingleWriterShmRingBuffer:
         if monotonic_id_after >= monotonic_id_before:
             return range(monotonic_id_before, monotonic_id_after)
         else:
-            return chain(
-                range(monotonic_id_before, self.ID_MAX), range(0, monotonic_id_after)
-            )
+            return chain(range(monotonic_id_before, self.ID_MAX), range(0, monotonic_id_after))
 
 
 class ObjectSerde(ABC):
@@ -367,9 +349,7 @@ class MsgpackSerde(ObjectSerde):
             nbytes = len(value)
 
         object_metadata = (type_name, nbytes, len_arr)
-        serialized_metadata = pickle.dumps(
-            object_metadata, protocol=pickle.HIGHEST_PROTOCOL
-        )
+        serialized_metadata = pickle.dumps(object_metadata, protocol=pickle.HIGHEST_PROTOCOL)
         return value, nbytes, serialized_metadata, len(serialized_metadata)
 
     def deserialize(self, data_view: memoryview) -> Any:
@@ -536,9 +516,7 @@ class SingleWriterShmObjectStorage:
         """Free unused buffers in the ring buffer."""
         # try to free up 2*max_object_size bytes of space in the ring buffer,
         # since the buffer might be fragmented
-        freed_ids = self.ring_buffer.free_buf(
-            self.default_is_free_check, 2 * self.max_object_size
-        )
+        freed_ids = self.ring_buffer.free_buf(self.default_is_free_check, 2 * self.max_object_size)
         # update the metadata after freeing up space
         for freed_id in freed_ids:
             key_to_free = self.id_index[freed_id]
@@ -578,15 +556,12 @@ class SingleWriterShmObjectStorage:
         if key in self.key_index:
             raise ValueError(f"Key '{key}' already exists in the storage.")
 
-        object_data, data_bytes, object_metadata, md_bytes = self.ser_de.serialize(
-            value
-        )
+        object_data, data_bytes, object_metadata, md_bytes = self.ser_de.serialize(value)
         buffer_size = self.flag_bytes + data_bytes + md_bytes
         # Sanity checks
         if buffer_size > self.max_object_size:
             raise ValueError(
-                f"Serialized object size ({buffer_size} bytes) exceeds "
-                f"max object size ({self.max_object_size} bytes)"
+                f"Serialized object size ({buffer_size} bytes) exceeds max object size ({self.max_object_size} bytes)"
             )
 
         # Allocate new buffer
@@ -600,9 +575,7 @@ class SingleWriterShmObjectStorage:
         # Write data to buffer
         with self.ring_buffer.access_buf(address) as (data_view, metadata):
             data_view[: self.flag_bytes] = self.ring_buffer.int2byte(0)
-            self.copy_to_buffer(
-                object_data, data_bytes, object_metadata, md_bytes, data_view
-            )
+            self.copy_to_buffer(object_data, data_bytes, object_metadata, md_bytes, data_view)
         self.increment_writer_flag(monotonic_id)
 
         # Update key index
@@ -615,10 +588,7 @@ class SingleWriterShmObjectStorage:
         with self.ring_buffer.access_buf(address) as (data_view, buf_metadata):
             # check id from metadata
             if buf_metadata[0] != monotonic_id:
-                raise ValueError(
-                    f"Data for address:id '{address}:{monotonic_id}'"
-                    " has been modified or is invalid."
-                )
+                raise ValueError(f"Data for address:id '{address}:{monotonic_id}' has been modified or is invalid.")
 
             obj = self.ser_de.deserialize(data_view[self.flag_bytes :])
 

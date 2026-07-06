@@ -90,9 +90,7 @@ def _convert_req_index_to_global_index_kernel(
     base = tl.load(bt_ptr, mask=valid_block, other=0)
 
     # # If token == -1 OR block_id OOB, output 0; else base * BLOCK_SIZE + offset
-    out_val = tl.where(
-        is_invalid_tok | (~valid_block), 0, base * BLOCK_SIZE + inblock_off
-    )
+    out_val = tl.where(is_invalid_tok | (~valid_block), 0, base * BLOCK_SIZE + inblock_off)
     out_ptr_ij = out_ptr + seq_start + indice_id
     out_ptr_ij_mask = (seq_start + indice_id) < seq_end
 
@@ -185,12 +183,8 @@ def generate_sparse_seqlen_kernel(
         return
     context_start_point = seq_len - query_len
     sparse_seqlen = context_start_point + query_offset
-    sparse_seqlen_masked = tl.where(
-        sparse_seqlen + 1 < topk_token, sparse_seqlen + 1, topk_token
-    )
-    tl.store(
-        out_ptr + query_start + query_offset, sparse_seqlen_masked, mask=query_mask
-    )
+    sparse_seqlen_masked = tl.where(sparse_seqlen + 1 < topk_token, sparse_seqlen + 1, topk_token)
+    tl.store(out_ptr + query_start + query_offset, sparse_seqlen_masked, mask=query_mask)
 
 
 def generate_sparse_seqlen_triton(
@@ -247,9 +241,7 @@ def fetch_id_to_ragged_kernel(
     tl.store(out_tensor_ptr + out_tensor_offset, in_tensor_val, mask=out_tensor_mask)
 
 
-def fetch_id_to_ragged_triton(
-    in_tensor: torch.Tensor, cumsum: torch.Tensor, out_tensor: torch.Tensor, topk
-):
+def fetch_id_to_ragged_triton(in_tensor: torch.Tensor, cumsum: torch.Tensor, out_tensor: torch.Tensor, topk):
     num_tokens = in_tensor.size(0)
     block_size = 64
     num_block_per_row = triton.cdiv(topk, block_size)
@@ -257,9 +249,7 @@ def fetch_id_to_ragged_triton(
         num_tokens,
         num_block_per_row,
     )
-    fetch_id_to_ragged_kernel[grid](
-        in_tensor, cumsum, out_tensor, in_tensor.stride(0), topk, num_tokens, block_size
-    )
+    fetch_id_to_ragged_kernel[grid](in_tensor, cumsum, out_tensor, in_tensor.stride(0), topk, num_tokens, block_size)
 
 
 class ROCMAiterMLASparseBackend(AttentionBackend):
@@ -344,12 +334,8 @@ class ROCMAiterMLASparseMetadata(AttentionMetadata):
 
 
 @dataclass
-class ROCMAiterMLASparseMetadataBuilder(
-    AttentionMetadataBuilder[ROCMAiterMLASparseMetadata]
-):
-    _cudagraph_support: ClassVar[AttentionCGSupport] = (
-        AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
-    )
+class ROCMAiterMLASparseMetadataBuilder(AttentionMetadataBuilder[ROCMAiterMLASparseMetadata]):
+    _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
 
     def __init__(
         self,
@@ -368,25 +354,17 @@ class ROCMAiterMLASparseMetadataBuilder(
         self.num_heads = self.model_config.get_num_attention_heads(parallel_config)
         self.mla_dims = get_mla_dims(self.model_config)
         self.topk_tokens = aphrodite_config.model_config.hf_config.index_topk
-        self.max_model_len_tensor = torch.tensor(
-            [self.model_config.max_model_len], device=device, dtype=torch.int32
-        )
+        self.max_model_len_tensor = torch.tensor([self.model_config.max_model_len], device=device, dtype=torch.int32)
         # this is ignored by `flash_mla_with_kvcache` if indices not None
-        self.dummy_block_table = torch.empty(
-            (1, 1), dtype=torch.int32, device=self.device
-        )
+        self.dummy_block_table = torch.empty((1, 1), dtype=torch.int32, device=self.device)
 
         self.req_id_per_token_buffer = torch.zeros(
             (aphrodite_config.scheduler_config.max_num_batched_tokens,),
             dtype=torch.int32,
             device=device,
         )
-        self.qo_indptr = torch.arange(
-            0, max_num_batched_tokens + 1, dtype=torch.int32, device=device
-        )
-        self.paged_kv_last_page_len = torch.ones(
-            max_num_batched_tokens, dtype=torch.int32, device=device
-        )
+        self.qo_indptr = torch.arange(0, max_num_batched_tokens + 1, dtype=torch.int32, device=device)
+        self.paged_kv_last_page_len = torch.ones(max_num_batched_tokens, dtype=torch.int32, device=device)
 
         # These two needs to be calculated in runtime,
         # but we still needs to prepare the buffer
@@ -395,9 +373,7 @@ class ROCMAiterMLASparseMetadataBuilder(
             dtype=torch.int32,
             device=device,
         )
-        self.paged_kv_indptr = torch.zeros(
-            [max_num_batched_tokens + 1], dtype=torch.int32, device=device
-        )
+        self.paged_kv_indptr = torch.zeros([max_num_batched_tokens + 1], dtype=torch.int32, device=device)
 
         # ----- Persistent MLA metadata buffers -----
         # The aiter sparse decode kernel supports a "persistent" path that
@@ -438,21 +414,11 @@ class ROCMAiterMLASparseMetadataBuilder(
             is_sparse=True,
             fast_mode=True,
         )
-        self._mla_work_meta_data = torch.empty(
-            work_meta_data_size, dtype=work_meta_data_type, device=device
-        )
-        self._mla_work_indptr = torch.empty(
-            work_indptr_size, dtype=work_indptr_type, device=device
-        )
-        self._mla_work_info_set = torch.empty(
-            work_info_set_size, dtype=work_info_set_type, device=device
-        )
-        self._mla_reduce_indptr = torch.empty(
-            reduce_indptr_size, dtype=reduce_indptr_type, device=device
-        )
-        self._mla_reduce_final_map = torch.empty(
-            reduce_final_map_size, dtype=reduce_final_map_type, device=device
-        )
+        self._mla_work_meta_data = torch.empty(work_meta_data_size, dtype=work_meta_data_type, device=device)
+        self._mla_work_indptr = torch.empty(work_indptr_size, dtype=work_indptr_type, device=device)
+        self._mla_work_info_set = torch.empty(work_info_set_size, dtype=work_info_set_type, device=device)
+        self._mla_reduce_indptr = torch.empty(reduce_indptr_size, dtype=reduce_indptr_type, device=device)
+        self._mla_reduce_final_map = torch.empty(reduce_final_map_size, dtype=reduce_final_map_type, device=device)
         self._mla_reduce_partial_map = torch.empty(
             reduce_partial_map_size,
             dtype=reduce_partial_map_type,
@@ -472,9 +438,7 @@ class ROCMAiterMLASparseMetadataBuilder(
         num_tokens = common_attn_metadata.num_actual_tokens
         starts = np.asarray(common_attn_metadata.query_start_loc_cpu, dtype=np.int32)
         seg_lengths = np.diff(starts)
-        req_id_per_token = np.repeat(
-            np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths
-        )
+        req_id_per_token = np.repeat(np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths)
         # Only re-zero the shrink-tail. paged_kv_indptr is fully rewritten
         # by the cumsum below. paged_kv_indices entries past new_indices_extent
         # are never read (the attention kernel only touches the ranges
@@ -482,22 +446,13 @@ class ROCMAiterMLASparseMetadataBuilder(
         new_req_extent = int(req_id_per_token.shape[0])
         new_indices_extent = num_tokens * self.topk_tokens
         if self._prev_req_extent > new_req_extent:
-            self.req_id_per_token_buffer[new_req_extent : self._prev_req_extent].fill_(
-                0
-            )
+            self.req_id_per_token_buffer[new_req_extent : self._prev_req_extent].fill_(0)
         if self._prev_indices_extent > new_indices_extent:
-            self.paged_kv_indices[new_indices_extent : self._prev_indices_extent].fill_(
-                0
-            )
+            self.paged_kv_indices[new_indices_extent : self._prev_indices_extent].fill_(0)
         self._prev_req_extent = new_req_extent
         self._prev_indices_extent = new_indices_extent
-        self.req_id_per_token_buffer[:new_req_extent].copy_(
-            torch.from_numpy(req_id_per_token), non_blocking=True
-        )
-        query_lens = (
-            common_attn_metadata.query_start_loc[1:]
-            - common_attn_metadata.query_start_loc[:-1]
-        )
+        self.req_id_per_token_buffer[:new_req_extent].copy_(torch.from_numpy(req_id_per_token), non_blocking=True)
+        query_lens = common_attn_metadata.query_start_loc[1:] - common_attn_metadata.query_start_loc[:-1]
         seq_lens = common_attn_metadata.seq_lens
         sparse_seqlen = generate_sparse_seqlen_triton(
             query_lens,
@@ -542,9 +497,7 @@ class ROCMAiterMLASparseMetadataBuilder(
         # not chunked-prefill continuations (>1 query token, seq_len > query_len).
         step_query_lens = seg_lengths
         total_seq_lens = common_attn_metadata.seq_lens_cpu[:num_reqs].numpy()
-        is_chunked_continuation = (step_query_lens > 1) & (
-            total_seq_lens > step_query_lens
-        )
+        is_chunked_continuation = (step_query_lens > 1) & (total_seq_lens > step_query_lens)
         use_persistent = not is_chunked_continuation.any()
         if use_persistent and metadata_key != self._prev_metadata_key:
             from aiter import get_mla_metadata_v1
@@ -758,8 +711,6 @@ class ROCMAiterMLASparseImpl(SparseMLAAttentionImpl[ROCMAiterMLASparseMetadata])
                 q, _ = ops.scaled_fp8_quant(q.view(q.shape[0], -1), layer._q_scale)
                 q = q.view(original_q_shape)
         mla_padded_q = AiterMLAHelper.get_mla_padded_q(self.num_heads, q)
-        attn_out = self._forward_mla(
-            layer, mla_padded_q, kv_c_and_k_pe_cache, attn_metadata
-        )
+        attn_out = self._forward_mla(layer, mla_padded_q, kv_c_and_k_pe_cache, attn_metadata)
 
         return attn_out, None

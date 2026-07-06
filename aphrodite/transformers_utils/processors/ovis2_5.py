@@ -110,10 +110,7 @@ class Ovis2_5Processor(ProcessorMixin):
         self,
         images: ImageInput = None,
         videos: np.ndarray | list[ImageInput] = None,
-        text: TextInput
-        | PreTokenizedInput
-        | list[TextInput]
-        | list[PreTokenizedInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Ovis2_5ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -247,14 +244,10 @@ class Ovis2_5Processor(ProcessorMixin):
                     # Replace placeholders
                     for token_id in ids_list:
                         if token_id == image_token_id:
-                            new_ids.extend(
-                                visual_features["image_placeholders"][image_idx]
-                            )
+                            new_ids.extend(visual_features["image_placeholders"][image_idx])
                             image_idx += 1
                         elif token_id == video_token_id:
-                            new_ids.extend(
-                                visual_features["video_placeholders"][video_idx]
-                            )
+                            new_ids.extend(visual_features["video_placeholders"][video_idx])
                             video_idx += 1
                         else:
                             new_ids.append(token_id)
@@ -281,10 +274,7 @@ class Ovis2_5Processor(ProcessorMixin):
 
             for j, video_segment in enumerate(video_split_texts):
                 image_split_texts = video_segment.split(self.image_token)
-                text_chunks = [
-                    self.tokenizer(chunk, add_special_tokens=False).input_ids
-                    for chunk in image_split_texts
-                ]
+                text_chunks = [self.tokenizer(chunk, add_special_tokens=False).input_ids for chunk in image_split_texts]
                 segment_tokens = []
                 for i, chunk in enumerate(text_chunks):
                     segment_tokens.extend(chunk)
@@ -313,9 +303,7 @@ class Ovis2_5Processor(ProcessorMixin):
         3. The aspect ratio of the image is maintained as closely as possible.
         """
         if height < factor or width < factor:
-            print(
-                f"height:{height} or width:{width} must be larger than factor:{factor}"
-            )
+            print(f"height:{height} or width:{width} must be larger than factor:{factor}")
             if height < width:
                 width = round(factor / height * width)
                 height = factor
@@ -324,10 +312,7 @@ class Ovis2_5Processor(ProcessorMixin):
                 width = factor
 
         elif max(height, width) / min(height, width) > 200:
-            print(
-                f"absolute aspect ratio must be smaller than 200, "
-                f"got {max(height, width) / min(height, width)}"
-            )
+            print(f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}")
             if height > width:
                 height = 200 * width
             else:
@@ -380,9 +365,7 @@ class Ovis2_5Processor(ProcessorMixin):
         padded_placeholder_tokens = []
         for token in visual_placeholders:
             if token == image_atom_token_id:
-                padded_placeholder_tokens.extend(
-                    [image_padding_token_id] * num_image_atoms
-                )
+                padded_placeholder_tokens.extend([image_padding_token_id] * num_image_atoms)
             else:
                 padded_placeholder_tokens.append(image_padding_token_id)
         return padded_placeholder_tokens
@@ -417,10 +400,7 @@ class Ovis2_5Processor(ProcessorMixin):
             max_pixels if max_pixels is not None else MAX_PIXELS,
             min_pixels if min_pixels is not None else MIN_PIXELS,
         )
-        images = [
-            image.convert("RGB") if do_convert_rgb and image.mode != "RGB" else image
-            for image in images
-        ]
+        images = [image.convert("RGB") if do_convert_rgb and image.mode != "RGB" else image for image in images]
 
         width, height = images[0].size
         resized_height, resized_width = height, width
@@ -434,17 +414,13 @@ class Ovis2_5Processor(ProcessorMixin):
                 max_pixels=max_pixels,
             )
             new_size = dict(height=resized_height, width=resized_width)
-            image_pt = self.image_processor.preprocess(image, size=new_size)[
-                "pixel_values"
-            ][0]
+            image_pt = self.image_processor.preprocess(image, size=new_size)["pixel_values"][0]
 
             processed_images.append(image_pt)
 
         patches = np.array(processed_images)
         if patches.shape[0] % self.temporal_patch_size != 0:
-            num_to_pad = self.temporal_patch_size - (
-                patches.shape[0] % self.temporal_patch_size
-            )
+            num_to_pad = self.temporal_patch_size - (patches.shape[0] % self.temporal_patch_size)
             repeats = np.repeat(patches[-1][np.newaxis], num_to_pad, axis=0)
             patches = np.concatenate([patches, repeats], axis=0)
         channel = patches.shape[1]
@@ -469,9 +445,7 @@ class Ovis2_5Processor(ProcessorMixin):
             channel * self.temporal_patch_size * self.patch_size * self.patch_size,
         )
 
-        visual_placeholders = self.construct_visual_placeholders(
-            [grid_t, grid_h, grid_w], is_video
-        )
+        visual_placeholders = self.construct_visual_placeholders([grid_t, grid_h, grid_w], is_video)
         return (
             torch.tensor(flatten_patches),
             visual_placeholders,

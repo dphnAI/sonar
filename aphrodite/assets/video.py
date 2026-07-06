@@ -66,8 +66,7 @@ def video_to_ndarrays(path: str, num_frames: int = -1) -> npt.NDArray:
     frames = np.stack(frames)
     if len(frames) < num_frames:
         raise ValueError(
-            f"Could not read enough frames from video file {path}"
-            f" (expected {num_frames} frames, got {len(frames)})"
+            f"Could not read enough frames from video file {path} (expected {num_frames} frames, got {len(frames)})"
         )
     return frames
 

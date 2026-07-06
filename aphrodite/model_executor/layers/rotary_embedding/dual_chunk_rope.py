@@ -38,16 +38,12 @@ class DualChunkRotaryEmbedding(CustomOp):
         self.dtype = dtype
         device_idx = torch.accelerator.current_device_index()
         self.device = torch.device(f"cuda:{device_idx}")
-        (q_cache, qc_cache, k_cache, qc_no_clamp_cache, q_inter_cache) = (
-            self._compute_cos_sin_cache()
-        )
+        (q_cache, qc_cache, k_cache, qc_no_clamp_cache, q_inter_cache) = self._compute_cos_sin_cache()
 
         self.register_buffer("cos_sin_q_cache", q_cache, persistent=False)
         self.register_buffer("cos_sin_qc_cache", qc_cache, persistent=False)
         self.register_buffer("cos_sin_k_cache", k_cache, persistent=False)
-        self.register_buffer(
-            "cos_sin_qc_no_clamp_cache", qc_no_clamp_cache, persistent=False
-        )
+        self.register_buffer("cos_sin_qc_no_clamp_cache", qc_no_clamp_cache, persistent=False)
         self.register_buffer("cos_sin_q_inter_cache", q_inter_cache, persistent=False)
 
     def _compute_inv_freq(self, base: float) -> torch.Tensor:
@@ -61,12 +57,7 @@ class DualChunkRotaryEmbedding(CustomOp):
         # use CPU to compute the cache and then move it to GPU. However, we
         # create the cache on GPU for faster initialization. This may cause
         # a slight numerical difference between the HF implementation and ours.
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim
-            )
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim))
         return inv_freq
 
     def _compute_cos_sin_cache(self) -> torch.Tensor:
@@ -74,9 +65,7 @@ class DualChunkRotaryEmbedding(CustomOp):
         inv_freq = self._compute_inv_freq(self.base)
         chunk_len = self.chunk_size - self.local_size
         q_t = torch.arange(chunk_len, dtype=torch.float)
-        qc_t = (torch.arange(chunk_len, dtype=torch.float) + chunk_len).clamp(
-            max=self.chunk_size
-        )
+        qc_t = (torch.arange(chunk_len, dtype=torch.float) + chunk_len).clamp(max=self.chunk_size)
         k_t = torch.arange(self.max_position_embeddings, dtype=torch.float) % chunk_len
 
         # count from chunk_len, no clamp(self.chunk_size) restriction
@@ -102,21 +91,13 @@ class DualChunkRotaryEmbedding(CustomOp):
         q_inter_cos = q_inter_freqs.cos()
         q_inter_sin = q_inter_freqs.sin()
 
-        q_cache = torch.cat((q_cos, q_sin), dim=-1).to(
-            dtype=self.dtype, device=self.device
-        )
-        qc_cache = torch.cat((qc_cos, qc_sin), dim=-1).to(
-            dtype=self.dtype, device=self.device
-        )
-        k_cache = torch.cat((k_cos, k_sin), dim=-1).to(
-            dtype=self.dtype, device=self.device
-        )
+        q_cache = torch.cat((q_cos, q_sin), dim=-1).to(dtype=self.dtype, device=self.device)
+        qc_cache = torch.cat((qc_cos, qc_sin), dim=-1).to(dtype=self.dtype, device=self.device)
+        k_cache = torch.cat((k_cos, k_sin), dim=-1).to(dtype=self.dtype, device=self.device)
         qc_no_clamp_cache = torch.cat((qc_no_clamp_cos, qc_no_clamp_sin), dim=-1).to(
             dtype=self.dtype, device=self.device
         )
-        q_inter_cache = torch.cat((q_inter_cos, q_inter_sin), dim=-1).to(
-            dtype=self.dtype, device=self.device
-        )
+        q_inter_cache = torch.cat((q_inter_cos, q_inter_sin), dim=-1).to(dtype=self.dtype, device=self.device)
         return q_cache, qc_cache, k_cache, qc_no_clamp_cache, q_inter_cache
 
     def forward_native(
@@ -137,12 +118,8 @@ class DualChunkRotaryEmbedding(CustomOp):
             query_pass = None
             key_pass = None
 
-        positions_with_offsets = (
-            torch.add(positions, offsets) if offsets is not None else positions
-        )
-        key = self._apply_rotary_embedding(
-            self.cos_sin_k_cache[positions_with_offsets], key_rot, key_pass
-        )
+        positions_with_offsets = torch.add(positions, offsets) if offsets is not None else positions
+        key = self._apply_rotary_embedding(self.cos_sin_k_cache[positions_with_offsets], key_rot, key_pass)
         chunk_len = self.chunk_size - self.local_size
         query = self._apply_rotary_embedding(
             self.cos_sin_q_cache[positions_with_offsets % chunk_len],

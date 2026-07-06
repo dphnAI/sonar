@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 import torch
 
-from tests.quantization.utils import is_quant_method_supported
 from aphrodite.config.model import ModelConfig
 from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
 from aphrodite.model_executor.layers.quantization.modelopt import (
@@ -27,6 +26,7 @@ from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding,
 )
 from aphrodite.platforms import current_platform
+from tests.quantization.utils import is_quant_method_supported
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -100,9 +100,7 @@ def test_modelopt_nvfp4_quantizes_parallel_lm_head():
         exclude_modules=[],
     )
 
-    with patch(
-        "aphrodite.model_executor.layers.quantization.modelopt.init_nvfp4_linear_kernel"
-    ):
+    with patch("aphrodite.model_executor.layers.quantization.modelopt.init_nvfp4_linear_kernel"):
         method = config.get_quant_method(_mock_lm_head(), prefix="lm_head")
 
     assert isinstance(method, ModelOptNvFp4LinearMethod)
@@ -121,13 +119,9 @@ def test_modelopt_nvfp4_leaves_excluded_parallel_lm_head_unquantized():
 
 
 def test_modelopt_mixed_precision_quantizes_parallel_lm_head():
-    config = _mixed_precision_config(
-        {"lm_head": {"quant_algo": "NVFP4", "group_size": 16}}
-    )
+    config = _mixed_precision_config({"lm_head": {"quant_algo": "NVFP4", "group_size": 16}})
 
-    with patch(
-        "aphrodite.model_executor.layers.quantization.modelopt.init_nvfp4_linear_kernel"
-    ):
+    with patch("aphrodite.model_executor.layers.quantization.modelopt.init_nvfp4_linear_kernel"):
         method = config.get_quant_method(_mock_lm_head(), prefix="lm_head")
 
     assert isinstance(method, ModelOptNvFp4LinearMethod)
@@ -150,17 +144,11 @@ def test_vocab_parallel_embedding_weight_loader_accepts_scalar_scale():
 def test_modelopt_fp8_checkpoint_setup(default_aphrodite_config, aphrodite_runner):
     """Test ModelOpt FP8 checkpoint loading and structure validation."""
     # TODO: provide a small publicly available test checkpoint
-    model_path = (
-        "/home/scratch.omniml_data_1/zhiyu/ckpts/test_ckpts/"
-        "TinyLlama-1.1B-Chat-v1.0-fp8-0710"
-    )
+    model_path = "/home/scratch.omniml_data_1/zhiyu/ckpts/test_ckpts/TinyLlama-1.1B-Chat-v1.0-fp8-0710"
 
     # Skip test if checkpoint doesn't exist
     if not os.path.exists(model_path):
-        pytest.skip(
-            f"Test checkpoint not found at {model_path}. "
-            "This test requires a local ModelOpt FP8 checkpoint."
-        )
+        pytest.skip(f"Test checkpoint not found at {model_path}. This test requires a local ModelOpt FP8 checkpoint.")
 
     # Set model config as model_config.dtype is required in ModelOptFp8LinearMethod.
     default_aphrodite_config.model_config = ModelConfig()
@@ -394,9 +382,7 @@ def test_modelopt_nvfp4_config_dispatches_w4a16_method():
         ("W4A16_NVFP4", True, True),  # native W4A16 ckpt
     ],
 )
-def test_modelopt_nvfp4_moe_dispatches_to_marlin_when_w4a16(
-    quant_method, expected_use_a16, act_key_is_none
-):
+def test_modelopt_nvfp4_moe_dispatches_to_marlin_when_w4a16(quant_method, expected_use_a16, act_key_is_none):
     """``ModelOptNvFp4FusedMoE``: when the ckpt's ``quant_method`` is
     ``W4A16_NVFP4``, the MoE class must pass ``activation_key=None`` to
     ``select_nvfp4_moe_backend``. That filters out every W4A4 backend
@@ -429,8 +415,7 @@ def test_modelopt_nvfp4_moe_dispatches_to_marlin_when_w4a16(
             mock_select,
         ),
         patch(
-            "aphrodite.model_executor.layers.quantization.modelopt."
-            "is_global_sf_supported_for_nvfp4_backend",
+            "aphrodite.model_executor.layers.quantization.modelopt.is_global_sf_supported_for_nvfp4_backend",
             return_value=False,
         ),
     ):
@@ -452,9 +437,7 @@ def test_modelopt_nvfp4_moe_dispatches_to_marlin_when_w4a16(
         ("W4A16_NVFP4", "ModelOptNvFp4W4A16LinearMethod"),
     ],
 )
-def test_modelopt_mixed_precision_dispatches_w4a16_layer(
-    per_layer_algo, expected_linear_cls_name
-):
+def test_modelopt_mixed_precision_dispatches_w4a16_layer(per_layer_algo, expected_linear_cls_name):
     """``ModelOptMixedPrecisionConfig.get_quant_method`` must route a Linear
     layer to the right LinearMethod based on its per-layer ``quant_algo``
     entry in ``quantized_layers``. Verifies the new ``W4A16_NVFP4`` branch
@@ -474,10 +457,7 @@ def test_modelopt_mixed_precision_dispatches_w4a16_layer(
     from aphrodite.model_executor.layers.linear import LinearBase
     from aphrodite.model_executor.layers.quantization import modelopt as m
 
-    if (
-        expected_linear_cls_name == "ModelOptNvFp4W4A16LinearMethod"
-        and current_platform.is_rocm()
-    ):
+    if expected_linear_cls_name == "ModelOptNvFp4W4A16LinearMethod" and current_platform.is_rocm():
         pytest.skip("ModelOptNvFp4W4A16LinearMethod is not supported with rocm")
 
     hf_quant_config: dict[str, Any] = {
@@ -497,9 +477,7 @@ def test_modelopt_mixed_precision_dispatches_w4a16_layer(
     method = config.get_quant_method(fake_layer, "model.layers.0.fake_proj")
 
     expected_cls = getattr(m, expected_linear_cls_name)
-    assert isinstance(method, expected_cls), (
-        f"Expected {expected_linear_cls_name}, got {type(method).__name__}"
-    )
+    assert isinstance(method, expected_cls), f"Expected {expected_linear_cls_name}, got {type(method).__name__}"
 
 
 def test_modelopt_mixed_precision_builds_w4a16_sibling_config():

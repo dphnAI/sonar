@@ -29,9 +29,7 @@ def _convert_tokens_to_string_with_added_encoders(
     current_sub_text: list[str] = []
     convert_tokens_to_string = tokenizer.convert_tokens_to_string
     added_vocab_set = set(tokenizer.get_added_vocab())
-    all_special_tokens = (
-        set(tokenizer.all_special_tokens) if skip_special_tokens else ()
-    )
+    all_special_tokens = set(tokenizer.all_special_tokens) if skip_special_tokens else ()
 
     for token in output_tokens:
         # Use precomputed set for skip-special check
@@ -152,9 +150,7 @@ def detokenize_incrementally(
     # If the new token id is out of bounds, return an empty string.
     if 0 <= new_token_id < len(tokenizer):
         # Put new_token_id in a list so skip_special_tokens is respected
-        new_tokens = tokenizer.convert_ids_to_tokens(
-            [new_token_id], skip_special_tokens=skip_special_tokens
-        )
+        new_tokens = tokenizer.convert_ids_to_tokens([new_token_id], skip_special_tokens=skip_special_tokens)
         if isinstance(new_tokens, str):
             new_tokens = [new_tokens]
         else:
@@ -173,9 +169,7 @@ def detokenize_incrementally(
     # the decode which decide to add a space or not depending on the
     # surrounding ids.
     if tokenizer.is_fast or not tokenizer.get_added_vocab():
-        prefix_text = tokenizer.convert_tokens_to_string(
-            output_tokens[prefix_offset:read_offset]
-        )
+        prefix_text = tokenizer.convert_tokens_to_string(output_tokens[prefix_offset:read_offset])
         new_text = tokenizer.convert_tokens_to_string(output_tokens[prefix_offset:])
     else:
         prefix_text = _convert_tokens_to_string_with_added_encoders(

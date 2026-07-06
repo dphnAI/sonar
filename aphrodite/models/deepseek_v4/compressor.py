@@ -246,14 +246,10 @@ class DeepseekCompressor(nn.Module):
 
         # Save reference to static_forward_context for forward-time KV cache lookup.
         # get_current_aphrodite_config() is only available during __init__, not forward.
-        self._static_forward_context = (
-            aphrodite_config.compilation_config.static_forward_context
-        )
+        self._static_forward_context = aphrodite_config.compilation_config.static_forward_context
 
         if self.head_dim == 512:
-            assert not use_fp4_cache, (
-                "MXFP4 cache is only supported for indexer (head=128)"
-            )
+            assert not use_fp4_cache, "MXFP4 cache is only supported for indexer (head=128)"
             self._quant_block = 64
             self._token_stride = self.nope_head_dim + self.rope_head_dim * 2
             self._scale_dim = self.nope_head_dim // 64 + 1  # 7 real + 1 pad
@@ -267,9 +263,7 @@ class DeepseekCompressor(nn.Module):
                 self._token_stride = self.head_dim
                 self._scale_dim = 4  # single float32 scale
         else:
-            raise ValueError(
-                f"Unsupported head_dim for fused quant+cache: {self.head_dim}"
-            )
+            raise ValueError(f"Unsupported head_dim for fused quant+cache: {self.head_dim}")
 
     def forward(
         self,
@@ -281,18 +275,14 @@ class DeepseekCompressor(nn.Module):
     ) -> None:
         # Each of shape [num_tokens, coff * self.head_dim]
         # input bf16, output are fp32
-        kv, score = kv_score.split(
-            [self.coff * self.head_dim, self.coff * self.head_dim], dim=-1
-        )
+        kv, score = kv_score.split([self.coff * self.head_dim, self.coff * self.head_dim], dim=-1)
 
         # Get the metadata and handle dummy profiling run.
         attn_metadata = get_forward_context().attn_metadata
         if not isinstance(attn_metadata, dict):
             return
 
-        state_metadata = cast(
-            CompressorMetadata, attn_metadata[self.state_cache.prefix]
-        )
+        state_metadata = cast(CompressorMetadata, attn_metadata[self.state_cache.prefix])
         token_to_req_indices = state_metadata.token_to_req_indices
         slot_mapping = state_metadata.slot_mapping
         num_actual = slot_mapping.shape[0]
@@ -303,11 +293,7 @@ class DeepseekCompressor(nn.Module):
         state_cache = self.state_cache.kv_cache
         # kv_state stored in first half, score_state stored in second half
         state_width = state_cache.shape[-1] // 2
-        pdl_kwargs = (
-            {}
-            if current_platform.is_rocm() or current_platform.is_xpu()
-            else {"launch_pdl": False}
-        )
+        pdl_kwargs = {} if current_platform.is_rocm() or current_platform.is_xpu() else {"launch_pdl": False}
 
         # Store the KV and score (with fused APE addition) in the state.
         # NOTE: PDL is disabled — both this kernel and the compress kernels
@@ -344,11 +330,7 @@ class DeepseekCompressor(nn.Module):
         # fp8_ds_mla path uses the UE8M0 paged uint8 layout.
         store_full_kv = self.head_dim == 512 and kv_cache.dtype != torch.uint8
         store_full_fp8 = kv_cache.dtype == torch.float8_e4m3fn
-        fp8_scale = (
-            getattr(k_cache_layer, "_flashinfer_fp8_kv_scale", None)
-            if store_full_fp8
-            else None
-        )
+        fp8_scale = getattr(k_cache_layer, "_flashinfer_fp8_kv_scale", None) if store_full_fp8 else None
 
         # cutedsl (head=512) accepts the full-cache flags; triton (indexer/AMD)
         # does not, so the two callables have different signatures.

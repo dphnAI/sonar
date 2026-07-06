@@ -58,9 +58,7 @@ class PoolingMetadata:
         pooling_params = self.pooling_params
 
         tasks: list[PoolingTask] = [
-            task
-            for pooling_param in pooling_params
-            if (task := pooling_param.task) is not None
+            task for pooling_param in pooling_params if (task := pooling_param.task) is not None
         ]
         if len(pooling_params) != len(tasks):
             raise ValueError(
@@ -73,17 +71,11 @@ class PoolingMetadata:
     def __getitem__(self, indices: slice) -> "PoolingMetadata":
         return PoolingMetadata(
             prompt_lens=self.prompt_lens[indices],
-            prompt_token_ids=None
-            if self.prompt_token_ids is None
-            else self.prompt_token_ids[indices],
-            prompt_token_ids_cpu=None
-            if self.prompt_token_ids_cpu is None
-            else self.prompt_token_ids_cpu[indices],
+            prompt_token_ids=None if self.prompt_token_ids is None else self.prompt_token_ids[indices],
+            prompt_token_ids_cpu=None if self.prompt_token_ids_cpu is None else self.prompt_token_ids_cpu[indices],
             pooling_params=self.pooling_params[indices],
             pooling_states=self.pooling_states[indices],
-            pooling_cursor=None
-            if self.pooling_cursor is None
-            else self.pooling_cursor[indices],
+            pooling_cursor=None if self.pooling_cursor is None else self.pooling_cursor[indices],
         )
 
     def _get_prompt_token_ids(
@@ -107,8 +99,7 @@ class PoolingMetadata:
         pooling_cursor = self.pooling_cursor
         if pooling_cursor is None:
             raise RuntimeError(
-                "pooling_cursor has not been initialized. "
-                "Call `build_pooling_cursor` before accessing it"
+                "pooling_cursor has not been initialized. Call `build_pooling_cursor` before accessing it"
             )
 
         return pooling_cursor
@@ -125,15 +116,12 @@ class PoolingMetadata:
 
         if len(prompt_lens) != n_seq:
             raise ValueError(
-                f"prompt_lens length ({len(prompt_lens)}) does not match "
-                f"the number of sequences ({n_seq})"
+                f"prompt_lens length ({len(prompt_lens)}) does not match the number of sequences ({n_seq})"
             )
 
         num_scheduled_tokens_cpu = torch.from_numpy(num_scheduled_tokens_np)
         if query_start_loc_gpu is None:
-            cumsum = torch.zeros(
-                n_seq + 1, dtype=torch.int64, pin_memory=PIN_MEMORY, device="cpu"
-            )
+            cumsum = torch.zeros(n_seq + 1, dtype=torch.int64, pin_memory=PIN_MEMORY, device="cpu")
             torch.cumsum(num_scheduled_tokens_cpu, dim=0, out=cumsum[1:])
             cumsum = cumsum.to(device, non_blocking=True)
         else:

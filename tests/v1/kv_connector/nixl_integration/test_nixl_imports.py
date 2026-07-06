@@ -41,8 +41,7 @@ def _import_nixl_ep_cpp(nixl_ep: types.ModuleType) -> types.ModuleType:
                 raise
 
     raise AssertionError(
-        "No nixl_ep_cpp extension module found; tried "
-        f"{', '.join(dict.fromkeys(candidate_module_names))}"
+        f"No nixl_ep_cpp extension module found; tried {', '.join(dict.fromkeys(candidate_module_names))}"
     )
 
 

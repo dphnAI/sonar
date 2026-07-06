@@ -53,12 +53,8 @@ def chunk_local_cumsum_scalar_kernel(
         bos, eos = i_b * T, i_b * T + T
 
     if HEAD_FIRST:
-        p_s = tl.make_block_ptr(
-            s + bos * H + i_h * T, (T,), (1,), (i_t * BT,), (BT,), (0,)
-        )
-        p_o = tl.make_block_ptr(
-            o + bos * H + i_h * T, (T,), (1,), (i_t * BT,), (BT,), (0,)
-        )
+        p_s = tl.make_block_ptr(s + bos * H + i_h * T, (T,), (1,), (i_t * BT,), (BT,), (0,))
+        p_o = tl.make_block_ptr(o + bos * H + i_h * T, (T,), (1,), (i_t * BT,), (BT,), (0,))
     else:
         p_s = tl.make_block_ptr(s + bos * H + i_h, (T,), (H,), (i_t * BT,), (BT,), (0,))
         p_o = tl.make_block_ptr(o + bos * H + i_h, (T,), (H,), (i_t * BT,), (BT,), (0,))
@@ -73,11 +69,7 @@ def chunk_local_cumsum_scalar_kernel(
 
 @triton.heuristics({"IS_VARLEN": lambda args: args["cu_seqlens"] is not None})
 @triton.autotune(
-    configs=[
-        triton.Config({"BS": BS}, num_warps=num_warps)
-        for BS in BS_LIST
-        for num_warps in [2, 4, 8]
-    ],
+    configs=[triton.Config({"BS": BS}, num_warps=num_warps) for BS in BS_LIST for num_warps in [2, 4, 8]],
     key=["B", "H", "S", "BT", "IS_VARLEN", "REVERSE"],
 )
 @triton.jit(do_not_specialize=["T"])
@@ -170,9 +162,7 @@ def chunk_local_cumsum_scalar(
         B, H, T = g.shape
     else:
         B, T, H = g.shape
-    assert chunk_size == 2 ** (chunk_size.bit_length() - 1), (
-        "chunk_size must be a power of 2"
-    )
+    assert chunk_size == 2 ** (chunk_size.bit_length() - 1), "chunk_size must be a power of 2"
     if chunk_indices is None and cu_seqlens is not None:
         chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size)
     BT = chunk_size
@@ -207,9 +197,7 @@ def chunk_local_cumsum_vector(
         B, H, T, S = g.shape
     else:
         B, T, H, S = g.shape
-    assert chunk_size == 2 ** (chunk_size.bit_length() - 1), (
-        "chunk_size must be a power of 2"
-    )
+    assert chunk_size == 2 ** (chunk_size.bit_length() - 1), "chunk_size must be a power of 2"
     if chunk_indices is None and cu_seqlens is not None:
         chunk_indices = prepare_chunk_indices(cu_seqlens, chunk_size)
     BT = chunk_size
@@ -251,9 +239,7 @@ def chunk_local_cumsum(
     **kwargs,
 ) -> torch.Tensor:
     if cu_seqlens is not None:
-        assert g.shape[0] == 1, (
-            "Only batch size 1 is supported when cu_seqlens are provided"
-        )
+        assert g.shape[0] == 1, "Only batch size 1 is supported when cu_seqlens are provided"
     if len(g.shape) == 3:
         return chunk_local_cumsum_scalar(
             g,

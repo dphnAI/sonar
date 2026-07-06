@@ -56,23 +56,18 @@ class SymmMemCommunicator:
         self.world_size = dist.get_world_size(self.group)
         capability = current_platform.get_device_capability()
         if capability is None:
-            logger.warning_once(
-                "SymmMemCommunicator: device capability is unknown, "
-                "communicator is not available."
-            )
+            logger.warning_once("SymmMemCommunicator: device capability is unknown, communicator is not available.")
             return
         self.device_capability = capability.as_version_str()
         if self.device_capability not in SYMM_MEM_ALL_REDUCE_MAX_SIZES:
             logger.warning_once(
-                "SymmMemCommunicator: Device capability %s not supported, "
-                "communicator is not available.",
+                "SymmMemCommunicator: Device capability %s not supported, communicator is not available.",
                 self.device_capability,
             )
             return
         if self.world_size not in SYMM_MEM_ALL_REDUCE_MAX_SIZES[self.device_capability]:
             logger.warning_once(
-                "SymmMemCommunicator: World size %d not supported, "
-                "communicator is not available.",
+                "SymmMemCommunicator: World size %d not supported, communicator is not available.",
                 self.world_size,
             )
             return
@@ -84,9 +79,7 @@ class SymmMemCommunicator:
                 self.max_size,
             )
         else:
-            self.max_size = SYMM_MEM_ALL_REDUCE_MAX_SIZES[self.device_capability][
-                self.world_size
-            ]
+            self.max_size = SYMM_MEM_ALL_REDUCE_MAX_SIZES[self.device_capability][self.world_size]
         try:
             self.buffer = torch_symm_mem.empty(
                 self.max_size // self.dtype.itemsize,
@@ -103,10 +96,7 @@ class SymmMemCommunicator:
             )
             return
         if handle.multicast_ptr == 0:
-            logger.warning_once(
-                "SymmMemCommunicator: symmetric memory "
-                "multicast operations are not supported."
-            )
+            logger.warning_once("SymmMemCommunicator: symmetric memory multicast operations are not supported.")
             return
         self.force_multimem = force_multimem
         self.disabled = False
@@ -123,9 +113,7 @@ class SymmMemCommunicator:
             return False
         return inp_size <= self.max_size
 
-    def all_reduce(
-        self, inp: torch.Tensor, *, out: torch.Tensor | None = None
-    ) -> torch.Tensor | None:
+    def all_reduce(self, inp: torch.Tensor, *, out: torch.Tensor | None = None) -> torch.Tensor | None:
         if not self.should_use_symm_mem(inp):
             return None
         if out is None:
@@ -139,17 +127,11 @@ class SymmMemCommunicator:
             use_multimem = self.force_multimem
         else:
             # Normal logic: use multimem for supported world sizes
-            use_multimem = (
-                self.world_size in self._WORLD_SIZES_MULTIMEM[self.device_capability]
-            )
+            use_multimem = self.world_size in self._WORLD_SIZES_MULTIMEM[self.device_capability]
 
         if use_multimem:
-            torch.ops.symm_mem.multimem_all_reduce_(
-                self.buffer[: inp.numel()], "sum", self.group.group_name
-            )
+            torch.ops.symm_mem.multimem_all_reduce_(self.buffer[: inp.numel()], "sum", self.group.group_name)
         else:
-            torch.ops.symm_mem.two_shot_all_reduce_(
-                self.buffer[: inp.numel()], "sum", self.group.group_name
-            )
+            torch.ops.symm_mem.two_shot_all_reduce_(self.buffer[: inp.numel()], "sum", self.group.group_name)
         out.copy_(self.buffer[: inp.numel()].view(out.shape))
         return out

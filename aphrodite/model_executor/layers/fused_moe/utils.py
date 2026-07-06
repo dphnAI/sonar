@@ -85,9 +85,7 @@ def count_expert_num_tokens(
     of tokens assigned to the ith expert.
     """
     assert topk_ids.dtype.is_signed, "The kernel uses -1 to represent invalid topk_ids"
-    expert_num_tokens = torch.empty(
-        (num_local_experts), device=topk_ids.device, dtype=torch.int32
-    )
+    expert_num_tokens = torch.empty((num_local_experts), device=topk_ids.device, dtype=torch.int32)
 
     grid = num_local_experts
     BLOCK_SIZE = min(topk_ids.numel(), 1024)
@@ -111,9 +109,7 @@ def _resize_cache(x: torch.Tensor, v: tuple[int, ...]) -> torch.Tensor:
     Shrink the given tensor and apply the given view to it.  This is
     used to resize the intermediate fused_moe caches.
     """
-    assert prod(v) <= x.numel(), (
-        f"{v} ({prod(v)}) <= {x.shape} ({x.numel()})"
-    )  # CUDAGRAPH unfriendly?
+    assert prod(v) <= x.numel(), f"{v} ({prod(v)}) <= {x.shape} ({x.numel()})"  # CUDAGRAPH unfriendly?
     return x.flatten()[: prod(v)].view(*v)
 
 
@@ -138,9 +134,7 @@ def _fp8_quantize(
     if block_shape is None:
         # TODO(luka): use QuantFP8 custom op
         #  https://github.com/vllm-project/vllm/issues/20711
-        A, A_scale = ops.scaled_fp8_quant(
-            A, A_scale, use_per_token_if_dynamic=per_act_token
-        )
+        A, A_scale = ops.scaled_fp8_quant(A, A_scale, use_per_token_if_dynamic=per_act_token)
     else:
         assert not per_act_token
         assert len(block_shape) == 2
@@ -307,8 +301,7 @@ def moe_kernel_quantize_input(
     elif quant_dtype == "mxfp4":
         if not quantization_emulation:
             raise NotImplementedError(
-                "moe_kernel_quantize_input should not be used for native"
-                " quant_dtype='mxfp4' MOE. Please open an issue."
+                "moe_kernel_quantize_input should not be used for native quant_dtype='mxfp4' MOE. Please open an issue."
             )
         return _mxfp4_quantize(A, A_scale, per_act_token_quant, block_shape)
     elif quant_dtype == "mxfp8":
@@ -365,9 +358,7 @@ def normalize_batched_scales_shape(
     if scales is not None and scales.ndim < 3:
         if scales.numel() == 1:
             scales = scales.view(1)
-            scales = torch.repeat_interleave(scales, num_experts, dim=0).view(
-                num_experts, 1, 1
-            )
+            scales = torch.repeat_interleave(scales, num_experts, dim=0).view(num_experts, 1, 1)
         else:
             scales = scales.view(num_experts, -1, scales.size(-1))
 
@@ -451,8 +442,4 @@ def swiglu_limit_func(
 
 @functools.lru_cache
 def enable_swap_ab(BLOCK_SIZE_M: int, BLOCK_SIZE_N: int) -> bool:
-    return (
-        current_platform.is_device_capability(90)
-        and BLOCK_SIZE_M < 64
-        and BLOCK_SIZE_N >= 64
-    )
+    return current_platform.is_device_capability(90) and BLOCK_SIZE_M < 64 and BLOCK_SIZE_N >= 64

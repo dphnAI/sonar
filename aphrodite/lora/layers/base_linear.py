@@ -119,9 +119,7 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
         elif isinstance(self.base_layer, RowParallelLinear):
             lora_a_out_size = lora_config.max_lora_rank
             lora_b_out_size = (
-                self.output_size
-                if not lora_config.fully_sharded_loras
-                else divide(self.output_size, self.tp_size)
+                self.output_size if not lora_config.fully_sharded_loras else divide(self.output_size, self.tp_size)
             )
         else:
             raise NotImplementedError
@@ -167,43 +165,31 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
         # override this function.
         assert isinstance(lora_a, torch.Tensor)
         assert isinstance(lora_b, torch.Tensor)
-        assert (
-            len(self.lora_a_stacked) == len(self.lora_b_stacked) == self.n_slices == 1
-        )
+        assert len(self.lora_a_stacked) == len(self.lora_b_stacked) == self.n_slices == 1
 
         self.reset_lora(index)
         if self.tp_size > 1:
             lora_a = self.slice_lora_a(lora_a)
             lora_b = self.slice_lora_b(lora_b)
 
-        self.lora_a_stacked[0][index, 0, : lora_a.shape[0], : lora_a.shape[1]].copy_(
-            lora_a, non_blocking=True
-        )
-        self.lora_b_stacked[0][index, 0, : lora_b.shape[0], : lora_b.shape[1]].copy_(
-            lora_b, non_blocking=True
-        )
+        self.lora_a_stacked[0][index, 0, : lora_a.shape[0], : lora_a.shape[1]].copy_(lora_a, non_blocking=True)
+        self.lora_b_stacked[0][index, 0, : lora_b.shape[0], : lora_b.shape[1]].copy_(lora_b, non_blocking=True)
 
     def _get_quant_method(self) -> QuantizeMethodBase:
         quant_method = self.base_layer.quant_method
         if quant_method is None:
-            raise RuntimeError(
-                f"{type(self.base_layer).__name__} must define quant_method for LoRA."
-            )
+            raise RuntimeError(f"{type(self.base_layer).__name__} must define quant_method for LoRA.")
         return quant_method
 
     def apply(self, x: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         # is_forward_context_available for tower modules
         if self._enable_aux_cuda_stream and is_forward_context_available():
             output_size = sum(self.output_slices)
-            return torch.ops.aphrodite.lora_linear_async(
-                self.layer_name, output_size, x, bias
-            )
+            return torch.ops.aphrodite.lora_linear_async(self.layer_name, output_size, x, bias)
         else:
             return self._apply_sync(x, bias)
 
-    def _apply_sync(
-        self, x: torch.Tensor, bias: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def _apply_sync(self, x: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         output = self._get_quant_method().apply(self.base_layer, x, bias)
         return self._apply_lora_to_output(x, output)
 
@@ -212,9 +198,7 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
         output = base_output[0] if isinstance(base_output, tuple) else base_output
         return self._apply_lora_to_output(x, output)
 
-    def _apply_lora_to_output(
-        self, x: torch.Tensor, output: torch.Tensor
-    ) -> torch.Tensor:
+    def _apply_lora_to_output(self, x: torch.Tensor, output: torch.Tensor) -> torch.Tensor:
         original_shape = output.shape if output.ndim == 3 else None
 
         # In transformers backend, x and output have extra batch dimension like
@@ -237,9 +221,7 @@ class BaseLinearLayerWithLoRA(BaseLayerWithLoRA):
 
         return output
 
-    def _apply_async_impl(
-        self, x: torch.Tensor, bias: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def _apply_async_impl(self, x: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
         """
         Forward pass with base linear and LoRA on separate CUDA streams
         for overlap, using maybe_execute_in_parallel.

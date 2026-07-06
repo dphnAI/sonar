@@ -6,8 +6,8 @@ import openai
 import pytest
 import pytest_asyncio
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L12-v2"
 max_model_len = 128
@@ -83,9 +83,7 @@ async def test_bigger_truncation_size(client: openai.AsyncOpenAI):
     error_details = err.value.response.json()["error"]
     assert error_details["type"] == "BadRequestError"
     expected_message = (
-        "truncate_prompt_tokens value is "
-        "greater than max_model_len."
-        " Please request a smaller truncation size."
+        "truncate_prompt_tokens value is greater than max_model_len. Please request a smaller truncation size."
     )
     assert error_details["message"] == expected_message
 

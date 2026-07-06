@@ -30,9 +30,7 @@ def test_lm_head(
 ) -> None:
     # `LLM.apply_model` requires pickling a function.
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
-    with aphrodite_runner(
-        model_id, dtype=torch.float16, max_model_len=2048, enforce_eager=True
-    ) as aphrodite_model:
+    with aphrodite_runner(model_id, dtype=torch.float16, max_model_len=2048, enforce_eager=True) as aphrodite_model:
 
         def check_model(model):
             lm_head_layer = model.lm_head
@@ -42,9 +40,7 @@ def test_lm_head(
                     AutoGPTQLinearMethod,
                 )
             else:
-                assert isinstance(
-                    lm_head_layer.quant_method, UnquantizedEmbeddingMethod
-                )
+                assert isinstance(lm_head_layer.quant_method, UnquantizedEmbeddingMethod)
 
         aphrodite_model.apply_model(check_model)
 

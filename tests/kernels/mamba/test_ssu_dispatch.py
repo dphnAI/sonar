@@ -52,18 +52,14 @@ def test_default_backend_is_triton():
 
 
 def test_explicit_triton_backend():
-    initialize_mamba_ssu_backend(
-        MambaConfig(backend=MambaBackendEnum.TRITON), _kv_cache_config_with_ssu()
-    )
+    initialize_mamba_ssu_backend(MambaConfig(backend=MambaBackendEnum.TRITON), _kv_cache_config_with_ssu())
     backend = get_mamba_ssu_backend()
     assert isinstance(backend, TritonSSUBackend)
 
 
 @pytest.mark.skipif(not HAS_FLASHINFER, reason="flashinfer not installed")
 def test_flashinfer_backend_init():
-    initialize_mamba_ssu_backend(
-        MambaConfig(backend=MambaBackendEnum.FLASHINFER), _kv_cache_config_with_ssu()
-    )
+    initialize_mamba_ssu_backend(MambaConfig(backend=MambaBackendEnum.FLASHINFER), _kv_cache_config_with_ssu())
     backend = get_mamba_ssu_backend()
     assert isinstance(backend, FlashInferSSUBackend)
     assert backend.name == "flashinfer"
@@ -93,9 +89,7 @@ def test_init_is_noop_for_non_ssu_mamba_type(mamba_type):
     old = mod._mamba_ssu_backend
     mod._mamba_ssu_backend = None
     try:
-        initialize_mamba_ssu_backend(
-            MambaConfig(), _kv_cache_config_with_ssu(mamba_type)
-        )
+        initialize_mamba_ssu_backend(MambaConfig(), _kv_cache_config_with_ssu(mamba_type))
         assert mod._mamba_ssu_backend is None
         with pytest.raises(RuntimeError, match="not been initialized"):
             get_mamba_ssu_backend()
@@ -111,9 +105,7 @@ def test_flashinfer_import_error():
 
 def test_triton_basic_call():
     set_random_seed(0)
-    initialize_mamba_ssu_backend(
-        MambaConfig(backend=MambaBackendEnum.TRITON), _kv_cache_config_with_ssu()
-    )
+    initialize_mamba_ssu_backend(MambaConfig(backend=MambaBackendEnum.TRITON), _kv_cache_config_with_ssu())
     device = "cuda"
     batch_size = 2
     dim = 64

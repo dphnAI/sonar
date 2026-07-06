@@ -74,9 +74,7 @@ class NixlTransport(DataTransport):
                 self._backends,
             )
         else:
-            cfg = _NixlAgentConfig(
-                num_threads=self._num_threads, capture_telemetry=True
-            )
+            cfg = _NixlAgentConfig(num_threads=self._num_threads, capture_telemetry=True)
             logger.info(
                 "NixlTransport %s: NIXL backends=[UCX] num_threads=%d",
                 self._local_id,
@@ -88,15 +86,10 @@ class NixlTransport(DataTransport):
         reg_descs = [(self._base_addr, total_size, 0, "")]
         self._reg = self._agent.register_memory(reg_descs, mem_type="DRAM")
 
-        block_tuples = [
-            (self._base_addr + i * self._block_len, self._block_len, 0)
-            for i in range(self._num_blocks)
-        ]
+        block_tuples = [(self._base_addr + i * self._block_len, self._block_len, 0) for i in range(self._num_blocks)]
         xfer_dlist = self._agent.get_xfer_descs(block_tuples, mem_type="DRAM")
         self._local_dlist = self._agent.prep_xfer_dlist("NIXL_INIT_AGENT", xfer_dlist)
-        logger.info(
-            "NixlTransport %s: registered %d blocks", self._local_id, self._num_blocks
-        )
+        logger.info("NixlTransport %s: registered %d blocks", self._local_id, self._num_blocks)
 
     def get_agent_metadata(self) -> bytes:
         assert self._agent is not None
@@ -115,9 +108,7 @@ class NixlTransport(DataTransport):
         block_len: int,
     ) -> None:
         nixl_name = self._agent.add_remote_agent(agent_metadata)
-        block_descs = [
-            (base_addr + i * block_len, block_len, 0) for i in range(num_blocks)
-        ]
+        block_descs = [(base_addr + i * block_len, block_len, 0) for i in range(num_blocks)]
         xfer_dlist = self._agent.get_xfer_descs(block_descs, mem_type="DRAM")
         remote_dlist = self._agent.prep_xfer_dlist(nixl_name, xfer_dlist)
         self._peer_nixl_names[peer_id] = nixl_name
@@ -150,8 +141,7 @@ class NixlTransport(DataTransport):
         remote_dlist = self._remote_dlists.get(peer_id)
         if remote_dlist is None:
             logger.warning(
-                "NixlTransport %s: write_blocks NO REMOTE DLIST for peer=%s "
-                "(known peers=%s)",
+                "NixlTransport %s: write_blocks NO REMOTE DLIST for peer=%s (known peers=%s)",
                 self._local_id,
                 peer_id,
                 list(self._remote_dlists.keys()),
@@ -235,9 +225,7 @@ class NixlTransport(DataTransport):
         in ``self._inflight`` so a later ``poll()`` will observe them.
         """
         if mode == "immediate":
-            handles = [
-                self._inflight.pop(tid) for tid in transfer_ids if tid in self._inflight
-            ]
+            handles = [self._inflight.pop(tid) for tid in transfer_ids if tid in self._inflight]
             self._release_handles(handles)
             return []
 

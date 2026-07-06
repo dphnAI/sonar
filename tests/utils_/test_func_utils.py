@@ -26,9 +26,7 @@ from aphrodite.utils.func_utils import supports_kw
         (lambda foo, **kwargs: None, "foo", True, True, False),
     ],
 )
-def test_supports_kw(
-    callable, kw_name, requires_kw_only, allow_var_kwargs, is_supported
-):
+def test_supports_kw(callable, kw_name, requires_kw_only, allow_var_kwargs, is_supported):
     assert (
         supports_kw(
             callable=callable,

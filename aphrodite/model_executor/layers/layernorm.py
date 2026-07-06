@@ -16,9 +16,7 @@ from aphrodite.model_executor.layers.batch_invariant import rms_norm_batch_invar
 logger = init_logger(__name__)
 
 
-def poly_norm(
-    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, variance_epsilon: float
-) -> torch.Tensor:
+def poly_norm(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, variance_epsilon: float) -> torch.Tensor:
     from aphrodite import _custom_ops as ops
 
     out = torch.empty_like(x)
@@ -55,9 +53,7 @@ class RMSNorm(CustomOp):
 
         self.hidden_size = hidden_size
         self.variance_epsilon = eps
-        self.variance_size_override = (
-            None if var_hidden_size == hidden_size else var_hidden_size
-        )
+        self.variance_size_override = None if var_hidden_size == hidden_size else var_hidden_size
         weight_dtype = dtype or torch.get_default_dtype()
         self.has_weight = has_weight
         self.weight = torch.ones(hidden_size, dtype=weight_dtype)
@@ -99,9 +95,7 @@ class RMSNorm(CustomOp):
         residual: torch.Tensor | None = None,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if envs.APHRODITE_BATCH_INVARIANT:
-            assert self.variance_size_override is None, (
-                "Batch invariance is not supported for variance_size_override"
-            )
+            assert self.variance_size_override is None, "Batch invariance is not supported for variance_size_override"
             return rms_norm_batch_invariant(
                 x,
                 self.weight.data,
@@ -265,9 +259,7 @@ class RMSNormGated(CustomOp):
 
         return out.to(orig_dtype)
 
-    def forward_native(
-        self, x: torch.Tensor, z: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward_native(self, x: torch.Tensor, z: torch.Tensor | None = None) -> torch.Tensor:
         """PyTorch-native implementation equivalent to forward()."""
         return self.forward_static(
             x,
@@ -280,9 +272,7 @@ class RMSNormGated(CustomOp):
             activation=self.activation,
         )
 
-    def forward_cuda(
-        self, x: torch.Tensor, z: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward_cuda(self, x: torch.Tensor, z: torch.Tensor | None = None) -> torch.Tensor:
         from aphrodite.model_executor.layers.fla.ops.layernorm_guard import rmsnorm_fn
 
         return rmsnorm_fn(
@@ -296,9 +286,7 @@ class RMSNormGated(CustomOp):
             activation=self.activation,
         )
 
-    def forward_xpu(
-        self, x: torch.Tensor, z: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward_xpu(self, x: torch.Tensor, z: torch.Tensor | None = None) -> torch.Tensor:
         return self.forward_cuda(x, z)
 
 
@@ -315,6 +303,4 @@ class LayerNorm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(dim, dtype=torch.float32))
 
     def forward(self, x: torch.Tensor):
-        return F.layer_norm(
-            x.float(), (self.dim,), self.weight, self.bias, self.eps
-        ).type_as(x)
+        return F.layer_norm(x.float(), (self.dim,), self.weight, self.bias, self.eps).type_as(x)

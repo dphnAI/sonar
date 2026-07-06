@@ -285,18 +285,10 @@ class Qwen2VisionAttention(nn.Module):
         super().__init__()
         # Per attention head and per partition values.
         use_data_parallel = is_vit_use_data_parallel()
-        self.tp_size = (
-            1
-            if use_data_parallel
-            else parallel_state.get_tensor_model_parallel_world_size()
-        )
+        self.tp_size = 1 if use_data_parallel else parallel_state.get_tensor_model_parallel_world_size()
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(
-            projection_size, num_heads
-        )
-        self.num_attention_heads_per_partition = dist_utils.divide(
-            num_heads, self.tp_size
-        )
+        self.hidden_size_per_attention_head = dist_utils.divide(projection_size, num_heads)
+        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
 
         self.qkv = ColumnParallelLinear(
             input_size=embed_dim,
@@ -333,9 +325,7 @@ class Qwen2VisionAttention(nn.Module):
 
         # 3 * [s, b, head * head_dim]
         if self.tp_size > 1:
-            splitter = partial(
-                dist_utils.split_tensor_along_last_dim, num_partitions=self.tp_size
-            )
+            splitter = partial(dist_utils.split_tensor_along_last_dim, num_partitions=self.tp_size)
             q = splitter(q)[self.tp_rank]
             k = splitter(k)[self.tp_rank]
             v = splitter(v)[self.tp_rank]
@@ -605,9 +595,7 @@ class Qwen2VisionTransformer(nn.Module):
     def device(self) -> torch.device:
         return self.patch_embed.proj.weight.device
 
-    def rot_pos_emb(
-        self, grid_thw: list[list[int]]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def rot_pos_emb(self, grid_thw: list[list[int]]) -> tuple[torch.Tensor, torch.Tensor]:
         pos_ids = []
         max_grid_size = 0
         for t, h, w in grid_thw:
@@ -679,9 +667,7 @@ class Qwen2VisionTransformer(nn.Module):
         cu_seqlens = torch.from_numpy(cu_seqlens)
 
         # Keep cu_seqlens shape stable across capture/replay.
-        pad_to = (
-            max_frames_per_batch if max_frames_per_batch is not None else max_batch_size
-        )
+        pad_to = max_frames_per_batch if max_frames_per_batch is not None else max_batch_size
         if pad_to is not None:
             num_seqs = len(cu_seqlens) - 1
             if num_seqs < pad_to:
@@ -723,9 +709,7 @@ class Qwen2VisionTransformer(nn.Module):
 
         if encoder_metadata is None:
             assert grid_thw is not None
-            grid_thw_list = (
-                grid_thw if isinstance(grid_thw, list) else grid_thw.tolist()
-            )
+            grid_thw_list = grid_thw if isinstance(grid_thw, list) else grid_thw.tolist()
             encoder_metadata = self.prepare_encoder_metadata(grid_thw_list)
 
         rotary_pos_emb_cos = encoder_metadata["rotary_pos_emb_cos"]
@@ -763,30 +747,18 @@ def _create_qwen2vl_field_factory(
     def _qwen2vl_field_config(hf_inputs: Mapping[str, torch.Tensor]):
         image_grid_thw = hf_inputs.get("image_grid_thw", torch.empty((0, 3)))
         image_pixel_grid_sizes = image_grid_thw.prod(-1)
-        image_embed_grid_sizes = (
-            image_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
-        )
+        image_embed_grid_sizes = image_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
 
         video_grid_thw = hf_inputs.get("video_grid_thw", torch.empty((0, 3)))
         video_grid_sizes = video_grid_thw.prod(-1)
-        video_embed_grid_sizes = (
-            video_grid_sizes // spatial_merge_size // spatial_merge_size
-        )
+        video_embed_grid_sizes = video_grid_sizes // spatial_merge_size // spatial_merge_size
 
         return dict(
-            pixel_values=MultiModalFieldConfig.flat_from_sizes(
-                "image", image_pixel_grid_sizes
-            ),
-            image_embeds=MultiModalFieldConfig.flat_from_sizes(
-                "image", image_embed_grid_sizes
-            ),
+            pixel_values=MultiModalFieldConfig.flat_from_sizes("image", image_pixel_grid_sizes),
+            image_embeds=MultiModalFieldConfig.flat_from_sizes("image", image_embed_grid_sizes),
             image_grid_thw=MultiModalFieldConfig.batched("image", keep_on_cpu=True),
-            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes(
-                "video", video_grid_sizes
-            ),
-            video_embeds=MultiModalFieldConfig.flat_from_sizes(
-                "video", video_embed_grid_sizes
-            ),
+            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes("video", video_grid_sizes),
+            video_embeds=MultiModalFieldConfig.flat_from_sizes("video", video_embed_grid_sizes),
             video_grid_thw=MultiModalFieldConfig.batched("video", keep_on_cpu=True),
             timestamps=MultiModalFieldConfig.batched("video", keep_on_cpu=True),
         )
@@ -945,9 +917,7 @@ class Qwen2VLProcessingInfo(BaseProcessingInfo):
         )
         return num_video_tokens
 
-    def get_image_size_with_most_features(
-        self, max_pixels: int | None = None
-    ) -> ImageSize:
+    def get_image_size_with_most_features(self, max_pixels: int | None = None) -> ImageSize:
         # NOTE: Simply processing a huge size with _get_vision_info might not give a
         # size that maximizes the number of features, i.e., the number of (merged)
         # patches. This is because the number of patches limits the allowed aspect
@@ -1041,9 +1011,7 @@ class Qwen2VLProcessingInfo(BaseProcessingInfo):
         max_videos = mm_counts.get("video", 0)
 
         max_total_frames = self._get_max_video_frames(seq_len)
-        max_frames_per_video = min(
-            max_total_frames // max(max_videos, 1), max_frames_per_video
-        )
+        max_frames_per_video = min(max_total_frames // max(max_videos, 1), max_frames_per_video)
 
         return max(max_frames_per_video, 1)
 
@@ -1085,9 +1053,7 @@ class Qwen2VLDummyInputsBuilder(BaseDummyInputsBuilder[Qwen2VLProcessingInfo]):
         num_videos = mm_counts.get("video", 0)
 
         target_width, target_height = self.info.get_image_size_with_most_features()
-        target_num_frames = self.info.get_num_frames_with_most_features(
-            seq_len, mm_counts
-        )
+        target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
 
         image_overrides = mm_options.get("image")
         video_overrides = mm_options.get("video")
@@ -1150,9 +1116,7 @@ class Qwen2VLMultiModalProcessor(BaseMultiModalProcessor[Qwen2VLProcessingInfo])
         hf_inputs: BatchFeature,
         hf_processor_mm_kwargs: Mapping[str, object],
     ) -> Mapping[str, MultiModalFieldConfig]:
-        return _create_qwen2vl_field_factory(
-            self.info.get_hf_config().vision_config.spatial_merge_size
-        )(hf_inputs)
+        return _create_qwen2vl_field_factory(self.info.get_hf_config().vision_config.spatial_merge_size)(hf_inputs)
 
 
 @MULTIMODAL_REGISTRY.register_processor(
@@ -1182,9 +1146,7 @@ class Qwen2VLForConditionalGeneration(
 
     supports_encoder_tp_data = True
 
-    def iter_mm_grid_thw(
-        self, mm_features: list[MultiModalFeatureSpec]
-    ) -> Iterator[tuple[int, int, int, int, float]]:
+    def iter_mm_grid_thw(self, mm_features: list[MultiModalFeatureSpec]) -> Iterator[tuple[int, int, int, int, float]]:
         """
         Iterate over multimodal features and yield grid information.
 
@@ -1206,9 +1168,7 @@ class Qwen2VLForConditionalGeneration(
                 t, h, w = mm_feature.data["video_grid_thw"].data.tolist()
                 second_per_grid_ts = 1.0
                 if mm_feature.data.get("second_per_grid_ts", None):
-                    second_per_grid_ts = mm_feature.data[
-                        "second_per_grid_ts"
-                    ].data.item()
+                    second_per_grid_ts = mm_feature.data["second_per_grid_ts"].data.item()
                 t_factor = second_per_grid_ts * tokens_per_second
                 yield (
                     offset,
@@ -1237,9 +1197,7 @@ class Qwen2VLForConditionalGeneration(
         ) in self.iter_mm_grid_thw(mm_features):
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(
-                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
-            )
+            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
 
             grid_indices = np.indices((llm_grid_t, llm_grid_h, llm_grid_w))
             if t_factor != 1.0:
@@ -1250,9 +1208,7 @@ class Qwen2VLForConditionalGeneration(
         if st < len(input_tokens):
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
             text_len = len(input_tokens) - st
-            llm_pos_ids_list.append(
-                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
-            )
+            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
 
         llm_positions = np.concatenate(llm_pos_ids_list, axis=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()
@@ -1293,13 +1249,9 @@ class Qwen2VLForConditionalGeneration(
                 architectures=["Qwen2ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Qwen2VLImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Qwen2VLImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
         image_grid_thw = kwargs.pop("image_grid_thw", None)
@@ -1321,9 +1273,7 @@ class Qwen2VLForConditionalGeneration(
                 image_grid_thw=image_grid_thw,
             )
 
-    def _parse_and_validate_video_input(
-        self, **kwargs: object
-    ) -> Qwen2VLVideoInputs | None:
+    def _parse_and_validate_video_input(self, **kwargs: object) -> Qwen2VLVideoInputs | None:
         pixel_values_videos = kwargs.pop("pixel_values_videos", None)
         video_embeds = kwargs.pop("video_embeds", None)
         video_grid_thw = kwargs.pop("video_grid_thw", None)
@@ -1345,9 +1295,7 @@ class Qwen2VLForConditionalGeneration(
                 video_grid_thw=video_grid_thw,
             )
 
-    def _process_image_input(
-        self, image_input: Qwen2VLImageInputs
-    ) -> tuple[torch.Tensor, ...]:
+    def _process_image_input(self, image_input: Qwen2VLImageInputs) -> tuple[torch.Tensor, ...]:
         grid_thw = image_input["image_grid_thw"]
         assert grid_thw.ndim == 2
 
@@ -1368,9 +1316,7 @@ class Qwen2VLForConditionalGeneration(
         sizes = (grid_thw.prod(-1) // merge_size // merge_size).tolist()
         return image_embeds.split(sizes)
 
-    def _process_video_input(
-        self, video_input: Qwen2VLVideoInputs
-    ) -> tuple[torch.Tensor, ...]:
+    def _process_video_input(self, video_input: Qwen2VLVideoInputs) -> tuple[torch.Tensor, ...]:
         grid_thw = video_input["video_grid_thw"]
         assert grid_thw.ndim == 2
 
@@ -1399,15 +1345,9 @@ class Qwen2VLForConditionalGeneration(
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if (
-                input_key in ("pixel_values", "image_embeds")
-                and "images" not in modalities
-            ):
+            if input_key in ("pixel_values", "image_embeds") and "images" not in modalities:
                 modalities["images"] = self._parse_and_validate_image_input(**kwargs)
-            if (
-                input_key in ("pixel_values_videos", "video_embeds")
-                and "videos" not in modalities
-            ):
+            if input_key in ("pixel_values_videos", "video_embeds") and "videos" not in modalities:
                 modalities["videos"] = self._parse_and_validate_video_input(**kwargs)
 
         return modalities
@@ -1515,9 +1455,7 @@ class Qwen2VLForConditionalGeneration(
             for t, h, w in grid_thw
         ]
 
-    def select_encoder_cudagraph_items(
-        self, mm_kwargs: dict[str, Any], indices: list[int]
-    ) -> dict[str, Any]:
+    def select_encoder_cudagraph_items(self, mm_kwargs: dict[str, Any], indices: list[int]) -> dict[str, Any]:
         grid_thw = self._get_grid_thw_by_modality(mm_kwargs)
         pixel_values = self._get_pixel_values_by_modality(mm_kwargs)
 
@@ -1539,9 +1477,7 @@ class Qwen2VLForConditionalGeneration(
         for p in patches_per_item:
             cum_patches.append(cum_patches[-1] + p)
 
-        selected_pv = torch.cat(
-            [pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices]
-        )
+        selected_pv = torch.cat([pixel_values[cum_patches[i] : cum_patches[i + 1]] for i in indices])
         selected_grid = [grid_thw[i] for i in indices]
 
         if self.get_input_modality(mm_kwargs) == "image":
@@ -1574,9 +1510,7 @@ class Qwen2VLForConditionalGeneration(
 
         frames_per_item = max_frames_per_batch // max_batch_size
         if frames_per_item > 1:
-            tokens_per_frame = (
-                per_mm_item_output + frames_per_item - 1
-            ) // frames_per_item
+            tokens_per_frame = (per_mm_item_output + frames_per_item - 1) // frames_per_item
             grid_config = [
                 [
                     frames_per_item,
@@ -1587,8 +1521,7 @@ class Qwen2VLForConditionalGeneration(
             ]
         else:
             grid_config = [
-                [1, spatial_merge_size, per_mm_item_output * spatial_merge_size]
-                for _ in range(max_batch_size)
+                [1, spatial_merge_size, per_mm_item_output * spatial_merge_size] for _ in range(max_batch_size)
             ]
 
         # Create dummy pixel_values.
@@ -1597,12 +1530,8 @@ class Qwen2VLForConditionalGeneration(
         patch_size = patch_embed.patch_size
         temporal_patch_size = patch_embed.temporal_patch_size
         total_patches = sum(t * h * w for t, h, w in grid_config)
-        flattened_patch_size = (
-            in_channels * temporal_patch_size * patch_size * patch_size
-        )
-        dummy_pixel_values = torch.randn(
-            total_patches, flattened_patch_size, device=device, dtype=dtype
-        )
+        flattened_patch_size = in_channels * temporal_patch_size * patch_size * patch_size
+        dummy_pixel_values = torch.randn(total_patches, flattened_patch_size, device=device, dtype=dtype)
 
         # max_seqlen.item() gets baked into the CUDA graph at capture time.
         metadata = self.visual.prepare_encoder_metadata(

@@ -23,9 +23,7 @@ from aphrodite.scalar_type import scalar_types
 from aphrodite.utils.torch_utils import set_random_seed
 
 
-def mxint4_quantize(
-    x: torch.Tensor, sf_vec_size: int = 32
-) -> tuple[torch.Tensor, torch.Tensor]:
+def mxint4_quantize(x: torch.Tensor, sf_vec_size: int = 32) -> tuple[torch.Tensor, torch.Tensor]:
     """Quantize BF16 tensor to MXINT4 with block scaling (group_size=sf_vec_size).
 
     Returns:
@@ -39,9 +37,7 @@ def mxint4_quantize(
     amax = torch.where(x_max > -x_min, x_max, -x_min)
     scales = amax / 8.0
     x_scaled = x_reshaped * scales.reciprocal()
-    x_int8 = (
-        x_scaled.round().clamp(-8, 7).to(torch.int8).reshape(-1, sf_vec_size // 2, 2)
-    )
+    x_int8 = x_scaled.round().clamp(-8, 7).to(torch.int8).reshape(-1, sf_vec_size // 2, 2)
     x_int4 = (x_int8[..., 0] & 0x0F) | ((x_int8[..., 1] & 0x0F) << 4)
     return (
         x_int4.to(torch.uint8).reshape(*x.shape[:-1], x.shape[-1] // 2),
@@ -49,9 +45,7 @@ def mxint4_quantize(
     )
 
 
-def mxint4_quantize_moe_weights(
-    weights_bf16: torch.Tensor, group_size: int = 32
-) -> tuple[torch.Tensor, torch.Tensor]:
+def mxint4_quantize_moe_weights(weights_bf16: torch.Tensor, group_size: int = 32) -> tuple[torch.Tensor, torch.Tensor]:
     """Quantize MoE weights [e, n, k] to MxInt4 format.
 
     Args:
@@ -84,14 +78,10 @@ __all__ = [
 def test_trtllm_mxint4_activation_supports_aphrodite_gated_silu():
     assert TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.SILU)
     assert TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.SWIGLUOAI)
-    assert not TrtLlmMxint4ExpertsMonolithic._supports_activation(
-        MoEActivation.RELU2_NO_MUL
-    )
+    assert not TrtLlmMxint4ExpertsMonolithic._supports_activation(MoEActivation.RELU2_NO_MUL)
 
 
-def marlin_quantize_moe_weights(
-    weights_bf16: torch.Tensor, group_size: int = 32
-) -> tuple[torch.Tensor, torch.Tensor]:
+def marlin_quantize_moe_weights(weights_bf16: torch.Tensor, group_size: int = 32) -> tuple[torch.Tensor, torch.Tensor]:
     """Quantize MoE weights [e, n, k] to Marlin INT4 format.
 
     Args:
@@ -113,9 +103,7 @@ def marlin_quantize_moe_weights(
     for i in range(e):
         # Transpose for Marlin: [n, k] → [k, n]
         w_t = weights_bf16[i].T.contiguous()
-        _, w_q, w_s, _, _, _ = marlin_quantize(
-            w_t, scalar_types.uint4b8, group_size, act_order=False
-        )
+        _, w_q, w_s, _, _, _ = marlin_quantize(w_t, scalar_types.uint4b8, group_size, act_order=False)
         weight_list.append(w_q)
         scale_list.append(w_s)
 
@@ -126,9 +114,7 @@ def marlin_quantize_moe_weights(
     return weights_marlin, scales_marlin
 
 
-TRTLLM_GEN_AVAILABLE = (
-    current_platform.is_cuda() and current_platform.is_device_capability_family(100)
-)
+TRTLLM_GEN_AVAILABLE = current_platform.is_cuda() and current_platform.is_device_capability_family(100)
 
 
 @pytest.mark.skipif(not TRTLLM_GEN_AVAILABLE, reason="Skip for non SM100")

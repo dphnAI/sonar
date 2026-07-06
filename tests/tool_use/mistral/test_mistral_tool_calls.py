@@ -24,9 +24,7 @@ from .utils import ServerConfig
 def _requires_tool_parser(server_config: ServerConfig) -> None:
     r"""Skip test if server was not started with --tool-call-parser."""
     if "--tool-call-parser" not in server_config.get("arguments", []):
-        pytest.skip(
-            f"Skipping: {server_config['model']} not configured with --tool-call-parser"
-        )
+        pytest.skip(f"Skipping: {server_config['model']} not configured with --tool-call-parser")
 
 
 def _is_pre_v11(server_config: ServerConfig) -> bool:
@@ -168,18 +166,14 @@ async def _collect_streamed_parallel_tool_calls(
                 if tool_call.function.name:
                     result.function_names.append(tool_call.function.name)
                 if tool_call.function.arguments:
-                    result.function_args_strs[tool_call.index] += (
-                        tool_call.function.arguments
-                    )
+                    result.function_args_strs[tool_call.index] += tool_call.function.arguments
 
     return result
 
 
 # test: a tool_choice with mistral-tokenizer results in an ID of length 9
 @pytest.mark.asyncio
-async def test_tool_call_with_tool_choice(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-) -> None:
+async def test_tool_call_with_tool_choice(client: openai.AsyncOpenAI, server_config: ServerConfig) -> None:
     _requires_tool_parser(server_config)
 
     models = await client.models.list()
@@ -279,9 +273,7 @@ async def test_tool_call_auto_or_required(
 
 
 @pytest.mark.asyncio
-async def test_tool_call_none_with_tools(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-) -> None:
+async def test_tool_call_none_with_tools(client: openai.AsyncOpenAI, server_config: ServerConfig) -> None:
     _requires_tool_parser(server_config)
 
     models = await client.models.list()
@@ -338,9 +330,7 @@ async def test_tool_call_none_with_tools(
 
 
 @pytest.mark.asyncio
-async def test_chat_without_tools(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-) -> None:
+async def test_chat_without_tools(client: openai.AsyncOpenAI, server_config: ServerConfig) -> None:
     models = await client.models.list()
     model_name: str = models.data[0].id
 
@@ -372,9 +362,7 @@ async def test_chat_without_tools(
         stream=True,
     )
 
-    result = await _collect_streamed_content(
-        stream, expected_finish_reason=choice.finish_reason
-    )
+    result = await _collect_streamed_content(stream, expected_finish_reason=choice.finish_reason)
 
     assert result.role_sent
     assert result.finish_reason_count == 1
@@ -383,9 +371,7 @@ async def test_chat_without_tools(
 
 
 @pytest.mark.asyncio
-async def test_tool_call_with_results(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-) -> None:
+async def test_tool_call_with_results(client: openai.AsyncOpenAI, server_config: ServerConfig) -> None:
     _requires_tool_parser(server_config)
 
     models = await client.models.list()
@@ -421,9 +407,7 @@ async def test_tool_call_with_results(
         stream=True,
     )
 
-    result = await _collect_streamed_content(
-        stream, expected_finish_reason=choice.finish_reason
-    )
+    result = await _collect_streamed_content(stream, expected_finish_reason=choice.finish_reason)
 
     assert result.role_sent
     assert result.finish_reason_count == 1
@@ -434,15 +418,11 @@ async def test_tool_call_with_results(
 def _requires_parallel(server_config: ServerConfig) -> None:
     r"""Skip test if the model does not support parallel tool calls."""
     if not server_config.get("supports_parallel"):
-        pytest.skip(
-            f"Skipping: {server_config['model']} does not support parallel tool calls"
-        )
+        pytest.skip(f"Skipping: {server_config['model']} does not support parallel tool calls")
 
 
 @pytest.mark.asyncio
-async def test_tool_call_parallel(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-) -> None:
+async def test_tool_call_parallel(client: openai.AsyncOpenAI, server_config: ServerConfig) -> None:
     _requires_tool_parser(server_config)
     _requires_parallel(server_config)
 
@@ -451,9 +431,7 @@ async def test_tool_call_parallel(
 
     # --- non-streaming ---
     chat_completion = await client.chat.completions.create(
-        messages=ensure_system_prompt(
-            MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config
-        ),
+        messages=ensure_system_prompt(MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config),
         temperature=0,
         max_completion_tokens=200,
         model=model_name,
@@ -479,9 +457,7 @@ async def test_tool_call_parallel(
 
     # --- streaming ---
     stream = await client.chat.completions.create(
-        messages=ensure_system_prompt(
-            MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config
-        ),
+        messages=ensure_system_prompt(MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config),
         temperature=0,
         max_completion_tokens=200,
         model=model_name,

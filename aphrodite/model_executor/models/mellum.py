@@ -130,9 +130,7 @@ class MellumDecoderLayer(Qwen3MoeDecoderLayer):
 
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
-        dual_chunk_attention_config = getattr(
-            config, "dual_chunk_attention_config", None
-        )
+        dual_chunk_attention_config = getattr(config, "dual_chunk_attention_config", None)
 
         layer_idx = extract_layer_index(prefix)
         layer_type = config.layer_types[layer_idx]
@@ -159,9 +157,7 @@ class MellumDecoderLayer(Qwen3MoeDecoderLayer):
         )
 
         if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = Qwen3MoeSparseMoeBlock(
-                aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp"
-            )
+            self.mlp = Qwen3MoeSparseMoeBlock(aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp")
         else:
             self.mlp = Qwen3MoeMLP(
                 hidden_size=config.hidden_size,
@@ -172,9 +168,7 @@ class MellumDecoderLayer(Qwen3MoeDecoderLayer):
             )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 @support_torch_compile
@@ -211,9 +205,7 @@ class MellumForCausalLM(Qwen3MoeForCausalLM):
         self.quant_config = quant_config
         if "dense" in getattr(config, "mlp_layer_types", []):
             self.packed_modules_mapping["gate_up_proj"] = ["gate_proj", "up_proj"]
-        self.model = MellumModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = MellumModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             config.vocab_size,
             config.hidden_size,
@@ -223,9 +215,7 @@ class MellumForCausalLM(Qwen3MoeForCausalLM):
         if self.config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
         self.moe_layers = []
         example_layer = None

@@ -117,12 +117,8 @@ def test_pynvvideocodec_backend_accounts_raw_decoded_frames(
 
     pool = RecordingPool()
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", FakeNvc)
-    monkeypatch.setattr(
-        "aphrodite.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool
-    )
-    monkeypatch.setattr(
-        PyNvVideoCodecVideoBackend, "_decode_to_pinned_host", classmethod(fake_decode)
-    )
+    monkeypatch.setattr("aphrodite.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool)
+    monkeypatch.setattr(PyNvVideoCodecVideoBackend, "_decode_to_pinned_host", classmethod(fake_decode))
 
     loader = VIDEO_LOADER_REGISTRY.load(PYNVVIDEOCODEC_VIDEO_BACKEND)
     frames, metadata = loader.load_bytes(b"fake video", num_frames=4)
@@ -177,12 +173,8 @@ def test_pynvvideocodec_codec_uses_dynamic_sampling_strategy(
 
     pool = RecordingPool()
     monkeypatch.setitem(sys.modules, "PyNvVideoCodec", FakeNvc)
-    monkeypatch.setattr(
-        "aphrodite.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool
-    )
-    monkeypatch.setattr(
-        DynamicVideoBackend, "_decode_to_pinned_host", classmethod(fake_decode)
-    )
+    monkeypatch.setattr("aphrodite.multimodal.gpu_ipc_memory.get_mm_gpu_ipc_pool", lambda: pool)
+    monkeypatch.setattr(DynamicVideoBackend, "_decode_to_pinned_host", classmethod(fake_decode))
 
     loader = VIDEO_LOADER_REGISTRY.load("opencv_dynamic")
     frames, metadata = loader.load_bytes(
@@ -368,15 +360,13 @@ def test_video_processor_from_model_repo(
     """
     video_processor = get_video_processor_cls_name_from_config(model_repo)
     assert video_processor is not None, (
-        f"Model repo {model_repo!r} did not contain a video_processor_type "
-        f"in its preprocessor config"
+        f"Model repo {model_repo!r} did not contain a video_processor_type in its preprocessor config"
     )
 
     backend = get_video_loader_backend_for_processor(video_processor)
     loader = VIDEO_LOADER_REGISTRY.load(backend)
     assert isinstance(loader, expected_loader_cls), (
-        f"{model_repo!r}: backend={backend!r} loaded "
-        f"{type(loader)}, expected {expected_loader_cls}"
+        f"{model_repo!r}: backend={backend!r} loaded {type(loader)}, expected {expected_loader_cls}"
     )
 
     # --- Alignment check with HF VideoProcessor.sample_frames ---
@@ -432,9 +422,7 @@ def test_video_backend_handles_broken_frames(monkeypatch: pytest.MonkeyPatch):
             video_data = f.read()
 
         loader = VIDEO_LOADER_REGISTRY.load("opencv")
-        frames, metadata = loader.load_bytes(
-            video_data, num_frames=-1, backend="opencv"
-        )
+        frames, metadata = loader.load_bytes(video_data, num_frames=-1, backend="opencv")
 
         # Verify metadata consistency:
         # frames_indices must match actual loaded frames
@@ -589,9 +577,9 @@ def test_video_recovery_with_corrupted_file(monkeypatch: pytest.MonkeyPatch):
         assert frames_no_recovery.shape[0] == len(meta_no_recovery["frames_indices"]), (
             "Frame count must match indices without recovery"
         )
-        assert frames_with_recovery.shape[0] == len(
-            meta_with_recovery["frames_indices"]
-        ), "Frame count must match indices with recovery"
+        assert frames_with_recovery.shape[0] == len(meta_with_recovery["frames_indices"]), (
+            "Frame count must match indices with recovery"
+        )
 
         # KEY ASSERTION: Recovery should produce MORE frames than without recovery
         # Without recovery: 7 frames (frame 17 skipped)
@@ -604,8 +592,7 @@ def test_video_recovery_with_corrupted_file(monkeypatch: pytest.MonkeyPatch):
 
         # Verify we got all 8 requested frames with recovery
         assert frames_with_recovery.shape[0] == 8, (
-            f"With recovery, should load all 8 requested frames. "
-            f"Got {frames_with_recovery.shape[0]}"
+            f"With recovery, should load all 8 requested frames. Got {frames_with_recovery.shape[0]}"
         )
 
         # Verify the video metadata is correct
@@ -647,12 +634,8 @@ def test_video_recovery_dynamic_backend(monkeypatch: pytest.MonkeyPatch):
         )
 
         # Verify basic properties
-        assert frames_no_recovery.shape[0] > 0, (
-            "Should load some frames without recovery"
-        )
-        assert frames_with_recovery.shape[0] > 0, (
-            "Should load some frames with recovery"
-        )
+        assert frames_no_recovery.shape[0] > 0, "Should load some frames without recovery"
+        assert frames_with_recovery.shape[0] > 0, "Should load some frames with recovery"
         assert "do_sample_frames" in meta_with
         assert meta_with["do_sample_frames"] is False  # Dynamic backend always False
         assert frames_with_recovery.shape[0] == len(meta_with["frames_indices"])
@@ -668,9 +651,7 @@ def test_video_recovery_dynamic_backend(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def dummy_video_path(tmp_path):
-    image_path = get_aphrodite_public_assets(
-        filename="stop_sign.jpg", s3_prefix="vision_model_images"
-    )
+    image_path = get_aphrodite_public_assets(filename="stop_sign.jpg", s3_prefix="vision_model_images")
 
     video_path = tmp_path / "test_RGB_video.mp4"
     create_video_from_image(str(image_path), str(video_path), num_frames=1800, fps=30)
@@ -703,9 +684,7 @@ def test_pyav_backend_loads_frames(dummy_video_path, monkeypatch: pytest.MonkeyP
         assert "duration" in metadata
 
 
-def test_pyav_dynamic_backend_loads_frames(
-    dummy_video_path, monkeypatch: pytest.MonkeyPatch
-):
+def test_pyav_dynamic_backend_loads_frames(dummy_video_path, monkeypatch: pytest.MonkeyPatch):
     """Test that the pyav codec with dynamic sampling can load frames."""
     with monkeypatch.context() as m:
         m.setenv("APHRODITE_VIDEO_LOADER_BACKEND", "opencv_dynamic")
@@ -714,9 +693,7 @@ def test_pyav_dynamic_backend_loads_frames(
             video_data = f.read()
 
         loader = VIDEO_LOADER_REGISTRY.load("opencv_dynamic")
-        frames, metadata = loader.load_bytes(
-            video_data, fps=2, max_duration=10, backend="pyav"
-        )
+        frames, metadata = loader.load_bytes(video_data, fps=2, max_duration=10, backend="pyav")
 
         assert frames.ndim == 4
         assert frames.shape[3] == 3  # RGB
@@ -738,14 +715,10 @@ def test_pyav_backend_returns_target_frames_not_keyframes():
     num_sampled = 4
     height, width = 64, 64
 
-    video_bytes = create_long_gop_video(
-        num_frames=num_frames, width=width, height=height
-    )
+    video_bytes = create_long_gop_video(num_frames=num_frames, width=width, height=height)
 
     loader = VIDEO_LOADER_REGISTRY.load("opencv")
-    frames, metadata = loader.load_bytes(
-        video_bytes, num_frames=num_sampled, backend="pyav"
-    )
+    frames, metadata = loader.load_bytes(video_bytes, num_frames=num_sampled, backend="pyav")
     assert frames.shape == (num_sampled, height, width, 3)
 
     requested = list(metadata["frames_indices"])
@@ -763,8 +736,7 @@ def test_pyav_backend_returns_target_frames_not_keyframes():
 
     for marker, want_idx in zip(actual, requested):
         assert abs(marker - want_idx) <= 10, (
-            f"Frame mismatch: requested index {want_idx}, "
-            f"got marker {marker} (tolerance ±10)"
+            f"Frame mismatch: requested index {want_idx}, got marker {marker} (tolerance ±10)"
         )
 
 
@@ -798,9 +770,7 @@ def test_pyav_backend_returns_target_frames_not_keyframes():
             60,
             id="opencv_dynamic-exceeds_max_duration",
         ),
-        pytest.param(
-            "openpangu", {"num_frames": 32, "fps": -1}, 32, id="openpangu-num_frames"
-        ),
+        pytest.param("openpangu", {"num_frames": 32, "fps": -1}, 32, id="openpangu-num_frames"),
         pytest.param(
             "molmo2",
             {"num_frames": 32, "frame_sample_mode": "uniform_last_frame"},
@@ -930,9 +900,7 @@ def test_glm46v_dynamic_fps_thresholds(
     )
     target = VideoTargetMetadata(num_frames=-1, fps=-1, max_duration=-1)
 
-    indices = GLM46VVideoBackend.compute_frames_index_to_sample(
-        source, target, temporal_patch_size=temporal_patch_size
-    )
+    indices = GLM46VVideoBackend.compute_frames_index_to_sample(source, target, temporal_patch_size=temporal_patch_size)
 
     # Frame count should match expected (may be +1 from even padding)
     assert len(indices) in (expected_extract_t, expected_extract_t + 1), (
@@ -943,9 +911,7 @@ def test_glm46v_dynamic_fps_thresholds(
     assert len(indices) % 2 == 0, f"Frame count must be even, got {len(indices)}"
 
     # All indices must be valid
-    assert all(0 <= idx < total_frames for idx in indices), (
-        f"Indices out of range [0, {total_frames})"
-    )
+    assert all(0 <= idx < total_frames for idx in indices), f"Indices out of range [0, {total_frames})"
 
     # Indices must be sorted and deduplicated
     assert indices == sorted(set(indices)), "Indices must be sorted and deduplicated"
@@ -957,17 +923,13 @@ def test_glm46v_even_frame_count_enforcement():
     # 5-second video at 30fps → 150 frames
     # extract_t = 5 * 3.0 * 2 = 30 (even, no padding needed)
     source_even = VideoSourceMetadata(total_frames_num=150, original_fps=30, duration=5)
-    indices_even = GLM46VVideoBackend.compute_frames_index_to_sample(
-        source_even, target
-    )
+    indices_even = GLM46VVideoBackend.compute_frames_index_to_sample(source_even, target)
     assert len(indices_even) % 2 == 0
 
     # 3-second video at 30fps → 90 frames
     # extract_t = 3 * 3.0 * 2 = 18 (even, no padding needed)
     source_even2 = VideoSourceMetadata(total_frames_num=90, original_fps=30, duration=3)
-    indices_even2 = GLM46VVideoBackend.compute_frames_index_to_sample(
-        source_even2, target
-    )
+    indices_even2 = GLM46VVideoBackend.compute_frames_index_to_sample(source_even2, target)
     assert len(indices_even2) % 2 == 0
 
 
@@ -976,12 +938,8 @@ def test_glm46v_duration_estimation_from_fps():
     target = VideoTargetMetadata(num_frames=-1, fps=-1, max_duration=-1)
     # duration=0 → estimated from total_frames / fps
     # (89 / 30) + 1 ≈ 4s → target_fps=3.0, extract_t = 4 * 3.0 * 2 = 24
-    source_no_duration = VideoSourceMetadata(
-        total_frames_num=90, original_fps=30, duration=0
-    )
-    indices = GLM46VVideoBackend.compute_frames_index_to_sample(
-        source_no_duration, target
-    )
+    source_no_duration = VideoSourceMetadata(total_frames_num=90, original_fps=30, duration=0)
+    indices = GLM46VVideoBackend.compute_frames_index_to_sample(source_no_duration, target)
 
     assert len(indices) > 0
     assert len(indices) % 2 == 0

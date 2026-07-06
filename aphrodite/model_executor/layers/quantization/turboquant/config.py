@@ -219,10 +219,7 @@ class TurboQuantConfig:
         """
         if cache_dtype not in TQ_PRESETS:
             valid = ", ".join(TQ_PRESETS.keys())
-            raise ValueError(
-                f"Unknown TurboQuant cache dtype: {cache_dtype!r}. "
-                f"Valid presets: {valid}"
-            )
+            raise ValueError(f"Unknown TurboQuant cache dtype: {cache_dtype!r}. Valid presets: {valid}")
         preset = TQ_PRESETS[cache_dtype]
         return TurboQuantConfig(
             head_dim=head_dim,
@@ -243,15 +240,11 @@ def _get_full_attention_layer_indices(model_config: ModelConfig) -> list[int]:
 
     layer_types = getattr(text_cfg, "layer_types", None)
     if layer_types is not None:
-        return [
-            i for i, t in enumerate(layer_types) if t in ("full_attention", "attention")
-        ]
+        return [i for i, t in enumerate(layer_types) if t in ("full_attention", "attention")]
 
     layers_block_type = getattr(text_cfg, "layers_block_type", None)
     if layers_block_type is not None:
-        return [
-            i for i, t in enumerate(layers_block_type) if t in ("attention", "hybrid")
-        ]
+        return [i for i, t in enumerate(layers_block_type) if t in ("attention", "hybrid")]
 
     attn_type_list = getattr(hf_cfg, "attn_type_list", None)
     if attn_type_list is not None:

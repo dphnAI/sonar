@@ -17,9 +17,7 @@ from aphrodite.utils.torch_utils import direct_register_custom_op
 _SHRINK_LORA_SCALE_PTR_DICT: dict[tuple[int, ...], tuple] = {}
 
 
-def _get_shrink_lora_scale_ptr(
-    lora_scale_weights: list[torch.Tensor], device: torch.device
-):
+def _get_shrink_lora_scale_ptr(lora_scale_weights: list[torch.Tensor], device: torch.device):
     """
     `_SHRINK_LORA_SCALE_PTR_DICT` collects the required information during
     `profile_run`. After this, it remains constant and subsequent usage is
@@ -52,27 +50,19 @@ def _get_shrink_lora_scale_ptr(
         assert 1 <= lora_scale_weight.ndim <= 3
         assert lora_scale_weight.is_contiguous()
         tensor_ptrs.append(lora_scale_weight.data_ptr())
-        scale_l_strides.append(
-            lora_scale_weight.stride(0) if lora_scale_weight.ndim > 0 else 0
-        )
+        scale_l_strides.append(lora_scale_weight.stride(0) if lora_scale_weight.ndim > 0 else 0)
         scale_n_strides.append(
             lora_scale_weight.stride(-2)
             if lora_scale_weight.ndim > 2
             else (lora_scale_weight.stride(-1) if lora_scale_weight.ndim > 1 else 1)
         )
-        scale_k_strides.append(
-            lora_scale_weight.stride(-1) if lora_scale_weight.ndim > 2 else 0
-        )
+        scale_k_strides.append(lora_scale_weight.stride(-1) if lora_scale_weight.ndim > 2 else 0)
     if len(lora_scale_weights) > 1:
         scale_ptr_tensor = torch.tensor(tensor_ptrs, device=device, dtype=torch.uint64)
     else:
         scale_ptr_tensor = lora_scale_weights[0]
 
-    if (
-        len(set(scale_l_strides)) > 1
-        or len(set(scale_n_strides)) > 1
-        or len(set(scale_k_strides)) > 1
-    ):
+    if len(set(scale_l_strides)) > 1 or len(set(scale_n_strides)) > 1 or len(set(scale_k_strides)) > 1:
         raise ValueError("All LoRA scale weights must have the same stride.")
 
     _SHRINK_LORA_SCALE_PTR_DICT[key] = (
@@ -163,9 +153,7 @@ def _lora_shrink_kernel_fp8(
 
     # Identify all rows that this CTA should process.
     lora_m_indices_start = tl.load(lora_token_start_loc + lora_idx)
-    cta_lora_seq_indices = (
-        token_indices_sorted_by_lora_ids + lora_m_indices_start + cta_m_offset
-    )
+    cta_lora_seq_indices = token_indices_sorted_by_lora_ids + lora_m_indices_start + cta_m_offset
 
     # Load all relevant row indices.
     offset_m = tl.arange(0, BLOCK_M) % cta_m_len
@@ -222,9 +210,7 @@ def _lora_shrink_kernel_fp8(
 @torch.inference_mode()
 def _lora_shrink_fp8(
     inputs: torch.Tensor,  # shape [num_tokens, hidden_size] - FP8 or FP16/BF16
-    lora_a_weights: list[
-        torch.Tensor
-    ],  # shape [num_loras, lora_rank, hidden_size] - FP8 or FP16/BF16
+    lora_a_weights: list[torch.Tensor],  # shape [num_loras, lora_rank, hidden_size] - FP8 or FP16/BF16
     output_tensor: torch.Tensor,  # shape [num_slices, num_tokens, lora_rank]
     token_lora_mapping: torch.Tensor,  # shape [num_tokens]
     token_indices_sorted_by_lora_ids: torch.Tensor,  # shape [num_tokens]
@@ -278,8 +264,8 @@ def _lora_shrink_fp8(
     output_tensor.zero_()
 
     # Get LoRA weight pointers
-    (lora_ptr_tensor, lora_strides_d0, lora_strides_d1, lora_strides_d2) = (
-        _get_lora_a_ptr(lora_a_weights, inputs.device)
+    (lora_ptr_tensor, lora_strides_d0, lora_strides_d1, lora_strides_d2) = _get_lora_a_ptr(
+        lora_a_weights, inputs.device
     )
 
     # Get scale pointers if using FP8
@@ -287,12 +273,10 @@ def _lora_shrink_fp8(
         assert a_scale is not None, "a_scale required for FP8 w8a8"
         assert b_scale is not None, "b_scale required for FP8"
 
-        b_scale_ptr_tensor, b_scale_l_stride, b_scale_n_stride, b_scale_k_stride = (
-            _get_shrink_lora_scale_ptr(b_scale, inputs.device)
+        b_scale_ptr_tensor, b_scale_l_stride, b_scale_n_stride, b_scale_k_stride = _get_shrink_lora_scale_ptr(
+            b_scale, inputs.device
         )
-        a_scale_ptr = (
-            a_scale if a_scale is not None else torch.tensor(1.0, device=inputs.device)
-        )
+        a_scale_ptr = a_scale if a_scale is not None else torch.tensor(1.0, device=inputs.device)
     else:
         b_scale_ptr_tensor = torch.tensor(0, device=inputs.device)
         b_scale_l_stride = 0

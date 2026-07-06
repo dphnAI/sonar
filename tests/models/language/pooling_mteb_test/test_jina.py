@@ -4,6 +4,7 @@ from functools import partial
 
 import pytest
 
+from aphrodite import PoolingParams
 from tests.models.language.pooling.embed_utils import (
     check_embeddings_close,
     correctness_test_embed_models,
@@ -13,7 +14,6 @@ from tests.models.utils import (
     EmbedModelInfo,
     RerankModelInfo,
 )
-from aphrodite import PoolingParams
 
 from .mteb_embed_utils import mteb_test_embed_models
 from .mteb_score_utils import mteb_test_rerank_models
@@ -71,9 +71,7 @@ def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelIn
 
 
 @pytest.mark.parametrize("model_info", EMBEDDING_MODELS)
-def test_embed_models_correctness(
-    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
-) -> None:
+def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
     task = "retrieval" if "v5" in model_info.name else "text-matching"
 
     def hf_model_callback(model):
@@ -125,21 +123,15 @@ def test_matryoshka(
         hf_outputs = hf_model.encode(example_prompts, task=task)
         hf_outputs = matryoshka_fy(hf_outputs, dimensions)
 
-    with aphrodite_runner(
-        model_info.name, runner="pooling", dtype=dtype, max_model_len=None
-    ) as aphrodite_model:
+    with aphrodite_runner(model_info.name, runner="pooling", dtype=dtype, max_model_len=None) as aphrodite_model:
         assert aphrodite_model.llm.llm_engine.model_config.is_matryoshka
 
-        matryoshka_dimensions = (
-            aphrodite_model.llm.llm_engine.model_config.matryoshka_dimensions
-        )
+        matryoshka_dimensions = aphrodite_model.llm.llm_engine.model_config.matryoshka_dimensions
         assert matryoshka_dimensions is not None
 
         if dimensions not in matryoshka_dimensions:
             with pytest.raises(ValueError):
-                aphrodite_model.embed(
-                    example_prompts, pooling_params=PoolingParams(dimensions=dimensions)
-                )
+                aphrodite_model.embed(example_prompts, pooling_params=PoolingParams(dimensions=dimensions))
         else:
             aphrodite_outputs = aphrodite_model.embed(
                 example_prompts, pooling_params=PoolingParams(dimensions=dimensions)

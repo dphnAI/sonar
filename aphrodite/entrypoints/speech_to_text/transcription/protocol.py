@@ -96,9 +96,7 @@ class TranscriptionRequest(OpenAIBaseModel):
 
     ## TODO (varun) : Support if set to 0, certain thresholds are met !!
 
-    timestamp_granularities: list[Literal["word", "segment"]] = Field(
-        alias="timestamp_granularities[]", default=[]
-    )
+    timestamp_granularities: list[Literal["word", "segment"]] = Field(alias="timestamp_granularities[]", default=[])
     """The timestamp granularities to populate for this transcription.
 
     `response_format` must be set `verbose_json` to use timestamp granularities.
@@ -118,10 +116,7 @@ class TranscriptionRequest(OpenAIBaseModel):
 
     aphrodite_xargs: dict[str, str | int | float | bool] | None = Field(
         default=None,
-        description=(
-            "Additional request parameters with string or "
-            "numeric values, used by custom extensions."
-        ),
+        description=("Additional request parameters with string or numeric values, used by custom extensions."),
     )
     # --8<-- [end:transcription-extra-params]
 
@@ -243,21 +238,13 @@ class TranscriptionRequest(OpenAIBaseModel):
 
         # Default parameters
         if (temperature := self.temperature) is None:
-            temperature = default_sampling_params.get(
-                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
-            )
+            temperature = default_sampling_params.get("temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"])
         if (top_p := self.top_p) is None:
-            top_p = default_sampling_params.get(
-                "top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"]
-            )
+            top_p = default_sampling_params.get("top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"])
         if (top_k := self.top_k) is None:
-            top_k = default_sampling_params.get(
-                "top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"]
-            )
+            top_k = default_sampling_params.get("top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"])
         if (min_p := self.min_p) is None:
-            min_p = default_sampling_params.get(
-                "min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"]
-            )
+            min_p = default_sampling_params.get("min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"])
 
         if (repetition_penalty := self.repetition_penalty) is None:
             repetition_penalty = default_sampling_params.get(
@@ -275,9 +262,7 @@ class TranscriptionRequest(OpenAIBaseModel):
             frequency_penalty=self.frequency_penalty,
             repetition_penalty=repetition_penalty,
             presence_penalty=self.presence_penalty,
-            output_kind=RequestOutputKind.DELTA
-            if self.stream
-            else RequestOutputKind.FINAL_ONLY,
+            output_kind=RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY,
             extra_args=self.aphrodite_xargs,
             skip_clone=True,  # Created fresh per request, safe to skip clone
         )
@@ -400,6 +385,4 @@ class TranscriptionResponseVerbose(OpenAIBaseModel):
     """Extracted words and their corresponding timestamps."""
 
 
-TranscriptionResponseVariant: TypeAlias = (
-    TranscriptionResponse | TranscriptionResponseVerbose
-)
+TranscriptionResponseVariant: TypeAlias = TranscriptionResponse | TranscriptionResponseVerbose

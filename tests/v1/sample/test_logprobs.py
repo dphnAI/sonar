@@ -10,6 +10,11 @@ from typing import get_args
 import pytest
 import torch
 
+from aphrodite import SamplingParams
+from aphrodite.config.model import LogprobsMode
+from aphrodite.distributed import cleanup_dist_env_and_memory
+from aphrodite.exceptions import APHRODITEValidationError
+from aphrodite.platforms import current_platform
 from tests.utils import large_gpu_mark
 from tests.v1.sample.utils import (
     BatchLogprobsComposition,
@@ -18,13 +23,8 @@ from tests.v1.sample.utils import (
     compute_correct_cumulative_logprob,
     get_test_batch,
 )
-from aphrodite import SamplingParams
-from aphrodite.config.model import LogprobsMode
-from aphrodite.distributed import cleanup_dist_env_and_memory
-from aphrodite.exceptions import APHRODITEValidationError
-from aphrodite.platforms import current_platform
 
-from ...conftest import HfRunner, AphroditeRunner
+from ...conftest import AphroditeRunner, HfRunner
 
 MODEL = "meta-llama/Llama-3.2-1B-Instruct"
 DTYPE = "half"
@@ -129,9 +129,7 @@ def _repeat_logprob_config(
     """
     num_test_prompts = len(test_prompts)
     # Make sure there is a logprobs configuration for each test prompt
-    logprob_prompt_logprob_list = list(
-        itertools.islice(itertools.cycle(logprob_prompt_logprob_list), num_test_prompts)
-    )
+    logprob_prompt_logprob_list = list(itertools.islice(itertools.cycle(logprob_prompt_logprob_list), num_test_prompts))
     # Now the number of prompts should match the number of sample params combos
     assert num_test_prompts == len(logprob_prompt_logprob_list)
     return logprob_prompt_logprob_list
@@ -148,9 +146,7 @@ def _run_and_validate(
     max_tokens: int,
     do_apc: bool,
 ) -> None:
-    aphrodite_results = aphrodite_model.llm.generate(
-        test_prompts, sampling_params=aphrodite_sampling_params
-    )
+    aphrodite_results = aphrodite_model.llm.generate(test_prompts, sampling_params=aphrodite_sampling_params)
 
     for aphrodite_result, hf_logprob, hf_output, logprob_prompt_logprob in zip(
         aphrodite_results, hf_logprobs, hf_outputs, logprob_prompt_logprob_list
@@ -161,16 +157,10 @@ def _run_and_validate(
         # Test whether sampled token output is consistent between Aphrodite and HF
         # Aphrodite prompt+completion should match HF output
         if temperature == 0.0:
-            assert (
-                aphrodite_result.prompt_token_ids + aphrodite_result.outputs[0].token_ids
-                == hf_output[0]
-            )
+            assert aphrodite_result.prompt_token_ids + aphrodite_result.outputs[0].token_ids == hf_output[0]
         else:
             # Sampled tokens won't match if not greedy
-            assert (
-                aphrodite_result.prompt_token_ids
-                == hf_output[0][: len(aphrodite_result.prompt_token_ids)]
-            )
+            assert aphrodite_result.prompt_token_ids == hf_output[0][: len(aphrodite_result.prompt_token_ids)]
 
         # Validate sample logprobs
         if num_top_logprobs is not None:
@@ -179,9 +169,7 @@ def _run_and_validate(
             # correct
             assert aphrodite_result.outputs[0].logprobs is not None
             assert len(aphrodite_result.outputs[0].logprobs) == max_tokens
-            for logprobs, token_id in zip(
-                aphrodite_result.outputs[0].logprobs, aphrodite_result.outputs[0].token_ids
-            ):
+            for logprobs, token_id in zip(aphrodite_result.outputs[0].logprobs, aphrodite_result.outputs[0].token_ids):
                 assert logprobs is not None
 
                 # Confirm that the output token appears among the logprobs
@@ -204,13 +192,9 @@ def _run_and_validate(
             output_string_from_most_likely_tokens_lst: list[str] = []
             for top_logprobs in aphrodite_result.outputs[0].logprobs:
                 top_logprob = next(iter(top_logprobs.values()))
-                output_string_from_most_likely_tokens_lst.append(
-                    top_logprob.decoded_token
-                )
+                output_string_from_most_likely_tokens_lst.append(top_logprob.decoded_token)
 
-            output_string_from_most_likely_tokens = "".join(
-                output_string_from_most_likely_tokens_lst
-            )
+            output_string_from_most_likely_tokens = "".join(output_string_from_most_likely_tokens_lst)
             assert_incr_detok_str_matches_non_incr_detok_str(
                 output_text,
                 output_string_from_most_likely_tokens,
@@ -232,8 +216,7 @@ def _run_and_validate(
                             rtol=1e-2,
                         )
                     assert isinstance(sample_logprob.decoded_token, str), (
-                        "The token should be decoded by the time it is"
-                        " returned to the user."
+                        "The token should be decoded by the time it is returned to the user."
                     )
 
             # At this point we know the sample logprobs are correct for this
@@ -266,9 +249,7 @@ def _run_and_validate(
 
                 # Confirm that the prompt token appears among the logprobs
                 assert prompt_token_id in prompt_logprobs
-                token_in_topk = (
-                    prompt_logprobs[prompt_token_id].rank <= num_top_prompt_logprobs
-                )
+                token_in_topk = prompt_logprobs[prompt_token_id].rank <= num_top_prompt_logprobs
 
                 # If the prompt token is not included in the top K
                 # logprob, it can return 1 more data
@@ -280,9 +261,7 @@ def _run_and_validate(
                 if num_top_prompt_logprobs > 0:
                     # We should have an entry for each of the topk ranks
                     all_ranks = {lp.rank for lp in prompt_logprobs.values()}
-                    assert all(
-                        r in all_ranks for r in range(1, num_top_prompt_logprobs + 1)
-                    )
+                    assert all(r in all_ranks for r in range(1, num_top_prompt_logprobs + 1))
 
             # Compare prompt logprobs to HF
             # The first prompt logprob is always None, so we compare it from
@@ -300,9 +279,7 @@ def _run_and_validate(
             assert aphrodite_result.prompt_logprobs is None
 
 
-@pytest.mark.parametrize(
-    "batch_logprobs_composition", [NONE, SAMPLE, PROMPT, SAMPLE_PROMPT]
-)
+@pytest.mark.parametrize("batch_logprobs_composition", [NONE, SAMPLE, PROMPT, SAMPLE_PROMPT])
 @pytest.mark.parametrize("temperature", [0.0, 2.0])
 def test_get_logprobs_and_prompt_logprobs(
     hf_model,
@@ -359,9 +336,7 @@ def test_get_logprobs_and_prompt_logprobs(
     logprob_prompt_logprob_list = get_test_batch(batch_logprobs_composition)
 
     # Ensure that each test prompt has a logprob config for testing
-    logprob_prompt_logprob_list = _repeat_logprob_config(
-        test_prompts, logprob_prompt_logprob_list
-    )
+    logprob_prompt_logprob_list = _repeat_logprob_config(test_prompts, logprob_prompt_logprob_list)
     # Generate SamplingParams
     aphrodite_sampling_params = [
         SamplingParams(
@@ -469,9 +444,7 @@ def test_zero_logprobs(aphrodite_model, example_prompts):
     sampling_params_logprobs_zero = SamplingParams(
         max_tokens=max_tokens, logprobs=0, prompt_logprobs=0, temperature=0.0
     )
-    results_logprobs_zero = aphrodite_model.llm.generate(
-        example_prompts, sampling_params=sampling_params_logprobs_zero
-    )
+    results_logprobs_zero = aphrodite_model.llm.generate(example_prompts, sampling_params=sampling_params_logprobs_zero)
 
     for i in range(len(results_logprobs_zero)):
         # Check that there is one sample logprob dict for each
@@ -502,12 +475,8 @@ def test_all_logprobs(example_prompts):
         gpu_memory_utilization=0.15,
         max_model_len=256,
     ) as runner:
-        sampling_params_logprobs_all = SamplingParams(
-            max_tokens=5, logprobs=-1, prompt_logprobs=-1
-        )
-        results_logprobs_all = runner.llm.generate(
-            example_prompts, sampling_params=sampling_params_logprobs_all
-        )
+        sampling_params_logprobs_all = SamplingParams(max_tokens=5, logprobs=-1, prompt_logprobs=-1)
+        results_logprobs_all = runner.llm.generate(example_prompts, sampling_params=sampling_params_logprobs_all)
         vocab_size = runner.llm.llm_engine.model_config.get_vocab_size()
 
         for i in range(len(results_logprobs_all)):
@@ -930,13 +899,10 @@ def test_verify_tokens_integration():
                     # Decoded tokens should not end with replacement character
                     # They should either be corrected or empty string
                     assert not decoded_token.endswith("�"), (
-                        f"Token {token_id} decoded to '{decoded_token}' which "
-                        f"ends with replacement character"
+                        f"Token {token_id} decoded to '{decoded_token}' which ends with replacement character"
                     )
                     # Decoded tokens should not contain lone replacement characters
-                    assert decoded_token != "�", (
-                        f"Token {token_id} is a lone replacement character"
-                    )
+                    assert decoded_token != "�", f"Token {token_id} is a lone replacement character"
 
 
 def test_utf8_edge_cases_with_real_model():
@@ -1105,9 +1071,7 @@ def test_spec_decode_logprobs(
     method, model_name, spec_config, top_logprobs = model_setup
 
     prompt = "Hello world " * 50
-    sampling_params = SamplingParams(
-        temperature=0, logprobs=top_logprobs, max_tokens=10, ignore_eos=False
-    )
+    sampling_params = SamplingParams(temperature=0, logprobs=top_logprobs, max_tokens=10, ignore_eos=False)
     penalty_sampling_params = SamplingParams(
         temperature=0,
         logprobs=top_logprobs,
@@ -1136,9 +1100,7 @@ def test_spec_decode_logprobs(
         model=model_name,
         **llm_kwargs,
     )
-    ref_results = ref_llm.generate(
-        [prompt, prompt], [sampling_params, penalty_sampling_params]
-    )
+    ref_results = ref_llm.generate([prompt, prompt], [sampling_params, penalty_sampling_params])
     # Collect logprobs outputs from reference LLM.
     ref_logprobs = []
     for results in ref_results:
@@ -1157,9 +1119,7 @@ def test_spec_decode_logprobs(
         speculative_config=spec_config_with_len,
         **llm_kwargs,
     )
-    spec_results = spec_llm.generate(
-        [prompt, prompt], [sampling_params, penalty_sampling_params]
-    )
+    spec_results = spec_llm.generate([prompt, prompt], [sampling_params, penalty_sampling_params])
     # Collect logprobs outputs from spec decode LLM.
     spec_logprobs = []
     for results in spec_results:
@@ -1173,18 +1133,14 @@ def test_spec_decode_logprobs(
     # Per-token logprobs are expected to be the same.
     assert len(ref_logprobs) == len(spec_logprobs)
     for ref_logprob, spec_logprob in zip(ref_logprobs, spec_logprobs):
-        assert math.isclose(
-            ref_logprob.logprob, spec_logprob.logprob, rel_tol=5e-2, abs_tol=2.5e-1
-        ), (
+        assert math.isclose(ref_logprob.logprob, spec_logprob.logprob, rel_tol=5e-2, abs_tol=2.5e-1), (
             f"Logprob mismatch: ref={ref_logprob.logprob} "
             f"spec={spec_logprob.logprob} "
             f"diff={abs(ref_logprob.logprob - spec_logprob.logprob)} "
             f"(token={ref_logprob.decoded_token!r})"
         )
         assert ref_logprob.rank == spec_logprob.rank, (
-            f"Rank mismatch: ref={ref_logprob.rank} "
-            f"spec={spec_logprob.rank} "
-            f"(token={ref_logprob.decoded_token!r})"
+            f"Rank mismatch: ref={ref_logprob.rank} spec={spec_logprob.rank} (token={ref_logprob.decoded_token!r})"
         )
         assert ref_logprob.decoded_token == spec_logprob.decoded_token
 
@@ -1199,9 +1155,7 @@ def test_prompt_logprobs_with_chunking_and_preemption():
 
     # Create prompts that will trigger chunking and preemption
     prompts = [
-        "The following numbers of the sequence "
-        + ", ".join(str(i) for i in range(10))
-        + " are:",
+        "The following numbers of the sequence " + ", ".join(str(i) for i in range(10)) + " are:",
         "In one word, the capital of France is ",
     ] + [f"Tell me about the number {i}: " for i in range(32)]
 
@@ -1232,20 +1186,14 @@ def test_prompt_logprobs_with_chunking_and_preemption():
         # Verify that all outputs have prompt logprobs
         for i, output in enumerate(outputs):
             _, _, _, prompt_token_ids, prompt_logprobs = output
-            assert prompt_logprobs is not None and len(prompt_logprobs) > 0, (
-                f"Output {i} missing prompt logprobs"
-            )
-            assert len(prompt_logprobs) == len(prompt_token_ids), (
-                "Unexpected number of prompt logprob positions"
-            )
+            assert prompt_logprobs is not None and len(prompt_logprobs) > 0, f"Output {i} missing prompt logprobs"
+            assert len(prompt_logprobs) == len(prompt_token_ids), "Unexpected number of prompt logprob positions"
 
             # Each position should have the requested number of logprobs
             for pos, logprobs_dict in enumerate(prompt_logprobs):
                 if logprobs_dict is not None:  # First token may be None
                     assert (
-                        sampling_params.prompt_logprobs
-                        <= len(logprobs_dict)
-                        <= sampling_params.prompt_logprobs + 1
+                        sampling_params.prompt_logprobs <= len(logprobs_dict) <= sampling_params.prompt_logprobs + 1
                     ), (
                         f"Output {i} position {pos} has {len(logprobs_dict)} "
                         f"logprobs, expected {sampling_params.prompt_logprobs}"
@@ -1253,12 +1201,8 @@ def test_prompt_logprobs_with_chunking_and_preemption():
 
         # Check that we actually had preemptions
         metrics_after = aphrodite_model.llm.get_metrics()
-        preemptions_before = next(
-            (m.value for m in metrics_before if m.name == "aphrodite:num_preemptions"), 0
-        )
-        preemptions_after = next(
-            (m.value for m in metrics_after if m.name == "aphrodite:num_preemptions"), 0
-        )
+        preemptions_before = next((m.value for m in metrics_before if m.name == "aphrodite:num_preemptions"), 0)
+        preemptions_after = next((m.value for m in metrics_after if m.name == "aphrodite:num_preemptions"), 0)
         preemptions = preemptions_after - preemptions_before
         assert preemptions > 0, "Test did not trigger any preemptions"
 
@@ -1294,6 +1238,4 @@ def test_token_logprobs_large_batch_int64_row_offset():
     torch.accelerator.synchronize()  # surface any async illegal memory access
     last = batch_size - 1
     ref = torch.log_softmax(logits[last].float(), dim=-1)[7]
-    assert torch.allclose(logprobs[last, 0], ref, atol=1e-2), (
-        f"logprob {logprobs[last, 0].item()} != ref {ref.item()}"
-    )
+    assert torch.allclose(logprobs[last, 0], ref, atol=1e-2), f"logprob {logprobs[last, 0].item()} != ref {ref.item()}"

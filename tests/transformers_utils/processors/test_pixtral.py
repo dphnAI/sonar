@@ -41,9 +41,7 @@ def test_fetch_images_recurses_over_nested_list(
     assert result == [[a], [b]]
 
 
-def test_fetch_images_str_delegates_to_load_image(
-    monkeypatch, image_processor: MistralCommonImageProcessor
-):
+def test_fetch_images_str_delegates_to_load_image(monkeypatch, image_processor: MistralCommonImageProcessor):
     sentinel = Image.new("RGB", (2, 2))
     received: dict[str, object] = {}
 

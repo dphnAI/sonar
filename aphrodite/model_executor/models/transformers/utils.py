@@ -64,9 +64,7 @@ def init_on_device_without_buffers(device: torch.device):
             param_cls = type(module._parameters[name])
             kwargs = module._parameters[name].__dict__
             kwargs["requires_grad"] = param.requires_grad
-            module._parameters[name] = param_cls(
-                module._parameters[name].to(device), **kwargs
-            )
+            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
 
     tensor_constructors_to_patch = {}
 
@@ -205,10 +203,7 @@ def replace_rms_norm_class(rms_norm: nn.Module, hidden_size: int) -> RMSNorm:
         with torch.device("cpu"):
             weight_test = getattr(rms_norm.__class__(1), "weight", None)
     except Exception:
-        logger.warning(
-            "Failed to determine if RMSNorm weight is centered on zero or one. "
-            "Defaulting to one."
-        )
+        logger.warning("Failed to determine if RMSNorm weight is centered on zero or one. Defaulting to one.")
         weight_test = None
     if weight_test is not None and torch.all(weight_test == 0):
         return GemmaRMSNorm(**kwargs)

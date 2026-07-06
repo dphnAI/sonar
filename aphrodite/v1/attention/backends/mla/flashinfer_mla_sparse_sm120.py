@@ -49,13 +49,10 @@ class FlashInferMLASparseSM120Impl(SparseMLAAttentionImpl[FlashInferMLASparseMet
     ) -> None:
         if any([alibi_slopes, sliding_window, logits_soft_cap]):
             raise NotImplementedError(
-                "FLASHINFER_MLA_SPARSE_SM120 does not support alibi_slopes / "
-                "sliding_window / logits_soft_cap"
+                "FLASHINFER_MLA_SPARSE_SM120 does not support alibi_slopes / sliding_window / logits_soft_cap"
             )
         if attn_type != AttentionType.DECODER:
-            raise NotImplementedError(
-                "FLASHINFER_MLA_SPARSE_SM120 only supports decoder self-attention"
-            )
+            raise NotImplementedError("FLASHINFER_MLA_SPARSE_SM120 only supports decoder self-attention")
 
         self.num_heads = num_heads
         self.head_size = head_size
@@ -76,25 +73,18 @@ class FlashInferMLASparseSM120Impl(SparseMLAAttentionImpl[FlashInferMLASparseMet
         aphrodite_config = get_current_aphrodite_config()
         model_type = None
         if aphrodite_config.model_config is not None:
-            model_type = getattr(
-                aphrodite_config.model_config.hf_text_config, "model_type", None
-            )
+            model_type = getattr(aphrodite_config.model_config.hf_text_config, "model_type", None)
         self.kv_scale_format = _kv_scale_format_for_model(model_type)
 
         # Skip-topk layers are built with indexer=None and get the shared
         # buffer via mla_args instead (cf. FLASHMLA_SPARSE).
         self.topk_indices_buffer: torch.Tensor | None = (
-            indexer.topk_indices_buffer
-            if indexer is not None
-            else mla_args.get("topk_indices_buffer")
+            indexer.topk_indices_buffer if indexer is not None else mla_args.get("topk_indices_buffer")
         )
         from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120
 
         if not has_flashinfer_sparse_mla_sm120():
-            raise RuntimeError(
-                "FLASHINFER_MLA_SPARSE_SM120 requires FlashInfer's "
-                "sparse MLA decode API."
-            )
+            raise RuntimeError("FLASHINFER_MLA_SPARSE_SM120 requires FlashInfer's sparse MLA decode API.")
         assert self.topk_indices_buffer is not None
 
         self.supports_quant_query_input = False

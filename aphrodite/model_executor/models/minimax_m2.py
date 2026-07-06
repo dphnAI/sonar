@@ -32,7 +32,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -81,17 +81,12 @@ class MiniMaxM2MoE(nn.Module):
 
         if self.tp_size > config.num_local_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than "
-                f"the number of experts {config.num_local_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.num_local_experts}."
             )
         self.use_routing_bias = getattr(config, "use_routing_bias", False)
         if self.use_routing_bias:
-            self.e_score_correction_bias = nn.Parameter(
-                torch.empty(config.num_local_experts, dtype=torch.float32)
-            )
-            self.e_score_correction_bias.weight_loader = (
-                MiniMaxM2MoE.ebias_weight_loader
-            )
+            self.e_score_correction_bias = nn.Parameter(torch.empty(config.num_local_experts, dtype=torch.float32))
+            self.e_score_correction_bias.weight_loader = MiniMaxM2MoE.ebias_weight_loader
         else:
             self.e_score_correction_bias = None
 
@@ -129,9 +124,7 @@ class MiniMaxM2MoE(nn.Module):
 
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
         return final_hidden_states.view(num_tokens, hidden_dim)
 
@@ -193,10 +186,7 @@ class MiniMaxM2Attention(nn.Module):
             prefix=f"{prefix}.o_proj",
         )
 
-        if (
-            rope_parameters is not None
-            and "partial_rotary_factor" not in rope_parameters
-        ):
+        if rope_parameters is not None and "partial_rotary_factor" not in rope_parameters:
             rope_parameters["partial_rotary_factor"] = rotary_dim / self.head_dim
         self.rotary_emb = get_rope(
             self.head_dim,
@@ -214,13 +204,9 @@ class MiniMaxM2Attention(nn.Module):
             prefix=f"{prefix}.attn",
         )
 
-        self.q_norm = MiniMaxText01RMSNormTP(
-            self.head_dim * self.total_num_heads, eps=rms_norm_eps
-        )
+        self.q_norm = MiniMaxText01RMSNormTP(self.head_dim * self.total_num_heads, eps=rms_norm_eps)
         if self.total_num_kv_heads >= tp_size:
-            self.k_norm = MiniMaxText01RMSNormTP(
-                self.head_dim * self.total_num_kv_heads, eps=rms_norm_eps
-            )
+            self.k_norm = MiniMaxText01RMSNormTP(self.head_dim * self.total_num_kv_heads, eps=rms_norm_eps)
         else:
             # KV heads are replicated across TP ranks; shard k_norm weight by
             # total_num_kv_heads rather than tp_size to avoid incorrect sharding.
@@ -229,8 +215,7 @@ class MiniMaxM2Attention(nn.Module):
                 self.head_dim * self.total_num_kv_heads,
                 eps=rms_norm_eps,
                 weight_shard_world_size=self.total_num_kv_heads,
-                weight_shard_rank=get_tensor_model_parallel_rank()
-                // num_kv_head_replicas,
+                weight_shard_rank=get_tensor_model_parallel_rank() // num_kv_head_replicas,
             )
 
     def forward(
@@ -239,9 +224,7 @@ class MiniMaxM2Attention(nn.Module):
         hidden_states: torch.Tensor,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
-        q, k, v = MiniMaxText01RMSNormTP.forward_qkv(
-            self.q_norm, self.k_norm, qkv, self.q_size, self.kv_size
-        )
+        q, k, v = MiniMaxText01RMSNormTP.forward_qkv(self.q_norm, self.k_norm, qkv, self.q_size, self.kv_size)
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v)
         output, _ = self.o_proj(attn_output)
@@ -261,9 +244,7 @@ class MiniMaxM2DecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         max_position_embeddings = getattr(config, "max_position_embeddings", 8192)
         if hasattr(config, "max_model_len") and isinstance(config.max_model_len, int):
-            max_position_embeddings = max(
-                config.max_position_embeddings, config.max_model_len
-            )
+            max_position_embeddings = max(config.max_position_embeddings, config.max_model_len)
         # DecoderLayers are created with `make_layers` which passes the prefix
         # with the layer's index.
         layer_idx = int(prefix.split(sep=".")[-1])
@@ -290,9 +271,7 @@ class MiniMaxM2DecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -395,18 +374,12 @@ class MiniMaxM2Model(nn.Module, EagleModelMixin):
             residual = intermediate_tensors["residual"]
 
         aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
-        for idx, layer in enumerate(
-            islice(self.layers, self.start_layer, self.end_layer)
-        ):
+        for idx, layer in enumerate(islice(self.layers, self.start_layer, self.end_layer)):
             hidden_states, residual = layer(positions, hidden_states, residual)
-            self._maybe_add_hidden_state(
-                aux_hidden_states, idx + 1, hidden_states, residual
-            )
+            self._maybe_add_hidden_state(aux_hidden_states, idx + 1, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         hidden_states, _ = self.norm(hidden_states, residual)
 
         if len(aux_hidden_states) > 0:
@@ -447,9 +420,7 @@ class MiniMaxM2ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle3):
         self.quant_config = quant_config
         if hasattr(aphrodite_config.model_config, "max_model_len"):
             self.config.max_model_len = aphrodite_config.model_config.max_model_len
-        self.model = MiniMaxM2Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = MiniMaxM2Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -460,9 +431,7 @@ class MiniMaxM2ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle3):
         else:
             self.lm_head = PPMissingLayer()
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -475,9 +444,7 @@ class MiniMaxM2ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle3):
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

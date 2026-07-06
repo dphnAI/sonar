@@ -75,16 +75,12 @@ class LlamaDecoderLayer(LlamaDecoderLayer):
         """Use drafter's quantization config instead of verifier's."""
         return get_draft_quant_config(aphrodite_config)
 
-    def _norm_before_residual(
-        self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _norm_before_residual(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         hidden_states = self.hidden_norm(hidden_states)
         residual = hidden_states
         return hidden_states, residual
 
-    def _norm_after_residual(
-        self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def _norm_after_residual(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         residual = hidden_states
         hidden_states = self.hidden_norm(hidden_states)
         return hidden_states, residual
@@ -147,11 +143,7 @@ class LlamaModel(nn.Module):
             self.use_aux_hidden_state = eagle_config["use_aux_hidden_state"]
         else:
             self.use_aux_hidden_state = True
-        self.norm_before_fc = bool(
-            eagle_config.get(
-                "norm_before_fc", getattr(self.config, "norm_before_fc", False)
-            )
-        )
+        self.norm_before_fc = bool(eagle_config.get("norm_before_fc", getattr(self.config, "norm_before_fc", False)))
 
         current_aphrodite_config = get_current_aphrodite_config()
 
@@ -173,17 +165,13 @@ class LlamaModel(nn.Module):
             ]
         )
         if self.use_aux_hidden_state:
-            self.num_aux_hidden_states = getattr(
-                self.config, "num_aux_hidden_states", None
-            )
+            self.num_aux_hidden_states = getattr(self.config, "num_aux_hidden_states", None)
             if self.num_aux_hidden_states is None:
                 eagle_config = getattr(self.config, "eagle_config", None) or {}
                 layer_ids = eagle_config.get("eagle_aux_hidden_state_layer_ids")
                 self.num_aux_hidden_states = len(layer_ids) if layer_ids else 3
 
-            target_hidden_size = getattr(
-                self.config, "target_hidden_size", self.config.hidden_size
-            )
+            target_hidden_size = getattr(self.config, "target_hidden_size", self.config.hidden_size)
             self.fc_input_size = target_hidden_size * self.num_aux_hidden_states
 
             if self.norm_before_fc:
@@ -275,9 +263,7 @@ class Eagle3LlamaForCausalLM(LlamaForCausalLM):
         if getattr(self.config, "draft_vocab_size", None) is None:
             base_vocab_size = getattr(self.config, "vocab_size", None)
             self.config.draft_vocab_size = base_vocab_size
-        target_layer_num = aphrodite_config.model_config.get_num_layers(
-            aphrodite_config.parallel_config
-        )
+        target_layer_num = aphrodite_config.model_config.get_num_layers(aphrodite_config.parallel_config)
 
         # Store target layer count in draft config for
         # proper layer_types indexing in draft models
@@ -295,9 +281,7 @@ class Eagle3LlamaForCausalLM(LlamaForCausalLM):
             quant_config=get_draft_quant_config(aphrodite_config),
             prefix=maybe_prefix(prefix, "lm_head"),
         )
-        self.logits_processor = LogitsProcessor(
-            self.config.draft_vocab_size, scale=logit_scale
-        )
+        self.logits_processor = LogitsProcessor(self.config.draft_vocab_size, scale=logit_scale)
         self.draft_id_to_target_id = nn.Parameter(
             torch.zeros(self.config.draft_vocab_size, dtype=torch.long),
             requires_grad=False,
@@ -336,8 +320,7 @@ class Eagle3LlamaForCausalLM(LlamaForCausalLM):
         logits = self.logits_processor(self.lm_head, hidden_states)
         if self.draft_id_to_target_id is None:
             assert logits.shape[1] == self.config.vocab_size, (
-                "Expected logits to have shape "
-                f"(*, {self.config.vocab_size}), but got {logits.shape}"
+                f"Expected logits to have shape (*, {self.config.vocab_size}), but got {logits.shape}"
             )
             return logits
 

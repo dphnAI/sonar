@@ -61,9 +61,7 @@ class FsAsyncLookupManager(AsyncLookupManager):
         super().__init__(tier_type=tier_type)
         self._tier = tier
 
-    def batch_lookup(
-        self, keys: list[OffloadKey], req_context: ReqContext
-    ) -> Iterable[bool]:
+    def batch_lookup(self, keys: list[OffloadKey], req_context: ReqContext) -> Iterable[bool]:
         paths = [self._tier.file_mapper.get_file_name(k) for k in keys]
         if _HAS_BATCH_LOOKUP_C:
             # C extension: GIL released for the entire faccessat() batch.
@@ -114,9 +112,7 @@ class FileSystemTierManager(SecondaryTierManager):
         super().__init__(offloading_spec, primary_kv_view, tier_type)
 
         # Extract block size from primary view
-        assert primary_kv_view.strides is not None, (
-            "primary_kv_view.strides cannot be None"
-        )
+        assert primary_kv_view.strides is not None, "primary_kv_view.strides cannot be None"
         self._block_size: int = primary_kv_view.strides[0]
 
         # Opt in; FileMapper enables it only for a parallelism-invariant block.
@@ -132,9 +128,7 @@ class FileSystemTierManager(SecondaryTierManager):
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         if not os.path.exists(config_path):
             with open(config_path, "w") as f:
-                json.dump(
-                    self.file_mapper.get_run_config(), f, indent=2, sort_keys=True
-                )
+                json.dump(self.file_mapper.get_run_config(), f, indent=2, sort_keys=True)
 
         self._pool = DualQueueThreadPool(
             n_read_threads,
@@ -188,10 +182,7 @@ class FileSystemTierManager(SecondaryTierManager):
         """
         Collect completed jobs from the finished-jobs queue.
         """
-        return (
-            JobResult(job_id=job_id, success=success)
-            for job_id, success in self._pool.get_finished()
-        )
+        return (JobResult(job_id=job_id, success=success) for job_id, success in self._pool.get_finished())
 
     @override
     def drain_jobs(self) -> None:

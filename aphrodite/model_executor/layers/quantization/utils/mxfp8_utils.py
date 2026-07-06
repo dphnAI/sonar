@@ -23,9 +23,7 @@ def swizzle_mxfp8_scale(sf: torch.Tensor, M: int, K: int) -> torch.Tensor:
     k_scale_padded = num_k_tiles * 4
 
     scale_cols = K // scaling_vector_size
-    sf_padded = torch.zeros(
-        (m_padded, k_scale_padded), dtype=sf.dtype, device=sf.device
-    )
+    sf_padded = torch.zeros((m_padded, k_scale_padded), dtype=sf.dtype, device=sf.device)
     sf_padded[:M, :scale_cols] = sf
 
     sf_reshaped = sf_padded.view(num_m_tiles, 4, 32, num_k_tiles, 4)
@@ -148,9 +146,7 @@ def _mxfp8_e4m3_quantize_triton(
     M, K = x.shape
     x = x.contiguous()
     xq = torch.empty((M, K), dtype=MXFP8_VALUE_DTYPE, device=x.device)
-    scales = torch.empty(
-        (M, K // MXFP8_BLOCK_SIZE), dtype=MXFP8_SCALE_DTYPE, device=x.device
-    )
+    scales = torch.empty((M, K // MXFP8_BLOCK_SIZE), dtype=MXFP8_SCALE_DTYPE, device=x.device)
     BLOCK_M = 64
     grid = (triton.cdiv(M, BLOCK_M), K // MXFP8_BLOCK_SIZE)
     _MXFP8_QUANT_KERNEL[grid](
@@ -193,12 +189,7 @@ def _mxfp8_e4m3_quantize_impl(
     # ROCm: a single fused Triton kernel beats the multi-pass torch path for the
     # common 2D, non-swizzled activation-quant case (used by the native MX
     # linear/MoE). Falls back to torch otherwise (3D weights, swizzled layout).
-    if (
-        current_platform.is_rocm()
-        and not is_sf_swizzled_layout
-        and x.ndim == 2
-        and x.shape[-1] % MXFP8_BLOCK_SIZE == 0
-    ):
+    if current_platform.is_rocm() and not is_sf_swizzled_layout and x.ndim == 2 and x.shape[-1] % MXFP8_BLOCK_SIZE == 0:
         return _mxfp8_e4m3_quantize_triton(x)
 
     return _mxfp8_e4m3_quantize_torch(x, is_sf_swizzled_layout)
@@ -244,9 +235,7 @@ def mxfp8_e4m3_quantize_fake(
         if is_sf_swizzled_layout:
             M_padded = ((M + 127) // 128) * 128
             K_padded = ((K + 3) // 4) * 4
-            scales = torch.empty(
-                M_padded * K_padded, dtype=MXFP8_SCALE_DTYPE, device=x.device
-            )
+            scales = torch.empty(M_padded * K_padded, dtype=MXFP8_SCALE_DTYPE, device=x.device)
         else:
             scales = torch.empty((M, K), dtype=MXFP8_SCALE_DTYPE, device=x.device)
     elif x.ndim == 3:
@@ -255,9 +244,7 @@ def mxfp8_e4m3_quantize_fake(
         if is_sf_swizzled_layout:
             M_padded = ((M + 127) // 128) * 128
             K_padded = ((K + 3) // 4) * 4
-            scales = torch.empty(
-                B * M_padded * K_padded, dtype=MXFP8_SCALE_DTYPE, device=x.device
-            )
+            scales = torch.empty(B * M_padded * K_padded, dtype=MXFP8_SCALE_DTYPE, device=x.device)
         else:
             scales = torch.empty((B, M, K), dtype=MXFP8_SCALE_DTYPE, device=x.device)
     else:
@@ -275,7 +262,5 @@ direct_register_custom_op(
 )
 
 
-def xpu_mxfp8_quantize(
-    x: torch.Tensor, dtype: torch.dtype | None = None
-) -> tuple[torch.Tensor, torch.Tensor]:
+def xpu_mxfp8_quantize(x: torch.Tensor, dtype: torch.dtype | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     return torch.ops.aphrodite.xpu_mxfp8_quantize(x, dtype)

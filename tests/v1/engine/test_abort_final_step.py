@@ -22,7 +22,7 @@ from unittest.mock import patch
 import pytest
 
 from aphrodite import SamplingParams
-from aphrodite.config import KVTransferConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, KVTransferConfig
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorBase_V1,
@@ -95,9 +95,7 @@ class DummyKVConnector(KVConnectorBase_V1):
     ):
         pass
 
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         return DummyKVConnectorMetadata()
 
     def request_finished(
@@ -136,9 +134,7 @@ class DummyKVConnector(KVConnectorBase_V1):
 
 
 # Register the dummy connector
-KVConnectorFactory.register_connector(
-    "DummyKVConnector", __name__, DummyKVConnector.__name__
-)
+KVConnectorFactory.register_connector("DummyKVConnector", __name__, DummyKVConnector.__name__)
 
 
 @pytest.mark.parametrize("async_scheduling", [False, True])
@@ -194,10 +190,7 @@ async def test_abort_during_final_step(async_scheduling: bool):
             finished = scheduler_output.finished_req_ids or set()
 
             def is_target_request(req_ids):
-                return any(
-                    rid == request_id or rid.startswith(f"{request_id}-")
-                    for rid in req_ids
-                )
+                return any(rid == request_id or rid.startswith(f"{request_id}-") for rid in req_ids)
 
             if is_target_request(scheduled) or is_target_request(finished):
                 # Signal that execute_model has been called by deleting ready_file
@@ -283,30 +276,21 @@ async def test_abort_during_final_step(async_scheduling: bool):
                 while time.time() - start < timeout:
                     with open(status_file) as f4:
                         status_lines = f4.read().strip().split("\n")
-                        captured_statuses = [
-                            line
-                            for line in status_lines
-                            if line and line.startswith("FINISHED_")
-                        ]
+                        captured_statuses = [line for line in status_lines if line and line.startswith("FINISHED_")]
                     if captured_statuses:
                         break
                     await asyncio.sleep(0.05)
                 else:
-                    raise TimeoutError(
-                        "Timeout waiting for KV connector to record finish status."
-                    )
+                    raise TimeoutError("Timeout waiting for KV connector to record finish status.")
 
                 # Verify we got output
                 assert len(outputs) > 0, "Should have received at least one output"
 
                 # The final output should have finish_reason="abort"
                 final_output = outputs[-1]
-                assert final_output.finished, (
-                    "Final output should be marked as finished"
-                )
+                assert final_output.finished, "Final output should be marked as finished"
                 assert final_output.outputs[0].finish_reason == "abort", (
-                    f"Expected finish_reason='abort' but got "
-                    f"'{final_output.outputs[0].finish_reason}'. "
+                    f"Expected finish_reason='abort' but got '{final_output.outputs[0].finish_reason}'. "
                 )
 
                 assert len(captured_statuses) >= 1, (
@@ -315,8 +299,7 @@ async def test_abort_during_final_step(async_scheduling: bool):
                 )
 
                 assert "FINISHED_ABORTED" in captured_statuses, (
-                    f"KV connector should see FINISHED_ABORTED but got "
-                    f"{captured_statuses}. "
+                    f"KV connector should see FINISHED_ABORTED but got {captured_statuses}. "
                 )
 
                 # Verify cleanup

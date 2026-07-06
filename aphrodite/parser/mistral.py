@@ -23,13 +23,10 @@ class MistralParser(DelegatingParser):
 
         if not isinstance(self._tool_parser, MistralToolParser):
             raise ValueError(
-                "MistralParser requires --tool-call-parser mistral, "
-                f"got {self._tool_parser.__class__.__name__}."
+                f"MistralParser requires --tool-call-parser mistral, got {self._tool_parser.__class__.__name__}."
             )
 
-    def _maybe_force_auto_tool_parsing(
-        self, request: ChatCompletionRequest | ResponsesRequest
-    ) -> None:
+    def _maybe_force_auto_tool_parsing(self, request: ChatCompletionRequest | ResponsesRequest) -> None:
         # When the Mistral grammar factory injected structured outputs,
         # the model emits v11+ format ([TOOL_CALLS]name{args}) that the
         # named/required parsers can't handle. Disable them so all

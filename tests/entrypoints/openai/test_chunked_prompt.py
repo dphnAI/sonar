@@ -62,9 +62,7 @@ async def test_completion_stream_options_and_logprobs_with_long_prompts(
     async for chunk in stream:
         assert chunk.usage.prompt_tokens >= 0
         assert chunk.usage.completion_tokens >= 0
-        assert chunk.usage.total_tokens == (
-            chunk.usage.prompt_tokens + chunk.usage.completion_tokens
-        )
+        assert chunk.usage.total_tokens == (chunk.usage.prompt_tokens + chunk.usage.completion_tokens)
         if not finished:
             assert chunk.choices[0].text
             # Count actual tokens from logprobs since multiple tokens
@@ -108,9 +106,7 @@ async def test_chat_completion_stream_options_and_logprobs_with_long_prompts(
     async for chunk in stream:
         assert chunk.usage.prompt_tokens >= 0
         assert chunk.usage.completion_tokens >= 0
-        assert chunk.usage.total_tokens == (
-            chunk.usage.prompt_tokens + chunk.usage.completion_tokens
-        )
+        assert chunk.usage.total_tokens == (chunk.usage.prompt_tokens + chunk.usage.completion_tokens)
 
         if not finished:
             if chunk.choices[0].delta.content == "":

@@ -48,9 +48,7 @@ def test_str_prompts(llm: LLM):
 
 @pytest.mark.skip_global_cleanup
 def test_token_ids_prompts(llm: LLM):
-    outputs = llm.encode(
-        [prompt_token_ids], pooling_task="token_classify", use_tqdm=False
-    )
+    outputs = llm.encode([prompt_token_ids], pooling_task="token_classify", use_tqdm=False)
     assert len(outputs) == 1
     assert isinstance(outputs[0], PoolingRequestOutput)
     assert outputs[0].prompt_token_ids == prompt_token_ids

@@ -61,9 +61,7 @@ def _prepare_megamoe_inputs_kernel(
 
     scale = amax / 448.0
     scale_bits = scale.to(tl.uint32, bitcast=True)
-    scale_exp = ((scale_bits >> 23) & 0xFF) + ((scale_bits & 0x7FFFFF) != 0).to(
-        tl.uint32
-    )
+    scale_exp = ((scale_bits >> 23) & 0xFF) + ((scale_bits & 0x7FFFFF) != 0).to(tl.uint32)
     scale_exp = tl.minimum(tl.maximum(scale_exp, 1), 254)
     rounded_scale = (scale_exp << 23).to(tl.float32, bitcast=True)
 
@@ -98,25 +96,19 @@ def _prepare_megamoe_inputs_kernel(
         ).to(tl.int64)
         ids = tl.where(token_is_padding, -1, ids)
         tl.store(
-            topk_idx_out
-            + token_id * topk_idx_stride_m
-            + topk_offsets * topk_idx_stride_k,
+            topk_idx_out + token_id * topk_idx_stride_m + topk_offsets * topk_idx_stride_k,
             ids,
             mask=topk_mask,
         )
 
         weights = tl.load(
-            topk_weights
-            + token_id * topk_weights_stride_m
-            + topk_offsets * topk_weights_stride_k,
+            topk_weights + token_id * topk_weights_stride_m + topk_offsets * topk_weights_stride_k,
             mask=topk_mask,
             other=0.0,
         )
         weights = tl.where(token_is_padding, 0.0, weights)
         tl.store(
-            topk_weights_out
-            + token_id * topk_weights_out_stride_m
-            + topk_offsets * topk_weights_out_stride_k,
+            topk_weights_out + token_id * topk_weights_out_stride_m + topk_offsets * topk_weights_out_stride_k,
             weights,
             mask=topk_mask,
         )
@@ -136,16 +128,10 @@ def prepare_megamoe_inputs(
     if num_tokens == 0:
         return
     if hidden_size % 128 != 0:
-        raise ValueError(
-            "DeepSeek V4 MegaMoE input staging requires hidden_size to be "
-            "a multiple of 128."
-        )
+        raise ValueError("DeepSeek V4 MegaMoE input staging requires hidden_size to be a multiple of 128.")
     top_k = topk_ids.shape[1]
     if topk_weights.shape != topk_ids.shape:
-        raise ValueError(
-            "DeepSeek V4 MegaMoE input staging requires topk_weights and "
-            "topk_ids to have the same shape."
-        )
+        raise ValueError("DeepSeek V4 MegaMoE input staging requires topk_weights and topk_ids to have the same shape.")
 
     block_k = 128
     grid = (num_tokens, triton.cdiv(hidden_size, block_k))

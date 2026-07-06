@@ -5,8 +5,8 @@ import asyncio
 import pytest
 from opentelemetry.sdk.environment_variables import OTEL_EXPORTER_OTLP_TRACES_INSECURE
 
-from tests.tracing.conftest import FAKE_TRACE_SERVER_ADDRESS, FakeTraceService
 from aphrodite.tracing import init_tracer, instrument, is_otel_available
+from tests.tracing.conftest import FAKE_TRACE_SERVER_ADDRESS, FakeTraceService
 
 # Skip everything if OTel is missing
 pytestmark = pytest.mark.skipif(not is_otel_available(), reason="OTel required")

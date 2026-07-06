@@ -78,9 +78,7 @@ def _compare_bs1_vs_bsn_single_process(
         choice = resp["choices"][0]
         toks, lps = _extract_tokens_and_logprobs(choice)
         if lps is None:
-            raise AssertionError(
-                "logprobs not returned; ensure server supports 'logprobs'"
-            )
+            raise AssertionError("logprobs not returned; ensure server supports 'logprobs'")
         bs1_tokens_per_prompt.append(list(toks))
         bs1_logprobs_per_prompt.append(list(lps))
 
@@ -92,9 +90,7 @@ def _compare_bs1_vs_bsn_single_process(
         raise AssertionError("BS=N empty/failed batched response")
     choices = resp.get("choices", [])
     if len(choices) != len(prompts):
-        raise AssertionError(
-            f"BS=N choices length {len(choices)} != num prompts {len(prompts)}"
-        )
+        raise AssertionError(f"BS=N choices length {len(choices)} != num prompts {len(prompts)}")
     for idx, choice in enumerate(choices):
         toks, lps = _extract_tokens_and_logprobs(choice)
         if lps is None:
@@ -113,15 +109,13 @@ def _compare_bs1_vs_bsn_single_process(
     ):
         if tokens_bs1 != tokens_bsN:
             raise AssertionError(
-                f"Prompt {i} (sampling): Different tokens sampled. "
-                f"BS=1 tokens: {tokens_bs1} BS=N tokens: {tokens_bsN}"
+                f"Prompt {i} (sampling): Different tokens sampled. BS=1 tokens: {tokens_bs1} BS=N tokens: {tokens_bsN}"
             )
         if logprobs_bs1 is None or logprobs_bsN is None:
             raise AssertionError(f"Prompt {i}: Missing logprobs in one of the runs")
         if len(logprobs_bs1) != len(logprobs_bsN):
             raise AssertionError(
-                f"Prompt {i}: Different number of steps: "
-                f"{len(logprobs_bs1)} (BS=1) vs {len(logprobs_bsN)} (BS=N)."
+                f"Prompt {i}: Different number of steps: {len(logprobs_bs1)} (BS=1) vs {len(logprobs_bsN)} (BS=N)."
             )
         for t, (a, b) in enumerate(zip(logprobs_bs1, logprobs_bsN)):
             if a != b:

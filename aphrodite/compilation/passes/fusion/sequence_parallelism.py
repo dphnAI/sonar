@@ -24,9 +24,9 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticTensorSym,
 )
 
+from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from ..inductor_pass import enable_fake_mode
 from ..utility.noop_elimination import NoOpEliminationPass
-from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
 from .matcher_utils import MatcherQuantFP8
 
 logger = init_logger(__name__)
@@ -178,9 +178,7 @@ class FirstAllReduceRMSNormPattern(_SequenceParallelPatternHelper):
             all_gather = self._all_gather(rmsnorm)
             return all_gather, reduce_scatter
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class MiddleAllReduceRMSNormPattern(_SequenceParallelPatternHelper):
@@ -206,9 +204,7 @@ class MiddleAllReduceRMSNormPattern(_SequenceParallelPatternHelper):
             rms_norm_weights: torch.Tensor,
         ) -> tuple[torch.Tensor, torch.Tensor]:
             all_reduce = self._all_reduce(mm_1)
-            rmsnorm = aphrodite.ir.ops.fused_add_rms_norm(
-                all_reduce, residual, rms_norm_weights, self.epsilon
-            )
+            rmsnorm = aphrodite.ir.ops.fused_add_rms_norm(all_reduce, residual, rms_norm_weights, self.epsilon)
             return rmsnorm[0], rmsnorm[1]
 
         def replacement(
@@ -235,21 +231,15 @@ class MiddleAllReduceRMSNormPattern(_SequenceParallelPatternHelper):
             # the FirstAllReduceRMSNorm pattern is never matched. we must
             # perform a proper TP-aware slice here. simply using `[0:local_len]`
             # would incorrectly cause all ranks to process rank 0's chunk.
-            residual = residual[
-                self.tp_rank * local_len : self.tp_rank * local_len + local_len, ...
-            ]
-            rmsnorm = aphrodite.ir.ops.fused_add_rms_norm(
-                reduce_scatter, residual, rms_norm_weights, self.epsilon
-            )
+            residual = residual[self.tp_rank * local_len : self.tp_rank * local_len + local_len, ...]
+            rmsnorm = aphrodite.ir.ops.fused_add_rms_norm(reduce_scatter, residual, rms_norm_weights, self.epsilon)
             all_gather = self._all_gather(rmsnorm[0])
             # residual output is now [local_len, H]; the next layer's
             # slice on it is semantically incorrect until
             # NoOpEliminationPass removes it.
             return all_gather, rmsnorm[1]
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
         pm.register_replacement(
             get_first_out_wrapper(pattern),
             get_first_out_wrapper(replacement),
@@ -296,9 +286,7 @@ class FirstAllReduceRMSNormStaticFP8Pattern(_SequenceParallelPatternHelper):
 
             return all_gather, reduce_scatter
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class MiddleAllReduceRMSNormStaticFP8Pattern(_SequenceParallelPatternHelper):
@@ -346,9 +334,7 @@ class MiddleAllReduceRMSNormStaticFP8Pattern(_SequenceParallelPatternHelper):
             # the FirstAllReduceRMSNorm pattern is never matched. we must
             # perform a proper TP-aware slice here. simply using `[0:local_len]`
             # would incorrectly cause all ranks to process rank 0's chunk.
-            residual = residual[
-                self.tp_rank * local_len : self.tp_rank * local_len + local_len, ...
-            ]
+            residual = residual[self.tp_rank * local_len : self.tp_rank * local_len + local_len, ...]
             rms, residual_out = aphrodite.ir.ops.fused_add_rms_norm(
                 reduce_scatter, residual, rms_norm_weights, self.epsilon
             )
@@ -359,9 +345,7 @@ class MiddleAllReduceRMSNormStaticFP8Pattern(_SequenceParallelPatternHelper):
             # NoOpEliminationPass removes it.
             return all_gather, residual_out
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
         pm.register_replacement(
             get_first_out_wrapper(pattern),
@@ -422,9 +406,7 @@ class FirstAllReduceRMSNormStaticNVFP4Pattern(_SequenceParallelPatternHelper):
                 self._all_gather(quant[1]),
             )
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class MiddleAllReduceRMSNormStaticNVFP4Pattern(_SequenceParallelPatternHelper):
@@ -490,9 +472,7 @@ class MiddleAllReduceRMSNormStaticNVFP4Pattern(_SequenceParallelPatternHelper):
             )
             return self._all_gather(quant[0]), residual_out, self._all_gather(quant[1])
 
-        pm.register_replacement(
-            pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass
-        )
+        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
 
 
 class SequenceParallelismPass(AphroditePatternMatcherPass):
@@ -557,35 +537,21 @@ class SequenceParallelismPass(AphroditePatternMatcherPass):
         self.noop_cleanup = NoOpEliminationPass(config)
         self.noop_cleanup.pass_name = f"{self.pass_name}.{self.noop_cleanup.pass_name}"
 
-        self.patterns: PatternMatcherPass = PatternMatcherPass(
-            pass_name="sequence_parallelism_pass"
-        )
+        self.patterns: PatternMatcherPass = PatternMatcherPass(pass_name="sequence_parallelism_pass")
 
         for epsilon in [1e-5, 1e-6]:
             # RMSNorm + Static FP8 quantization patterns
-            FirstAllReduceRMSNormStaticFP8Pattern(
-                epsilon, self.model_dtype, self.device
-            ).register(self.patterns)
-            MiddleAllReduceRMSNormStaticFP8Pattern(
-                epsilon, self.model_dtype, self.device
-            ).register(self.patterns)
+            FirstAllReduceRMSNormStaticFP8Pattern(epsilon, self.model_dtype, self.device).register(self.patterns)
+            MiddleAllReduceRMSNormStaticFP8Pattern(epsilon, self.model_dtype, self.device).register(self.patterns)
 
             if "SCALED_FP4_QUANT_OUT_OVERLOAD" in globals():
-                FirstAllReduceRMSNormStaticNVFP4Pattern(
-                    epsilon, self.model_dtype, self.device
-                ).register(self.patterns)
-                MiddleAllReduceRMSNormStaticNVFP4Pattern(
-                    epsilon, self.model_dtype, self.device
-                ).register(self.patterns)
+                FirstAllReduceRMSNormStaticNVFP4Pattern(epsilon, self.model_dtype, self.device).register(self.patterns)
+                MiddleAllReduceRMSNormStaticNVFP4Pattern(epsilon, self.model_dtype, self.device).register(self.patterns)
 
             # Normal RMSNorm patterns
-            FirstAllReduceRMSNormPattern(
-                epsilon, self.model_dtype, self.device
-            ).register(self.patterns)
+            FirstAllReduceRMSNormPattern(epsilon, self.model_dtype, self.device).register(self.patterns)
 
-            MiddleAllReduceRMSNormPattern(
-                epsilon, self.model_dtype, self.device
-            ).register(self.patterns)
+            MiddleAllReduceRMSNormPattern(epsilon, self.model_dtype, self.device).register(self.patterns)
 
         self.dump_patterns(config, self.patterns)
 
@@ -602,10 +568,9 @@ class SequenceParallelismPass(AphroditePatternMatcherPass):
         - min_token_num is None (SP disabled for this device/config)
         - The compile range starts below the minimum token threshold
         """
-        assert (
-            self.compilation_config.use_inductor_graph_partition
-            or not self.compilation_config.splitting_ops
-        ), "SequenceParallelismPass requires full-graph compilation"
+        assert self.compilation_config.use_inductor_graph_partition or not self.compilation_config.splitting_ops, (
+            "SequenceParallelismPass requires full-graph compilation"
+        )
 
         # min_token_num is None when SP is disabled for this device/config
         # (e.g., non-CUDA platform, unsupported GPU, or small hidden_size)

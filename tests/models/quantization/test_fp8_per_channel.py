@@ -57,9 +57,7 @@ def test_fp8_per_channel_logprobs(
             max_model_len=MAX_MODEL_LEN,
             enforce_eager=True,
         ) as aphrodite_model:
-            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
-                example_prompts, MAX_TOKENS, NUM_LOG_PROBS
-            )
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
 
         with aphrodite_runner(
             model,
@@ -67,9 +65,7 @@ def test_fp8_per_channel_logprobs(
             enforce_eager=True,
             quantization="fp8_per_channel",
         ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(
-                example_prompts, MAX_TOKENS, NUM_LOG_PROBS
-            )
+            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, MAX_TOKENS, NUM_LOG_PROBS)
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,

@@ -6,8 +6,8 @@ import torch
 
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.config import (
-    CompilationConfig,
     AphroditeConfig,
+    CompilationConfig,
     get_cached_compilation_config,
     set_current_aphrodite_config,
 )
@@ -18,10 +18,10 @@ from aphrodite.model_executor.layers.activation import (
     SiluAndMul,
 )
 from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
-    dispatch_topk_sigmoid_func,
-    dispatch_topk_softmax_func,
     aphrodite_topk_sigmoid,
     aphrodite_topk_softmax,
+    dispatch_topk_sigmoid_func,
+    dispatch_topk_softmax_func,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.platforms import current_platform
@@ -84,9 +84,7 @@ def test_enabled_ops(
 ):
     custom_ops = env.split(",") if env else []
     aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(
-            backend=backend, mode=compilation_mode, custom_ops=custom_ops
-        )
+        compilation_config=CompilationConfig(backend=backend, mode=compilation_mode, custom_ops=custom_ops)
     )
     get_cached_compilation_config.cache_clear()
     with set_current_aphrodite_config(aphrodite_config):
@@ -115,21 +113,15 @@ def test_enabled_ops(
         assert SiluAndMul2().enabled() == SiluAndMul().enabled()
 
 
-@pytest.mark.parametrize(
-    "env", ["all,none", "all,+rms_norm,all", "+rms_norm,-rms_norm"]
-)
+@pytest.mark.parametrize("env", ["all,none", "all,+rms_norm,all", "+rms_norm,-rms_norm"])
 def test_enabled_ops_invalid(env: str):
     with pytest.raises(Exception):  # noqa
-        aphrodite_config = AphroditeConfig(
-            compilation_config=CompilationConfig(custom_ops=env.split(","))
-        )
+        aphrodite_config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=env.split(",")))
         with set_current_aphrodite_config(aphrodite_config):
             RMSNorm(1024).enabled()
 
 
-@pytest.mark.parametrize(
-    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_topk_softmax_dispatch(use_rocm_aiter: bool):
     topk_func = dispatch_topk_softmax_func(use_rocm_aiter)
 
@@ -139,9 +131,7 @@ def test_topk_softmax_dispatch(use_rocm_aiter: bool):
         assert topk_func == aphrodite_topk_softmax
 
 
-@pytest.mark.parametrize(
-    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_topk_sigmoid_dispatch(use_rocm_aiter: bool):
     topk_func = dispatch_topk_sigmoid_func(use_rocm_aiter)
 

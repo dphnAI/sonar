@@ -36,19 +36,14 @@ class Dynamic4bitLinearKernel(MPLinearKernel):
             return False, "Only CPU is supported"
         if c.weight_type not in cls.SUPPORTED_QUANT_TYPES:
             return False, f"Unsupported quant type {c.weight_type}"
-        if (
-            current_platform.get_cpu_architecture() == CpuArchEnum.ARM
-            and c.act_type
-            not in [
-                torch.float32,
-                torch.bfloat16,
-                torch.float16,
-            ]
-        ):
+        if current_platform.get_cpu_architecture() == CpuArchEnum.ARM and c.act_type not in [
+            torch.float32,
+            torch.bfloat16,
+            torch.float16,
+        ]:
             return (
                 False,
-                "Dynamic4bitLinearKernel on Arm requires Float32 or"
-                " BFloat16 or Float16 activations",
+                "Dynamic4bitLinearKernel on Arm requires Float32 or BFloat16 or Float16 activations",
             )
         if c.full_weight_shape[0] % c.group_size != 0:
             return (
@@ -64,8 +59,7 @@ class Dynamic4bitLinearKernel(MPLinearKernel):
             except AttributeError:
                 return (
                     False,
-                    f"PyTorch {torch.__version__} does not support"
-                    " _dyn_quant_matmul_4bit. Install a newer version",
+                    f"PyTorch {torch.__version__} does not support _dyn_quant_matmul_4bit. Install a newer version",
                 )
         return True, None
 
@@ -73,27 +67,21 @@ class Dynamic4bitLinearKernel(MPLinearKernel):
         c = self.config
         packed_weight = getattr(layer, self.w_q_name)
         packed_weight = packed_weight.add(8)
-        uint8_packed = (packed_weight[::, 1::2] << 4 | packed_weight[::, ::2]).to(
-            torch.uint8
-        )
+        uint8_packed = (packed_weight[::, 1::2] << 4 | packed_weight[::, ::2]).to(torch.uint8)
 
         scales = getattr(layer, self.w_s_name)
         block_size = c.group_size
 
         # Handle scaling factors for partitioned weights
         if block_size == c.partition_weight_shape[0]:
-            scales = scales.to(
-                torch.float32
-            )  # Float32 & Bfloat16 variants requires float32 scales
+            scales = scales.to(torch.float32)  # Float32 & Bfloat16 variants requires float32 scales
             scales = scales.view(-1, 1)  # Channel-wise scales
             if layer.bias is not None:
                 # Float32 & Bfloat16 variants requires float32 bias
                 replace_parameter(
                     layer,
                     "bias",
-                    torch.nn.Parameter(
-                        layer.bias.to(torch.float32), requires_grad=False
-                    ),
+                    torch.nn.Parameter(layer.bias.to(torch.float32), requires_grad=False),
                 )
         else:
             # KleidiAI kernel requires bfloat16 scales with groupwise scheme
@@ -108,9 +96,7 @@ class Dynamic4bitLinearKernel(MPLinearKernel):
             c.partition_weight_shape[0],
             c.partition_weight_shape[1],
         )
-        replace_parameter(
-            layer, self.w_q_name, torch.nn.Parameter(w, requires_grad=False)
-        )
+        replace_parameter(layer, self.w_q_name, torch.nn.Parameter(w, requires_grad=False))
         setattr(layer, self.w_s_name, None)
 
     def apply_weights(
@@ -134,9 +120,7 @@ class Dynamic4bitLinearKernel(MPLinearKernel):
         # dtype of activations before they get dynamically quantized to int8
         original_pre_quant_act_dtype = x.dtype
         pre_quant_act_dtype = original_pre_quant_act_dtype
-        if (
-            is_groupwise and pre_quant_act_dtype == torch.bfloat16
-        ) or pre_quant_act_dtype == torch.float16:
+        if (is_groupwise and pre_quant_act_dtype == torch.bfloat16) or pre_quant_act_dtype == torch.float16:
             pre_quant_act_dtype = torch.float32
 
         x_2d = x.reshape(-1, x.shape[-1])

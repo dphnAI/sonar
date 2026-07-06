@@ -38,9 +38,7 @@ def apply_all_penalties(
     )
 
 
-def _convert_to_tensors(
-    output_token_ids: list[list[int]], vocab_size: int, device: torch.device
-) -> torch.Tensor:
+def _convert_to_tensors(output_token_ids: list[list[int]], vocab_size: int, device: torch.device) -> torch.Tensor:
     """
     Convert the different list data structures to tensors.
     """

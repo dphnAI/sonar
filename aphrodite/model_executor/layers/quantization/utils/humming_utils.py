@@ -179,9 +179,7 @@ def _compressed_tensors_weight_schema_to_quant_key(
     elif "nvfp4" in fmt or "mxfp4" in fmt:
         dtype = FP4_DTYPE
     else:
-        dtype = _HUMMING_TO_QUANT_DTYPE[
-            humming_dtypes.DataType.from_str(f"uint{schema.num_bits}")
-        ]
+        dtype = _HUMMING_TO_QUANT_DTYPE[humming_dtypes.DataType.from_str(f"uint{schema.num_bits}")]
 
     # Determine group shape from strategy
     if schema.strategy in ("group", "tensor_group"):
@@ -399,9 +397,7 @@ def humming_is_layer_skipped(config: dict[str, Any], prefix: str):
     return False
 
 
-def convert_linear_layer_to_humming_standard(
-    layer: LinearBase, name_map: dict[str, str]
-):
+def convert_linear_layer_to_humming_standard(layer: LinearBase, name_map: dict[str, str]):
     """Rename/reshape a linear layer's quantized params (the canonical MPLinear
     layout: ``weight_packed`` int32 + ``weight_scale``) into the parameter names
     and layout humming's weight schema expects (``weight`` / ``weight_scale``)."""
@@ -628,19 +624,14 @@ def select_humming_moe_experts(
     def _make_log_backend(experts_cls: type[mk.FusedMoEExperts]):
         return f"Using {experts_cls.__name__} Humming MoE backend."
 
-    def _make_log_unsupported(
-        experts_cls: type[mk.FusedMoEExperts], reason: str | None
-    ) -> str:
+    def _make_log_unsupported(experts_cls: type[mk.FusedMoEExperts], reason: str | None) -> str:
         if reason:
             return (
                 f"Humming MoE experts {experts_cls.__name__} does not support the "
                 f"deployment configuration since {reason}."
             )
         else:
-            return (
-                f"Humming MoE experts '{experts_cls.__name__}' does not support the "
-                "deployment configuration."
-            )
+            return f"Humming MoE experts '{experts_cls.__name__}' does not support the deployment configuration."
 
     for k_cls in AVAILABLE_EXPERTS:
         supported, reason = k_cls.is_supported_config(
@@ -954,9 +945,7 @@ def convert_to_humming_moe_kernel_format(
 
     if weight_schema is None or input_schema is None:
         if quant_config is None:
-            raise ValueError(
-                "Must provide either weight_schema/input_schema or quant_config"
-            )
+            raise ValueError("Must provide either weight_schema/input_schema or quant_config")
 
         from humming.layer import HummingInputSchema
         from humming.schema import BaseWeightSchema
@@ -986,8 +975,7 @@ def convert_to_humming_moe_kernel_format(
             },
             "w2": {
                 "shape_n": layer.moe_config.hidden_dim,
-                "shape_k": layer.moe_config.intermediate_size_per_partition
-                * (1 if is_gated else 2),
+                "shape_k": layer.moe_config.intermediate_size_per_partition * (1 if is_gated else 2),
             },
         }
 

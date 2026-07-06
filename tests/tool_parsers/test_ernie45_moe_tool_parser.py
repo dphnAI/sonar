@@ -31,14 +31,10 @@ def ernie45_tool_parser(ernie45_tokenizer):
     return Ernie45ToolParser(ernie45_tokenizer)
 
 
-def assert_tool_calls(
-    actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]
-):
+def assert_tool_calls(actual_tool_calls: list[ToolCall], expected_tool_calls: list[ToolCall]):
     assert len(actual_tool_calls) == len(expected_tool_calls)
 
-    for actual_tool_call, expected_tool_call in zip(
-        actual_tool_calls, expected_tool_calls
-    ):
+    for actual_tool_call, expected_tool_call in zip(actual_tool_calls, expected_tool_calls):
         assert isinstance(actual_tool_call.id, str)
         assert len(actual_tool_call.id) > 0
 
@@ -52,9 +48,7 @@ def assert_tool_calls(
 
 def test_extract_tool_calls_no_tools(ernie45_tool_parser):
     model_output = "This is a test"
-    extracted_tool_calls = ernie45_tool_parser.extract_tool_calls(
-        model_output, request=None
-    )  # type: ignore[arg-type]
+    extracted_tool_calls = ernie45_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
     assert not extracted_tool_calls.tools_called
     assert extracted_tool_calls.tool_calls == []
     assert extracted_tool_calls.content == model_output
@@ -158,12 +152,8 @@ def test_extract_tool_calls_no_tools(ernie45_tool_parser):
         ),
     ],
 )
-def test_extract_tool_calls(
-    ernie45_tool_parser, model_output, expected_tool_calls, expected_content
-):
-    extracted_tool_calls = ernie45_tool_parser.extract_tool_calls(
-        model_output, request=None
-    )  # type: ignore[arg-type]
+def test_extract_tool_calls(ernie45_tool_parser, model_output, expected_tool_calls, expected_content):
+    extracted_tool_calls = ernie45_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -188,16 +178,14 @@ def stream_delta_message_generator(
         previous_token_ids = all_token_ids[:i]
         current_token_ids = all_token_ids[: i + 1]
 
-        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = (
-            detokenize_incrementally(
-                tokenizer=ernie45_tokenizer,
-                all_input_ids=current_token_ids,
-                prev_tokens=previous_tokens,
-                prefix_offset=prefix_offset,
-                read_offset=read_offset,
-                skip_special_tokens=False,
-                spaces_between_special_tokens=True,
-            )
+        (new_tokens, delta_text, new_prefix_offset, new_read_offset) = detokenize_incrementally(
+            tokenizer=ernie45_tokenizer,
+            all_input_ids=current_token_ids,
+            prev_tokens=previous_tokens,
+            prefix_offset=prefix_offset,
+            read_offset=read_offset,
+            skip_special_tokens=False,
+            spaces_between_special_tokens=True,
         )
 
         current_text = previous_text + delta_text
@@ -215,9 +203,7 @@ def stream_delta_message_generator(
             yield delta_message
 
         previous_text = current_text
-        previous_tokens = (
-            previous_tokens + new_tokens if previous_tokens else new_tokens
-        )
+        previous_tokens = previous_tokens + new_tokens if previous_tokens else new_tokens
         prefix_offset = new_prefix_offset
         read_offset = new_read_offset
 
@@ -331,9 +317,7 @@ def test_extract_tool_calls_streaming_incremental(
     request = ChatCompletionRequest(model=MODEL, messages=[])
 
     tool_calls_dict = {}
-    for delta_message in stream_delta_message_generator(
-        ernie45_tool_parser, ernie45_tokenizer, model_output, request
-    ):
+    for delta_message in stream_delta_message_generator(ernie45_tool_parser, ernie45_tokenizer, model_output, request):
         if (
             delta_message.role is None
             and delta_message.content is None
@@ -349,9 +333,7 @@ def test_extract_tool_calls_streaming_incremental(
                     tool_call_chunk.function.arguments = ""
                 tool_calls_dict[index] = tool_call_chunk
             else:
-                tool_calls_dict[
-                    index
-                ].function.arguments += tool_call_chunk.function.arguments
+                tool_calls_dict[index].function.arguments += tool_call_chunk.function.arguments
     actual_tool_calls = list(tool_calls_dict.values())
 
     assert len(actual_tool_calls) > 0

@@ -29,9 +29,7 @@ __all__ = [
 ]
 
 
-def reorder_w1w3_to_w3w1(
-    weight: torch.Tensor, scale: torch.Tensor, dim: int = -2
-) -> tuple[torch.Tensor, torch.Tensor]:
+def reorder_w1w3_to_w3w1(weight: torch.Tensor, scale: torch.Tensor, dim: int = -2) -> tuple[torch.Tensor, torch.Tensor]:
     """Re-order the concatenated `[w1, w3]` tensors to `[w3, w1]`"""
     size = weight.size(dim)
     assert size % 2 == 0, f"Expected even size in dim {dim}, got {size}"
@@ -54,9 +52,7 @@ def interleave_linear_and_gate(
     """Interleave gate and linear weight rows for CuteDSL wrapper."""
     sizes = x.size()
     dim = dim % x.dim()
-    assert sizes[dim] % (group_size * 2) == 0, (
-        f"dim {dim} size {sizes[dim]} must be divisible by {group_size * 2}"
-    )
+    assert sizes[dim] % (group_size * 2) == 0, f"dim {dim} size {sizes[dim]} must be divisible by {group_size * 2}"
     prev_sizes = sizes[:dim]
     post_sizes = sizes[dim + 1 :]
     x = x.view(*prev_sizes, 2, sizes[dim] // (group_size * 2), group_size, *post_sizes)
@@ -161,26 +157,22 @@ def prepare_static_weights_for_trtllm_fp4_moe(
     _cache_permute_indices: dict[torch.Size, torch.Tensor] = {}
     """Prepare quantized weights for kernel (done offline with weights)."""
     epilogue_tile_m = 128  # FIXME: this depends on the kernel internals
-    gemm1_intermediate_size = (
-        2 * intermediate_size if is_gated_activation else intermediate_size
-    )
+    gemm1_intermediate_size = 2 * intermediate_size if is_gated_activation else intermediate_size
 
     # Convert quantized weights to proper formats
     gemm1_weights_fp4 = gemm1_weights.view(torch.float8_e4m3fn).reshape(
         num_experts, gemm1_intermediate_size, hidden_size // 2
     )  # packed fp4
-    gemm1_scales_linear_fp4 = gemm1_scales_linear_fp4_bytes.view(
-        torch.float8_e4m3fn
-    ).reshape(
+    gemm1_scales_linear_fp4 = gemm1_scales_linear_fp4_bytes.view(torch.float8_e4m3fn).reshape(
         num_experts, gemm1_intermediate_size, hidden_size // 16
     )  # fp8 scaling factors
 
     gemm2_weights_fp4 = gemm2_weights.view(torch.float8_e4m3fn).reshape(
         num_experts, hidden_size, intermediate_size // 2
     )  # packed fp4
-    gemm2_scales_linear_fp4 = gemm2_scales_linear_fp4_bytes.view(
-        torch.float8_e4m3fn
-    ).reshape(num_experts, hidden_size, intermediate_size // 16)  # fp8 scaling factors
+    gemm2_scales_linear_fp4 = gemm2_scales_linear_fp4_bytes.view(torch.float8_e4m3fn).reshape(
+        num_experts, hidden_size, intermediate_size // 16
+    )  # fp8 scaling factors
 
     gemm1_weights_fp4_shuffled = []
     gemm1_scales_fp4_shuffled = []
@@ -198,9 +190,7 @@ def prepare_static_weights_for_trtllm_fp4_moe(
             is_gated_act_gemm=is_gated_activation,
         )
         gemm1_weights_fp4_shuffled.append(
-            gemm1_weights_fp4[i]
-            .view(torch.uint8)[permute_indices.to(gemm1_weights_fp4.device)]
-            .contiguous()
+            gemm1_weights_fp4[i].view(torch.uint8)[permute_indices.to(gemm1_weights_fp4.device)].contiguous()
         )
 
         permute_sf_indices = _maybe_get_cached_w3_w1_permute_indices(
@@ -213,9 +203,7 @@ def prepare_static_weights_for_trtllm_fp4_moe(
         gemm1_scales_fp4_shuffled.append(
             nvfp4_block_scale_interleave(
                 gemm1_scales_linear_fp4[i]
-                .view(torch.uint8)[
-                    permute_sf_indices.to(gemm1_scales_linear_fp4.device)
-                ]
+                .view(torch.uint8)[permute_sf_indices.to(gemm1_scales_linear_fp4.device)]
                 .contiguous()
             )
         )
@@ -226,9 +214,7 @@ def prepare_static_weights_for_trtllm_fp4_moe(
             epilogue_tile_m,
         )
         gemm2_weights_fp4_shuffled.append(
-            gemm2_weights_fp4[i]
-            .view(torch.uint8)[permute_indices.to(gemm2_weights_fp4.device)]
-            .contiguous()
+            gemm2_weights_fp4[i].view(torch.uint8)[permute_indices.to(gemm2_weights_fp4.device)].contiguous()
         )
 
         permute_sf_indices = get_w2_permute_indices_with_cache(
@@ -240,9 +226,7 @@ def prepare_static_weights_for_trtllm_fp4_moe(
         gemm2_scales_fp4_shuffled.append(
             nvfp4_block_scale_interleave(
                 gemm2_scales_linear_fp4[i]
-                .view(torch.uint8)[
-                    permute_sf_indices.to(gemm2_scales_linear_fp4.device)
-                ]
+                .view(torch.uint8)[permute_sf_indices.to(gemm2_scales_linear_fp4.device)]
                 .contiguous()
             )
         )
@@ -329,8 +313,8 @@ def prepare_nvfp4_moe_layer_for_fi_or_cutlass(
 
     # Shuffle weights and scales for FI TRTLLM NVFP4 MoE kernels.
     if backend == NvFp4MoeBackend.FLASHINFER_TRTLLM:
-        w13, w13_scale, w2, w2_scale, padded_hidden = (
-            align_trtllm_fp4_moe_hidden_dim_for_fi(w13, w13_scale, w2, w2_scale)
+        w13, w13_scale, w2, w2_scale, padded_hidden = align_trtllm_fp4_moe_hidden_dim_for_fi(
+            w13, w13_scale, w2, w2_scale
         )
         if layer.moe_config.hidden_dim_unpadded is None:
             layer.moe_config.hidden_dim_unpadded = layer.moe_config.hidden_dim
@@ -338,10 +322,8 @@ def prepare_nvfp4_moe_layer_for_fi_or_cutlass(
 
         # Align weights for FI NVFP4 MoE kernels.
         min_alignment = 16 if is_gated else 128
-        w13, w13_scale, w2, w2_scale, padded_intermediate = (
-            align_fp4_moe_weights_for_fi(
-                w13, w13_scale, w2, w2_scale, is_act_and_mul, min_alignment
-            )
+        w13, w13_scale, w2, w2_scale, padded_intermediate = align_fp4_moe_weights_for_fi(
+            w13, w13_scale, w2, w2_scale, is_act_and_mul, min_alignment
         )
         layer.moe_config.intermediate_size_per_partition = padded_intermediate
 

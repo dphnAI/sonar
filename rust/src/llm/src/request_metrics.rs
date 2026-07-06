@@ -29,7 +29,7 @@ const REQUEST_LEVEL_METRICS_ENV: &str = "APHRODITE_REQUEST_LEVEL_METRICS";
 ///
 /// Matches Python's `envs.APHRODITE_REQUEST_LEVEL_METRICS` parsing: the env var
 /// is interpreted as an integer and any non-zero value enables the feature.
-/// Unset or unparseable values fall back to the Python default of `1` (enabled).
+/// Unset or unparsable values fall back to the Python default of `1` (enabled).
 pub(crate) fn request_level_metrics_enabled() -> bool {
     static CACHED: OnceLock<bool> = OnceLock::new();
     *CACHED.get_or_init(|| match std::env::var(REQUEST_LEVEL_METRICS_ENV) {

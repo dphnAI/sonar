@@ -56,7 +56,5 @@ class IntermediateTensors:
     def empty_like(
         intermediate_tensors: "IntermediateTensors",
     ) -> "IntermediateTensors":
-        tensors = {
-            k: torch.empty_like(v) for k, v in intermediate_tensors.tensors.items()
-        }
+        tensors = {k: torch.empty_like(v) for k, v in intermediate_tensors.tensors.items()}
         return IntermediateTensors(tensors)

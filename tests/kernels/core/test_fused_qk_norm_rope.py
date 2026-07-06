@@ -4,11 +4,11 @@
 import pytest
 import torch
 
-from tests.kernels.utils import opcheck
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.utils import opcheck
 
 DTYPES = [torch.bfloat16, torch.float16]
 IS_NEOX = [True, False]

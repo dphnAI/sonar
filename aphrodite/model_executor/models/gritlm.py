@@ -5,7 +5,7 @@ from collections.abc import Set
 import numpy as np
 import torch
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.pooler import (
     DispatchPooler,
@@ -53,9 +53,7 @@ class GritLMMeanPool(SequencePoolingMethod):
             return np.array([self.token_ids[token] for token in tokens])
 
         self.user_pattern_ids = tokens_to_ids(["▁<", "|", "user", "|", ">", "<0x0A>"])
-        self.embed_newline_pattern_ids = tokens_to_ids(
-            ["<0x0A>", "<", "|", "embed", "|", ">", "<0x0A>"]
-        )
+        self.embed_newline_pattern_ids = tokens_to_ids(["<0x0A>", "<", "|", "embed", "|", ">", "<0x0A>"])
         self.embed_pattern_ids = tokens_to_ids(["▁<", "|", "embed", "|", ">", "<0x0A>"])
 
     def _find_array(
@@ -119,18 +117,11 @@ class GritLMMeanPool(SequencePoolingMethod):
         # If user pattern is found in the prompt, that means there should be
         # a newline token before the embed pattern.
         embed_pattern_ids = self.embed_pattern_ids
-        if (
-            self._find_array(
-                prompt_token_ids, self.user_pattern_ids, start_idx=1, end_idx=2
-            )
-            == 1
-        ):
+        if self._find_array(prompt_token_ids, self.user_pattern_ids, start_idx=1, end_idx=2) == 1:
             embed_pattern_ids = self.embed_newline_pattern_ids
 
         # Find the embed pattern in the prompt.
-        found_embed_pattern_idx = self._find_array(
-            prompt_token_ids, embed_pattern_ids, start_idx=1
-        )
+        found_embed_pattern_idx = self._find_array(prompt_token_ids, embed_pattern_ids, start_idx=1)
 
         if found_embed_pattern_idx != -1:
             instruction_len = found_embed_pattern_idx + len(embed_pattern_ids)
@@ -158,21 +149,14 @@ class GritLMMeanPool(SequencePoolingMethod):
         prompt_lens = pooling_metadata.prompt_lens
         prompt_token_ids = pooling_metadata.get_prompt_token_ids_cpu()
         instr_lens = torch.tensor(
-            [
-                self._get_instruction_len(token_ids.numpy())
-                for token_ids in prompt_token_ids
-            ],
+            [self._get_instruction_len(token_ids.numpy()) for token_ids in prompt_token_ids],
             device="cpu",
         )
 
         offset = 0
         pooled_data = list[torch.Tensor]()
         for prompt_len, instr_len in zip(prompt_lens, instr_lens):
-            pooled_data.append(
-                hidden_states[offset + instr_len : offset + prompt_len].mean(
-                    dim=0, dtype=torch.float32
-                )
-            )
+            pooled_data.append(hidden_states[offset + instr_len : offset + prompt_len].mean(dim=0, dtype=torch.float32))
             offset += prompt_len
 
         return pooled_data

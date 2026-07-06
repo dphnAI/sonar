@@ -48,12 +48,8 @@ def make_awq_checkpoint_data(K, N, group_size, seed=42):
     rng = np.random.RandomState(seed)
     num_groups = K // group_size
 
-    weight_int4_orig = torch.from_numpy(
-        rng.randint(0, 16, size=(K, N)).astype(np.int32)
-    )
-    zeros_int4_orig = torch.from_numpy(
-        rng.randint(0, 16, size=(num_groups, N)).astype(np.int32)
-    )
+    weight_int4_orig = torch.from_numpy(rng.randint(0, 16, size=(K, N)).astype(np.int32))
+    zeros_int4_orig = torch.from_numpy(rng.randint(0, 16, size=(num_groups, N)).astype(np.int32))
     scales = torch.from_numpy((rng.randn(num_groups, N) * 0.05).astype(np.float32))
 
     scales_exp = scales.repeat_interleave(group_size, dim=0)
@@ -61,16 +57,10 @@ def make_awq_checkpoint_data(K, N, group_size, seed=42):
     float_ref = (weight_int4_orig.float() - zeros_exp.float()) * scales_exp
 
     awq_interleave = [0, 2, 4, 6, 1, 3, 5, 7]
-    weight_interleaved = (
-        weight_int4_orig.reshape(-1, 8)[:, awq_interleave].reshape(K, N).contiguous()
-    )
+    weight_interleaved = weight_int4_orig.reshape(-1, 8)[:, awq_interleave].reshape(K, N).contiguous()
     packed_qweight = pack_cols(weight_interleaved, 4, K, N)
 
-    zeros_interleaved = (
-        zeros_int4_orig.reshape(-1, 8)[:, awq_interleave]
-        .reshape(num_groups, N)
-        .contiguous()
-    )
+    zeros_interleaved = zeros_int4_orig.reshape(-1, 8)[:, awq_interleave].reshape(num_groups, N).contiguous()
     packed_qzeros = pack_cols(zeros_interleaved, 4, num_groups, N)
 
     return (
@@ -96,9 +86,7 @@ class TestConvertWeightPackedScaleZp:
     )
     def test_packing_output_shapes(self, K, N, group_size):
         """Packed outputs should have expected shapes."""
-        (packed_qweight, packed_qzeros, scales, _, _, _) = make_awq_checkpoint_data(
-            K, N, group_size
-        )
+        (packed_qweight, packed_qzeros, scales, _, _, _) = make_awq_checkpoint_data(K, N, group_size)
 
         blocked_w, blocked_zp, blocked_s = convert_weight_packed_scale_zp(
             packed_qweight,
@@ -110,15 +98,9 @@ class TestConvertWeightPackedScaleZp:
         block_n = 32
         Nc = N // block_n
 
-        assert blocked_w.dim() >= 2, (
-            f"blocked_w should have >= 2 dims, got {blocked_w.dim()}"
-        )
-        assert blocked_s.size(0) == Nc, (
-            f"Expected Nc={Nc} scale blocks, got {blocked_s.size(0)}"
-        )
-        assert blocked_zp.size(0) == Nc, (
-            f"Expected Nc={Nc} qzeros blocks, got {blocked_zp.size(0)}"
-        )
+        assert blocked_w.dim() >= 2, f"blocked_w should have >= 2 dims, got {blocked_w.dim()}"
+        assert blocked_s.size(0) == Nc, f"Expected Nc={Nc} scale blocks, got {blocked_s.size(0)}"
+        assert blocked_zp.size(0) == Nc, f"Expected Nc={Nc} qzeros blocks, got {blocked_zp.size(0)}"
 
         print(
             f"  [PASS] packing shapes K={K}, N={N}, gs={group_size}: "
@@ -142,9 +124,7 @@ class TestInt4ScaledMmCpu:
     )
     def test_gemm_vs_float_reference(self, M, K, N, group_size):
         """INT4 W4A8 GEMM should approximate float matmul."""
-        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = (
-            make_awq_checkpoint_data(K, N, group_size)
-        )
+        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = make_awq_checkpoint_data(K, N, group_size)
 
         blocked_w, blocked_zp, blocked_s = convert_weight_packed_scale_zp(
             packed_qweight,
@@ -164,21 +144,15 @@ class TestInt4ScaledMmCpu:
         ref_mag = ref_out.abs().mean().item() + 1e-6
         mean_rel = mean_abs / ref_mag
 
-        assert mean_rel < 0.05, (
-            f"Mean relative error {mean_rel:.4f} exceeds 5% threshold"
-        )
-        assert pct95 < ref_mag * 0.15, (
-            f"95th-pctile abs_diff {pct95:.4f} exceeds 15% of ref magnitude"
-        )
+        assert mean_rel < 0.05, f"Mean relative error {mean_rel:.4f} exceeds 5% threshold"
+        assert pct95 < ref_mag * 0.15, f"95th-pctile abs_diff {pct95:.4f} exceeds 15% of ref magnitude"
         print(f"  [PASS] INT4 GEMM correct: M={M}, K={K}, N={N}")
 
     @pytest.mark.parametrize("M", [1, 8, 32])
     def test_gemm_with_bias(self, M):
         """INT4 W4A8 GEMM with bias should match reference."""
         K, N, group_size = 256, 128, 128
-        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = (
-            make_awq_checkpoint_data(K, N, group_size)
-        )
+        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = make_awq_checkpoint_data(K, N, group_size)
 
         blocked_w, blocked_zp, blocked_s = convert_weight_packed_scale_zp(
             packed_qweight,
@@ -197,17 +171,13 @@ class TestInt4ScaledMmCpu:
         mean_abs = abs_diff.mean().item()
         ref_mag = ref_out.abs().mean().item() + 1e-6
         mean_rel = mean_abs / ref_mag
-        assert mean_rel < 0.05, (
-            f"Mean relative error {mean_rel:.4f} with bias exceeds 5%"
-        )
+        assert mean_rel < 0.05, f"Mean relative error {mean_rel:.4f} with bias exceeds 5%"
         print(f"  [PASS] INT4 GEMM with bias: M={M}")
 
     def test_gemm_3d_input(self):
         """apply() reshapes 3D input [B, S, K] -> [B*S, K] -> back to 3D."""
         K, N, group_size = 256, 128, 128
-        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = (
-            make_awq_checkpoint_data(K, N, group_size)
-        )
+        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = make_awq_checkpoint_data(K, N, group_size)
 
         blocked_w, blocked_zp, blocked_s = convert_weight_packed_scale_zp(
             packed_qweight,
@@ -237,9 +207,7 @@ class TestInt4ScaledMmCpu:
     def test_gemm_fp16_input(self):
         """INT4 GEMM should also work with fp16 input."""
         K, N, group_size, M = 256, 256, 128, 8
-        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = (
-            make_awq_checkpoint_data(K, N, group_size)
-        )
+        (packed_qweight, packed_qzeros, scales, float_ref, _, _) = make_awq_checkpoint_data(K, N, group_size)
 
         blocked_w, blocked_zp, blocked_s = convert_weight_packed_scale_zp(
             packed_qweight,
@@ -256,9 +224,7 @@ class TestInt4ScaledMmCpu:
         ref_mag = ref_out.abs().mean().item() + 1e-6
         mean_rel = abs_diff.mean().item() / ref_mag
 
-        assert mean_rel < 0.05, (
-            f"Mean relative error {mean_rel:.4f} for fp16 exceeds 5%"
-        )
+        assert mean_rel < 0.05, f"Mean relative error {mean_rel:.4f} for fp16 exceeds 5%"
         print(f"  [PASS] fp16 input M={M}, K={K}, N={N}")
 
 

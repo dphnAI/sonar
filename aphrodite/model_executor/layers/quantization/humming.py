@@ -194,17 +194,12 @@ class HummingConfig(QuantizationConfig):
         return cls(full_config=config)
 
     @classmethod
-    def override_quantization_method(
-        cls, hf_quant_cfg, user_quant, hf_config=None
-    ) -> QuantizationMethods | None:
+    def override_quantization_method(cls, hf_quant_cfg, user_quant, hf_config=None) -> QuantizationMethods | None:
         if user_quant == "humming" and hf_config is not None:
             model_type = hf_config.model_type
             quant_method = hf_quant_cfg.get("quant_method", None)
             if model_type == "gpt_oss" and quant_method == "mxfp4":
-                msg = (
-                    "For gpt-oss model, use '--moe-backend humming' "
-                    "instead of '--quantization humming'."
-                )
+                msg = "For gpt-oss model, use '--moe-backend humming' instead of '--quantization humming'."
                 raise ValueError(msg)
         return "humming" if user_quant == "humming" else None
 
@@ -269,9 +264,7 @@ class HummingConfig(QuantizationConfig):
             return _hm.BaseInputSchema.from_config(config)
         return None
 
-    def get_quant_config_for_layer(
-        self, prefix: str, layer_type: str
-    ) -> "HummingLayerQuantizationConfig | None":
+    def get_quant_config_for_layer(self, prefix: str, layer_type: str) -> "HummingLayerQuantizationConfig | None":
         weight_schema: BaseWeightSchema | None = None
         force_weight_schema: HummingWeightSchema | None = None
 
@@ -315,9 +308,7 @@ class HummingConfig(QuantizationConfig):
             )
         return None
 
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> "QuantizeMethodBase | None":
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         layer_type = "other"
         if isinstance(layer, RoutedExperts):
             layer_type = "moe"
@@ -359,9 +350,7 @@ class HummingLayerQuantizationConfig(HummingConfig):
         weight_schema = _hm.BaseWeightSchema.from_config(config)
         return cls(weight_schema)
 
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> QuantizeMethodBase | None:
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> QuantizeMethodBase | None:
         raise NotImplementedError
 
 
@@ -608,9 +597,7 @@ class HummingLinearMethod(LinearMethodBase):
 
 
 class HummingMoEMethod(FusedMoEMethodBase):
-    def __init__(
-        self, quant_config: HummingLayerQuantizationConfig, moe: "FusedMoEConfig"
-    ) -> None:
+    def __init__(self, quant_config: HummingLayerQuantizationConfig, moe: "FusedMoEConfig") -> None:
         super().__init__(moe)
         self.quant_config = quant_config
         self.weight_schema = quant_config.weight_schema
@@ -620,12 +607,8 @@ class HummingMoEMethod(FusedMoEMethodBase):
 
         # Derive QuantKeys from humming schemas.
         # Prefer force schemas (the final format after requant) over base.
-        weight_key = weight_schema_to_quant_key(
-            self.force_weight_schema or self.weight_schema
-        )
-        activation_key = input_schema_to_quant_key(
-            self.force_input_schema or self.input_schema
-        )
+        weight_key = weight_schema_to_quant_key(self.force_weight_schema or self.weight_schema)
+        activation_key = input_schema_to_quant_key(self.force_input_schema or self.input_schema)
 
         # Select Humming MoE experts
         self.experts_cls = select_humming_moe_experts(

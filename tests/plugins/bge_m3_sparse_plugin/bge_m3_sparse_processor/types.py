@@ -23,13 +23,11 @@ EMBED_TASKS: tuple[EmbedTask, ...] = get_args(EmbedTask)
 class SparseEmbeddingCompletionRequestMixin(CompletionRequestMixin, EmbedRequestMixin):
     return_tokens: bool | None = Field(
         default=None,
-        description="Whether to return dict shows the mapping of token_id to text."
-        "`None` or False means not return.",
+        description="Whether to return dict shows the mapping of token_id to text.`None` or False means not return.",
     )
     embed_task: EmbedTask = Field(
         default="dense&sparse",
-        description="embed task, can be one of 'sparse', 'dense' , 'dense&sparse', "
-        "default to 'dense&sparse'",
+        description="embed task, can be one of 'sparse', 'dense' , 'dense&sparse', default to 'dense&sparse'",
     )
 
     def to_embed_requests_offline(self) -> list[EmbedRequestMixin]:

@@ -36,18 +36,14 @@ def test_commit_eplb_maps_shape_change():
     # Build current state tensors
     model_state = _make_model_state(
         phy2log=torch.zeros(num_layers, num_physical, dtype=torch.long),
-        log2phy=torch.full(
-            (num_layers, num_logical, max_replicas), -1, dtype=torch.long
-        ),
+        log2phy=torch.full((num_layers, num_logical, max_replicas), -1, dtype=torch.long),
         logcnt=torch.zeros(num_layers, num_logical, dtype=torch.long),
     )
 
     # The new map has two more physical experts. These new physical experts will
     # automatically map to the first two logical experts
     new_phy2log_larger = (
-        (torch.arange(num_physical + 2, dtype=torch.long) % num_logical)
-        .unsqueeze(0)
-        .expand(num_layers, -1)
+        (torch.arange(num_physical + 2, dtype=torch.long) % num_logical).unsqueeze(0).expand(num_layers, -1)
     )
     _commit_eplb_maps(model_state, new_phy2log_larger)
 
@@ -67,17 +63,12 @@ def test_commit_eplb_maps_for_layer_logical_padding():
 
     model_state = _make_model_state(
         phy2log=torch.zeros(num_layers, num_physical, dtype=torch.long),
-        log2phy=torch.full(
-            (num_layers, num_logical, max_replicas), -1, dtype=torch.long
-        ),
+        log2phy=torch.full((num_layers, num_logical, max_replicas), -1, dtype=torch.long),
         logcnt=torch.zeros(num_layers, num_logical, dtype=torch.long),
     )
 
     new_phy2log = (
-        (torch.arange(num_physical, dtype=torch.long) % num_logical)
-        .unsqueeze(0)
-        .expand(num_layers, -1)
-        .contiguous()
+        (torch.arange(num_physical, dtype=torch.long) % num_logical).unsqueeze(0).expand(num_layers, -1).contiguous()
     )
     layer = 0
     _commit_eplb_maps_for_layer(model_state, new_phy2log[layer], layer)
@@ -105,16 +96,12 @@ def test_commit_eplb_maps():
 
     model_state = _make_model_state(
         phy2log=torch.zeros(num_layers, num_physical, dtype=torch.long),
-        log2phy=torch.full(
-            (num_layers, num_logical, max_replicas), -1, dtype=torch.long
-        ),
+        log2phy=torch.full((num_layers, num_logical, max_replicas), -1, dtype=torch.long),
         logcnt=torch.zeros(num_layers, num_logical, dtype=torch.long),
     )
 
     new_phy2log = torch.tensor([[0, 1, 2, 0], [1, 2, 0, 1]], dtype=torch.long)
-    new_log2phy = torch.tensor(
-        [[[0, 3], [1, -1], [2, -1]], [[2, -1], [0, 3], [1, -1]]], dtype=torch.long
-    )
+    new_log2phy = torch.tensor([[[0, 3], [1, -1], [2, -1]], [[2, -1], [0, 3], [1, -1]]], dtype=torch.long)
     new_logcnt = torch.tensor([[2, 1, 1], [1, 2, 1]], dtype=torch.long)
 
     _commit_eplb_maps(model_state, new_phy2log)
@@ -131,16 +118,12 @@ def test_commit_eplb_maps_for_layer():
     original_phy2log = torch.tensor([[9, 9, 9, 9], [8, 8, 8, 8]], dtype=torch.long)
     model_state = _make_model_state(
         phy2log=original_phy2log.clone(),
-        log2phy=torch.full(
-            (num_layers, num_logical, max_replicas), -1, dtype=torch.long
-        ),
+        log2phy=torch.full((num_layers, num_logical, max_replicas), -1, dtype=torch.long),
         logcnt=torch.zeros(num_layers, num_logical, dtype=torch.long),
     )
 
     new_phy2log = torch.tensor([[0, 1, 2, 0], [1, 2, 0, 1]], dtype=torch.long)
-    new_log2phy = torch.tensor(
-        [[[0, 3], [1, -1], [2, -1]], [[2, -1], [0, 3], [1, -1]]], dtype=torch.long
-    )
+    new_log2phy = torch.tensor([[[0, 3], [1, -1], [2, -1]], [[2, -1], [0, 3], [1, -1]]], dtype=torch.long)
     new_logcnt = torch.tensor([[2, 1, 1], [1, 2, 1]], dtype=torch.long)
 
     _commit_eplb_maps_for_layer(model_state, new_phy2log[0], layer=0)

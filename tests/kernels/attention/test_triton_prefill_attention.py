@@ -43,9 +43,7 @@ def ref_masked_attention(
         pos_k = torch.arange(total_tokens, device=q.device).unsqueeze(0)
 
         # Start with valid mask (False = no masking)
-        mask = torch.ones(
-            (total_tokens, total_tokens), dtype=torch.bool, device=q.device
-        )
+        mask = torch.ones((total_tokens, total_tokens), dtype=torch.bool, device=q.device)
 
         # Apply causal mask
         if is_causal:
@@ -65,9 +63,7 @@ def ref_masked_attention(
         use_causal = False  # Don't use is_causal when providing explicit mask
 
     # Use SDPA
-    output = F.scaled_dot_product_attention(
-        q, k, v, attn_mask=attn_mask, is_causal=use_causal, dropout_p=0.0
-    )
+    output = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, is_causal=use_causal, dropout_p=0.0)
 
     # Convert back to original shape: [total_tokens, num_heads, head_dim]
     output = output.transpose(1, 2).squeeze(0)
@@ -95,9 +91,7 @@ def test_context_attention(
     torch.manual_seed(42)
 
     # Generate random sequence lengths for each batch
-    seq_lens = torch.randint(
-        max_seq_len // 2, max_seq_len + 1, (B,), device=DEVICE_TYPE
-    )
+    seq_lens = torch.randint(max_seq_len // 2, max_seq_len + 1, (B,), device=DEVICE_TYPE)
     total_tokens = seq_lens.sum().item()
 
     # Create batch start locations
@@ -174,9 +168,7 @@ def test_context_attention_sliding_window(
     torch.manual_seed(42)
 
     # Generate random sequence lengths for each batch
-    seq_lens = torch.randint(
-        max_seq_len // 2, max_seq_len + 1, (B,), device=DEVICE_TYPE
-    )
+    seq_lens = torch.randint(max_seq_len // 2, max_seq_len + 1, (B,), device=DEVICE_TYPE)
     total_tokens = seq_lens.sum().item()
 
     # Create batch start locations

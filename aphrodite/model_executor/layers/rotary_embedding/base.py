@@ -47,13 +47,9 @@ class RotaryEmbeddingBase(CustomOp):
         if not hasattr(self, "use_flashinfer"):
             self.use_flashinfer = False
 
-        self.use_aiter = (
-            self.enabled() and rocm_aiter_ops.is_triton_rotary_embed_enabled()
-        )
+        self.use_aiter = self.enabled() and rocm_aiter_ops.is_triton_rotary_embed_enabled()
         if self.use_aiter:
-            self.rocm_aiter_triton_rotary_embedding = (
-                rocm_aiter_ops.get_triton_rotary_embedding_op()
-            )
+            self.rocm_aiter_triton_rotary_embedding = rocm_aiter_ops.get_triton_rotary_embedding_op()
 
         if init_cache:
             cache = self._compute_cos_sin_cache()
@@ -83,12 +79,7 @@ class RotaryEmbeddingBase(CustomOp):
         # use CPU to compute the cache and then move it to GPU. However, we
         # create the cache on GPU for faster initialization. This may cause
         # a slight numerical difference between the HF implementation and ours.
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim
-            )
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim))
         return inv_freq
 
     def _compute_cos_sin_cache(self) -> torch.Tensor:
@@ -106,18 +97,11 @@ class RotaryEmbeddingBase(CustomOp):
         # __setattr__ in nn.Module (called by `self.cos_sin_cache = ...`)
         # is expensive, so avoid calling it if possible
         cos_sin_cache = self.cos_sin_cache
-        if (
-            cos_sin_cache.device == query.device
-            and self.cos_sin_cache.dtype == query.dtype
-        ):
+        if cos_sin_cache.device == query.device and self.cos_sin_cache.dtype == query.dtype:
             return cos_sin_cache
 
         # Reuse precomputed bf16 cache in the AITER compile path.
-        if (
-            self.use_aiter
-            and torch.compiler.is_compiling()
-            and query.dtype == torch.bfloat16
-        ):
+        if self.use_aiter and torch.compiler.is_compiling() and query.dtype == torch.bfloat16:
             cache_bf16 = getattr(self, "cos_sin_cache_bf16", None)
             if cache_bf16 is not None and cache_bf16.device == query.device:
                 return cache_bf16

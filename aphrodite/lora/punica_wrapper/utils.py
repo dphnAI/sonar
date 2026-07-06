@@ -24,9 +24,7 @@ def compute_meta(
     needed based on the input, but only once.
     """
 
-    lora_indices_tensor, seq_length_tensor = torch.unique_consecutive(
-        token_lora_tensor, return_counts=True
-    )
+    lora_indices_tensor, seq_length_tensor = torch.unique_consecutive(token_lora_tensor, return_counts=True)
     cum_result = torch.cumsum(seq_length_tensor, dim=0)
     b_seq_start_tensor = torch.zeros_like(seq_length_tensor)
     b_seq_start_tensor[1:].copy_(cum_result[:-1])
@@ -95,22 +93,12 @@ def convert_mapping(
     # Build a reverse lookup (LoRA id -> index) once instead of repeatedly
     # calling list.index(), which is an O(num_loras) linear scan performed for
     # every prompt token and every batch token on each step.
-    lora_id_to_index = {
-        lora_id: index
-        for index, lora_id in enumerate(lora_index_to_id)
-        if lora_id is not None
-    }
+    lora_id_to_index = {lora_id: index for index, lora_id in enumerate(lora_index_to_id) if lora_id is not None}
 
-    prompt_mapping: list[int] = [
-        lora_id_to_index[x] if x > 0 else -1 for x in mapping.prompt_mapping
-    ]
+    prompt_mapping: list[int] = [lora_id_to_index[x] if x > 0 else -1 for x in mapping.prompt_mapping]
     lora_idx = None
     for i in range(len(index_mapping_indices)):
-        lora_idx = (
-            lora_id_to_index[index_mapping_indices[i]]
-            if index_mapping_indices[i] > 0
-            else -1
-        )
+        lora_idx = lora_id_to_index[index_mapping_indices[i]] if index_mapping_indices[i] > 0 else -1
         embedding_indices[i] = lora_idx if index_mapping_indices[i] > 0 else 0
         lora_indices[i] = lora_idx
 
@@ -121,27 +109,21 @@ def convert_mapping(
     ]
 
     indices = async_tensor_h2d(indices_list, dtype=torch.long, device=device)
-    prompt_mapping_tensor = async_tensor_h2d(
-        prompt_mapping, dtype=torch.long, device=device
-    )
+    prompt_mapping_tensor = async_tensor_h2d(prompt_mapping, dtype=torch.long, device=device)
     embeddings_indices = torch.stack(
         [
             indices[2] * extra_vocab_size,
             indices[2] * (vocab_size + extra_vocab_size),
         ]
     )
-    embeddings_indices = torch.where(
-        embeddings_indices == -1, max_loras - 1, embeddings_indices
-    )
+    embeddings_indices = torch.where(embeddings_indices == -1, max_loras - 1, embeddings_indices)
     base_indices = indices[1]
     sampler_indices = prompt_mapping_tensor
     sampler_indices_padded = sampler_indices.clone()
-    sampler_indices_padded = torch.where(
-        sampler_indices_padded == -1, max_loras - 1, sampler_indices_padded
+    sampler_indices_padded = torch.where(sampler_indices_padded == -1, max_loras - 1, sampler_indices_padded)
+    sampler_indices_padded = torch.arange(0, len(sampler_indices_padded), device=device, dtype=torch.long) + (
+        sampler_indices_padded * len(sampler_indices_padded)
     )
-    sampler_indices_padded = torch.arange(
-        0, len(sampler_indices_padded), device=device, dtype=torch.long
-    ) + (sampler_indices_padded * len(sampler_indices_padded))
 
     # Contain length of indices tensors. Used to index into each tensor.
     indices_len = [

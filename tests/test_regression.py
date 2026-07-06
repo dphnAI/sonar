@@ -12,9 +12,9 @@ import gc
 import pytest
 import torch
 
-from tests.utils import large_gpu_mark
 from aphrodite import LLM, SamplingParams
 from aphrodite.platforms import current_platform
+from tests.utils import large_gpu_mark
 
 
 @pytest.mark.parametrize(

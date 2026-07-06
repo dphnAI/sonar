@@ -173,9 +173,7 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
         Sharing would break compute_logits (and centroids masking when
         use_ordered_embeddings is enabled).
         """
-        logger.info(
-            "Gemma4 MTP: keeping draft model's own lm_head (draft_dim != backbone_dim)."
-        )
+        logger.info("Gemma4 MTP: keeping draft model's own lm_head (draft_dim != backbone_dim).")
 
     def load_model(self, target_model: nn.Module) -> None:
         target_attn_layer_names = set(
@@ -265,16 +263,10 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
         self.draft_attn_groups = list(attention_groups.values())
         if self.draft_attn_groups:
             self.kv_cache_gid = self.draft_attn_groups[0].kv_cache_group_id
-            self.block_size = (
-                self.draft_attn_groups[0]
-                .get_metadata_builder()
-                .kv_cache_spec.block_size
-            )
+            self.block_size = self.draft_attn_groups[0].get_metadata_builder().kv_cache_spec.block_size
         else:
             self.kv_cache_gid = 0
-            self.block_size = kv_cache_config.kv_cache_groups[
-                0
-            ].kv_cache_spec.block_size
+            self.block_size = kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size
         logger.debug("Using block size %d for drafting layers", self.block_size)
 
     def _setup_gemma4_kv_sharing(
@@ -315,11 +307,7 @@ class Gemma4Proposer(SpecDecodeBaseProposer):
             if attn is None:
                 continue
 
-            draft_layer_type = (
-                draft_layer_types[draft_idx]
-                if draft_idx < len(draft_layer_types)
-                else "full_attention"
-            )
+            draft_layer_type = draft_layer_types[draft_idx] if draft_idx < len(draft_layer_types) else "full_attention"
             candidates = type_to_target_indices.get(draft_layer_type, [])
             if not candidates:
                 logger.warning(

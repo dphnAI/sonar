@@ -44,8 +44,7 @@ def deshuffle(w: torch.Tensor):
 def init_compute_data(M, K, N, E, a_dtype: str, w_dtype: str, num_warps: int):
     randbits = [torch.randperm(E) for _ in range(M)]
     x_list = [
-        (-1) ** i
-        * ((16384 + ((i * 512) % 4096) + bits).to(torch.int16).view(torch.bfloat16))
+        (-1) ** i * ((16384 + ((i * 512) % 4096) + bits).to(torch.int16).view(torch.bfloat16))
         for i, bits in enumerate(randbits)
     ]
     exp_data = torch.stack(x_list).to(device="cuda")  # simulating gate_output (M, E)
@@ -124,20 +123,14 @@ def init_compute_data(M, K, N, E, a_dtype: str, w_dtype: str, num_warps: int):
             value=0,
         )
 
-        w1_bias_tri = F.pad(
-            w1_bias_tri, (0, w1_right_pad, 0, 0), mode="constant", value=0
-        )
-        w2_bias_tri = F.pad(
-            w2_bias_tri, (0, w2_right_pad, 0, 0), mode="constant", value=0
-        )
+        w1_bias_tri = F.pad(w1_bias_tri, (0, w1_right_pad, 0, 0), mode="constant", value=0)
+        w2_bias_tri = F.pad(w2_bias_tri, (0, w2_right_pad, 0, 0), mode="constant", value=0)
 
         x_tri = F.pad(x_tri, (0, x_pad, 0, 0), mode="constant", value=0)
 
         w_layout, w_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
-        w_scale_layout, w_scale_layout_opts = (
-            layout.make_default_matmul_mxfp4_w_scale_layout(
-                mx_axis=1, num_warps=num_warps
-            )
+        w_scale_layout, w_scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(
+            mx_axis=1, num_warps=num_warps
         )
 
         w1_tri, w1_scale_tri = downcast_to_mxfp(w1_tri, torch.uint8, axis=1)
@@ -146,30 +139,22 @@ def init_compute_data(M, K, N, E, a_dtype: str, w_dtype: str, num_warps: int):
         w2_tri, w2_scale_tri = downcast_to_mxfp(w2_tri, torch.uint8, axis=1)
         w2 = upcast_from_mxfp(w2_tri, w2_scale_tri, torch.bfloat16, axis=1)
 
-        w1_tri = convert_layout(
-            wrap_torch_tensor(w1_tri, FP4), w_layout, **w_layout_opts
-        )
+        w1_tri = convert_layout(wrap_torch_tensor(w1_tri, FP4), w_layout, **w_layout_opts)
         w1_scale_tri = convert_layout(
             wrap_torch_tensor(w1_scale_tri),
             w_scale_layout,
             **w_scale_layout_opts,
         )
 
-        w2_tri = convert_layout(
-            wrap_torch_tensor(w2_tri, FP4), w_layout, **w_layout_opts
-        )
+        w2_tri = convert_layout(wrap_torch_tensor(w2_tri, FP4), w_layout, **w_layout_opts)
         w2_scale_tri = convert_layout(
             wrap_torch_tensor(w2_scale_tri),
             w_scale_layout,
             **w_scale_layout_opts,
         )
 
-        pc1 = PrecisionConfig(
-            weight_scale=w1_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData())
-        )
-        pc2 = PrecisionConfig(
-            weight_scale=w2_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData())
-        )
+        pc1 = PrecisionConfig(weight_scale=w1_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData()))
+        pc2 = PrecisionConfig(weight_scale=w2_scale_tri, flex_ctx=FlexCtx(rhs_data=InFlexData()))
 
         # tucuate so the rest can run properly
         w1 = w1[..., :K, : 2 * N]
@@ -324,8 +309,7 @@ def test_equiv(num_token, a_dtype, w_dtype, tp, workspace_init):
         )
     else:
         raise NotImplementedError(
-            f"Quantization configuration for activation={a_dtype} and weight={w_dtype} "
-            f"has not been implemented."
+            f"Quantization configuration for activation={a_dtype} and weight={w_dtype} has not been implemented."
         )
 
     out_triton_monolithic = triton_kernel_moe_forward(

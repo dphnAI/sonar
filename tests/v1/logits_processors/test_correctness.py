@@ -9,15 +9,6 @@ import numpy as np
 import pytest
 import torch
 
-from tests.utils import create_new_process_for_each_test
-from tests.v1.sample.utils import (
-    LogitsprocsTestFakes,
-    create_fake_logits,
-    create_penalty_tensor,
-    create_prompt_tokens_tensor,
-    fake_apply_logitsprocs,
-    fake_update_logitsprocs_state,
-)
 from aphrodite.config import AphroditeConfig
 from aphrodite.platforms import current_platform
 from aphrodite.sampling_params import SamplingParams, validate_thinking_token_budget
@@ -37,16 +28,22 @@ from aphrodite.v1.sample.thinking_budget_state import (
     ThinkingBudgetStateHolder,
     maybe_create_thinking_budget_state_holder,
 )
+from tests.utils import create_new_process_for_each_test
+from tests.v1.sample.utils import (
+    LogitsprocsTestFakes,
+    create_fake_logits,
+    create_penalty_tensor,
+    create_prompt_tokens_tensor,
+    fake_apply_logitsprocs,
+    fake_update_logitsprocs_state,
+)
 
 PIN_MEMORY_AVAILABLE = is_pin_memory_available()
 MAX_NUM_REQS = 256
 VOCAB_SIZE = 1024
 NUM_OUTPUT_TOKENS = 20
 DEVICE_TYPE = current_platform.device_type
-DEVICES = [
-    f"{DEVICE_TYPE}:{i}"
-    for i in range(1 if current_platform.device_count() == 1 else 2)
-]
+DEVICES = [f"{DEVICE_TYPE}:{i}" for i in range(1 if current_platform.device_count() == 1 else 2)]
 MAX_NUM_PROMPT_TOKENS = 64
 MIN_TOKENS_LEN_THRESHOLD = 5
 REQS_PER_LOGITPROC = 50
@@ -117,13 +114,9 @@ def _generate_fake_sampling_metadata(
     output_token_ids: list[list[int]] = []
     prompt_token_ids: list[list[int]] = []
     for _ in range(batch_size):
-        output_token_ids.append(
-            np.random.randint(0, vocab_size, size=num_output_tokens).tolist()
-        )
+        output_token_ids.append(np.random.randint(0, vocab_size, size=num_output_tokens).tolist())
         prompt_token_ids.append(
-            np.random.randint(
-                0, vocab_size, size=np.random.randint(1, MAX_NUM_PROMPT_TOKENS)
-            ).tolist()
+            np.random.randint(0, vocab_size, size=np.random.randint(1, MAX_NUM_PROMPT_TOKENS)).tolist()
         )
 
     aphrodite_config = AphroditeConfig()
@@ -135,11 +128,7 @@ def _generate_fake_sampling_metadata(
         is_pin_memory=PIN_MEMORY_AVAILABLE,
         is_pooling_model=False,
     )
-    num_spec = (
-        aphrodite_config.speculative_config.num_speculative_tokens
-        if aphrodite_config.speculative_config
-        else 0
-    )
+    num_spec = aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
     thinking_holder = maybe_create_thinking_budget_state_holder(
         aphrodite_config.reasoning_config,
         aphrodite_config.scheduler_config.max_num_seqs,
@@ -154,9 +143,7 @@ def _generate_fake_sampling_metadata(
         top_k=None,
         generators={},
         max_num_logprobs=0,
-        prompt_token_ids=create_prompt_tokens_tensor(
-            prompt_token_ids, vocab_size, device
-        ),
+        prompt_token_ids=create_prompt_tokens_tensor(prompt_token_ids, vocab_size, device),
         output_token_ids=output_token_ids,
         frequency_penalties=create_penalty_tensor(batch_size, 0.0, device),
         presence_penalties=create_penalty_tensor(batch_size, 0.0, device),
@@ -247,9 +234,7 @@ def _raise_error_invalid(
 
 def _logit_bias_params(kwargs: dict) -> None:
     """Logit bias config"""
-    kwargs["logit_bias"] = {
-        random.randint(0, VOCAB_SIZE - 1): random.choice([-0.1, 0.2])
-    }
+    kwargs["logit_bias"] = {random.randint(0, VOCAB_SIZE - 1): random.choice([-0.1, 0.2])}
 
 
 def _logit_bias_validate(
@@ -344,10 +329,7 @@ def _min_p_validate(
 def _min_tokens_params(kwargs: dict) -> None:
     """Min-tokens logitproc config"""
     kwargs["min_tokens"] = MIN_TOKENS_LEN_THRESHOLD
-    kwargs["stop_token_ids"] = [
-        np.random.randint(0, VOCAB_SIZE - 1)
-        for _ in range(np.random.randint(0, VOCAB_SIZE))
-    ]
+    kwargs["stop_token_ids"] = [np.random.randint(0, VOCAB_SIZE - 1) for _ in range(np.random.randint(0, VOCAB_SIZE))]
 
 
 def _min_tokens_validate(
@@ -362,9 +344,7 @@ def _min_tokens_validate(
     ref_num_out_tokens = len(request_params.out_tokens)
     min_reached = ref_num_out_tokens >= MIN_TOKENS_LEN_THRESHOLD
     ref_all_stop_token_ids = request_params.params.all_stop_token_ids
-    mt_lp: MinTokensLogitsProcessor = next(
-        test_fakes.get_logitsprocs_by_cls(MinTokensLogitsProcessor)
-    )
+    mt_lp: MinTokensLogitsProcessor = next(test_fakes.get_logitsprocs_by_cls(MinTokensLogitsProcessor))
     assert isinstance(mt_lp, MinTokensLogitsProcessor)
     min_tok = mt_lp.min_toks.get(batch_index, None)
 
@@ -437,10 +417,7 @@ def _min_tokens_validate(
         else:
             if logits_for_token == -float("inf"):
                 _raise_error_invalid(
-                    msg_suffix=(
-                        f"Token {token_id} should not be masked but "
-                        f"is (output len={ref_num_out_tokens})"
-                    ),
+                    msg_suffix=(f"Token {token_id} should not be masked but is (output len={ref_num_out_tokens})"),
                     batch_index=batch_index,
                     request_params=request_params,
                     step_idx=step_idx,
@@ -486,9 +463,7 @@ def _thinking_budget_validate(
         actual_budget = state["thinking_token_budget"]
         if actual_budget != expected_budget:
             _raise_error_invalid(
-                msg_suffix=(
-                    f"Budget mismatch: expected {expected_budget}, got {actual_budget}"
-                ),
+                msg_suffix=(f"Budget mismatch: expected {expected_budget}, got {actual_budget}"),
                 batch_index=batch_index,
                 request_params=request_params,
                 step_idx=step_idx,
@@ -508,32 +483,21 @@ def _thinking_budget_validate(
             budget = state["thinking_token_budget"]
             if think_count >= budget and not state["in_end"]:
                 _raise_error_invalid(
-                    msg_suffix=(
-                        f"Budget exceeded ({think_count} >= {budget}) but "
-                        "in_end is false"
-                    ),
+                    msg_suffix=(f"Budget exceeded ({think_count} >= {budget}) but in_end is false"),
                     batch_index=batch_index,
                     request_params=request_params,
                     step_idx=step_idx,
                 )
 
             end_tokens = holder.think_end_token_ids
-            if (
-                think_count >= budget
-                and state["in_end"]
-                and len(end_tokens) > 0
-                and holder.has_tracked_requests()
-            ):
-                expected_end_token_id = end_tokens[
-                    min(state["end_count"], len(end_tokens) - 1)
-                ]
+            if think_count >= budget and state["in_end"] and len(end_tokens) > 0 and holder.has_tracked_requests():
+                expected_end_token_id = end_tokens[min(state["end_count"], len(end_tokens) - 1)]
                 # Holder bumps forced vocab positions to 1e9 (does not -inf others).
                 forced_logit = float(logits_new[batch_index, expected_end_token_id])
                 if forced_logit < 1.0e8:
                     _raise_error_invalid(
                         msg_suffix=(
-                            f"Expected forced end token {expected_end_token_id} "
-                            f"with large logit, got {forced_logit}"
+                            f"Expected forced end token {expected_end_token_id} with large logit, got {forced_logit}"
                         ),
                         batch_index=batch_index,
                         request_params=request_params,
@@ -560,9 +524,7 @@ def _none_validate(
             ref_val = float(ref_logits[token])
             mismatch_strs.append(f"({token=},{val=},{ref_val=})")
         _raise_error_invalid(
-            msg_suffix=(
-                f"Unexpected modification of logits: {','.join(mismatch_strs)}"
-            ),
+            msg_suffix=(f"Unexpected modification of logits: {','.join(mismatch_strs)}"),
             batch_index=batch_index,
             request_params=request_params,
             step_idx=step_idx,
@@ -578,15 +540,9 @@ class LogitsprocTestHelpers(NamedTuple):
 
 logitsprocs_test_mapping = {
     STR_NO_LOGITPROC: LogitsprocTestHelpers(eval_fxn=_none_validate),
-    LogitBiasLogitsProcessor: LogitsprocTestHelpers(
-        gen_request_fxn=_logit_bias_params, eval_fxn=_logit_bias_validate
-    ),
-    MinPLogitsProcessor: LogitsprocTestHelpers(
-        gen_request_fxn=_min_p_params, eval_fxn=_min_p_validate
-    ),
-    MinTokensLogitsProcessor: LogitsprocTestHelpers(
-        gen_request_fxn=_min_tokens_params, eval_fxn=_min_tokens_validate
-    ),
+    LogitBiasLogitsProcessor: LogitsprocTestHelpers(gen_request_fxn=_logit_bias_params, eval_fxn=_logit_bias_validate),
+    MinPLogitsProcessor: LogitsprocTestHelpers(gen_request_fxn=_min_p_params, eval_fxn=_min_p_validate),
+    MinTokensLogitsProcessor: LogitsprocTestHelpers(gen_request_fxn=_min_tokens_params, eval_fxn=_min_tokens_validate),
     STR_THINKING_BUDGET: LogitsprocTestHelpers(
         gen_request_fxn=_thinking_budget_params, eval_fxn=_thinking_budget_validate
     ),
@@ -599,9 +555,7 @@ def _get_test_cases() -> list[list[str]]:
 
     # Isolate thinking-budget handling from other processors to avoid cross-talk.
     thinking_id: LogitprocType = STR_THINKING_BUDGET
-    other_processors = [
-        p for p in logitsprocs_types if p != STR_NO_LOGITPROC and p != thinking_id
-    ]
+    other_processors = [p for p in logitsprocs_types if p != STR_NO_LOGITPROC and p != thinking_id]
 
     return (
         [[STR_NO_LOGITPROC]]
@@ -630,9 +584,7 @@ def _generate_fake_step_update(
         random.choice(
             [
                 0,
-                random.randint(
-                    1, min(max_add_remove_per_step, workload_reqs_remaining)
-                ),
+                random.randint(1, min(max_add_remove_per_step, workload_reqs_remaining)),
             ]
         )
         if workload_reqs_remaining
@@ -646,9 +598,7 @@ def _generate_fake_step_update(
     # more requests are added. Assume that removed requests are always
     # drawn from the current batch, before new adds
     num_step_remove = (
-        random.choice([0, random.randint(1, min(max_add_remove_per_step, batch_size))])
-        if batch_size
-        else 0
+        random.choice([0, random.randint(1, min(max_add_remove_per_step, batch_size))]) if batch_size else 0
     )
 
     num_step_add_replace = min(num_step_add, num_step_remove)
@@ -672,9 +622,7 @@ def _generate_fake_step_update(
         persistent_batch[add_remove_idx] = add_req_params
 
     # Append remaining added requests to end of batch
-    add_reqs_append = workload_params[
-        (wdx + num_step_add_replace) : (wdx + num_step_add)
-    ]
+    add_reqs_append = workload_params[(wdx + num_step_add_replace) : (wdx + num_step_add)]
     batch_update_builder.added.extend(
         [
             (
@@ -694,10 +642,7 @@ def _generate_fake_step_update(
     last_nonempty_index = pre_condense_batch_size - 1
     condensed_to_idxs = set()
     while batch_update_builder.removed:
-        if (
-            last_nonempty_index in batch_update_builder.removed
-            or last_nonempty_index in condensed_to_idxs
-        ):
+        if last_nonempty_index in batch_update_builder.removed or last_nonempty_index in condensed_to_idxs:
             last_nonempty_index -= 1
             continue
         # last_nonempty_index is the highest persistent batch index that was
@@ -713,9 +658,7 @@ def _generate_fake_step_update(
         batch_update_builder.pop_removed()
         condensed_to_idxs.add(first_empty_index)
         persistent_batch[first_empty_index] = persistent_batch[last_nonempty_index]
-        batch_update_builder.moved.append(
-            (last_nonempty_index, first_empty_index, MoveDirectionality.UNIDIRECTIONAL)
-        )
+        batch_update_builder.moved.append((last_nonempty_index, first_empty_index, MoveDirectionality.UNIDIRECTIONAL))
 
         last_nonempty_index -= 1
 
@@ -732,9 +675,7 @@ def _generate_fake_step_update(
         idxs = list(range(condensed_batch_size))
         random.shuffle(idxs)
         swaps = [tuple(sorted([idxs[2 * i], idxs[2 * i + 1]])) for i in range(k)]
-        batch_update_builder.moved.extend(
-            [(sw[0], sw[1], MoveDirectionality.SWAP) for sw in swaps]
-        )
+        batch_update_builder.moved.extend([(sw[0], sw[1], MoveDirectionality.SWAP) for sw in swaps])
         for adx, bdx in swaps:
             persistent_batch[adx], persistent_batch[bdx] = (
                 persistent_batch[bdx],
@@ -761,8 +702,7 @@ def _assert_valid(
         assert len(persistent_batch) == 0
         if logits_w_lp.shape[0] != 0:
             raise ValueError(
-                "Fake persistent batch is empty but logitsprocs "
-                f"output batch has shape {logits_w_lp.shape}"
+                f"Fake persistent batch is empty but logitsprocs output batch has shape {logits_w_lp.shape}"
             )
         return
 
@@ -782,9 +722,7 @@ def _assert_valid(
         )
 
 
-def _slot_outputs_for_metadata(
-    persistent_batch: list[LogitsProcsRequestParams], pad_len: int
-) -> list[list[int]]:
+def _slot_outputs_for_metadata(persistent_batch: list[LogitsProcsRequestParams], pad_len: int) -> list[list[int]]:
     """Per-batch-slot output token ids aligned with ``SamplingMetadata`` rows."""
     rows: list[list[int]] = [[] for _ in range(pad_len)]
     for i, req in enumerate(persistent_batch):
@@ -797,9 +735,7 @@ def _slot_outputs_for_metadata(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("reqs_per_logitproc", [REQS_PER_LOGITPROC])
 @pytest.mark.parametrize("logitsprocs_under_test", _get_test_cases())
-def test_logitsprocs(
-    device: str, reqs_per_logitproc: int, logitsprocs_under_test: list[LogitprocType]
-):
+def test_logitsprocs(device: str, reqs_per_logitproc: int, logitsprocs_under_test: list[LogitprocType]):
     random.seed(40)
     torch.set_default_device(device)
 
@@ -814,9 +750,7 @@ def test_logitsprocs(
     test_fakes = _generate_test_fakes(workload_size, device)
 
     wdx = 0  # Next request index in workload to add
-    persistent_batch: list[
-        LogitsProcsRequestParams
-    ] = []  # Persistent batch state, as list of workload indices
+    persistent_batch: list[LogitsProcsRequestParams] = []  # Persistent batch state, as list of workload indices
 
     # Generate fake removed request indices from current persistent
     # batch before adds
@@ -1178,9 +1112,7 @@ def test_thinking_budget_enforced_without_penalties():
     # Step 1: think-start token appears.
     output_token_ids.append(THINK_START_TOKEN_ID)
     h.update_state([output_token_ids], None, None)
-    assert not h._state[0].get("in_end", False), (
-        "Still within budget after 0 think tokens"
-    )
+    assert not h._state[0].get("in_end", False), "Still within budget after 0 think tokens"
 
     # Steps 2–4: 3 thinking tokens (hits the budget exactly).
     for tok in [1, 2, 3]:
@@ -1189,8 +1121,7 @@ def test_thinking_budget_enforced_without_penalties():
 
     # After exactly `budget` thinking tokens the holder should force end token.
     assert h._state[0].get("in_end", False), (
-        "Budget exceeded: in_end should be True so that apply_to_logits "
-        "forces the end token"
+        "Budget exceeded: in_end should be True so that apply_to_logits forces the end token"
     )
 
 
@@ -1231,9 +1162,7 @@ def test_thinking_budget_invalid_budget_rejected(invalid_budget):
 def test_thinking_budget_long_thinking_section_end_marker_found_at_correct_index():
     """Test thinking budget enforced for a long thinking run,
     then a natural end marker."""
-    h = ThinkingBudgetStateHolder(
-        MockReasoningConfig(), 8, 0, torch.device("cpu"), False
-    )
+    h = ThinkingBudgetStateHolder(MockReasoningConfig(), 8, 0, torch.device("cpu"), False)
     h.sync_batch(
         BatchUpdate(
             batch_size=1,
@@ -1345,9 +1274,7 @@ class TestThinkingBudgetReentry:
             output.append(self.THINK_TOKEN)
             self._step(holder, list(output))
 
-        assert holder._state[0]["in_end"], (
-            "Second thinking block must also be budget-enforced"
-        )
+        assert holder._state[0]["in_end"], "Second thinking block must also be budget-enforced"
 
     def test_multi_token_end_reentry(self):
         holder = self._make_holder(self.THINK_END_MULTI)
@@ -1364,9 +1291,7 @@ class TestThinkingBudgetReentry:
             output.append(self.THINK_TOKEN)
             self._step(holder, list(output))
 
-        assert holder._state[0]["in_end"], (
-            "Immediate re-entry after multi-token end must be enforced"
-        )
+        assert holder._state[0]["in_end"], "Immediate re-entry after multi-token end must be enforced"
 
     def test_single_block_not_broken(self):
         holder = self._make_holder(self.THINK_END_SINGLE)

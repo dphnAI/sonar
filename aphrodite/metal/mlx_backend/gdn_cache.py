@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Per-request recurrent state cache for GDN linear attention layers.
 
 Unlike ``MetalPagedKVCache`` which stores per-token KV that grows with
@@ -48,11 +49,7 @@ class GDNPagedStateCache:
         conv_shape = (max_seqs, conv_kernel_dim - 1, conv_dim)
         recurrent_shape = (max_seqs, num_v_heads, value_head_dim, key_head_dim)
 
-        self.conv_states: list[mx.array] = [
-            mx.zeros(conv_shape, dtype=dtype) for _ in range(num_layers)
-        ]
+        self.conv_states: list[mx.array] = [mx.zeros(conv_shape, dtype=dtype) for _ in range(num_layers)]
         # Recurrent state uses float32 to avoid overflow in kernel accumulation.
-        self.recurrent_states: list[mx.array] = [
-            mx.zeros(recurrent_shape, dtype=mx.float32) for _ in range(num_layers)
-        ]
+        self.recurrent_states: list[mx.array] = [mx.zeros(recurrent_shape, dtype=mx.float32) for _ in range(num_layers)]
         mx.eval(*self.conv_states, *self.recurrent_states)

@@ -13,7 +13,7 @@ from torch import nn
 from typing_extensions import assert_never
 
 import aphrodite.envs as envs
-from aphrodite.config import ModelConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import (
     Attention,
@@ -98,9 +98,7 @@ def initialize_model(
     return model
 
 
-def process_weights_after_loading(
-    model: nn.Module, model_config: ModelConfig, target_device: torch.device
-) -> None:
+def process_weights_after_loading(model: nn.Module, model_config: ModelConfig, target_device: torch.device) -> None:
     for _, module in model.named_modules():
         quant_method = getattr(module, "quant_method", None)
         if isinstance(quant_method, QuantizeMethodBase):
@@ -118,9 +116,9 @@ def process_weights_after_loading(
     # Initialize post-load attention weights for Attention, MLA, and MM encoder.
     # NOTE: Happens after other modules so we can easily decompress weights.
     for _, module in model.named_modules():
-        if isinstance(
-            module, (Attention, MLAAttention, MMEncoderAttention)
-        ) and hasattr(module, "process_weights_after_loading"):
+        if isinstance(module, (Attention, MLAAttention, MMEncoderAttention)) and hasattr(
+            module, "process_weights_after_loading"
+        ):
             # TODO(lucas): see if there is a way to unify the signatures
             # of process_weights_after_loading
             with device_loading_context(module, target_device):
@@ -164,10 +162,7 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
         yield module
 
     finally:
-        use_pin_memory = (
-            is_pin_memory_available()
-            and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
-        )
+        use_pin_memory = is_pin_memory_available() and not envs.APHRODITE_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY
         # Restore parameters to their original devices, ignoring new parameters
         for name, p in module.named_parameters():
             if name in original_device_states:
@@ -176,9 +171,7 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
 
             # parameter is UVA offloaded, but was replaced with a new device tensor
             # re-offload it to CPU using UVA
-            if name in uva_offloaded_parameters and not getattr(
-                p, "_aphrodite_is_uva_offloaded", False
-            ):
+            if name in uva_offloaded_parameters and not getattr(p, "_aphrodite_is_uva_offloaded", False):
                 cpu_data = p.data.to(device="cpu")
                 if use_pin_memory:
                     cpu_data = cpu_data.pin_memory()
@@ -281,9 +274,7 @@ class ParamMapping:
         return None
 
 
-def configure_quant_config(
-    quant_config: QuantizationConfig, model_class: type[nn.Module]
-):
+def configure_quant_config(quant_config: QuantizationConfig, model_class: type[nn.Module]):
     """
     Pass packed_modules_mapping by reference to quant_config so that
     quant_config can properly match fused modules

@@ -151,6 +151,4 @@ class TestResponsesRequestSamplingParams:
         with pytest.raises(ValueError) as exc_info:
             request.to_sampling_params(default_max_tokens=1000)
 
-        assert "Cannot specify both structured_outputs and text.format" in str(
-            exc_info.value
-        )
+        assert "Cannot specify both structured_outputs and text.format" in str(exc_info.value)

@@ -100,9 +100,7 @@ def get_lock(model_name_or_path: str | Path, cache_dir: str | None = None):
 
 
 @contextmanager
-def atomic_writer(
-    filepath: str | Path, mode: str = "w", encoding: str | None = None
-) -> Generator[IO]:
+def atomic_writer(filepath: str | Path, mode: str = "w", encoding: str | None = None) -> Generator[IO]:
     """
     Context manager that provides an atomic file writing routine.
 
@@ -132,9 +130,7 @@ def atomic_writer(
         os.replace(temp_path, filepath)
 
     except Exception:
-        logger.exception(
-            "Error during atomic write. Original file '%s' not modified", filepath
-        )
+        logger.exception("Error during atomic write. Original file '%s' not modified", filepath)
         raise
     finally:
         # Clean up the temporary file if it still exists.
@@ -145,10 +141,7 @@ def atomic_writer(
 def _natural_sort_key(filepath: str) -> list:
     """Natural sort key for filenames with numeric components, such as
     model-00001-of-00005.safetensors -> ['model-', 1, '-of-', 5, '.safetensors']"""
-    return [
-        int(s) if s.isdigit() else s
-        for s in re.split(r"(\d+)", os.path.basename(filepath))
-    ]
+    return [int(s) if s.isdigit() else s for s in re.split(r"(\d+)", os.path.basename(filepath))]
 
 
 def maybe_download_from_modelscope(
@@ -237,9 +230,7 @@ def convert_bin_to_safetensor_file(
 
 
 # TODO(woosuk): Move this to other place.
-def get_quant_config(
-    model_config: ModelConfig, load_config: LoadConfig
-) -> QuantizationConfig:
+def get_quant_config(model_config: ModelConfig, load_config: LoadConfig) -> QuantizationConfig:
     if model_config.quantization is None:
         raise ValueError("Model quantization method is not specified in the config.")
     quant_cls = get_quantization_config(model_config.quantization)
@@ -268,9 +259,7 @@ def get_quant_config(
             n_kv_heads = getattr(model_config.hf_config, "num_key_value_heads", None)
 
         hf_quant_config["total_num_heads"] = n_heads
-        hf_quant_config["total_num_kv_heads"] = (
-            n_kv_heads if n_kv_heads is not None else n_heads
-        )
+        hf_quant_config["total_num_kv_heads"] = n_kv_heads if n_kv_heads is not None else n_heads
 
     if hf_quant_config is not None:
         # `model_config.quantization_config` may be set alongside a checkpoint
@@ -282,10 +271,7 @@ def get_quant_config(
         # not contain the per-layer quantized_layers map.  Newer checkpoints
         # embed it directly; older ones keep it only in hf_quant_config.json.
         # If it is missing, fall through to the file-based loading path.
-        if (
-            model_config.quantization == "modelopt_mixed"
-            and "quantized_layers" not in hf_quant_config
-        ):
+        if model_config.quantization == "modelopt_mixed" and "quantized_layers" not in hf_quant_config:
             pass  # fall through to file-based loading below
         else:
             return quant_cls.from_config(hf_quant_config)
@@ -294,10 +280,7 @@ def get_quant_config(
     # hf_overrides
     hf_overrides = model_config.hf_overrides
     if not isinstance(hf_overrides, dict):
-        raise ValueError(
-            "hf_overrides must be a dict for get_quant_config "
-            "to get the quantization config from it."
-        )
+        raise ValueError("hf_overrides must be a dict for get_quant_config to get the quantization config from it.")
     quantization_config_file = hf_overrides.get("quantization_config_file", None)
     if quantization_config_file is not None:
         if hasattr(quant_cls, "from_config_file"):
@@ -365,16 +348,11 @@ def get_quant_config(
 
     config_files = glob.glob(os.path.join(hf_folder, "*.json"))
 
-    quant_config_files = [
-        f for f in config_files if any(f.endswith(x) for x in possible_config_filenames)
-    ]
+    quant_config_files = [f for f in config_files if any(f.endswith(x) for x in possible_config_filenames)]
     if len(quant_config_files) == 0:
         raise ValueError(f"Cannot find the config file for {model_config.quantization}")
     if len(quant_config_files) > 1:
-        raise ValueError(
-            f"Found multiple config files for {model_config.quantization}: "
-            f"{quant_config_files}"
-        )
+        raise ValueError(f"Found multiple config files for {model_config.quantization}: {quant_config_files}")
 
     quant_config_file = quant_config_files[0]
     with open(quant_config_file) as f:
@@ -386,10 +364,7 @@ def get_quant_config(
             if config.get("producer", {}).get("name") == "modelopt":
                 return quant_cls.from_config(config)
             else:
-                raise ValueError(
-                    f"Unsupported quantization config"
-                    f" found for {model_config.quantization} in {f}."
-                )
+                raise ValueError(f"Unsupported quantization config found for {model_config.quantization} in {f}.")
 
     return quant_cls.from_config(config)
 
@@ -579,9 +554,7 @@ def download_safetensors_index_file_from_hf(
 # Passing both of these to the weight loader functionality breaks.
 # So, we use the index_file to
 # look up which safetensors files should be used.
-def filter_duplicate_safetensors_files(
-    hf_weights_files: list[str], hf_folder: str, index_file: str
-) -> list[str]:
+def filter_duplicate_safetensors_files(hf_weights_files: list[str], hf_folder: str, index_file: str) -> list[str]:
     # model.safetensors.index.json is a mapping from keys in the
     # torch state_dict to safetensors file holding that weight.
     index_file_name = os.path.join(hf_folder, index_file)
@@ -613,9 +586,7 @@ def filter_files_not_needed_for_inference(hf_weights_files: list[str]) -> list[s
         "scheduler.pt",
         "scaler.pt",
     ]
-    hf_weights_files = [
-        f for f in hf_weights_files if not any(f.endswith(x) for x in blacklist)
-    ]
+    hf_weights_files = [f for f in hf_weights_files if not any(f.endswith(x) for x in blacklist)]
     return hf_weights_files
 
 
@@ -627,9 +598,7 @@ _BAR_FORMAT = "{desc}: {percentage:3.0f}% Completed | {n_fmt}/{total_fmt} [{elap
 
 
 def enable_tqdm(use_tqdm_on_load: bool):
-    return use_tqdm_on_load and (
-        not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-    )
+    return use_tqdm_on_load and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0)
 
 
 def np_cache_weights_iterator(
@@ -712,10 +681,9 @@ def _get_fs_type(files: list[str]) -> str:
                 if len(parts) < 3:
                     continue
                 mount_point, fstype = parts[1], parts[2]
-                if (
-                    resolved == mount_point
-                    or resolved.startswith(os.path.join(mount_point, ""))
-                ) and len(mount_point) > len(best_mount):
+                if (resolved == mount_point or resolved.startswith(os.path.join(mount_point, ""))) and len(
+                    mount_point
+                ) > len(best_mount):
                     best_mount = mount_point
                     best_fstype = fstype
         return best_fstype
@@ -773,9 +741,7 @@ def _prefetch_all_checkpoints(
         ) -> None:
             nonlocal completed, next_log_pct
             try:
-                await loop.run_in_executor(
-                    executor, _prefetch_checkpoint, path, block_size
-                )
+                await loop.run_in_executor(executor, _prefetch_checkpoint, path, block_size)
                 completed += 1
                 if total_for_rank > 0 and next_log_pct <= 100:
                     pct = 100 * completed / total_for_rank
@@ -788,16 +754,10 @@ def _prefetch_all_checkpoints(
                         )
                         next_log_pct += 10
             except Exception:
-                logger.warning(
-                    "Failed to prefetch checkpoint file %r.", path, exc_info=True
-                )
+                logger.warning("Failed to prefetch checkpoint file %r.", path, exc_info=True)
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=num_prefetch_threads
-        ) as executor:
-            await asyncio.gather(
-                *(prefetch_one(p, executor) for p in paths_to_prefetch)
-            )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_prefetch_threads) as executor:
+            await asyncio.gather(*(prefetch_one(p, executor) for p in paths_to_prefetch))
 
     def _run_prefetch() -> None:
         start = time.perf_counter()
@@ -809,8 +769,7 @@ def _prefetch_all_checkpoints(
         )
 
     logger.info(
-        "Prefetching checkpoint files into page cache started "
-        "(in background, num_threads=%d, block_size=%d bytes)",
+        "Prefetching checkpoint files into page cache started (in background, num_threads=%d, block_size=%d bytes)",
         num_prefetch_threads,
         block_size,
     )
@@ -847,8 +806,7 @@ def safetensors_weights_iterator(
     fs_name = fs_type.upper() if fs_type else "unknown"
 
     logger.debug_once(
-        "Filesystem type for checkpoints: %s. Checkpoint size: %.2f GiB. "
-        "Available RAM: %.2f GiB.",
+        "Filesystem type for checkpoints: %s. Checkpoint size: %.2f GiB. Available RAM: %.2f GiB.",
         fs_name,
         total_bytes / 1024**3,
         avail_bytes / 1024**3,
@@ -919,10 +877,7 @@ def safetensors_weights_iterator(
             # we can't load flattened torchao tensor subclasses directly into the model
             # instead we reconstruct the subclasses here before returning
             if not torchao_version_at_least("0.15.0"):
-                raise ValueError(
-                    "Please use torchao version >= 0.15.0 "
-                    "to load torchao safetensors checkpoint"
-                )
+                raise ValueError("Please use torchao version >= 0.15.0 to load torchao safetensors checkpoint")
             from torchao.prototype.safetensors.safetensors_support import (
                 unflatten_tensor_state_dict,
             )
@@ -941,9 +896,7 @@ def safetensors_weights_iterator(
                 # tensor subclass data on one file
                 # state_dict has the leftover data from this step and we wait for
                 # missing information to be provided in a future iteration
-                unflattened_state_dict, leftover_state_dict = (
-                    unflatten_tensor_state_dict(state_dict, metadata)
-                )
+                unflattened_state_dict, leftover_state_dict = unflatten_tensor_state_dict(state_dict, metadata)
             yield from unflattened_state_dict.items()
         else:
             with safe_open(st_file, framework="pt") as f:
@@ -992,21 +945,14 @@ def runai_safetensors_weights_iterator(
     """Iterate over the weights in the model safetensor files."""
     with SafetensorsStreamer() as streamer:
         is_cuda_alike = current_platform.is_cuda_alike()
-        device = (
-            f"cuda:{current_platform.current_device()}"
-            if is_distributed and is_cuda_alike
-            else "cpu"
-        )
+        device = f"cuda:{current_platform.current_device()}" if is_distributed and is_cuda_alike else "cpu"
 
         streamer.stream_files(
             hf_weights_files,
             device=device,
             is_distributed=is_distributed,
         )
-        total_tensors = sum(
-            len(tensors_meta)
-            for tensors_meta in streamer.files_to_tensors_metadata.values()
-        )
+        total_tensors = sum(len(tensors_meta) for tensors_meta in streamer.files_to_tensors_metadata.values())
 
         tensor_iter = tqdm(
             streamer.get_tensors(),
@@ -1099,9 +1045,7 @@ def instanttensor_weights_iterator(
     try:
         import instanttensor
     except ImportError as e:
-        raise ImportError(
-            "Please install instanttensor via `pip install instanttensor`"
-        ) from e
+        raise ImportError("Please install instanttensor via `pip install instanttensor`") from e
 
     if not current_platform.is_cuda():
         raise ValueError("InstantTensor requires NVIDIA GPUs")
@@ -1116,9 +1060,7 @@ def instanttensor_weights_iterator(
 
     device = current_platform.current_device()
 
-    with instanttensor.safe_open(
-        hf_weights_files, framework="pt", device=device, process_group=process_group
-    ) as f:
+    with instanttensor.safe_open(hf_weights_files, framework="pt", device=device, process_group=process_group) as f:
         yield from tqdm(
             f.tensors(),
             desc="Loading safetensors using InstantTensor loader",
@@ -1142,9 +1084,7 @@ def pt_weights_iterator(
         disable=True,
         bar_format=_BAR_FORMAT,
     ):
-        state = torch.load(
-            bin_file, map_location=pt_load_map_location, weights_only=True
-        )
+        state = torch.load(bin_file, map_location=pt_load_map_location, weights_only=True)
         yield from state.items()
         del state
 
@@ -1158,14 +1098,10 @@ def multi_thread_pt_weights_iterator(
     """Multi-Thread iterate over the weights in the model bin/pt files."""
 
     def _load_file(bin_file: str):
-        return torch.load(
-            bin_file, map_location=pt_load_map_location, weights_only=True
-        )
+        return torch.load(bin_file, map_location=pt_load_map_location, weights_only=True)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(_load_file, bin_file) for bin_file in hf_weights_files
-        ]
+        futures = [executor.submit(_load_file, bin_file) for bin_file in hf_weights_files]
         futures_iter = tqdm(
             concurrent.futures.as_completed(futures),
             total=len(hf_weights_files),
@@ -1205,8 +1141,7 @@ def default_weight_loader(param: torch.Tensor, loaded_weight: torch.Tensor) -> N
             param.data.copy_(loaded_weight.view(param.shape))
         else:
             assert param.size() == loaded_weight.size(), (
-                f"Attempted to load weight ({loaded_weight.size()}) "
-                f"into parameter ({param.size()})"
+                f"Attempted to load weight ({loaded_weight.size()}) into parameter ({param.size()})"
             )
 
             param.data.copy_(loaded_weight)
@@ -1216,9 +1151,7 @@ def default_weight_loader(param: torch.Tensor, loaded_weight: torch.Tensor) -> N
         raise
 
 
-def row_parallel_weight_loader(
-    param: torch.Tensor, loaded_weight: torch.Tensor
-) -> None:
+def row_parallel_weight_loader(param: torch.Tensor, loaded_weight: torch.Tensor) -> None:
     """Load weights that are row-parallelized."""
     tp_rank = get_tensor_model_parallel_rank()
     shard_dim = 0 if param.dim() != 1 else None
@@ -1249,9 +1182,7 @@ def sharded_weight_loader(shard_axis: int) -> LoaderFunction:
     return loader
 
 
-def composed_weight_loader(
-    loader: LoaderFunction, fn: Callable[[torch.Tensor], torch.Tensor]
-) -> LoaderFunction:
+def composed_weight_loader(loader: LoaderFunction, fn: Callable[[torch.Tensor], torch.Tensor]) -> LoaderFunction:
     """Create a weight loader that post-processes the weights after loading"""
 
     def composed_loader(param: torch.Tensor, loaded_weight: torch.Tensor) -> None:
@@ -1381,10 +1312,7 @@ def maybe_remap_kv_scale_name(name: str, params_dict: dict) -> str | None:
 
     if any("mla_attn" in key for key in params_dict):
         attn_str = "mla_attn.mla_attn"
-        logger.debug_once(
-            f"Found mla_attn with k_scale and v_scale in "
-            f"the checkpoint, using {attn_str} as attn_str"
-        )
+        logger.debug_once(f"Found mla_attn with k_scale and v_scale in the checkpoint, using {attn_str} as attn_str")
     else:
         attn_str = "attn"
     # Define scale name mapping patterns in order of precedence
@@ -1508,10 +1436,7 @@ def maybe_remap_moe_expert_param_name(
     ]
 
     # Check if this is an expert weight parameter
-    is_expert_param = any(
-        f".{suffix}" in name or name.endswith(suffix)
-        for suffix in expert_param_suffixes
-    )
+    is_expert_param = any(f".{suffix}" in name or name.endswith(suffix) for suffix in expert_param_suffixes)
 
     if not is_expert_param:
         return name

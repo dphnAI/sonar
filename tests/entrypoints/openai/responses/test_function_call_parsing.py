@@ -142,9 +142,7 @@ def test_invalid_function_call_fallback():
     # Missing required field 'call_id'
     request_data = {
         "model": "gpt-oss",
-        "input": [
-            {"type": "function_call", "name": "incomplete_function", "arguments": "{}"}
-        ],
+        "input": [{"type": "function_call", "name": "incomplete_function", "arguments": "{}"}],
     }
 
     # This should not raise an error during model creation
@@ -344,8 +342,7 @@ def test_assistant_string_content_stays_easyinput():
 
     item = request.input[0]
     assert isinstance(item, dict), (
-        "String-content assistant message should remain a dict (EasyInput), "
-        f"got {type(item)}"
+        f"String-content assistant message should remain a dict (EasyInput), got {type(item)}"
     )
     assert item.get("content") == "hello"
     assert "id" not in item
@@ -370,8 +367,7 @@ def test_assistant_output_style_content_coerced():
 
     item = request.input[0]
     assert isinstance(item, ResponseOutputMessage), (
-        "Output-style assistant message should be coerced to "
-        f"ResponseOutputMessage, got {type(item)}"
+        f"Output-style assistant message should be coerced to ResponseOutputMessage, got {type(item)}"
     )
     assert item.content[0].text == "world"
     assert item.content[0].annotations == []

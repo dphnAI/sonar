@@ -110,9 +110,7 @@ class CompressedTensorsW4A4Mxfp4MoEMethod(CompressedTensorsMoEMethod):
             requires_grad=False,
         )
         layer.register_parameter("w13_weight_scale", w13_weight_scale)
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.GROUP.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.GROUP.value})
         set_weight_attrs(w13_weight_scale, extra_weight_attrs)
 
         w2_weight_scale = torch.nn.Parameter(
@@ -128,9 +126,7 @@ class CompressedTensorsW4A4Mxfp4MoEMethod(CompressedTensorsMoEMethod):
         layer.register_parameter("w2_weight_scale", w2_weight_scale)
         set_weight_attrs(w2_weight_scale, extra_weight_attrs)
 
-    def get_fused_moe_quant_config(
-        self, layer: torch.nn.Module
-    ) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
         if self.use_cutlass_mxfp4:
             # W4A4: both weights and activations quantized to MXFP4
             return mxfp4_moe_quant_config(
@@ -147,14 +143,10 @@ class CompressedTensorsW4A4Mxfp4MoEMethod(CompressedTensorsMoEMethod):
             )
 
     def process_weights_after_loading(self, layer: RoutedExperts) -> None:
-        layer.w13_weight = torch.nn.Parameter(
-            layer.w13_weight_packed.data, requires_grad=False
-        )
+        layer.w13_weight = torch.nn.Parameter(layer.w13_weight_packed.data, requires_grad=False)
         delattr(layer, "w13_weight_packed")
 
-        layer.w2_weight = torch.nn.Parameter(
-            layer.w2_weight_packed.data, requires_grad=False
-        )
+        layer.w2_weight = torch.nn.Parameter(layer.w2_weight_packed.data, requires_grad=False)
         delattr(layer, "w2_weight_packed")
 
         if self.use_cutlass_mxfp4:
@@ -182,12 +174,8 @@ class CompressedTensorsW4A4Mxfp4MoEMethod(CompressedTensorsMoEMethod):
                 s2 = layer.w2_weight_scale[e_idx]
                 sw2 = swizzle_mxfp4_scales(s2, w2_M, w2_N)
                 swizzled_w2.append(sw2.reshape(w2_M, w2_scale_N))
-            layer.w13_weight_scale = torch.nn.Parameter(
-                torch.stack(swizzled_w13), requires_grad=False
-            )
-            layer.w2_weight_scale = torch.nn.Parameter(
-                torch.stack(swizzled_w2), requires_grad=False
-            )
+            layer.w13_weight_scale = torch.nn.Parameter(torch.stack(swizzled_w13), requires_grad=False)
+            layer.w2_weight_scale = torch.nn.Parameter(torch.stack(swizzled_w2), requires_grad=False)
         elif current_platform.is_xpu():
             pass
         else:

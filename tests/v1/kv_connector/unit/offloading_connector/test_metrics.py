@@ -64,9 +64,7 @@ class _FakeMetric:
 
 class _FakeAphroditeConfig:
     def __init__(self, store_threshold: int = 2):
-        self.kv_transfer_config = SimpleNamespace(
-            kv_connector_extra_config={"store_threshold": store_threshold}
-        )
+        self.kv_transfer_config = SimpleNamespace(kv_connector_extra_config={"store_threshold": store_threshold})
 
 
 def _spec_cls_with_metric_definitions(

@@ -15,7 +15,7 @@ from typing import ClassVar
 import torch
 import torch.nn as nn
 
-from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
 from aphrodite.config.cache import CacheDType
 from aphrodite.forward_context import get_forward_context
 from aphrodite.model_executor.layers.attention.attention import set_default_quant_scales
@@ -54,9 +54,7 @@ def unified_kv_cache_update(
     kv_cache = attn_layer.kv_cache
 
     slot_mapping = forward_context.slot_mapping
-    assert isinstance(slot_mapping, dict), (
-        f"Expected slot_mapping to be a dict, got {type(slot_mapping)}. "
-    )
+    assert isinstance(slot_mapping, dict), f"Expected slot_mapping to be a dict, got {type(slot_mapping)}. "
     layer_slot_mapping = slot_mapping.get(layer_name)
     if layer_slot_mapping is not None:
         assert hasattr(attn_layer.impl, "do_kv_cache_update"), (
@@ -153,9 +151,7 @@ class CacheOnlyAttentionMetadata:
         self.slot_mapping = slot_mapping
 
 
-class CacheOnlyAttentionMetadataBuilder(
-    AttentionMetadataBuilder[CacheOnlyAttentionMetadata]
-):
+class CacheOnlyAttentionMetadataBuilder(AttentionMetadataBuilder[CacheOnlyAttentionMetadata]):
     def __init__(
         self,
         kv_cache_spec: AttentionSpec,
@@ -173,14 +169,10 @@ class CacheOnlyAttentionMetadataBuilder(
     ) -> CacheOnlyAttentionMetadata:
         use_cascade = common_prefix_len > 0
         if use_cascade:
-            raise NotImplementedError(
-                "Cascade attention not supported by CacheOnlyAttention"
-            )
+            raise NotImplementedError("Cascade attention not supported by CacheOnlyAttention")
         causal = common_attn_metadata.causal
         if not causal:
-            raise NotImplementedError(
-                "Non-causal attention not supported by CacheOnlyAttention"
-            )
+            raise NotImplementedError("Non-causal attention not supported by CacheOnlyAttention")
 
         return CacheOnlyAttentionMetadata(
             slot_mapping=common_attn_metadata.slot_mapping,
@@ -266,9 +258,7 @@ class CacheOnlyAttentionLayer(nn.Module, AttentionLayerBase):
             "CacheOnlyAttentionLayer doesn't currently support quantized kv cache but"
             f"kv cache dtype was set to {kv_cache_dtype}"
         )
-        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(
-            kv_cache_dtype, aphrodite_config.model_config
-        )
+        self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(kv_cache_dtype, aphrodite_config.model_config)
 
         # Initialize KV cache quantization attributes
         set_default_quant_scales(self, register_buffer=True)
@@ -343,12 +333,8 @@ class ExtractHiddenStatesModel(nn.Module):
         self.aphrodite_config = aphrodite_config
         self.hf_config = aphrodite_config.speculative_config.draft_model_config.hf_config
         self.hidden_size = aphrodite_config.model_config.get_hidden_size()
-        self.target_num_hidden_layers = (
-            aphrodite_config.model_config.get_total_num_hidden_layers()
-        )
-        self.num_hidden_states = len(
-            getattr(self.hf_config, "eagle_aux_hidden_state_layer_ids", [])
-        )
+        self.target_num_hidden_layers = aphrodite_config.model_config.get_total_num_hidden_layers()
+        self.num_hidden_states = len(getattr(self.hf_config, "eagle_aux_hidden_state_layer_ids", []))
 
         cache_config = aphrodite_config.cache_config
 
@@ -367,9 +353,7 @@ class ExtractHiddenStatesModel(nn.Module):
                     num_heads=self.num_hidden_states,
                     head_size=self.hidden_size,
                     cache_config=cache_config,
-                    prefix=maybe_prefix(
-                        prefix, f"cache_only_layers.{self.target_num_hidden_layers}"
-                    ),
+                    prefix=maybe_prefix(prefix, f"cache_only_layers.{self.target_num_hidden_layers}"),
                 )
             }
         )

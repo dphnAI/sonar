@@ -33,10 +33,7 @@ class RunaiModelStreamerLoader(BaseModelLoader):
 
             allowed_keys = {"distributed", "concurrency", "memory_limit"}
             if unexpected_keys := set(extra_config) - allowed_keys:
-                raise ValueError(
-                    "Unexpected extra config keys for runai_streamer: "
-                    f"{unexpected_keys}"
-                )
+                raise ValueError(f"Unexpected extra config keys for runai_streamer: {unexpected_keys}")
 
             if "distributed" in extra_config:
                 distributed = extra_config["distributed"]
@@ -53,14 +50,8 @@ class RunaiModelStreamerLoader(BaseModelLoader):
             ):
                 if key in extra_config:
                     value = extra_config[key]
-                    if (
-                        isinstance(value, bool)
-                        or not isinstance(value, int)
-                        or value <= 0
-                    ):
-                        raise ValueError(
-                            f"{key} must be a positive integer, got {value!r}"
-                        )
+                    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                        raise ValueError(f"{key} must be a positive integer, got {value!r}")
                     env_updates[env_var] = str(value)
             os.environ.update(env_updates)
 
@@ -69,9 +60,7 @@ class RunaiModelStreamerLoader(BaseModelLoader):
             if runai_streamer_s3_endpoint is None and aws_endpoint_url is not None:
                 os.environ["RUNAI_STREAMER_S3_ENDPOINT"] = aws_endpoint_url
 
-    def _prepare_weights(
-        self, model_name_or_path: str, revision: str | None
-    ) -> list[str]:
+    def _prepare_weights(self, model_name_or_path: str, revision: str | None) -> list[str]:
         """Prepare weights for the model.
 
         If the model is not local, it will be downloaded."""
@@ -103,9 +92,7 @@ class RunaiModelStreamerLoader(BaseModelLoader):
             )
 
         if not hf_weights_files:
-            raise RuntimeError(
-                f"Cannot find any safetensors model weights with `{model_name_or_path}`"
-            )
+            raise RuntimeError(f"Cannot find any safetensors model weights with `{model_name_or_path}`")
 
         return hf_weights_files
 
@@ -127,6 +114,4 @@ class RunaiModelStreamerLoader(BaseModelLoader):
         model_weights = model_config.model
         if model_weights_override := model_config.model_weights:
             model_weights = model_weights_override
-        model.load_weights(
-            self._get_weights_iterator(model_weights, model_config.revision)
-        )
+        model.load_weights(self._get_weights_iterator(model_weights, model_config.revision))

@@ -102,14 +102,8 @@ def test_online_quant_config_dict_json(aphrodite_runner, enable_pickle):
     from torchao.core.config import config_to_dict
     from torchao.quantization import Float8DynamicActivationFloat8WeightConfig, PerRow
 
-    torchao_quant_config = Float8DynamicActivationFloat8WeightConfig(
-        granularity=PerRow()
-    )
-    hf_overrides = {
-        "quantization_config_dict_json": json.dumps(
-            config_to_dict(torchao_quant_config)
-        )
-    }
+    torchao_quant_config = Float8DynamicActivationFloat8WeightConfig(granularity=PerRow())
+    hf_overrides = {"quantization_config_dict_json": json.dumps(config_to_dict(torchao_quant_config))}
     with aphrodite_runner(
         model_name=model_name,
         dtype="bfloat16",
@@ -178,15 +172,9 @@ def test_reload_weights():
 
     from aphrodite import LLM, SamplingParams
 
-    torchao_quant_config = Float8DynamicActivationFloat8WeightConfig(
-        granularity=PerRow()
-    )
+    torchao_quant_config = Float8DynamicActivationFloat8WeightConfig(granularity=PerRow())
 
-    hf_overrides = {
-        "quantization_config_dict_json": json.dumps(
-            config_to_dict(torchao_quant_config)
-        )
-    }
+    hf_overrides = {"quantization_config_dict_json": json.dumps(config_to_dict(torchao_quant_config))}
 
     llm = LLM(
         model="Qwen/Qwen3-0.6B",
@@ -197,9 +185,7 @@ def test_reload_weights():
         hf_overrides=hf_overrides,
     )
     # Update load format from `dummy` to `auto`
-    llm.collective_rpc(
-        "update_config", args=({"load_config": {"load_format": "auto"}},)
-    )
+    llm.collective_rpc("update_config", args=({"load_config": {"load_format": "auto"}},))
     # Now reload real weights inplace
     llm.collective_rpc("reload_weights")
     prompts = [
@@ -248,9 +234,7 @@ def test_safetensors_model_loading_with_params(aphrodite_runner):
 def test_opt_125m_module_fqn_to_config_regex_model(aphrodite_runner):
     torch._dynamo.reset()
     model_name = "torchao-testing/opt-125m-ModuleFqnToConfig-v1-regex-0.14.0.dev"
-    with aphrodite_runner(
-        model_name=model_name, dtype="bfloat16", pt_load_map_location=f"{DEVICE_TYPE}:0"
-    ) as llm:
+    with aphrodite_runner(model_name=model_name, dtype="bfloat16", pt_load_map_location=f"{DEVICE_TYPE}:0") as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=4)
 
     assert output
@@ -299,9 +283,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel(aphrodite_runner, monk
             ]
 
         llm_engine = llm.get_llm().llm_engine
-        has_int4_preshuffled_tensor = any(
-            llm_engine.apply_model(has_int4_preshuffled_tensor_weight)
-        )
+        has_int4_preshuffled_tensor = any(llm_engine.apply_model(has_int4_preshuffled_tensor_weight))
         weight_attrs = llm_engine.apply_model(get_weight_attrs)[0]
 
         # making sure we are using Int4PreshuffledTensor on H100 GPU, when
@@ -324,9 +306,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel(aphrodite_runner, monk
     "currently https://github.com/pytorch/ao/issues/2919, we'll have to skip "
     "torchao tests that requires newer versions (0.14.0.dev+) for now"
 )
-def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(
-    aphrodite_runner, monkeypatch
-):
+def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(aphrodite_runner, monkeypatch):
     """We load a bf16 model and online quantize the model to int4, then verify that
     the weights are updated to Int4PreshuffledTensor after online quantization
     """
@@ -343,14 +323,8 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(
     from torchao.core.config import config_to_dict
     from torchao.quantization import Int4WeightOnlyConfig
 
-    torchao_quant_config = Int4WeightOnlyConfig(
-        group_size=128, int4_packing_format="plain"
-    )
-    hf_overrides = {
-        "quantization_config_dict_json": json.dumps(
-            config_to_dict(torchao_quant_config)
-        )
-    }
+    torchao_quant_config = Int4WeightOnlyConfig(group_size=128, int4_packing_format="plain")
+    hf_overrides = {"quantization_config_dict_json": json.dumps(config_to_dict(torchao_quant_config))}
 
     # Note: using enforce_eager=True because the `bf16i4bf16_shuffled` doesn't
     # have meta kernel implemented yet, can remove this flag after that is implemented
@@ -379,9 +353,7 @@ def test_opt_125m_int4wo_model_running_preshuffled_kernel_online_quant(
             ]
 
         llm_engine = llm.get_llm().llm_engine
-        has_int4_preshuffled_tensor = any(
-            llm_engine.apply_model(has_int4_preshuffled_tensor_weight)
-        )
+        has_int4_preshuffled_tensor = any(llm_engine.apply_model(has_int4_preshuffled_tensor_weight))
         weight_attrs = llm_engine.apply_model(get_weight_attrs)[0]
 
         # making sure we are using Int4PreshuffledTensor on H100 GPU, when

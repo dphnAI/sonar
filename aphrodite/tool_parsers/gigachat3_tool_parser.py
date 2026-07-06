@@ -77,11 +77,7 @@ class GigaChat3ToolParser(ToolParser):
         if m_func:
             try:
                 function_call = json.loads(m_func.group(1), strict=False)
-                if (
-                    isinstance(function_call, dict)
-                    and "name" in function_call
-                    and "arguments" in function_call
-                ):
+                if isinstance(function_call, dict) and "name" in function_call and "arguments" in function_call:
                     if not isinstance(function_call["arguments"], dict):
                         function_call = None
                 else:

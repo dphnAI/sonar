@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import torch.nn as nn
 
-from aphrodite.config import ModelConfig, AphroditeConfig, replace
+from aphrodite.config import AphroditeConfig, ModelConfig, replace
 from aphrodite.distributed.parallel_state import get_pp_group
 from aphrodite.model_executor.model_loader import get_model
 from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import _should_share
@@ -32,36 +32,26 @@ def load_dflash_model(target_model: nn.Module, aphrodite_config: AphroditeConfig
         ),
     )
     with set_model_tag("dflash_head"):
-        dflash_model = get_model(
-            aphrodite_config=draft_aphrodite_config, model_config=draft_model_config
-        )
+        dflash_model = get_model(aphrodite_config=draft_aphrodite_config, model_config=draft_model_config)
 
     target_language_model = (
-        target_model.get_language_model()
-        if hasattr(target_model, "get_language_model")
-        else target_model
+        target_model.get_language_model() if hasattr(target_model, "get_language_model") else target_model
     )
     target_inner = target_language_model.model
     draft_inner = dflash_model.model
 
     # Skip embedding sharing under PP — each rank owns its own embedding.
     if get_pp_group().world_size == 1:
-        target_embed = getattr(target_inner, "embed_tokens", None) or getattr(
-            target_inner, "embedding", None
-        )
+        target_embed = getattr(target_inner, "embed_tokens", None) or getattr(target_inner, "embedding", None)
         draft_embed = getattr(draft_inner, "embed_tokens", None)
-        if target_embed is not None and _should_share(
-            dflash_model, "has_own_embed_tokens", draft_embed, target_embed
-        ):
+        if target_embed is not None and _should_share(dflash_model, "has_own_embed_tokens", draft_embed, target_embed):
             if draft_embed is not None:
                 del draft_inner.embed_tokens
             draft_inner.embed_tokens = target_embed
 
     target_lm_head = getattr(target_model, "lm_head", None)
     draft_lm_head = getattr(dflash_model, "lm_head", None)
-    if target_lm_head is not None and _should_share(
-        dflash_model, "has_own_lm_head", draft_lm_head, target_lm_head
-    ):
+    if target_lm_head is not None and _should_share(dflash_model, "has_own_lm_head", draft_lm_head, target_lm_head):
         if draft_lm_head is not None:
             del dflash_model.lm_head
         dflash_model.lm_head = target_lm_head

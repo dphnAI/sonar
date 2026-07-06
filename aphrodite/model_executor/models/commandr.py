@@ -31,7 +31,7 @@ from torch import nn
 from transformers import Cohere2Config, CohereConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
@@ -81,9 +81,7 @@ class LayerNorm(nn.Module):
         set_weight_attrs(self.weight, {"weight_loader": row_parallel_weight_loader})
 
     def forward(self, hidden_states, residuals=None):
-        hidden_states = layer_norm_func(
-            hidden_states, self.weight, self.variance_epsilon
-        )
+        hidden_states = layer_norm_func(hidden_states, self.weight, self.variance_epsilon)
         return hidden_states, residuals
 
 
@@ -151,9 +149,9 @@ class CohereAttention(nn.Module):
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
         self.scaling = self.head_dim**-0.5
-        self.max_position_embeddings = getattr(
-            config, "model_max_length", None
-        ) or getattr(config, "max_position_embeddings", 8192)
+        self.max_position_embeddings = getattr(config, "model_max_length", None) or getattr(
+            config, "max_position_embeddings", 8192
+        )
         self.use_qk_norm = getattr(config, "use_qk_norm", False)
         self.qkv_proj = QKVParallelLinear(
             self.hidden_size,
@@ -198,9 +196,7 @@ class CohereAttention(nn.Module):
             prefix=f"{prefix}.attn",
         )
         if self.use_qk_norm:
-            self.q_norm = LayerNorm(
-                param_shape=(self.num_heads, self.head_dim), eps=config.layer_norm_eps
-            )
+            self.q_norm = LayerNorm(param_shape=(self.num_heads, self.head_dim), eps=config.layer_norm_eps)
             self.k_norm = LayerNorm(
                 param_shape=(self.num_kv_heads, self.head_dim),
                 eps=config.layer_norm_eps,
@@ -250,9 +246,7 @@ class CohereDecoderLayer(nn.Module):
         )
 
         self.mlp = CohereMLP(config, quant_config=quant_config, prefix=f"{prefix}.mlp")
-        self.input_layernorm = LayerNorm(
-            param_shape=(config.hidden_size), eps=config.layer_norm_eps
-        )
+        self.input_layernorm = LayerNorm(param_shape=(config.hidden_size), eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -288,19 +282,13 @@ class CohereModel(nn.Module):
 
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = VocabParallelEmbedding(
-            config.vocab_size, config.hidden_size
-        )
+        self.embed_tokens = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: CohereDecoderLayer(
-                config, cache_config, quant_config, prefix=prefix
-            ),
+            lambda prefix: CohereDecoderLayer(config, cache_config, quant_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
-        self.norm = LayerNorm(
-            param_shape=(config.hidden_size), eps=config.layer_norm_eps
-        )
+        self.norm = LayerNorm(param_shape=(config.hidden_size), eps=config.layer_norm_eps)
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
             ["hidden_states", "residual"], config.hidden_size
         )
@@ -332,9 +320,7 @@ class CohereModel(nn.Module):
                 residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -372,15 +358,9 @@ class CohereForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsQuant):
         assert config.tie_word_embeddings
 
         self.quant_config = quant_config
-        self.logits_processor = LogitsProcessor(
-            config.vocab_size, scale=config.logit_scale
-        )
-        self.model = CohereModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.logits_processor = LogitsProcessor(config.vocab_size, scale=config.logit_scale)
+        self.model = CohereModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -393,9 +373,7 @@ class CohereForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsQuant):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(
@@ -406,14 +384,10 @@ class CohereForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsQuant):
         if is_not_lora:
             logits = self.logits_processor(self.model.embed_tokens, hidden_states)
         else:
-            logits = self.logits_processor(
-                self.model.embed_tokens.base_layer, hidden_states
-            )
+            logits = self.logits_processor(self.model.embed_tokens.base_layer, hidden_states)
 
         return logits
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        loader = AutoWeightsLoader(
-            self, skip_prefixes=["lm_head", "rotary_emb.inv_freq"]
-        )
+        loader = AutoWeightsLoader(self, skip_prefixes=["lm_head", "rotary_emb.inv_freq"])
         return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

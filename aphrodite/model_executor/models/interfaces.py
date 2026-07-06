@@ -36,10 +36,10 @@ from aphrodite.utils.func_utils import supports_kw
 
 if TYPE_CHECKING:
     from aphrodite.config import (
+        AphroditeConfig,
         ModelConfig,
         SpeechToTextConfig,
         SpeechToTextParams,
-        AphroditeConfig,
     )
     from aphrodite.inputs import PromptType, TokensPrompt
     from aphrodite.lora.model_manager import LoRAModelManager
@@ -189,9 +189,7 @@ class SupportsMultiModal(Protocol):
 
         if self._language_model_names:
             mod = self
-            for attr in common_prefix(
-                [name.split(".") for name in self._language_model_names]
-            ):
+            for attr in common_prefix([name.split(".") for name in self._language_model_names]):
                 if attr:
                     mod = getattr(mod, attr)
 
@@ -363,9 +361,7 @@ class SupportsMultiModal(Protocol):
             # to ensure that any external configuration requiring offset tracking,
             # e.g., LoRA, are applied correctly regardless of whether or not
             # we have multimodal tokens.
-            in_vocab_ids = input_ids.masked_fill(
-                is_multimodal.to(device=input_ids.device, non_blocking=True), 0
-            )
+            in_vocab_ids = input_ids.masked_fill(is_multimodal.to(device=input_ids.device, non_blocking=True), 0)
             return embed_input_ids(in_vocab_ids)
 
         return embed_input_ids(input_ids)
@@ -590,16 +586,14 @@ def supports_lora(
         if getattr(model, "supports_lora", False):
             if missing_attrs:
                 logger.warning(
-                    "The model (%s) sets `supports_lora=True`, "
-                    "but is missing LoRA-specific attributes: %s",
+                    "The model (%s) sets `supports_lora=True`, but is missing LoRA-specific attributes: %s",
                     model,
                     missing_attrs,
                 )
         else:
             if not missing_attrs:
                 logger.warning(
-                    "The model (%s) contains all LoRA-specific attributes, "
-                    "but does not set `supports_lora=True`.",
+                    "The model (%s) contains all LoRA-specific attributes, but does not set `supports_lora=True`.",
                     model,
                 )
 
@@ -702,16 +696,14 @@ def supports_pp(
         if getattr(model, "supports_pp", False):
             if missing_attrs:
                 logger.warning(
-                    "The model (%s) sets `supports_pp=True`, "
-                    "but is missing PP-specific attributes: %s",
+                    "The model (%s) sets `supports_pp=True`, but is missing PP-specific attributes: %s",
                     model,
                     missing_attrs,
                 )
         else:
             if not missing_attrs:
                 logger.warning(
-                    "The model (%s) contains all PP-specific attributes, "
-                    "but does not set `supports_pp=True`.",
+                    "The model (%s) contains all PP-specific attributes, but does not set `supports_pp=True`.",
                     model,
                 )
 
@@ -925,9 +917,7 @@ class MixtureOfExperts(Protocol):
 
 
 def is_mixture_of_experts(model: object) -> TypeIs[MixtureOfExperts]:
-    return (
-        isinstance(model, MixtureOfExperts) and getattr(model, "num_moe_layers", 0) > 0
-    )
+    return isinstance(model, MixtureOfExperts) and getattr(model, "num_moe_layers", 0) > 0
 
 
 @runtime_checkable
@@ -1148,8 +1138,7 @@ class SupportsTranscription(Protocol):
             return language
         elif language in cls.get_other_languages():
             logger.warning(
-                "Language %r is not natively supported by %s; "
-                "results may be less accurate. Supported languages: %r",
+                "Language %r is not natively supported by %s; results may be less accurate. Supported languages: %r",
                 language,
                 cls.__name__,
                 list(cls.supported_languages.keys()),
@@ -1157,8 +1146,7 @@ class SupportsTranscription(Protocol):
             return language
         else:
             raise ValueError(
-                f"Unsupported language: {language!r}.  Must be one of "
-                f"{list(cls.supported_languages.keys())}."
+                f"Unsupported language: {language!r}.  Must be one of {list(cls.supported_languages.keys())}."
             )
 
     @classmethod
@@ -1397,9 +1385,7 @@ class SupportsEagle3(SupportsEagleBase, Protocol):
             parent_ref = self.get_language_model()
         elif hasattr(self, "language_model"):
             parent_ref = self.language_model
-        assert hasattr(parent_ref, "model"), (
-            "Model instance must have 'model' attribute to set number of layers"
-        )
+        assert hasattr(parent_ref, "model"), "Model instance must have 'model' attribute to set number of layers"
         assert isinstance(parent_ref.model, EagleModelMixin), (
             "Model instance must inherit from EagleModelMixin to set auxiliary layers"
         )
@@ -1420,9 +1406,7 @@ class SupportsEagle3(SupportsEagleBase, Protocol):
             parent_ref = self.get_language_model()
         elif hasattr(self, "language_model"):
             parent_ref = self.language_model
-        assert hasattr(parent_ref, "model"), (
-            "Model instance must have 'model' attribute to get number of layers"
-        )
+        assert hasattr(parent_ref, "model"), "Model instance must have 'model' attribute to get number of layers"
         assert hasattr(parent_ref.model, "layers"), (
             "Model instance must have 'layers' attribute to get number of layers"
         )

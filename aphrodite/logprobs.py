@@ -83,9 +83,7 @@ class FlatLogprobs(MutableSequence[LogprobsOnePosition | None]):
         the intermediate logprob dictionary.
         """
         self.start_indices.append(len(self.logprobs))
-        for token_id, logprob, rank, decoded_token in zip(
-            token_ids, logprobs, ranks, decoded_tokens
-        ):
+        for token_id, logprob, rank, decoded_token in zip(token_ids, logprobs, ranks, decoded_tokens):
             self.token_ids.append(token_id)
             self.logprobs.append(logprob)
             self.ranks.append(rank)
@@ -199,8 +197,6 @@ def append_logprobs_for_next_position(
                     rank=rank,
                     decoded_token=token,
                 )
-                for token_id, logprob, rank, token in zip(
-                    token_ids, logprobs, ranks, decoded_tokens
-                )
+                for token_id, logprob, rank, token in zip(token_ids, logprobs, ranks, decoded_tokens)
             }
         )

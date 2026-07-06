@@ -39,9 +39,7 @@ def derender(request: Request) -> ServingDerender | None:
 async def derender_chat_completion(request: DerenderChatRequest, raw_request: Request):
     handler = derender(raw_request)
     if handler is None:
-        raise NotImplementedError(
-            "The model does not support Chat Completions Derender API"
-        )
+        raise NotImplementedError("The model does not support Chat Completions Derender API")
 
     result = await handler.derender_chat_response(request)
 

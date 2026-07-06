@@ -34,9 +34,7 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
         super().__init__(moe_config, quant_config)
         self.routing_method_type = moe_config.routing_method
         self.topk = moe_config.experts_per_token
-        self.intermediate_size_per_partition = (
-            moe_config.intermediate_size_per_partition
-        )
+        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
         self.hidden_dim = moe_config.hidden_dim
         self.local_num_experts = moe_config.num_local_experts
         self.ep_rank = moe_config.moe_parallel_config.ep_rank
@@ -49,11 +47,7 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
     def _supports_current_device() -> bool:
         """Supports only Blackwell-family GPUs."""
         p = current_platform
-        return (
-            p.is_cuda()
-            and p.is_device_capability_family(100)
-            and has_flashinfer_trtllm_fused_moe()
-        )
+        return p.is_cuda() and p.is_device_capability_family(100) and has_flashinfer_trtllm_fused_moe()
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -94,8 +88,7 @@ class TrtLlmBf16Experts(mk.FusedMoEExpertsMonolithic):
     ) -> bool:
         """Monolithic kernel so only use with naive DP/EP and TP."""
         return (
-            not moe_parallel_config.use_all2all_kernels
-            or moe_parallel_config.use_ag_rs_all2all_kernels
+            not moe_parallel_config.use_all2all_kernels or moe_parallel_config.use_ag_rs_all2all_kernels
         ) and not moe_parallel_config.enable_eplb
 
     @staticmethod

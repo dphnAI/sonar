@@ -45,9 +45,7 @@ __all__ = [
 #
 # Use a weak ref dictionary so that modules can be freed when the model is freed.
 # Values are sanitized from references to the layer key in order to avoid circular refs
-LAYERWISE_INFO: WeakKeyDictionary[torch.nn.Module, LayerReloadingInfo] = (
-    WeakKeyDictionary()
-)
+LAYERWISE_INFO: WeakKeyDictionary[torch.nn.Module, LayerReloadingInfo] = WeakKeyDictionary()
 
 # Global set used to track loading for logging purposes only
 LOADING_LAYERS: WeakSet[torch.nn.Module] = WeakSet()
@@ -202,9 +200,7 @@ def make_online_process_loader(layer: torch.nn.Module, param_name: str) -> Calla
             LOADING_LAYERS.add(layer)
             if len(LOADING_LAYERS) >= 2:
                 names = sorted([layer.__class__.__name__ for layer in LOADING_LAYERS])
-                mem_used = sum(
-                    get_info_size(LAYERWISE_INFO[layer]) for layer in LOADING_LAYERS
-                )
+                mem_used = sum(get_info_size(LAYERWISE_INFO[layer]) for layer in LOADING_LAYERS)
                 logger.warning_once(
                     "Allocating %.1f MB of device memory to buffers to load %s layers. "
                     "This extra memory usage can be avoided by ordering weights "
@@ -286,17 +282,14 @@ def finalize_layerwise_reload(*args, **kwargs):
     finalize_layerwise_processing(*args, **kwargs)
 
 
-def _finalize_attention_layer(
-    layer: torch.nn.Module, info: LayerReloadingInfo, model_config: ModelConfig
-) -> None:
+def _finalize_attention_layer(layer: torch.nn.Module, info: LayerReloadingInfo, model_config: ModelConfig) -> None:
     if info.load_numel > 0 and info.kernel_tensors is not None:
         # Reload with new scale weights from checkpoint
         _place_kernel_tensors(layer, info)
         _reload_attention_scales(layer, info)
     elif info.load_numel > 0 or info.kernel_tensors is None:
         raise ValueError(
-            "Layerwise loading of attention layers is not supported. "
-            "Attention must always process after linears."
+            "Layerwise loading of attention layers is not supported. Attention must always process after linears."
         )
     else:
         _place_kernel_tensors(layer, info)

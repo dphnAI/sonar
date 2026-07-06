@@ -76,9 +76,7 @@ class TestHasModule:
             ),
             patch(
                 "aphrodite.utils.import_utils.importlib.import_module",
-                side_effect=ImportError(
-                    "libcudart.so.12: cannot open shared object file"
-                ),
+                side_effect=ImportError("libcudart.so.12: cannot open shared object file"),
             ),
         ):
             assert _has_module("fake_native_ext") is False

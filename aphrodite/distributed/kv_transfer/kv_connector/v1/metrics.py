@@ -5,7 +5,7 @@ from typing import Any, TypeAlias, TypeVar
 
 from prometheus_client import Counter, Gauge, Histogram
 
-from aphrodite.config import KVTransferConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, KVTransferConfig
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 from aphrodite.logger import init_logger
 
@@ -54,9 +54,7 @@ class KVConnectorLogging:
     def __init__(self, kv_transfer_config: KVTransferConfig | None):
         # Instantiate the connector's stats class.
         if kv_transfer_config and kv_transfer_config.kv_connector:
-            self.connector_cls = KVConnectorFactory.get_connector_class(
-                kv_transfer_config
-            )
+            self.connector_cls = KVConnectorFactory.get_connector_class(kv_transfer_config)
         self.reset()
 
     def reset(self):
@@ -69,9 +67,7 @@ class KVConnectorLogging:
         # Note that this is not the same as the logging interval.
         # We expect transfer_stats_data to be aggregated across all workers and
         # consist of observations from a single connector or a MultiConnector.
-        transfer_stats = self.connector_cls.build_kv_connector_stats(
-            transfer_stats_data
-        )
+        transfer_stats = self.connector_cls.build_kv_connector_stats(transfer_stats_data)
         if transfer_stats is None:
             logger.warning_once(
                 "The connector %s is collecting stats but "
@@ -86,16 +82,11 @@ class KVConnectorLogging:
             self.transfer_stats_accumulator = transfer_stats
         else:
             # Accumulate last interval stats.
-            self.transfer_stats_accumulator = self.transfer_stats_accumulator.aggregate(
-                transfer_stats
-            )
+            self.transfer_stats_accumulator = self.transfer_stats_accumulator.aggregate(transfer_stats)
 
     def log(self, log_fn=logger.info):
         """Log transfer metrics periodically, similar to throughput logging"""
-        if (
-            self.transfer_stats_accumulator
-            and not self.transfer_stats_accumulator.is_empty()
-        ):
+        if self.transfer_stats_accumulator and not self.transfer_stats_accumulator.is_empty():
             # Produce a single cumulative stats object for the last time
             # interval from the recorded observations.
             xfer_metrics = self.transfer_stats_accumulator.reduce()

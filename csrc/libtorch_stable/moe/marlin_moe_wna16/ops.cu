@@ -273,11 +273,11 @@ MarlinFuncPtr get_marlin_kernel(
 
 exec_config_t determine_exec_config(
     const aphrodite::ScalarType& a_type, const aphrodite::ScalarType& b_type,
-    const aphrodite::ScalarType& c_type, const aphrodite::ScalarType& s_type, int prob_m,
-    int prob_n, int prob_k, int num_experts, int top_k, int thread_m_blocks,
-    bool m_block_size_8, int num_bits, int group_size, bool has_act_order,
-    bool is_k_full, bool has_zp, bool is_zp_float, bool is_a_8bit, int stages,
-    int max_shared_mem, int sms) {
+    const aphrodite::ScalarType& c_type, const aphrodite::ScalarType& s_type,
+    int prob_m, int prob_n, int prob_k, int num_experts, int top_k,
+    int thread_m_blocks, bool m_block_size_8, int num_bits, int group_size,
+    bool has_act_order, bool is_k_full, bool has_zp, bool is_zp_float,
+    bool is_a_8bit, int stages, int max_shared_mem, int sms) {
   exec_config_t exec_cfg = exec_config_t{1, thread_config_t{-1, -1, -1}};
   thread_config_t* thread_configs = thread_m_blocks > 1
                                         ? large_batch_thread_configs
@@ -348,7 +348,8 @@ void marlin_mm(const void* A, const void* B, void* C, void* C_tmp, void* b_bias,
                void* topk_weights, int moe_block_size, int num_experts,
                int top_k, bool mul_topk_weights, int prob_m, int prob_n,
                int prob_k, void* workspace, aphrodite::ScalarType const& a_type,
-               aphrodite::ScalarType const& b_type, aphrodite::ScalarType const& c_type,
+               aphrodite::ScalarType const& b_type,
+               aphrodite::ScalarType const& c_type,
                aphrodite::ScalarType const& s_type, bool has_bias,
                bool has_act_order, bool is_k_full, bool has_zp, int num_groups,
                int group_size, int dev, cudaStream_t stream, int thread_k,
@@ -554,10 +555,10 @@ torch::stable::Tensor moe_wna16_marlin_gemm(
     torch::stable::Tensor& expert_ids,
     torch::stable::Tensor& num_tokens_past_padded,
     torch::stable::Tensor& topk_weights, int64_t moe_block_size, int64_t top_k,
-    bool mul_topk_weights, aphrodite::ScalarTypeId const& b_type_id, int64_t size_m,
-    int64_t size_n, int64_t size_k, bool is_k_full, bool use_atomic_add,
-    bool use_fp32_reduce, bool is_zp_float, int64_t thread_k, int64_t thread_n,
-    int64_t blocks_per_sm) {
+    bool mul_topk_weights, aphrodite::ScalarTypeId const& b_type_id,
+    int64_t size_m, int64_t size_n, int64_t size_k, bool is_k_full,
+    bool use_atomic_add, bool use_fp32_reduce, bool is_zp_float,
+    int64_t thread_k, int64_t thread_n, int64_t blocks_per_sm) {
   aphrodite::ScalarTypeId a_type_id, c_type_id, s_type_id;
 
   auto c_dtype = a.scalar_type();
@@ -777,8 +778,9 @@ torch::stable::Tensor moe_wna16_marlin_gemm(
   torch::stable::Tensor global_scale;
   if (global_scale_or_none.has_value()) {
     global_scale = global_scale_or_none.value();
-    STD_TORCH_CHECK(b_type == aphrodite::kFE2M1f && s_type == aphrodite::kFE4M3fn,
-                    "global_scale can only be used for nvfp4 format.");
+    STD_TORCH_CHECK(
+        b_type == aphrodite::kFE2M1f && s_type == aphrodite::kFE4M3fn,
+        "global_scale can only be used for nvfp4 format.");
   } else {
     global_scale = torch::stable::new_empty(a, {0}, kFloat);
     STD_TORCH_CHECK(
@@ -812,12 +814,13 @@ torch::stable::Tensor moe_wna16_marlin_gemm(
         b_type == aphrodite::kU4 || b_type == aphrodite::kU8,
         "b_type must be u4 or u8 when has_zp = True. Got = ", b_type.str());
   } else {
-    STD_TORCH_CHECK(b_type == aphrodite::kU4B8 || b_type == aphrodite::kU8B128 ||
-                        b_type == aphrodite::kS4 || b_type == aphrodite::kS8 ||
-                        b_type == aphrodite::kFE4M3fn || b_type == aphrodite::kFE2M1f,
-                    "b_type must be uint4b8, uint8b128, int4, int8, "
-                    "float8_e4m3fn or float4_e2m1f when has_zp = False. Got = ",
-                    b_type.str());
+    STD_TORCH_CHECK(
+        b_type == aphrodite::kU4B8 || b_type == aphrodite::kU8B128 ||
+            b_type == aphrodite::kS4 || b_type == aphrodite::kS8 ||
+            b_type == aphrodite::kFE4M3fn || b_type == aphrodite::kFE2M1f,
+        "b_type must be uint4b8, uint8b128, int4, int8, "
+        "float8_e4m3fn or float4_e2m1f when has_zp = False. Got = ",
+        b_type.str());
   }
 
   if (has_zp && is_zp_float) {

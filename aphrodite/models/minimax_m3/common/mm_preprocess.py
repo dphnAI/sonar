@@ -115,9 +115,7 @@ class MiniMaxM3VLProcessingInfo(BaseProcessingInfo):
         # Long-side resize spec (opt-in). ``image_processor`` is the *video*
         # processor when counting video tokens, so read the bounds off it.
         max_long_side_pixel = getattr(image_processor, "max_long_side_pixel", None)
-        min_short_side_pixel = getattr(
-            image_processor, "min_short_side_pixel", MIN_SHORT_SIDE_PIXEL
-        )
+        min_short_side_pixel = getattr(image_processor, "min_short_side_pixel", MIN_SHORT_SIDE_PIXEL)
 
         new_h, new_w = smart_resize(
             image_height,
@@ -248,9 +246,7 @@ class MiniMaxM3VLProcessingInfo(BaseProcessingInfo):
     ) -> int:
         max_videos = mm_counts.get("video", 0)
         max_total_frames = self._get_max_video_frames(seq_len)
-        max_frames_per_video = min(
-            max_total_frames // max(max_videos, 1), max_frames_per_video
-        )
+        max_frames_per_video = min(max_total_frames // max(max_videos, 1), max_frames_per_video)
         return max(max_frames_per_video, 1)
 
     def get_max_video_tokens(
@@ -303,9 +299,7 @@ class MiniMaxM3VLDummyInputsBuilder(BaseDummyInputsBuilder[MiniMaxM3VLProcessing
         }
 
 
-class MiniMaxM3VLMultiModalProcessor(
-    BaseMultiModalProcessor[MiniMaxM3VLProcessingInfo]
-):
+class MiniMaxM3VLMultiModalProcessor(BaseMultiModalProcessor[MiniMaxM3VLProcessingInfo]):
     def _get_data_parser(self) -> MultiModalDataParser:
         # Request video metadata (fps + sampled frame indices) so the HF
         # processor can emit per-frame ``]<]X.X seconds[>[`` timestamp markers,
@@ -336,9 +330,7 @@ class MiniMaxM3VLMultiModalProcessor(
                 else:
                     frames, meta = item, {}
                 frames_only.append(frames)
-                meta = {
-                    k: v for k, v in (meta or {}).items() if k != "do_sample_frames"
-                }
+                meta = {k: v for k, v in (meta or {}).items() if k != "do_sample_frames"}
                 # VideoMetadata requires total_num_frames; derive it for
                 # dummy/profiling videos whose metadata omits it. fps and
                 # frames_indices default to None there → no timestamps, which
@@ -368,25 +360,13 @@ class MiniMaxM3VLMultiModalProcessor(
         video_grid_thw = hf_inputs.get("video_grid_thw")
 
         # Total patches per item (grid_t * grid_h * grid_w)
-        image_grid_sizes = (
-            image_grid_thw.prod(-1)
-            if image_grid_thw is not None
-            else torch.empty(0, dtype=torch.long)
-        )
-        video_grid_sizes = (
-            video_grid_thw.prod(-1)
-            if video_grid_thw is not None
-            else torch.empty(0, dtype=torch.long)
-        )
+        image_grid_sizes = image_grid_thw.prod(-1) if image_grid_thw is not None else torch.empty(0, dtype=torch.long)
+        video_grid_sizes = video_grid_thw.prod(-1) if video_grid_thw is not None else torch.empty(0, dtype=torch.long)
 
         return {
-            "pixel_values": MultiModalFieldConfig.flat_from_sizes(
-                "image", image_grid_sizes
-            ),
+            "pixel_values": MultiModalFieldConfig.flat_from_sizes("image", image_grid_sizes),
             "image_grid_thw": MultiModalFieldConfig.batched("image", keep_on_cpu=True),
-            "pixel_values_videos": MultiModalFieldConfig.flat_from_sizes(
-                "video", video_grid_sizes
-            ),
+            "pixel_values_videos": MultiModalFieldConfig.flat_from_sizes("video", video_grid_sizes),
             "video_grid_thw": MultiModalFieldConfig.batched("video", keep_on_cpu=True),
         }
 
@@ -407,9 +387,7 @@ class MiniMaxM3VLMultiModalProcessor(
         merge_length: int = hf_processor.image_processor.merge_size**2
 
         def get_image_replacement(item_idx: int):
-            grid_thw: torch.Tensor = out_mm_kwargs["image"][item_idx][
-                "image_grid_thw"
-            ].data
+            grid_thw: torch.Tensor = out_mm_kwargs["image"][item_idx]["image_grid_thw"].data
             # grid_thw shape: (3,) = [1, grid_h, grid_w]
             N = int(grid_thw.prod().item()) // merge_length
             full = [start_token_id] + [image_token_id] * N + [end_token_id]
@@ -422,9 +400,7 @@ class MiniMaxM3VLMultiModalProcessor(
         temporal_patch_size: int = hf_processor.video_processor.temporal_patch_size
 
         def get_video_replacement(item_idx: int):
-            grid_thw: torch.Tensor = out_mm_kwargs["video"][item_idx][
-                "video_grid_thw"
-            ].data
+            grid_thw: torch.Tensor = out_mm_kwargs["video"][item_idx]["video_grid_thw"].data
             # grid_thw shape: (3,) = [grid_t, grid_h, grid_w]
             # HF model uses VIDEO_TOKEN (not IMAGE_TOKEN) for video frame content:
             # processing_minimax.py L245: replace(placeholder, self.VIDEO_TOKEN)
@@ -436,11 +412,7 @@ class MiniMaxM3VLMultiModalProcessor(
             # rendered as "]<]X.X seconds[>["). Falls back to no timestamps when
             # metadata is unavailable (keeping the replacement aligned with the
             # processor output in both cases).
-            meta = (
-                video_metadata[item_idx]
-                if video_metadata is not None and item_idx < len(video_metadata)
-                else None
-            )
+            meta = video_metadata[item_idx] if video_metadata is not None and item_idx < len(video_metadata) else None
             fps = meta.get("fps") if meta else None
             frames_indices = meta.get("frames_indices") if meta else None
 
@@ -449,9 +421,7 @@ class MiniMaxM3VLMultiModalProcessor(
                 if fps is not None and frames_indices is not None:
                     idx = min(frame_idx * temporal_patch_size, len(frames_indices) - 1)
                     ts = frames_indices[idx] / fps
-                    full += tokenizer.encode(
-                        f"]<]{ts:.1f} seconds[>[", add_special_tokens=False
-                    )
+                    full += tokenizer.encode(f"]<]{ts:.1f} seconds[>[", add_special_tokens=False)
                 full += [start_token_id] + [video_token_id] * M + [end_token_id]
             return PromptUpdateDetails.select_token_id(full, video_token_id)
 

@@ -58,12 +58,7 @@ async def test_chat_with_enable_force_include_usage(
         assert (
             last_completion_tokens == 0
             or chunk.usage.completion_tokens > last_completion_tokens
-            or (
-                not chunk.choices
-                and chunk.usage.completion_tokens == last_completion_tokens
-            )
+            or (not chunk.choices and chunk.usage.completion_tokens == last_completion_tokens)
         )
-        assert chunk.usage.total_tokens == (
-            chunk.usage.prompt_tokens + chunk.usage.completion_tokens
-        )
+        assert chunk.usage.total_tokens == (chunk.usage.prompt_tokens + chunk.usage.completion_tokens)
         last_completion_tokens = chunk.usage.completion_tokens

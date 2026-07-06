@@ -6,10 +6,10 @@ import pytest
 import torch
 
 import aphrodite._custom_ops as ops
-from tests.kernels.quant_utils import ref_dynamic_per_tensor_fp8_quant
 from aphrodite.platforms import current_platform
 from aphrodite.platforms.rocm import on_gfx950
 from aphrodite.utils.platform_utils import num_compute_units
+from tests.kernels.quant_utils import ref_dynamic_per_tensor_fp8_quant
 
 DTYPES = [torch.bfloat16, torch.float16]
 BIAS_MODES = [0, 1, 2]
@@ -147,9 +147,7 @@ def test_rocm_wvsplitkrc_kernel(xnorm, n, k, m, dtype, seed, padded_a, bias_mode
     if not fits_wvsplitkrc:
         pytest.skip("Too large for wvSplitKrc")
 
-    xavier = (
-        math.sqrt(2 / k) if xnorm else 1
-    )  # normalize to avoid large output-bias deltas
+    xavier = math.sqrt(2 / k) if xnorm else 1  # normalize to avoid large output-bias deltas
     A = (torch.rand(n, k, dtype=dtype, device="cuda") * 2 - 1) * xavier
     B = (torch.rand(m, k, dtype=dtype, device="cuda") * 2 - 1) * xavier
     if padded_a:
@@ -200,15 +198,11 @@ def test_rocm_llmm1_kernel(n, k, m, dtype, rows_per_block, seed):
 @pytest.mark.parametrize("bias_mode", BIAS_MODES)
 @pytest.mark.parametrize("padded_a", [False, True])
 @pytest.mark.parametrize("padded_b", [False, True])
-def test_rocm_wvsplitk_kernel(
-    xnorm, n, k, m, dtype, seed, bias_mode, padded_a, padded_b
-):
+def test_rocm_wvsplitk_kernel(xnorm, n, k, m, dtype, seed, bias_mode, padded_a, padded_b):
     torch.manual_seed(seed)
     cu_count = num_compute_units()
 
-    xavier = (
-        math.sqrt(2 / k) if xnorm else 1
-    )  # normalize to avoid large output-bias deltas
+    xavier = math.sqrt(2 / k) if xnorm else 1  # normalize to avoid large output-bias deltas
     A = (torch.rand(n, k, dtype=dtype, device="cuda") * 2 - 1) * xavier
     B = (torch.rand(m, k, dtype=dtype, device="cuda") * 2 - 1) * xavier
 
@@ -242,9 +236,7 @@ def test_rocm_wvsplitk_kernel(
     not (current_platform.is_rocm() and current_platform.supports_fp8()),
     reason="only test for rocm fp8",
 )
-def test_rocm_wvsplitk_fp8_kernel(
-    xnorm, n, k, m, dtype, seed, padded_a, padded_b, biased
-):
+def test_rocm_wvsplitk_fp8_kernel(xnorm, n, k, m, dtype, seed, padded_a, padded_b, biased):
     torch.manual_seed(seed)
 
     xavier = math.sqrt(2 / k) if xnorm else 1  # normalize to avoid large deltas
@@ -260,9 +252,7 @@ def test_rocm_wvsplitk_fp8_kernel(
 
     BIAS = None if (not biased) else (torch.rand(m, dtype=dtype, device="cuda") * 2 - 1)
 
-    ref_out = torch._scaled_mm(
-        A, B.t(), out_dtype=dtype, scale_a=scale_a, scale_b=scale_b, bias=BIAS
-    )
+    ref_out = torch._scaled_mm(A, B.t(), out_dtype=dtype, scale_a=scale_a, scale_b=scale_b, bias=BIAS)
     out = ops.wvSplitKQ(B, A, dtype, scale_a, scale_b, num_compute_units(), BIAS)
 
     if xnorm:

@@ -40,10 +40,7 @@ def override_config(config: AutoGPTQConfig, prefix: str):
         config.is_sym = is_sym
 
     if (config.weight_bits, config.is_sym) not in config.TYPE_MAP:
-        raise ValueError(
-            "Unsupported quantization config: "
-            f"bits={config.weight_bits}, sym={config.is_sym}"
-        )
+        raise ValueError(f"Unsupported quantization config: bits={config.weight_bits}, sym={config.is_sym}")
 
     config.quant_type = config.TYPE_MAP[(config.weight_bits, config.is_sym)]
 
@@ -88,16 +85,11 @@ def is_layer_gptq_quantized(
     # from the fused version to unfused + check to make sure that
     # each shard of the fused layer has the same scheme.
     if proj_name in fused_mapping:
-        shard_prefixes = [
-            prefix.replace(proj_name, shard_proj_name)
-            for shard_proj_name in fused_mapping[proj_name]
-        ]
+        shard_prefixes = [prefix.replace(proj_name, shard_proj_name) for shard_proj_name in fused_mapping[proj_name]]
 
         is_quantized = None
         for shard_prefix in shard_prefixes:
-            is_shard_quantized = any(
-                layer in shard_prefix for layer in quantized_layers
-            )
+            is_shard_quantized = any(layer in shard_prefix for layer in quantized_layers)
 
             if is_quantized is None:
                 is_quantized = is_shard_quantized
@@ -121,9 +113,7 @@ def get_linear_quant_method(
     linear_method_cls: type,
 ):
     cloned_config = deepcopy(config)
-    parallel_lm_head_quantized = (
-        isinstance(layer, ParallelLMHead) and cloned_config.lm_head_quantized
-    )
+    parallel_lm_head_quantized = isinstance(layer, ParallelLMHead) and cloned_config.lm_head_quantized
     if isinstance(layer, LinearBase) or parallel_lm_head_quantized:
         is_layer_quantized = is_layer_gptq_quantized(
             prefix=prefix,

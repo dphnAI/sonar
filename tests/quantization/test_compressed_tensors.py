@@ -17,7 +17,6 @@ from compressed_tensors.quantization import (
     QuantizationType,
 )
 
-from tests.models.utils import check_logprobs_close
 from aphrodite.model_executor.kernels.linear import (
     Fp8BlockScaledMMLinearKernel,
 )
@@ -42,6 +41,7 @@ from aphrodite.model_executor.layers.quantization.input_quant_fp8 import QuantFP
 from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
+from tests.models.utils import check_logprobs_close
 
 # AITER only supports per-channel-per-channel INT8 gemm
 # and per-tensor-per-tensor INT8 GEMM.
@@ -89,10 +89,7 @@ def enable_pickle(monkeypatch):
 def test_compressed_tensors_w8a8_static_setup(aphrodite_runner, model_args):
     model_path, strategy, quant_type, shape_0, is_symmetric = model_args
 
-    if (
-        current_platform.is_rocm()
-        and model_path not in ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL
-    ):
+    if current_platform.is_rocm() and model_path not in ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL:
         pytest.skip(f"Skip model {model_path} as it is not supported on ROCm.")
 
     with aphrodite_runner(model_path, enforce_eager=True) as llm:
@@ -154,9 +151,7 @@ def test_compressed_tensors_w8a8_static_setup(aphrodite_runner, model_args):
 )
 @pytest.mark.parametrize("max_tokens", [4])
 @pytest.mark.parametrize("num_logprobs", [10])
-@pytest.mark.parametrize(
-    "use_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("use_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_compressed_tensors_w8a8_logprobs(
     hf_runner,
     aphrodite_runner,
@@ -167,10 +162,7 @@ def test_compressed_tensors_w8a8_logprobs(
     use_aiter,
     monkeypatch,
 ):
-    if (
-        current_platform.is_rocm()
-        and model_path not in ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL
-    ):
+    if current_platform.is_rocm() and model_path not in ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL:
         pytest.skip(f"Skip model {model_path} as it is not supported on ROCm.")
 
     if use_aiter:
@@ -189,14 +181,10 @@ def test_compressed_tensors_w8a8_logprobs(
         example_prompts = example_prompts[0:-1]
 
     with hf_runner(model_path, dtype=dtype) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(
-            example_prompts, max_tokens, num_logprobs
-        )
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
     with aphrodite_runner(model_path, dtype=dtype, enforce_eager=True) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
-            example_prompts, max_tokens, num_logprobs
-        )
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
@@ -226,9 +214,7 @@ def test_compressed_tensors_no_enforce_eager(aphrodite_runner):
         ),
     ],
 )
-@pytest.mark.parametrize(
-    "use_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("use_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_compressed_tensors_w8a8_dynamic_per_token(
     aphrodite_runner,
     model_args,
@@ -237,10 +223,7 @@ def test_compressed_tensors_w8a8_dynamic_per_token(
 ):
     model_path, strategy = model_args
 
-    if (
-        current_platform.is_rocm()
-        and model_path not in ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL
-    ):
+    if current_platform.is_rocm() and model_path not in ROCM_TRITON_SCALED_MM_SUPPORTED_INT8_MODEL:
         pytest.skip(f"Skip model {model_path} as it is not supported on ROCm.")
 
     if use_aiter:
@@ -289,9 +272,7 @@ def test_compressed_tensors_w8a8_dynamic_per_token(
         ),
     ],
 )
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="The tests are skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="The tests are skipped on non-CUDA platform.")
 def test_compressed_tensors_wNa16(aphrodite_runner, wNa16_args):
     model, strategy, group, pack_factor, symmetric, has_g_idx = wNa16_args
     with aphrodite_runner(model, enforce_eager=True) as llm:
@@ -345,9 +326,7 @@ def test_compressed_tensors_fp8(aphrodite_runner):
         assert output
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 def test_compressed_tensors_kv_cache_fp8_per_tensor(aphrodite_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-kvcache-fp8-tensor"
     with aphrodite_runner(model_path) as llm:
@@ -355,9 +334,7 @@ def test_compressed_tensors_kv_cache_fp8_per_tensor(aphrodite_runner):
         assert output
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 def test_compressed_tensors_kv_cache_fp8_per_attn_head(aphrodite_runner):
     model_path = "nm-testing/TinyLlama-1.1B-Chat-v1.0-kvcache-fp8-attn_head"
     try:
@@ -374,15 +351,11 @@ def test_compressed_tensors_kv_cache_fp8_per_attn_head(aphrodite_runner):
 
 @contextmanager
 def _nvfp4_marlin_error_context(model, capfd):
-    is_rocm_and_unsupported = (
-        model == "nm-testing/TinyLlama-1.1B-Chat-v1.0-NVFP4A16"
-        and current_platform.is_rocm()
-    )
+    is_rocm_and_unsupported = model == "nm-testing/TinyLlama-1.1B-Chat-v1.0-NVFP4A16" and current_platform.is_rocm()
 
     if is_rocm_and_unsupported:
         expected_error = (
-            "ValueError: Forced NVFP4 kernel MarlinNvFp4LinearKernel is not "
-            "supported: Marlin FP4 not available"
+            "ValueError: Forced NVFP4 kernel MarlinNvFp4LinearKernel is not supported: Marlin FP4 not available"
         )
         with pytest.raises(RuntimeError, match="Engine core initialization failed"):
             yield
@@ -457,9 +430,7 @@ def test_compressed_tensors_w4a8_fp8(aphrodite_runner, args):
         assert output
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 @pytest.mark.parametrize(
     "model,prompt,exp_perplexity",
     [
@@ -475,9 +446,7 @@ def test_compressed_tensors_w4a8_fp8(aphrodite_runner, args):
         ),
     ],
 )
-def test_compressed_tensors_transforms_perplexity(
-    aphrodite_runner, model, prompt, exp_perplexity
-):
+def test_compressed_tensors_transforms_perplexity(aphrodite_runner, model, prompt, exp_perplexity):
     with aphrodite_runner(model, enforce_eager=True) as llm:
         perplexity = llm.generate_prompt_perplexity([prompt])[0]
         print(perplexity)
@@ -554,9 +523,7 @@ def test_compressed_tensors_moe_ignore_with_model(aphrodite_runner):
             # Check layer 10 MoE (should be unquantized + ignored)
             layer_unquantized = model.model.layers[3].mlp.experts
             assert isinstance(layer_unquantized, MoERunner)
-            assert isinstance(
-                layer_unquantized._quant_method, UnquantizedFusedMoEMethod
-            )
+            assert isinstance(layer_unquantized._quant_method, UnquantizedFusedMoEMethod)
 
         llm.apply_model(check_model)
 
@@ -632,9 +599,7 @@ def test_get_quant_method_returns_none_for_ignored_parallel_lm_head():
 
     method = config.get_quant_method(mock_lm_head, prefix="model.lm_head")
 
-    assert method is None, (
-        f"Expected None for ignored ParallelLMHead, got {type(method).__name__}"
-    )
+    assert method is None, f"Expected None for ignored ParallelLMHead, got {type(method).__name__}"
 
 
 def test_get_quant_method_returns_none_for_unmatched_parallel_lm_head():
@@ -650,9 +615,7 @@ def test_get_quant_method_returns_none_for_unmatched_parallel_lm_head():
 
     method = config.get_quant_method(mock_lm_head, prefix="model.lm_head")
 
-    assert method is None, (
-        f"Expected None for unmatched ParallelLMHead, got {type(method).__name__}"
-    )
+    assert method is None, f"Expected None for unmatched ParallelLMHead, got {type(method).__name__}"
 
 
 def test_find_matched_target_returns_none_on_no_match():
@@ -824,9 +787,7 @@ _DYNAMIC_INT8_ACT = QuantizationArgs(
         ),
     ],
 )
-def test_scheme_selection(
-    weight_bits, weight_strategy, input_act, output_act, format, expected_scheme
-):
+def test_scheme_selection(weight_bits, weight_strategy, input_act, output_act, format, expected_scheme):
     """Test that _get_scheme_from_parts selects the correct scheme.
 
     This parametrized test verifies scheme selection for various combinations
@@ -896,9 +857,7 @@ def test_compressed_tensors_mxfp8_moe_setup(aphrodite_runner):
 
             experts = layer.mlp.experts
             assert isinstance(experts, MoERunner)
-            assert isinstance(
-                experts._quant_method, CompressedTensorsW8A8Mxfp8MoEMethod
-            )
+            assert isinstance(experts._quant_method, CompressedTensorsW8A8Mxfp8MoEMethod)
 
         llm.apply_model(check_model)
         output = llm.generate_greedy("Hello my name is", max_tokens=4)
@@ -928,9 +887,7 @@ def test_wna16_marlin_moe_w2_scale_sharding(actorder, group_size, part, full, ex
         CompressedTensorsWNA16MarlinMoEMethod,
     )
 
-    result = CompressedTensorsWNA16MarlinMoEMethod._w2_scale_sharding(
-        actorder, group_size, part, full
-    )
+    result = CompressedTensorsWNA16MarlinMoEMethod._w2_scale_sharding(actorder, group_size, part, full)
     assert result == expected
 
 

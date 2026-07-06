@@ -56,10 +56,7 @@ class IPCTrainerSendWeightsArgs:
         if self.send_mode == "http" and self.url is None:
             raise ValueError("url is required for 'http' send_mode")
         if self.send_mode not in ("ray", "http"):
-            raise ValueError(
-                f"send_mode must be 'ray', 'http', or a callable, "
-                f"got {self.send_mode!r}"
-            )
+            raise ValueError(f"send_mode must be 'ray', 'http', or a callable, got {self.send_mode!r}")
 
 
 @dataclass
@@ -91,23 +88,18 @@ class IPCWeightTransferUpdateInfo(WeightTransferUpdateInfo):
     def __post_init__(self):
         if self.ipc_handles_pickled is not None:
             if self.ipc_handles is not None:
-                raise ValueError(
-                    "Cannot specify both `ipc_handles` and `ipc_handles_pickled`"
-                )
+                raise ValueError("Cannot specify both `ipc_handles` and `ipc_handles_pickled`")
 
             if not envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
                 raise ValueError(
-                    "Refusing to deserialize `ipc_handles_pickled` without "
-                    "APHRODITE_ALLOW_INSECURE_SERIALIZATION=1"
+                    "Refusing to deserialize `ipc_handles_pickled` without APHRODITE_ALLOW_INSECURE_SERIALIZATION=1"
                 )
 
             self.ipc_handles = pickle.loads(base64.b64decode(self.ipc_handles_pickled))
             self.ipc_handles_pickled = None
 
         if self.ipc_handles is None:
-            raise ValueError(
-                "Either `ipc_handles` or `ipc_handles_pickled` must be provided"
-            )
+            raise ValueError("Either `ipc_handles` or `ipc_handles_pickled` must be provided")
         num_params = len(self.names)
         if len(self.dtype_names) != num_params:
             raise ValueError(
@@ -116,14 +108,9 @@ class IPCWeightTransferUpdateInfo(WeightTransferUpdateInfo):
             )
         if len(self.shapes) != num_params:
             raise ValueError(
-                f"`shapes` should be of the same size as `names`: "
-                f"got {len(self.shapes)} and {len(self.names)}"
+                f"`shapes` should be of the same size as `names`: got {len(self.shapes)} and {len(self.names)}"
             )
-        if (
-            not self.packed
-            and isinstance(self.ipc_handles, list)
-            and len(self.ipc_handles) != num_params
-        ):
+        if not self.packed and isinstance(self.ipc_handles, list) and len(self.ipc_handles) != num_params:
             raise ValueError(
                 f"`ipc_handles` should be of the same size as `names`: "
                 f"got {len(self.ipc_handles)} and {len(self.names)}"
@@ -132,9 +119,7 @@ class IPCWeightTransferUpdateInfo(WeightTransferUpdateInfo):
             raise ValueError("`tensor_sizes` is required when packed=True")
 
 
-class IPCWeightTransferEngine(
-    WeightTransferEngine[IPCWeightTransferInitInfo, IPCWeightTransferUpdateInfo]
-):
+class IPCWeightTransferEngine(WeightTransferEngine[IPCWeightTransferInitInfo, IPCWeightTransferUpdateInfo]):
     """
     Weight transfer engine using CUDA IPC for communication between trainer and workers.
 
@@ -165,9 +150,7 @@ class IPCWeightTransferEngine(
         """
         super().__init__(config, aphrodite_config, device, model)
 
-    def parse_update_info(
-        self, update_dict: dict[str, Any]
-    ) -> IPCWeightTransferUpdateInfo:
+    def parse_update_info(self, update_dict: dict[str, Any]) -> IPCWeightTransferUpdateInfo:
         """Parse update dict, deserializing pickled IPC handles if present.
 
         HTTP transport sends IPC handles as a base64-encoded pickle under the
@@ -181,14 +164,11 @@ class IPCWeightTransferEngine(
         pickled = update_dict.pop("ipc_handles_pickled", None)
         if pickled is not None:
             if update_dict.get("ipc_handles") is not None:
-                raise ValueError(
-                    "Cannot specify both `ipc_handles` and `ipc_handles_pickled`"
-                )
+                raise ValueError("Cannot specify both `ipc_handles` and `ipc_handles_pickled`")
 
             if not envs.APHRODITE_ALLOW_INSECURE_SERIALIZATION:
                 raise ValueError(
-                    "Refusing to deserialize `ipc_handles_pickled` without "
-                    "APHRODITE_ALLOW_INSECURE_SERIALIZATION=1"
+                    "Refusing to deserialize `ipc_handles_pickled` without APHRODITE_ALLOW_INSECURE_SERIALIZATION=1"
                 )
 
             update_dict["ipc_handles"] = pickle.loads(base64.b64decode(pickled))
@@ -307,11 +287,7 @@ class IPCWeightTransferEngine(
                      (e.g. via FSDP full_tensor()).
             trainer_args: IPCTrainerSendWeightsArgs or equivalent dict.
         """
-        args = (
-            IPCTrainerSendWeightsArgs(**trainer_args)
-            if isinstance(trainer_args, dict)
-            else trainer_args
-        )
+        args = IPCTrainerSendWeightsArgs(**trainer_args) if isinstance(trainer_args, dict) else trainer_args
         device_index = torch.accelerator.current_device_index()
         gpu_uuid = str(torch.cuda.get_device_properties(device_index).uuid)
         if args.packed:
@@ -340,10 +316,7 @@ class IPCWeightTransferEngine(
         Non-rank-0 returns a list of empty dicts.
         No-op (returns handles unchanged) when no distributed group exists.
         """
-        if (
-            not torch.distributed.is_initialized()
-            or torch.distributed.get_world_size() == 1
-        ):
+        if not torch.distributed.is_initialized() or torch.distributed.get_world_size() == 1:
             return handles
 
         world_size = torch.distributed.get_world_size()
@@ -366,10 +339,7 @@ class IPCWeightTransferEngine(
     @staticmethod
     def _post_send_sync() -> None:
         """Barrier + ipc_collect after a send; no-op if single-GPU."""
-        if (
-            torch.distributed.is_initialized()
-            and torch.distributed.get_world_size() > 1
-        ):
+        if torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1:
             torch.distributed.barrier()
         torch.cuda.ipc_collect()
 
@@ -429,9 +399,7 @@ class IPCWeightTransferEngine(
             post_iter_func=post_iter_func,
             buffer_size_bytes=args.packed_buffer_size_bytes,
         ):
-            ipc_handle = IPCWeightTransferEngine._all_gather_and_merge_handles(
-                [chunk.ipc_handle]
-            )[0]
+            ipc_handle = IPCWeightTransferEngine._all_gather_and_merge_handles([chunk.ipc_handle])[0]
 
             if IPCWeightTransferEngine._is_rank_zero():
                 IPCWeightTransferEngine._do_send(
@@ -472,21 +440,10 @@ class IPCWeightTransferEngine(
         if callable(args.send_mode):
             args.send_mode(update_info)
         elif args.send_mode == "ray":
-            handles = (
-                args.llm_handle
-                if isinstance(args.llm_handle, list)
-                else [args.llm_handle]
-            )
-            ray.get(
-                [
-                    h.update_weights.remote(dict(update_info=asdict(update_info)))
-                    for h in handles
-                ]
-            )
+            handles = args.llm_handle if isinstance(args.llm_handle, list) else [args.llm_handle]
+            ray.get([h.update_weights.remote(dict(update_info=asdict(update_info))) for h in handles])
         elif args.send_mode == "http":
-            pickled_handles = base64.b64encode(pickle.dumps(ipc_handles)).decode(
-                "utf-8"
-            )
+            pickled_handles = base64.b64encode(pickle.dumps(ipc_handles)).decode("utf-8")
             http_fields = {k: v for k, v in update_fields.items() if k != "ipc_handles"}
             http_fields["ipc_handles_pickled"] = pickled_handles
 

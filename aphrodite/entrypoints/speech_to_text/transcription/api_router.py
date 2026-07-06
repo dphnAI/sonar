@@ -39,9 +39,7 @@ def transcription(request: Request) -> OpenAIServingTranscription:
 )
 @with_cancellation
 @load_aware_call
-async def create_transcriptions(
-    raw_request: Request, request: Annotated[TranscriptionRequest, Form()]
-):
+async def create_transcriptions(raw_request: Request, request: Annotated[TranscriptionRequest, Form()]):
     handler = transcription(raw_request)
     if handler is None:
         raise NotImplementedError("The model does not support Transcriptions API")
@@ -51,9 +49,7 @@ async def create_transcriptions(
     generator = await handler.create_transcription(audio_data, request, raw_request)
 
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(
-            content=generator.model_dump(), status_code=generator.error.code
-        )
+        return JSONResponse(content=generator.model_dump(), status_code=generator.error.code)
 
     elif isinstance(generator, TranscriptionResponseVariant):
         return JSONResponse(content=generator.model_dump())

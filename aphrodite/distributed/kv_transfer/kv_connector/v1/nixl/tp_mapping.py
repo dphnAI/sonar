@@ -108,19 +108,13 @@ def compute_tp_mapping(
     all_ranks = sorted(set(attn_ranks) | set(ssm_ranks))
 
     # --- Per-group ordered source ranks ---
-    source_ranks_per_group = tuple(
-        tuple(ssm_ranks) if _is_ssm_spec(t) else tuple(attn_ranks)
-        for t in group_spec_types
-    )
+    source_ranks_per_group = tuple(tuple(ssm_ranks) if _is_ssm_spec(t) else tuple(attn_ranks) for t in group_spec_types)
 
     # --- Attention head slots ---
     head_to_slot: dict[int, int] = {}
     for i, r in enumerate(attn_ranks):
         head_to_slot[r * total_num_kv_heads // remote_tp_size] = i
-    rank_to_attention_slot = {
-        r: head_to_slot.get(r * total_num_kv_heads // remote_tp_size, 0)
-        for r in all_ranks
-    }
+    rank_to_attention_slot = {r: head_to_slot.get(r * total_num_kv_heads // remote_tp_size, 0) for r in all_ranks}
 
     # --- Rank offset factor ---
     if transfer_topology.is_mla or tp_size <= remote_tp_size:

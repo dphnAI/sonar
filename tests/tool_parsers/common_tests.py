@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from tests.tool_parsers.utils import run_tool_extraction
 from aphrodite.tokenizers import TokenizerLike
 from aphrodite.tool_parsers import ToolParserManager
+from tests.tool_parsers.utils import run_tool_extraction
 
 
 @dataclass
@@ -66,13 +66,9 @@ class ToolParserTestConfig:
 
     # Expected results for specific tests (optional overrides)
     single_tool_call_expected_name: str = "get_weather"
-    single_tool_call_expected_args: dict[str, Any] = field(
-        default_factory=lambda: {"city": "Tokyo"}
-    )
+    single_tool_call_expected_args: dict[str, Any] = field(default_factory=lambda: {"city": "Tokyo"})
     parallel_tool_calls_count: int = 2
-    parallel_tool_calls_names: list[str] = field(
-        default_factory=lambda: ["get_weather", "get_time"]
-    )
+    parallel_tool_calls_names: list[str] = field(default_factory=lambda: ["get_weather", "get_time"])
 
     # xfail configuration - maps test name to xfail reason
     xfail_streaming: dict[str, str] = field(default_factory=dict)
@@ -115,9 +111,7 @@ class ToolParserTests:
     @pytest.fixture
     def test_config(self) -> ToolParserTestConfig:
         """Override this to provide parser-specific configuration."""
-        raise NotImplementedError(
-            "Subclass must provide test_config fixture returning ToolParserTestConfig"
-        )
+        raise NotImplementedError("Subclass must provide test_config fixture returning ToolParserTestConfig")
 
     @pytest.fixture
     def tokenizer(self, default_tokenizer: TokenizerLike) -> TokenizerLike:
@@ -144,12 +138,8 @@ class ToolParserTests:
         test_name = "test_no_tool_calls"
         self.apply_xfail_mark(request, test_config, test_name, streaming)
 
-        content, tool_calls = run_tool_extraction(
-            tool_parser, test_config.no_tool_calls_output, streaming=streaming
-        )
-        assert content == test_config.no_tool_calls_output, (
-            f"Expected content to match input, got {content}"
-        )
+        content, tool_calls = run_tool_extraction(tool_parser, test_config.no_tool_calls_output, streaming=streaming)
+        assert content == test_config.no_tool_calls_output, f"Expected content to match input, got {content}"
         assert len(tool_calls) == 0, f"Expected no tool calls, got {len(tool_calls)}"
 
     def test_single_tool_call_simple_args(
@@ -164,9 +154,7 @@ class ToolParserTests:
         test_name = "test_single_tool_call_simple_args"
         self.apply_xfail_mark(request, test_config, test_name, streaming)
 
-        content, tool_calls = run_tool_extraction(
-            tool_parser, test_config.single_tool_call_output, streaming=streaming
-        )
+        content, tool_calls = run_tool_extraction(tool_parser, test_config.single_tool_call_output, streaming=streaming)
 
         # Content check (some parsers strip it)
         if test_config.single_tool_call_expected_content is not None:
@@ -178,9 +166,7 @@ class ToolParserTests:
 
         args = json.loads(tool_calls[0].function.arguments)
         for key, value in test_config.single_tool_call_expected_args.items():
-            assert args.get(key) == value, (
-                f"Expected {key}={value}, got {args.get(key)}"
-            )
+            assert args.get(key) == value, f"Expected {key}={value}, got {args.get(key)}"
 
     def test_parallel_tool_calls(
         self,
@@ -201,8 +187,7 @@ class ToolParserTests:
         )
 
         assert len(tool_calls) == test_config.parallel_tool_calls_count, (
-            f"Expected {test_config.parallel_tool_calls_count} "
-            f"tool calls, got {len(tool_calls)}"
+            f"Expected {test_config.parallel_tool_calls_count} tool calls, got {len(tool_calls)}"
         )
 
         # Verify tool names match expected
@@ -245,14 +230,11 @@ class ToolParserTests:
             "object_field": dict,
         }
         for required_field, expected_type in required_fields_types.items():
-            assert required_field in args, (
-                f"Expected field '{required_field}' in arguments"
-            )
+            assert required_field in args, f"Expected field '{required_field}' in arguments"
             if test_config.supports_typed_arguments:
                 found_type = type(args[required_field])
                 assert found_type is expected_type, (
-                    f"Expected field '{required_field}' to have type {expected_type}, "
-                    f"got {found_type}"
+                    f"Expected field '{required_field}' to have type {expected_type}, got {found_type}"
                 )
 
     def test_empty_arguments(
@@ -267,9 +249,7 @@ class ToolParserTests:
         test_name = "test_empty_arguments"
         self.apply_xfail_mark(request, test_config, test_name, streaming)
 
-        content, tool_calls = run_tool_extraction(
-            tool_parser, test_config.empty_arguments_output, streaming=streaming
-        )
+        content, tool_calls = run_tool_extraction(tool_parser, test_config.empty_arguments_output, streaming=streaming)
         assert len(tool_calls) == 1, f"Expected 1 tool call, got {len(tool_calls)}"
 
         args = tool_calls[0].function.arguments
@@ -290,12 +270,8 @@ class ToolParserTests:
         test_name = "test_surrounding_text"
         self.apply_xfail_mark(request, test_config, test_name, streaming)
 
-        content, tool_calls = run_tool_extraction(
-            tool_parser, test_config.surrounding_text_output, streaming=streaming
-        )
-        assert len(tool_calls) >= 1, (
-            f"Expected at least 1 tool call, got {len(tool_calls)}"
-        )
+        content, tool_calls = run_tool_extraction(tool_parser, test_config.surrounding_text_output, streaming=streaming)
+        assert len(tool_calls) >= 1, f"Expected at least 1 tool call, got {len(tool_calls)}"
 
     def test_escaped_strings(
         self,
@@ -309,9 +285,7 @@ class ToolParserTests:
         test_name = "test_escaped_strings"
         self.apply_xfail_mark(request, test_config, test_name, streaming)
 
-        content, tool_calls = run_tool_extraction(
-            tool_parser, test_config.escaped_strings_output, streaming=streaming
-        )
+        content, tool_calls = run_tool_extraction(tool_parser, test_config.escaped_strings_output, streaming=streaming)
         assert len(tool_calls) == 1, f"Expected 1 tool call, got {len(tool_calls)}"
 
         args = json.loads(tool_calls[0].function.arguments)
@@ -333,9 +307,7 @@ class ToolParserTests:
 
         for malformed_input in test_config.malformed_input_outputs:
             # Should not raise exception
-            content, tool_calls = run_tool_extraction(
-                tool_parser, malformed_input, streaming=streaming
-            )
+            content, tool_calls = run_tool_extraction(tool_parser, malformed_input, streaming=streaming)
             # Parser should handle gracefully (exact behavior varies)
 
     def test_streaming_reconstruction(
@@ -351,14 +323,10 @@ class ToolParserTests:
         test_output = test_config.single_tool_call_output
 
         # Non-streaming result
-        content_non, tools_non = run_tool_extraction(
-            tool_parser, test_output, streaming=False
-        )
+        content_non, tools_non = run_tool_extraction(tool_parser, test_output, streaming=False)
 
         # Streaming result
-        content_stream, tools_stream = run_tool_extraction(
-            tool_parser, test_output, streaming=True
-        )
+        content_stream, tools_stream = run_tool_extraction(tool_parser, test_output, streaming=True)
 
         # Compare results
         assert content_non == content_stream, "Content should match between modes"

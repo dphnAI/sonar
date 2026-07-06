@@ -12,10 +12,10 @@ from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
-    AphroditeConfig,
 )
 from aphrodite.forward_context import set_forward_context
 from aphrodite.utils.torch_utils import async_tensor_h2d
@@ -28,9 +28,7 @@ from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 class NgramGPUKernel(nn.Module):
     """GPU-accelerated N-gram proposer using fully async tensor operations."""
 
-    def __init__(
-        self, aphrodite_config: AphroditeConfig, prefix: str = "", device: torch.device = "cuda"
-    ):
+    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "", device: torch.device = "cuda"):
         super().__init__()
 
         assert aphrodite_config.speculative_config is not None
@@ -77,9 +75,7 @@ class NgramGPUKernel(nn.Module):
         batch_indices = torch.arange(batch_size, device=device)
 
         # Earliest match per (sequence, ngram_len); -1 means no match.
-        first_match_positions = torch.full(
-            (batch_size, num_ngram_sizes), -1, dtype=torch.long, device=device
-        )
+        first_match_positions = torch.full((batch_size, num_ngram_sizes), -1, dtype=torch.long, device=device)
 
         for i, ngram_len in enumerate(range(min_ngram_len, max_ngram_len + 1)):
             # Sliding windows of size ngram_len; unfold is O(1) view.
@@ -88,9 +84,7 @@ class NgramGPUKernel(nn.Module):
 
             # Trailing suffix (last ngram_len tokens) for each sequence.
             suffix_starts = seq_lengths - ngram_len
-            suffix_indices = suffix_starts.unsqueeze(1) + torch.arange(
-                ngram_len, device=device
-            )
+            suffix_indices = suffix_starts.unsqueeze(1) + torch.arange(ngram_len, device=device)
             suffix = torch.gather(token_ids, 1, suffix_indices.clamp(min=0))
 
             # Window matches for each sequence.
@@ -131,9 +125,7 @@ class NgramGPUKernel(nn.Module):
         tokens_available = seq_lengths - draft_start
 
         # Gather indices for draft tokens.
-        draft_indices = draft_start.unsqueeze(1) + torch.arange(
-            num_draft_tokens, device=device
-        )
+        draft_indices = draft_start.unsqueeze(1) + torch.arange(num_draft_tokens, device=device)
         draft_indices = draft_indices.clamp(min=0, max=max_seq_len - 1)
 
         # Extract draft tokens; gather always runs.
@@ -186,9 +178,7 @@ class NgramGPUKernel(nn.Module):
         # Allocate in forward so torch.compile can optimize.
         # NOTE(patchy): Do NOT pre-allocate this as a buffer
         #               it breaks torch.compile
-        draft_tokens = torch.full(
-            (actual_batch_size, self.k), -1, dtype=torch.int32, device=device
-        )
+        draft_tokens = torch.full((actual_batch_size, self.k), -1, dtype=torch.int32, device=device)
 
         results = self._find_first_and_extract_all_n_parallel(
             token_ids_gpu,
@@ -252,9 +242,7 @@ class NgramProposerGPU:
         self.max_num_seqs = aphrodite_config.scheduler_config.max_num_seqs
         self.device = device
 
-        self.kernel = NgramGPUKernel(
-            aphrodite_config=self.aphrodite_config, prefix="ngram_gpu_kernel", device=device
-        )
+        self.kernel = NgramGPUKernel(aphrodite_config=self.aphrodite_config, prefix="ngram_gpu_kernel", device=device)
         self.kernel.to(device)
         self.kernel.eval()
 
@@ -303,9 +291,7 @@ class NgramProposerGPU:
             device=device,
         )
 
-        num_tokens = torch.randint(
-            pattern_len, max_seq_len, (batch_size,), dtype=torch.int32, device=device
-        )
+        num_tokens = torch.randint(pattern_len, max_seq_len, (batch_size,), dtype=torch.int32, device=device)
 
         sampled_flags = torch.ones(batch_size, dtype=torch.bool, device=device)
         valid_mask = torch.ones(batch_size, dtype=torch.bool, device=device)
@@ -349,13 +335,9 @@ class NgramProposerGPU:
         # Scatter newly sampled tokens into token_ids_gpu.
         offsets = torch.arange(max_new_tokens, device=self.device)
         write_positions = num_tokens_no_spec.unsqueeze(1) + offsets.unsqueeze(0)
-        valid_write_mask = offsets.unsqueeze(0) < valid_sampled_tokens_count.unsqueeze(
-            1
-        )
+        valid_write_mask = offsets.unsqueeze(0) < valid_sampled_tokens_count.unsqueeze(1)
         in_bounds = write_positions < max_seq_len
-        scatter_mask = (
-            valid_write_mask & (valid_sampled_token_ids_gpu != -1) & in_bounds
-        )
+        scatter_mask = valid_write_mask & (valid_sampled_token_ids_gpu != -1) & in_bounds
 
         write_positions_long = write_positions.clamp(max=max_seq_len - 1).long()
         existing_values = token_ids_gpu.gather(1, write_positions_long)
@@ -368,9 +350,7 @@ class NgramProposerGPU:
         )
         token_ids_gpu.scatter_(1, write_positions_long, tokens_to_scatter)
 
-        num_tokens_tmp = (num_tokens_no_spec + valid_sampled_tokens_count).to(
-            torch.int32
-        )
+        num_tokens_tmp = (num_tokens_no_spec + valid_sampled_tokens_count).to(torch.int32)
 
         # Compute validity masks.
         sampled_flags = valid_sampled_tokens_count > 0
@@ -415,16 +395,9 @@ class NgramProposerGPU:
             )
             # Ensure at least length 1 for tensor creation
             max_len = max(max_len, 1)
-            padded_list = [
-                sublist + [-1] * (max_len - len(sublist))
-                for sublist in sampled_token_ids
-            ]
-            sampled_token_ids = torch.tensor(
-                padded_list, dtype=torch.int32, device=self.device
-            )
-        assert isinstance(sampled_token_ids, torch.Tensor), (
-            "sampled_token_ids should be a torch.Tensor for ngram_gpu"
-        )
+            padded_list = [sublist + [-1] * (max_len - len(sublist)) for sublist in sampled_token_ids]
+            sampled_token_ids = torch.tensor(padded_list, dtype=torch.int32, device=self.device)
+        assert isinstance(sampled_token_ids, torch.Tensor), "sampled_token_ids should be a torch.Tensor for ngram_gpu"
 
         # Backup last valid token before speculative tokens.
         backup_indices = (num_tokens_no_spec[:num_reqs] - 1).clamp(min=0).long()
@@ -438,9 +411,7 @@ class NgramProposerGPU:
         valid_sampled_token_ids_gpu.masked_fill_(discard_mask_expanded, -1)
 
         # Mask valid tokens within each request.
-        valid_mask = (valid_sampled_token_ids_gpu != -1) & (
-            valid_sampled_token_ids_gpu < gpu_input_batch.vocab_size
-        )
+        valid_mask = (valid_sampled_token_ids_gpu != -1) & (valid_sampled_token_ids_gpu < gpu_input_batch.vocab_size)
 
         # Count valid tokens per request.
         valid_sampled_tokens_count = valid_mask.sum(dim=1).to(torch.int32)
@@ -450,9 +421,7 @@ class NgramProposerGPU:
         last_valid_indices_safe = torch.clamp(last_valid_indices, min=0)
 
         # Last valid token from each row; undefined if none.
-        selected_tokens = torch.gather(
-            valid_sampled_token_ids_gpu, 1, last_valid_indices_safe.unsqueeze(1)
-        ).squeeze(1)
+        selected_tokens = torch.gather(valid_sampled_token_ids_gpu, 1, last_valid_indices_safe.unsqueeze(1)).squeeze(1)
 
         # Use last token if valid; otherwise fallback to backup.
         next_token_ids = torch.where(
@@ -505,9 +474,7 @@ def update_scheduler_for_invalid_drafts(
         if valid_k == 0:
             scheduler_output.scheduled_spec_decode_tokens.pop(req_id, None)
         else:
-            scheduler_output.scheduled_spec_decode_tokens[req_id] = spec_token_ids[
-                :valid_k
-            ]
+            scheduler_output.scheduled_spec_decode_tokens[req_id] = spec_token_ids[:valid_k]
 
 
 def update_ngram_gpu_tensors_incremental(

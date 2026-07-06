@@ -49,8 +49,7 @@ class RayPrometheusMetric:
             expected = len(self.metric._tag_keys) - 1
             if len(labels) != expected:
                 raise ValueError(
-                    "Number of labels must match the number of tag keys. "
-                    f"Expected {expected}, got {len(labels)}"
+                    f"Number of labels must match the number of tag keys. Expected {expected}, got {len(labels)}"
                 )
             labelskwargs.update(zip(self.metric._tag_keys, labels))
 

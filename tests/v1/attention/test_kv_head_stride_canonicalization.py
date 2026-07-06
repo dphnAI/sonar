@@ -118,8 +118,7 @@ class TestCanonicalizeSingletonDimStrides:
             t_deg = _inject_degenerate_stride(t, dim=-3)
             fixed = canonicalize_singleton_dim_strides(t_deg)
             assert fixed.stride(-3) == block_size * head_size, (
-                f"Failed for block_size={block_size}, head_size={head_size}: "
-                f"got stride(-3)={fixed.stride(-3)}"
+                f"Failed for block_size={block_size}, head_size={head_size}: got stride(-3)={fixed.stride(-3)}"
             )
 
     def test_various_shapes_flash_attn(self):
@@ -129,8 +128,7 @@ class TestCanonicalizeSingletonDimStrides:
             t_deg = _inject_degenerate_stride(t, dim=-2)
             fixed = canonicalize_singleton_dim_strides(t_deg)
             assert fixed.stride(-2) == head_size, (
-                f"Failed for block_size={block_size}, head_size={head_size}: "
-                f"got stride(-2)={fixed.stride(-2)}"
+                f"Failed for block_size={block_size}, head_size={head_size}: got stride(-2)={fixed.stride(-2)}"
             )
 
     def test_tma_alignment_satisfied_after_fix_bf16(self):

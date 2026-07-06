@@ -105,11 +105,7 @@ def _layer_norm_fwd(
     else:
         out = torch.empty_like(x)
     assert out.stride(-1) == 1
-    mean = (
-        torch.empty((ngroups * M,), dtype=torch.float32, device=x.device)
-        if not is_rms_norm
-        else None
-    )
+    mean = torch.empty((ngroups * M,), dtype=torch.float32, device=x.device) if not is_rms_norm else None
     rstd = torch.empty((ngroups * M,), dtype=torch.float32, device=x.device)
     # Less than 64KB per feature: enqueue fused kernel
     MAX_FUSED_SIZE = 65536 // x.element_size()
@@ -142,9 +138,7 @@ def _layer_norm_fwd(
     return out, mean, rstd
 
 
-def rms_norm_gated(
-    x, weight, bias, z=None, eps=1e-6, group_size=None, norm_before_gate=True
-):
+def rms_norm_gated(x, weight, bias, z=None, eps=1e-6, group_size=None, norm_before_gate=True):
     x_shape_og = x.shape
     # reshape input data into 2D tensor
     x = x.reshape(-1, x.shape[-1])

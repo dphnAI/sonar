@@ -48,9 +48,7 @@ class FlashInferB12xExperts(mk.FusedMoEExpertsModular):
         quant_config: FusedMoEQuantConfig,
     ):
         super().__init__(moe_config=moe_config, quant_config=quant_config)
-        assert quant_config.quant_dtype == "nvfp4", (
-            "FlashInferB12xExperts only supports nvfp4 quantization."
-        )
+        assert quant_config.quant_dtype == "nvfp4", "FlashInferB12xExperts only supports nvfp4 quantization."
         self.out_dtype = moe_config.in_dtype
         self.num_local_experts = moe_config.num_local_experts
         self.ep_rank = moe_config.moe_parallel_config.ep_rank
@@ -72,14 +70,14 @@ class FlashInferB12xExperts(mk.FusedMoEExpertsModular):
         # The FP4-packed values and dequantised results are identical in both
         # representations.  We set scale_2 = 1.0 to signal that the bake-in is
         # already done.
-        layer.w13_weight_scale.data = (
-            layer.w13_weight_scale.float() * layer.w13_weight_scale_2.view(-1, 1, 1)
-        ).to(layer.w13_weight_scale.dtype)
+        layer.w13_weight_scale.data = (layer.w13_weight_scale.float() * layer.w13_weight_scale_2.view(-1, 1, 1)).to(
+            layer.w13_weight_scale.dtype
+        )
         layer.w13_weight_scale_2.data.fill_(1.0)
 
-        layer.w2_weight_scale.data = (
-            layer.w2_weight_scale.float() * layer.w2_weight_scale_2.view(-1, 1, 1)
-        ).to(layer.w2_weight_scale.dtype)
+        layer.w2_weight_scale.data = (layer.w2_weight_scale.float() * layer.w2_weight_scale_2.view(-1, 1, 1)).to(
+            layer.w2_weight_scale.dtype
+        )
         layer.w2_weight_scale_2.data.fill_(1.0)
 
         # The SM12x kernel uses dynamic per-block quantization for FC2 input
@@ -133,11 +131,7 @@ class FlashInferB12xExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_current_device() -> bool:
         p = current_platform
-        return (
-            p.is_cuda()
-            and p.is_device_capability_family(120)
-            and has_flashinfer_b12x_moe()
-        )
+        return p.is_cuda() and p.is_device_capability_family(120) and has_flashinfer_b12x_moe()
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -221,9 +215,7 @@ class FlashInferB12xExperts(mk.FusedMoEExpertsModular):
         assert self.g1_alphas is not None and self.g2_alphas is not None, (
             "g1_alphas and g2_alphas must not be None for FlashInferB12xExperts"
         )
-        assert self._fc2_input_scale is not None, (
-            "_fc2_input_scale must be set by process_weights_after_loading"
-        )
+        assert self._fc2_input_scale is not None, "_fc2_input_scale must be set by process_weights_after_loading"
 
         top_k = topk_ids.shape[1]
 

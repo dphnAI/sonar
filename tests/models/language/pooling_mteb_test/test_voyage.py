@@ -38,15 +38,11 @@ MODELS = [
 def test_embed_models_mteb(hf_runner, aphrodite_runner, model_info: EmbedModelInfo) -> None:
     # Encoder-only attention models need enforce_eager=True to avoid
     # CUDA graph capture issues with piecewise compilation
-    mteb_test_embed_models(
-        hf_runner, aphrodite_runner, model_info, aphrodite_extra_kwargs={"enforce_eager": True}
-    )
+    mteb_test_embed_models(hf_runner, aphrodite_runner, model_info, aphrodite_extra_kwargs={"enforce_eager": True})
 
 
 @pytest.mark.parametrize("model_info", MODELS)
-def test_embed_models_correctness(
-    hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts
-) -> None:
+def test_embed_models_correctness(hf_runner, aphrodite_runner, model_info: EmbedModelInfo, example_prompts) -> None:
     correctness_test_embed_models(
         hf_runner,
         aphrodite_runner,

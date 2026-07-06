@@ -78,8 +78,7 @@ def _verify_device_group(coordinator: GroupCoordinator):
     torch.accelerator.synchronize()
     expected = coordinator.world_size
     assert torch.all(tensor == expected).cpu().item(), (
-        f"Device group all-reduce failed: expected {expected}, "
-        f"got {tensor.flatten()[0].item()}"
+        f"Device group all-reduce failed: expected {expected}, got {tensor.flatten()[0].item()}"
     )
 
 
@@ -89,8 +88,7 @@ def _verify_cpu_group(coordinator: GroupCoordinator):
     torch.distributed.all_reduce(tensor, group=coordinator.cpu_group)
     expected = coordinator.world_size
     assert torch.all(tensor == expected).cpu().item(), (
-        f"CPU group all-reduce failed: expected {expected}, "
-        f"got {tensor.flatten()[0].item()}"
+        f"CPU group all-reduce failed: expected {expected}, got {tensor.flatten()[0].item()}"
     )
 
 
@@ -197,8 +195,7 @@ def split_group_contract_worker():
     # so every rank must have made exactly two split_group calls.
     if len(captured) != 2:
         raise AssertionError(
-            f"rank {rank} expected 2 split_group calls (device + cpu), "
-            f"got {len(captured)}: {captured}"
+            f"rank {rank} expected 2 split_group calls (device + cpu), got {len(captured)}: {captured}"
         )
 
     world_size = torch.distributed.get_world_size()
@@ -206,9 +203,7 @@ def split_group_contract_worker():
         gathered: list[Any] = [None] * world_size
         torch.distributed.all_gather_object(gathered, captured[call_idx])
         # Normalize for stable comparison (sort each subgroup and the outer list).
-        norm = [
-            sorted([sorted(sg) for sg in per_rank_args]) for per_rank_args in gathered
-        ]
+        norm = [sorted([sorted(sg) for sg in per_rank_args]) for per_rank_args in gathered]
         reference = norm[0]
         for r, args in enumerate(norm):
             if args != reference:

@@ -22,7 +22,7 @@ from collections.abc import AsyncGenerator, Mapping
 import numpy as np
 import torch
 
-from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
 from aphrodite.inputs import PromptType, TokensPrompt
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.models.interfaces import (
@@ -86,9 +86,7 @@ class Qwen3ASRRealtimeBuffer:
         segment = self._buffer[: self._segment_size].copy()
         remaining = self._filled_len - self._segment_size
         if remaining > 0:
-            self._buffer[:remaining] = self._buffer[
-                self._segment_size : self._filled_len
-            ]
+            self._buffer[:remaining] = self._buffer[self._segment_size : self._filled_len]
         self._filled_len = remaining
         return segment
 
@@ -119,23 +117,15 @@ class Qwen3ASRRealtimeMultiModalProcessor(Qwen3ASRMultiModalProcessor):
         is_update_applied: bool,
     ) -> tuple[list[int], Mapping[str, list[PlaceholderFeaturesInfo]]]:
         audios = mm_kwargs.get("audio", [])
-        assert len(audios) == 1, (
-            f"Expected only one audio input for realtime, got {len(audios)}"
-        )
+        assert len(audios) == 1, f"Expected only one audio input for realtime, got {len(audios)}"
 
         audio_data = audios[0]
         audio_feature_lengths = audio_data.get("audio_feature_lengths")
         if audio_feature_lengths is not None:
             if isinstance(audio_feature_lengths.data, torch.Tensor):
-                audio_len = _get_feat_extract_output_lengths(
-                    audio_feature_lengths.data
-                ).item()
+                audio_len = _get_feat_extract_output_lengths(audio_feature_lengths.data).item()
             else:
-                audio_len = int(
-                    _get_feat_extract_output_lengths(
-                        torch.tensor(audio_feature_lengths.data)
-                    ).item()
-                )
+                audio_len = int(_get_feat_extract_output_lengths(torch.tensor(audio_feature_lengths.data)).item())
         else:
             audio_len = 0
 
@@ -202,9 +192,7 @@ class Qwen3ASRRealtimeGeneration(Qwen3ASRForConditionalGeneration, SupportsRealt
         )
 
         audio_placeholder = cls.get_placeholder_str("audio", 0)
-        prompt_template = (
-            f"<|im_start|>user\n{audio_placeholder}<|im_end|>\n<|im_start|>assistant\n"
-        )
+        prompt_template = f"<|im_start|>user\n{audio_placeholder}<|im_end|>\n<|im_start|>assistant\n"
 
         prompt_token_ids = tokenizer.encode(prompt_template)
 
@@ -225,9 +213,7 @@ class Qwen3ASRRealtimeGeneration(Qwen3ASRForConditionalGeneration, SupportsRealt
             )
 
     @classmethod
-    def get_speech_to_text_config(
-        cls, model_config: ModelConfig, task_type: str
-    ) -> SpeechToTextConfig:
+    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
         processor = cached_processor_from_config(model_config)
         feature_extractor = processor.feature_extractor
         return SpeechToTextConfig(

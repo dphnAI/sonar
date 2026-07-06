@@ -230,9 +230,7 @@ class TestCreateUvicornLogConfig:
 
     def test_config_with_custom_log_level(self):
         """Config should respect custom log level."""
-        config = create_uvicorn_log_config(
-            excluded_paths=["/health"], log_level="debug"
-        )
+        config = create_uvicorn_log_config(excluded_paths=["/health"], log_level="debug")
 
         assert config["loggers"]["uvicorn"]["level"] == "DEBUG"
         assert config["loggers"]["uvicorn.access"]["level"] == "DEBUG"

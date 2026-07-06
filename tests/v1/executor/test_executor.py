@@ -75,9 +75,7 @@ class _FakeProcess:
         pytest.param(6, 7, True, id="worker-exceeds-timeout"),
     ],
 )
-def test_multiproc_executor_worker_termination_timeout(
-    monkeypatch, timeout, exits_at, expected_terminate
-):
+def test_multiproc_executor_worker_termination_timeout(monkeypatch, timeout, exits_at, expected_terminate):
     monkeypatch.setenv("APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS", str(timeout))
     clock = _FakeClock()
     monkeypatch.setattr(multiproc_executor_module.time, "time", clock.time)
@@ -191,9 +189,7 @@ def test_custom_executor_async(distributed_executor_backend, tmp_path):
         sampling_params = SamplingParams(max_tokens=1)
 
         async def t():
-            stream = engine.generate(
-                request_id="0", prompt="foo", sampling_params=sampling_params
-            )
+            stream = engine.generate(request_id="0", prompt="foo", sampling_params=sampling_params)
             async for x in stream:
                 ...
 

@@ -63,9 +63,7 @@ class TestHYV3ExtractToolCalls:
         assert r.content == out
 
     def test_zero_arg_inline(self, hy_v3_tool_parser, mock_request):
-        out = (
-            "<tool_calls><tool_call>get_current_date<tool_sep></tool_call></tool_calls>"
-        )
+        out = "<tool_calls><tool_call>get_current_date<tool_sep></tool_call></tool_calls>"
         r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
         assert r.tools_called
         assert r.tool_calls[0].function.name == "get_current_date"

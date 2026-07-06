@@ -121,11 +121,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         from aphrodite.v1.kv_cache_interface import HiddenStateCacheSpec
 
         groups = kv_cache_config.kv_cache_groups
-        group_ids = [
-            gid
-            for gid, group in enumerate(groups)
-            if isinstance(group.kv_cache_spec, HiddenStateCacheSpec)
-        ]
+        group_ids = [gid for gid, group in enumerate(groups) if isinstance(group.kv_cache_spec, HiddenStateCacheSpec)]
         if len(group_ids) == 1:
             return group_ids[0]
         if not group_ids and len(groups) == 1:
@@ -166,12 +162,8 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         # Read the hidden-states group and its block size from the group spec;
         # cache_config.block_size is bumped (wrong) for hybrid verifiers.
         self._cache_kv_group_id = self._find_cache_kv_group_id(kv_cache_config)
-        self._block_size = self._get_cache_block_size(
-            aphrodite_config, kv_cache_config, self._cache_kv_group_id
-        )
-        self._storage_path = self._kv_transfer_config.get_from_extra_config(
-            "shared_storage_path", "/tmp"
-        )
+        self._block_size = self._get_cache_block_size(aphrodite_config, kv_cache_config, self._cache_kv_group_id)
+        self._storage_path = self._kv_transfer_config.get_from_extra_config("shared_storage_path", "/tmp")
         self.cache_layers: list[str] = []  # set by self.register_kv_caches
         logger.info(self._kv_transfer_config)
         logger.info("Shared storage path is %s", self._storage_path)
@@ -184,13 +176,10 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
             )
 
         assert self._aphrodite_config.speculative_config is not None, (
-            "ExampleHiddenStatesConnector only works when using "
-            "'extract_hidden_states' speculative method"
+            "ExampleHiddenStatesConnector only works when using 'extract_hidden_states' speculative method"
         )
         spec_config = self._aphrodite_config.speculative_config.draft_model_config.hf_config
-        self.num_hidden_states = len(
-            getattr(spec_config, "eagle_aux_hidden_state_layer_ids", [])
-        )
+        self.num_hidden_states = len(getattr(spec_config, "eagle_aux_hidden_state_layer_ids", []))
 
         # Scheduler-side state
         self._pending_saves: dict[str, PendingSave] = {}
@@ -208,26 +197,20 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         # the default stream (model forward). Thread pool for disk writes.
         self._copy_stream: torch.cuda.Stream | None = None  # lazy init
         self._executor = ThreadPoolExecutor(
-            max_workers=self._kv_transfer_config.get_from_extra_config(
-                "num_writer_threads", 8
-            ),
+            max_workers=self._kv_transfer_config.get_from_extra_config("num_writer_threads", 8),
             thread_name_prefix="aphrodite-hs-save",
         )
         # Whether to use a filesystem lock when writing files to shared storage.
         # This is necessary for online transfer clients to avoid incomplete reads,
         # but can be disabled for offline tasks that run tasks in batches to completion
-        self.allow_custom_save_path = self._kv_transfer_config.get_from_extra_config(
-            "allow_custom_save_path", False
-        )
+        self.allow_custom_save_path = self._kv_transfer_config.get_from_extra_config("allow_custom_save_path", False)
         if self.allow_custom_save_path:
             logger.warning(
                 "allow_custom_save_path is enabled. API clients can write "
                 "hidden states to arbitrary paths on the server filesystem. "
                 "Only enable this with trusted clients."
             )
-        self.use_lock = self._kv_transfer_config.get_from_extra_config(
-            "use_synchronization_lock", True
-        )
+        self.use_lock = self._kv_transfer_config.get_from_extra_config("use_synchronization_lock", True)
         # req_id → open fd on the .lock file with LOCK_EX held.
         # Pre-created in wait_for_save when a request first arrives,
         # consumed by _submit_async_write which passes the fd to the
@@ -303,9 +286,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
             self._aphrodite_config, CacheOnlyAttentionLayer, list(kv_caches.keys())
         )
         self.cache_layers = list(layers.keys())
-        assert len(self.cache_layers) == 1, (
-            f"Expected 1 CacheOnlyAttentionLayer, got {len(self.cache_layers)}"
-        )
+        assert len(self.cache_layers) == 1, f"Expected 1 CacheOnlyAttentionLayer, got {len(self.cache_layers)}"
         self._kv_cache = kv_caches[self.cache_layers[0]]
 
         # Block size must match the indexed buffer, else reads hit the wrong
@@ -365,8 +346,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         num_blocks = block_ids_t.shape[0]
         block_offsets = torch.arange(0, self._block_size, dtype=torch.long)
         slot_mapping = (
-            block_offsets.reshape((1, self._block_size))
-            + block_ids_t.reshape((num_blocks, 1)) * self._block_size
+            block_offsets.reshape((1, self._block_size)) + block_ids_t.reshape((num_blocks, 1)) * self._block_size
         )
         slot_mapping = slot_mapping.flatten()
 
@@ -383,16 +363,10 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
             # Move the CPU slot_mapping to GPU on the copy stream so the
             # implicit H2D inside fancy indexing doesn't sync the default
             # stream.
-            slot_mapping_gpu = slot_mapping.to(
-                device=self._kv_cache.device, non_blocking=True
-            )
-            hidden_states_gpu = extract_from_kv_cache(
-                self._kv_cache, slot_mapping_gpu, num_tokens
-            )
+            slot_mapping_gpu = slot_mapping.to(device=self._kv_cache.device, non_blocking=True)
+            hidden_states_gpu = extract_from_kv_cache(self._kv_cache, slot_mapping_gpu, num_tokens)
             # Async DtoH copy into pinned host memory.
-            pinned_hs = torch.empty_like(
-                hidden_states_gpu, device="cpu", pin_memory=True
-            )
+            pinned_hs = torch.empty_like(hidden_states_gpu, device="cpu", pin_memory=True)
             pinned_hs.copy_(hidden_states_gpu, non_blocking=True)
 
         # Record completion of this copy on the copy stream.
@@ -400,9 +374,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         copy_done.record(copy_stream)
 
         # token_ids is already on CPU (created in request_finished).
-        assert not pending.token_ids.is_cuda, (
-            "Expected token_ids on CPU, got CUDA tensor"
-        )
+        assert not pending.token_ids.is_cuda, "Expected token_ids on CPU, got CUDA tensor"
         tensors = {
             "hidden_states": pinned_hs,
             "token_ids": pending.token_ids.clone(),
@@ -423,9 +395,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
             lock_fd = os.open(lock_path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
             fcntl.flock(lock_fd, fcntl.LOCK_EX)
 
-        future = self._executor.submit(
-            self._write_tensors, tensors, copy_done, pending.filename, lock_fd
-        )
+        future = self._executor.submit(self._write_tensors, tensors, copy_done, pending.filename, lock_fd)
         self._req_copy_events[pending.req_id] = copy_done
         self._req_futures[pending.req_id] = future
         future.add_done_callback(partial(self._on_write_done, pending.req_id))
@@ -455,9 +425,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         # This connector is store-only, so we don't need to load any tokens
         return 0, False
 
-    def update_state_after_alloc(
-        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
         # Usually used to handle allocation of new blocks for requests that are loading
         # tokens from connector's external kv cache. We never load from external cache
         # so this is a no-op.
@@ -484,9 +452,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         # Resolve save paths for new requests and tell the worker so it can
         # pre-create lock files before the client receives the output path.
         for new_req in scheduler_output.scheduled_new_reqs:
-            default_path = os.path.join(
-                self._storage_path, f"{new_req.req_id}.safetensors"
-            )
+            default_path = os.path.join(self._storage_path, f"{new_req.req_id}.safetensors")
             kv_params = (
                 new_req.sampling_params.extra_args.get("kv_transfer_params")
                 if new_req.sampling_params and new_req.sampling_params.extra_args
@@ -530,8 +496,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
             token_ids = torch.tensor(request.prompt_token_ids)
         else:
             logger.warning(
-                "Request %s has no prompt_token_ids (prompt_embeds only). "
-                "Saved token_ids will be empty.",
+                "Request %s has no prompt_token_ids (prompt_embeds only). Saved token_ids will be empty.",
                 req_id,
             )
             token_ids = torch.tensor([], dtype=torch.long)
@@ -543,9 +508,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         )
         return True, {"hidden_states_path": filename}
 
-    def get_finished(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
         """Extract hidden states and poll DtoH-copy completion.
 
         On the worker side, connector metadata carries pending saves from the
@@ -601,10 +564,7 @@ class ExampleHiddenStatesConnector(KVConnectorBase_V1, SupportsHMA):
         """
 
         if cls is KVConnectorBase_V1:
-            raise TypeError(
-                "get_required_kvcache_layout should not be called "
-                "on the abstract base class"
-            )
+            raise TypeError("get_required_kvcache_layout should not be called on the abstract base class")
         # NHD means we have (num_tokens, num_heads)
         # HND means we have (num_heads, num_tokens)
         # For now, we only support NHD layout since this keeps the

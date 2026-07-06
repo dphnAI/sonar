@@ -49,8 +49,7 @@ def _build_attention(mm_config):
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.model_executor.layers.attention.mm_encoder_attention"
-            ".get_vit_attn_backend",
+            "aphrodite.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
             return_value=AttentionBackendEnum.FLASHINFER,
         ),
     ):
@@ -174,9 +173,7 @@ def test_static_scales_missing_layer(tmp_path) -> None:
         pytest.skip("FlashInfer cuDNN not available")
 
     scale_file = tmp_path / "wrong_layer.json"
-    scale_file.write_text(
-        json.dumps({"visual.blocks.99.attn": {"q": 1.0, "k": 1.0, "v": 1.0}})
-    )
+    scale_file.write_text(json.dumps({"visual.blocks.99.attn": {"q": 1.0, "k": 1.0, "v": 1.0}}))
     mm_config = MultiModalConfig(
         mm_encoder_attn_dtype="fp8",
         mm_encoder_fp8_scale_path=str(scale_file),
@@ -191,8 +188,7 @@ def test_static_scales_missing_layer(tmp_path) -> None:
     with (
         set_current_aphrodite_config(aphrodite_config),
         patch(
-            "aphrodite.model_executor.layers.attention.mm_encoder_attention"
-            ".get_vit_attn_backend",
+            "aphrodite.model_executor.layers.attention.mm_encoder_attention.get_vit_attn_backend",
             return_value=AttentionBackendEnum.FLASHINFER,
         ),
     ):

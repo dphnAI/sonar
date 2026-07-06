@@ -14,7 +14,6 @@ from unittest.mock import MagicMock
 import pytest
 import regex as re
 
-from tests.parser.engine.conftest import make_mock_tokenizer
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
     ChatCompletionToolsParam,
@@ -33,6 +32,7 @@ from aphrodite.parser.engine.parser_engine_config import (
     ParserState,
     Transition,
 )
+from tests.parser.engine.conftest import make_mock_tokenizer
 
 # ── Shared test configs ──────────────────────────────────────────────
 
@@ -179,11 +179,7 @@ class TestEventsToDelta:
         delta = engine._events_to_delta(events)
         assert delta is not None
         assert len(delta.tool_calls) > 0
-        names = [
-            tc.function.name
-            for tc in delta.tool_calls
-            if tc.function and tc.function.name
-        ]
+        names = [tc.function.name for tc in delta.tool_calls if tc.function and tc.function.name]
         assert "get_weather" in names
 
     def test_reasoning_end_sets_flag(self):
@@ -279,9 +275,7 @@ class TestEventsToDelta:
         delta = engine._events_to_delta(events)
         assert delta is not None
         indices = [tc.index for tc in delta.tool_calls]
-        assert len(indices) == len(set(indices)), (
-            f"Duplicate indices in tool_calls: {delta.tool_calls}"
-        )
+        assert len(indices) == len(set(indices)), f"Duplicate indices in tool_calls: {delta.tool_calls}"
         assert delta.tool_calls[0].function.name == "get_weather"
         assert delta.tool_calls[0].id is not None
 
@@ -675,9 +669,7 @@ class TestFixArgTypes:
             },
         )
         engine = _make_engine(tools=[tool])
-        result = engine._fix_arg_types(
-            '{"count": "42", "active": "true", "score": "3.14"}', "f"
-        )
+        result = engine._fix_arg_types('{"count": "42", "active": "true", "score": "3.14"}', "f")
         parsed = json.loads(result)
         assert parsed["count"] == 42
         assert parsed["active"] is True
@@ -820,10 +812,7 @@ class TestParseTokenIdPassthrough:
 
     def test_literal_tool_tag_in_content_preserved_with_token_ids(self, mock_request):
         engine = _make_engine(_hermes_config())
-        text = (
-            "Use <tool_call> to call tools."
-            '<tool_call>{"name": "f", "arguments": {"a": 1}}</tool_call>'
-        )
+        text = 'Use <tool_call> to call tools.<tool_call>{"name": "f", "arguments": {"a": 1}}</tool_call>'
         token_ids = [
             65,
             66,
@@ -839,9 +828,7 @@ class TestParseTokenIdPassthrough:
             203,  # real </tool_call>
         ]
 
-        _, content, tool_calls = engine.parse(
-            text, mock_request, model_output_token_ids=token_ids
-        )
+        _, content, tool_calls = engine.parse(text, mock_request, model_output_token_ids=token_ids)
 
         assert content is not None
         assert "<tool_call>" in content
@@ -855,9 +842,7 @@ class TestParseTokenIdPassthrough:
         text = '<tool_call>{"name": "h", "arguments": {"x": 1}}</tool_call>'
         token_ids = [202, 65, 66, 67, 203]
 
-        _, content, tool_calls = engine.parse(
-            text, mock_request, model_output_token_ids=token_ids
-        )
+        _, content, tool_calls = engine.parse(text, mock_request, model_output_token_ids=token_ids)
 
         assert tool_calls is not None
         assert len(tool_calls) == 1
@@ -879,9 +864,7 @@ class TestParseTokenIdPassthrough:
 
 class _CombinedTestEngine(ParserEngine):
     def __init__(self, tokenizer, tools=None, **kwargs):
-        super().__init__(
-            tokenizer, tools, parser_engine_config=_combined_config(), **kwargs
-        )
+        super().__init__(tokenizer, tools, parser_engine_config=_combined_config(), **kwargs)
 
 
 _CombinedReasoningAdapter, _CombinedToolAdapter = make_adapters(_CombinedTestEngine)
@@ -922,9 +905,7 @@ class TestAdapterFinishOnStreamEnd:
         # The '<' must NOT be silently dropped.
         assert delta is not None
         assert delta.content is not None
-        assert "<" in delta.content, (
-            "Trailing '<' lost: lexer buffer was not flushed on finish"
-        )
+        assert "<" in delta.content, "Trailing '<' lost: lexer buffer was not flushed on finish"
 
     def test_args_buffer_flushed_on_finished(self):
         """Pending arg buffer text must be emitted when stream ends
@@ -940,9 +921,7 @@ class TestAdapterFinishOnStreamEnd:
         # a TOOL_END terminal. Stream ends without one — finish()
         # must flush the buffer.
         delta = parser.parse_delta("", [], request, finished=True)
-        assert delta is not None, (
-            "Engine finish should produce a delta with flushed args/end"
-        )
+        assert delta is not None, "Engine finish should produce a delta with flushed args/end"
 
 
 # ── TestReasoningOnlyDelegatingParser ─────────────────────────────
@@ -1036,8 +1015,7 @@ class TestReasoningOnlyEndTokenLeak:
 
         streaming_content = "".join(content_parts)
         assert streaming_content == content, (
-            f"Streaming content {streaming_content!r} "
-            f"does not match non-streaming {content!r}"
+            f"Streaming content {streaming_content!r} does not match non-streaming {content!r}"
         )
 
     def test_multi_token_delta_preserves_content_after_think_end(self):
@@ -1067,9 +1045,7 @@ class TestReasoningOnlyEndTokenLeak:
             finished=False,
         )
         assert d2 is not None, "Content after </think> in multi-token delta was lost"
-        assert d2.content is not None, (
-            "Content after </think> in multi-token delta was nullified"
-        )
+        assert d2.content is not None, "Content after </think> in multi-token delta was nullified"
         assert "</think>" not in d2.content
         assert "Hi!" in d2.content
 
@@ -1198,25 +1174,11 @@ def _collect_arg_deltas(deltas: list) -> str:
 
 def _run_streaming_tool(engine, name: str, chunks: list[str]) -> dict:
     deltas = []
-    deltas.append(
-        engine._events_to_delta(
-            [SemanticEvent(EventType.TOOL_CALL_START, tool_index=0)]
-        )
-    )
-    deltas.append(
-        engine._events_to_delta(
-            [SemanticEvent(EventType.TOOL_NAME, name, tool_index=0)]
-        )
-    )
+    deltas.append(engine._events_to_delta([SemanticEvent(EventType.TOOL_CALL_START, tool_index=0)]))
+    deltas.append(engine._events_to_delta([SemanticEvent(EventType.TOOL_NAME, name, tool_index=0)]))
     for chunk in chunks:
-        deltas.append(
-            engine._events_to_delta(
-                [SemanticEvent(EventType.ARG_VALUE_CHUNK, chunk, tool_index=0)]
-            )
-        )
-    deltas.append(
-        engine._events_to_delta([SemanticEvent(EventType.TOOL_CALL_END, tool_index=0)])
-    )
+        deltas.append(engine._events_to_delta([SemanticEvent(EventType.ARG_VALUE_CHUNK, chunk, tool_index=0)]))
+    deltas.append(engine._events_to_delta([SemanticEvent(EventType.TOOL_CALL_END, tool_index=0)]))
     return json.loads(_collect_arg_deltas(deltas))
 
 
@@ -1597,11 +1559,7 @@ class TestDropSpecialTokens:
         delta = engine._events_to_delta(events)
         assert delta is not None
         assert delta.tool_calls is not None
-        names = [
-            tc.function.name
-            for tc in delta.tool_calls
-            if tc.function and tc.function.name
-        ]
+        names = [tc.function.name for tc in delta.tool_calls if tc.function and tc.function.name]
         assert "get_weather" in names
 
     def test_adjacent_drop_tokens_by_id(self):
@@ -1667,7 +1625,5 @@ class TestDropSpecialTokens:
         assert EventType.REASONING_CHUNK in types
         assert EventType.REASONING_END in types
         assert EventType.TEXT_CHUNK in types
-        reasoning_text = "".join(
-            e.value for e in events if e.type == EventType.REASONING_CHUNK
-        )
+        reasoning_text = "".join(e.value for e in events if e.type == EventType.REASONING_CHUNK)
         assert "<bos>" not in reasoning_text

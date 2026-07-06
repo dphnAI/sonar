@@ -129,9 +129,7 @@ def _gdn_attention_core_xpu_impl(
     non_spec_token_indx = attn_metadata.non_spec_token_indx
     non_spec_state_indices_tensor = attn_metadata.non_spec_state_indices_tensor  # noqa: E501
     non_spec_state_indices_tensor = (
-        non_spec_state_indices_tensor.contiguous()
-        if non_spec_state_indices_tensor is not None
-        else None
+        non_spec_state_indices_tensor.contiguous() if non_spec_state_indices_tensor is not None else None
     )
 
     spec_query_start_loc = attn_metadata.spec_query_start_loc
@@ -145,9 +143,7 @@ def _gdn_attention_core_xpu_impl(
         if spec_token_indx is not None:
             spec_token_indx = spec_token_indx.to(torch.int32)
 
-    conv_weights = self.conv1d.weight.view(
-        self.conv1d.weight.size(0), self.conv1d.weight.size(2)
-    )
+    conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
 
     torch.ops._xpu_C.gdn_attention(
         core_attn_out,
@@ -299,9 +295,7 @@ def _topk_topp_sample_impl(
     seeds: torch.Tensor | None,
     lambda_: float = 1.0,
 ) -> None:
-    torch.ops._xpu_C.topk_topp_sampler(
-        random_sampled, logits_to_return, logits, k, p, logprobs_mode, seeds, lambda_
-    )
+    torch.ops._xpu_C.topk_topp_sampler(random_sampled, logits_to_return, logits, k, p, logprobs_mode, seeds, lambda_)
     return
 
 
@@ -318,15 +312,12 @@ def _topk_topp_sample_fake(
     return
 
 
-def _xpu_mxfp8_quantize_impl(
-    x: torch.Tensor, dtype: torch.dtype | None = None
-) -> tuple[torch.Tensor, torch.Tensor]:
+def _xpu_mxfp8_quantize_impl(x: torch.Tensor, dtype: torch.dtype | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     MXFP8_BLOCK_SIZE = 32
     assert x.shape[-1] % MXFP8_BLOCK_SIZE == 0
     if dtype is not None:
         assert dtype in (torch.float8_e4m3fn, torch.float8_e5m2), (
-            f"Unsupported dtype for xpu_mxfp8_quantize: {dtype}. "
-            f"Expected torch.float8_e4m3fn or torch.float8_e5m2."
+            f"Unsupported dtype for xpu_mxfp8_quantize: {dtype}. Expected torch.float8_e4m3fn or torch.float8_e5m2."
         )
     else:
         dtype = current_platform.fp8_dtype()
@@ -355,9 +346,7 @@ def _xpu_mxfp8_quantize_impl(
     return x_q, x_s
 
 
-def _xpu_mxfp8_quantize_fake(
-    x: torch.Tensor, dtype: torch.dtype | None = None
-) -> tuple[torch.Tensor, torch.Tensor]:
+def _xpu_mxfp8_quantize_fake(x: torch.Tensor, dtype: torch.dtype | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     if dtype is None:
         dtype = current_platform.fp8_dtype()
 
@@ -376,8 +365,7 @@ def _xpu_mxfp4_quantize_impl(
     eps = 1e-10
     assert x.ndim == 2, "input must be 2-D"
     assert x.shape[-1] % MXFP4_BLOCK_SIZE == 0, (
-        f"last dimension {x.shape[-1]} must be divisible by group_size "
-        f"{MXFP4_BLOCK_SIZE}"
+        f"last dimension {x.shape[-1]} must be divisible by group_size {MXFP4_BLOCK_SIZE}"
     )
     assert x.is_contiguous(), "input groups must be contiguous"
 
@@ -508,9 +496,7 @@ def _selective_scan_fwd_kernel(
     # Determine cache index for ssm_states
     if CACHE_ENABLED:
         init_state_idx = tl.load(initial_state_idx_ptr + batch_idx).to(tl.int32)
-        load_cache_slot = tl.load(
-            cache_indices_ptr + batch_idx * cache_indices_stride + init_state_idx
-        ).to(tl.int64)
+        load_cache_slot = tl.load(cache_indices_ptr + batch_idx * cache_indices_stride + init_state_idx).to(tl.int64)
         if load_cache_slot == null_block_id:
             return
     elif HAS_CACHE_INDICES:
@@ -560,17 +546,13 @@ def _selective_scan_fwd_kernel(
     # Compute base addresses for u and delta
     if IS_VARLEN:
         u_base = u_ptr + dim_idx * u_d_stride + seq_start * u_batch_stride
-        delta_base = (
-            delta_ptr + dim_idx * delta_d_stride + seq_start * delta_batch_stride
-        )
+        delta_base = delta_ptr + dim_idx * delta_d_stride + seq_start * delta_batch_stride
         out_base = out_ptr + dim_idx * out_d_stride + seq_start * out_batch_stride
         B_base = B_ptr + group_idx * B_group_stride + seq_start * B_batch_stride
         C_base = C_ptr + group_idx * C_group_stride + seq_start * C_batch_stride
     else:
         u_base = u_ptr + batch_idx * u_batch_stride + dim_idx * u_d_stride
-        delta_base = (
-            delta_ptr + batch_idx * delta_batch_stride + dim_idx * delta_d_stride
-        )
+        delta_base = delta_ptr + batch_idx * delta_batch_stride + dim_idx * delta_d_stride
         out_base = out_ptr + batch_idx * out_batch_stride + dim_idx * out_d_stride
         B_base = B_ptr + batch_idx * B_batch_stride + group_idx * B_group_stride
         C_base = C_ptr + batch_idx * C_batch_stride + group_idx * C_group_stride
@@ -578,14 +560,10 @@ def _selective_scan_fwd_kernel(
     if HAS_Z:
         if IS_VARLEN:
             z_base = z_ptr + dim_idx * z_d_stride + seq_start * z_batch_stride
-            out_z_base = (
-                out_z_ptr + dim_idx * out_z_d_stride + seq_start * out_z_batch_stride
-            )
+            out_z_base = out_z_ptr + dim_idx * out_z_d_stride + seq_start * out_z_batch_stride
         else:
             z_base = z_ptr + batch_idx * z_batch_stride + dim_idx * z_d_stride
-            out_z_base = (
-                out_z_ptr + batch_idx * out_z_batch_stride + dim_idx * out_z_d_stride
-            )
+            out_z_base = out_z_ptr + batch_idx * out_z_batch_stride + dim_idx * out_z_d_stride
 
     # Determine chunk boundaries for APC mode
     if CACHE_ENABLED:
@@ -593,13 +571,11 @@ def _selective_scan_fwd_kernel(
         if batch_idx == 0:
             first_chunk_idx = 0
         else:
-            first_chunk_idx = (
-                tl.load(last_chunk_indices_ptr + batch_idx - 1).to(tl.int32) + 1
-            )
+            first_chunk_idx = tl.load(last_chunk_indices_ptr + batch_idx - 1).to(tl.int32) + 1
         n_chunks = last_chunk_idx - first_chunk_idx + 1
-        first_chunk_tokens = tl.load(cu_chunk_seqlen_ptr + first_chunk_idx + 1).to(
-            tl.int32
-        ) - tl.load(cu_chunk_seqlen_ptr + first_chunk_idx).to(tl.int32)
+        first_chunk_tokens = tl.load(cu_chunk_seqlen_ptr + first_chunk_idx + 1).to(tl.int32) - tl.load(
+            cu_chunk_seqlen_ptr + first_chunk_idx
+        ).to(tl.int32)
         block_idx_first = tl.load(block_idx_first_ptr + batch_idx).to(tl.int32)
         chunk_start_offset = 0
         if n_chunks > 1 and first_chunk_tokens < block_size:
@@ -613,11 +589,9 @@ def _selective_scan_fwd_kernel(
     tokens_processed = 0
     for chunk in range(0, n_chunks if CACHE_ENABLED else 1):
         if CACHE_ENABLED:
-            chunk_tokens = tl.load(
-                cu_chunk_seqlen_ptr + first_chunk_idx + chunk + 1
-            ).to(tl.int32) - tl.load(cu_chunk_seqlen_ptr + first_chunk_idx + chunk).to(
-                tl.int32
-            )
+            chunk_tokens = tl.load(cu_chunk_seqlen_ptr + first_chunk_idx + chunk + 1).to(tl.int32) - tl.load(
+                cu_chunk_seqlen_ptr + first_chunk_idx + chunk
+            ).to(tl.int32)
         else:
             chunk_tokens = actual_seqlen
 
@@ -687,11 +661,7 @@ def _selective_scan_fwd_kernel(
                 ).to(tl.int64)
             else:
                 block_idx_done = (current_position + chunk_tokens - 1) // block_size
-                store_slot = tl.load(
-                    cache_indices_ptr
-                    + batch_idx * cache_indices_stride
-                    + block_idx_done
-                ).to(tl.int64)
+                store_slot = tl.load(cache_indices_ptr + batch_idx * cache_indices_stride + block_idx_done).to(tl.int64)
 
             tl.store(
                 ssm_states_ptr
@@ -722,22 +692,16 @@ _OPS_REGISTERED = False
 class xpu_ops:
     @staticmethod
     @torch.compile
-    def dynamic_per_token_int8_quant_ref(
-        input: torch.Tensor, use_sym_quant: bool, bits: int
-    ):
+    def dynamic_per_token_int8_quant_ref(input: torch.Tensor, use_sym_quant: bool, bits: int):
         original_sizes = input.size()
         # view is not safe in torch.compile if input is not contiguous
-        input = input.reshape(
-            -1, original_sizes[-1]
-        )  # Flatten except for the last dimension
+        input = input.reshape(-1, original_sizes[-1])  # Flatten except for the last dimension
         qmin = -(2 ** (bits - 1)) if use_sym_quant else 0
         qmax = 2 ** (bits - 1) - 1 if use_sym_quant else 2**bits - 1
         min_val = torch.min(input, dim=-1)[0].to(dtype=torch.float32).unsqueeze(-1)
         max_val = torch.max(input, dim=-1)[0].to(dtype=torch.float32).unsqueeze(-1)
         if use_sym_quant:
-            scale = (
-                torch.maximum(torch.abs(min_val), torch.abs(max_val)) / qmax
-            ).clamp(min=1e-5)
+            scale = (torch.maximum(torch.abs(min_val), torch.abs(max_val)) / qmax).clamp(min=1e-5)
             zero_point = torch.zeros_like(scale).to(dtype=torch.int32)
         else:
             scale = ((max_val - min_val) / qmax).clamp(min=1e-5)
@@ -789,15 +753,11 @@ class xpu_ops:
         aux_tensors: list | None = None,
         **kwargs,
     ):
-        assert cu_seqlens_k is not None or seqused_k is not None, (
-            "cu_seqlens_k or seqused_k must be provided"
-        )
+        assert cu_seqlens_k is not None or seqused_k is not None, "cu_seqlens_k or seqused_k must be provided"
         assert cu_seqlens_k is None or seqused_k is None, (
             "cu_seqlens_k and seqused_k cannot be provided at the same time"
         )
-        assert block_table is None or seqused_k is not None, (
-            "when enable block_table, seqused_k is needed"
-        )
+        assert block_table is None or seqused_k is not None, "when enable block_table, seqused_k is needed"
         assert block_table is not None or cu_seqlens_k is not None, (
             "when block_table is disabled, cu_seqlens_k is needed"
         )
@@ -856,9 +816,7 @@ class xpu_ops:
         pack_gqa=None,  # Can be tuned for speed
         sm_margin=0,  # Can be tuned if some SMs are used for communication
     ) -> None:
-        logger.warning_once(
-            "get_scheduler_metadata is not implemented for xpu_ops, returning None."
-        )
+        logger.warning_once("get_scheduler_metadata is not implemented for xpu_ops, returning None.")
         return None
 
     @staticmethod
@@ -885,11 +843,7 @@ class xpu_ops:
         last_chunk_indices: torch.Tensor | None = None,
     ) -> None:
         varlen = query_start_loc is not None
-        batch_size = (
-            (query_start_loc.shape[0] - 1)
-            if query_start_loc is not None
-            else u.shape[0]
-        )
+        batch_size = (query_start_loc.shape[0] - 1) if query_start_loc is not None else u.shape[0]
         dim = u.shape[0] if varlen else u.shape[1]
         total_seqlen = u.shape[1] if varlen else u.shape[2]
         dstate = A.size(1)
@@ -959,9 +913,7 @@ class xpu_ops:
         ssm_batch_stride = ssm_states.stride(0)
         ssm_dim_stride = ssm_states.stride(1)
         ssm_dstate_stride = ssm_states.stride(2)
-        cache_indices_stride = (
-            cache_indices.stride(0) if cache_indices is not None else 0
-        )
+        cache_indices_stride = cache_indices.stride(0) if cache_indices is not None else 0
 
         grid = (batch_size, dim)
         _selective_scan_fwd_kernel[grid](

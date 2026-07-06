@@ -206,8 +206,7 @@ def _get_open_port(
             attempts += 1
             if max_attempts is not None and attempts >= max_attempts:
                 raise RuntimeError(
-                    f"Could not find open port after {max_attempts} "
-                    f"attempts starting from port {start_port}"
+                    f"Could not find open port after {max_attempts} attempts starting from port {start_port}"
                 )
     # try ipv4
     try:

@@ -85,9 +85,7 @@ def _make_request(
             "do_remote_decode": True,
         }
     req.kv_transfer_params = params
-    req.status = (
-        RequestStatus.FINISHED_LENGTH_CAPPED if finished else RequestStatus.RUNNING
-    )
+    req.status = RequestStatus.FINISHED_LENGTH_CAPPED if finished else RequestStatus.RUNNING
     return req
 
 
@@ -168,17 +166,13 @@ class TestPushScheduler:
 
         # Stage one D registration and one P finished entry.
         d_req = _make_request(request_id="req-d-9")
-        sched.update_state_after_alloc(
-            d_req, _BlocksMock(([1, 2, 3],)), num_external_tokens=48
-        )
+        sched.update_state_after_alloc(d_req, _BlocksMock(([1, 2, 3],)), num_external_tokens=48)
         p_req = _make_request(request_id="req-p-9", is_d_side=False)
         sched.request_finished(p_req, ([4, 5, 6],))
 
         scheduler_output = MagicMock()
         scheduler_output.scheduled_new_reqs = []
-        scheduler_output.scheduled_cached_reqs = MagicMock(
-            req_ids=[], resumed_req_ids=set()
-        )
+        scheduler_output.scheduled_cached_reqs = MagicMock(req_ids=[], resumed_req_ids=set())
 
         # Patch parent build_connector_meta so we don't have to set up
         # all the base scheduler plumbing.
@@ -212,9 +206,7 @@ class TestPushScheduler:
         # Drain via build_connector_meta - lease still pending until WRITE.
         scheduler_output = MagicMock()
         scheduler_output.scheduled_new_reqs = []
-        scheduler_output.scheduled_cached_reqs = MagicMock(
-            req_ids=[], resumed_req_ids=set()
-        )
+        scheduler_output.scheduled_cached_reqs = MagicMock(req_ids=[], resumed_req_ids=set())
         with patch.object(
             sched.__class__.__mro__[1],
             "build_connector_meta",
@@ -239,9 +231,7 @@ class TestPushScheduler:
         _stub_sw_clipping(sched)
 
         d_req = _make_request(request_id="req-d-x")
-        sched.update_state_after_alloc(
-            d_req, _BlocksMock(([1, 2],)), num_external_tokens=32
-        )
+        sched.update_state_after_alloc(d_req, _BlocksMock(([1, 2],)), num_external_tokens=32)
         p_req = _make_request(request_id="req-p-x", is_d_side=False)
         sched.request_finished(p_req, ([3, 4],))
 
@@ -268,17 +258,13 @@ class TestPushScheduler:
         _stub_sw_clipping(sched)
 
         d_req = _make_request(request_id="req-d-stale")
-        sched.update_state_after_alloc(
-            d_req, _BlocksMock(([7, 8],)), num_external_tokens=32
-        )
+        sched.update_state_after_alloc(d_req, _BlocksMock(([7, 8],)), num_external_tokens=32)
         # Force the deadline into the past.
         sched._push_registration_deadlines[d_req.request_id] = time.perf_counter() - 1.0
 
         scheduler_output = MagicMock()
         scheduler_output.scheduled_new_reqs = []
-        scheduler_output.scheduled_cached_reqs = MagicMock(
-            req_ids=[], resumed_req_ids=set()
-        )
+        scheduler_output.scheduled_cached_reqs = MagicMock(req_ids=[], resumed_req_ids=set())
         with patch.object(
             sched.__class__.__mro__[1],
             "build_connector_meta",
@@ -382,9 +368,7 @@ class TestPushWriterMatching:
         # P had already finished; its blocks were stashed via metadata.
         w._push_finished_blocks["req-A"] = ([200, 201, 202],)
 
-        notif = PUSH_REG_NOTIF_PREFIX + msgspec.msgpack.encode(
-            _registration_data("req-A")
-        )
+        notif = PUSH_REG_NOTIF_PREFIX + msgspec.msgpack.encode(_registration_data("req-A"))
         w._handle_push_reg_notif(notif)
 
         assert len(w.start_push_calls) == 1
@@ -400,9 +384,7 @@ class TestPushWriterMatching:
         """PUSH_REG arrives first (D registered first): stash, no fire."""
         w = _StubWriterWorker.fresh()
 
-        notif = PUSH_REG_NOTIF_PREFIX + msgspec.msgpack.encode(
-            _registration_data("req-B")
-        )
+        notif = PUSH_REG_NOTIF_PREFIX + msgspec.msgpack.encode(_registration_data("req-B"))
         w._handle_push_reg_notif(notif)
 
         assert len(w.start_push_calls) == 0
@@ -570,9 +552,7 @@ class TestPushSchedulerNegative:
         request.request_id = "req-no-params"
         request.kv_transfer_params = None
 
-        sched.update_state_after_alloc(
-            request, _BlocksMock(([1, 2, 3],)), num_external_tokens=64
-        )
+        sched.update_state_after_alloc(request, _BlocksMock(([1, 2, 3],)), num_external_tokens=64)
 
         assert sched._push_pending_registrations == {}
         assert sched._push_registration_deadlines == {}
@@ -584,9 +564,7 @@ class TestPushSchedulerNegative:
         _stub_sw_clipping(sched)
 
         request = _make_request(request_id="req-zero-ext")
-        sched.update_state_after_alloc(
-            request, _BlocksMock(([1, 2, 3],)), num_external_tokens=0
-        )
+        sched.update_state_after_alloc(request, _BlocksMock(([1, 2, 3],)), num_external_tokens=0)
 
         assert sched._push_pending_registrations == {}
         assert sched._push_registration_deadlines == {}
@@ -597,9 +575,7 @@ class TestPushSchedulerNegative:
         sched = make_nixl_push_scheduler()
         _stub_sw_clipping(sched)
 
-        request = _make_request(
-            request_id="req-running", is_d_side=False, finished=False
-        )
+        request = _make_request(request_id="req-running", is_d_side=False, finished=False)
 
         delay, ret = sched.request_finished(request, ([1, 2, 3],))
 
@@ -704,9 +680,7 @@ class TestPushWriterNegative:
         """Receiving the same PUSH_REG twice (e.g. P retries after a
         flake) keeps the entry staged exactly once and never fires."""
         w = _StubWriterWorker.fresh()
-        notif = PUSH_REG_NOTIF_PREFIX + msgspec.msgpack.encode(
-            _registration_data("req-dup")
-        )
+        notif = PUSH_REG_NOTIF_PREFIX + msgspec.msgpack.encode(_registration_data("req-dup"))
         w._handle_push_reg_notif(notif)
         w._handle_push_reg_notif(notif)
         assert "req-dup" in w._pending_d_registrations

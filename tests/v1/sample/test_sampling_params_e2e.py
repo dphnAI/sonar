@@ -51,9 +51,7 @@ def test_stop(llm):
     # Output should not contain the stop word.
     assert len(new_split_text) == STOP_IDX
 
-    params = SamplingParams(
-        temperature=0, stop=split_text[STOP_IDX], include_stop_str_in_output=True
-    )
+    params = SamplingParams(temperature=0, stop=split_text[STOP_IDX], include_stop_str_in_output=True)
     output = llm.generate(PROMPT, params)
     new_split_text = output[0].outputs[0].text.split()
 
@@ -87,9 +85,7 @@ def test_detokenize_false(llm):
     assert len(output[0].outputs[0].token_ids) > 0
     assert len(output[0].outputs[0].text) == 0
 
-    output = llm.generate(
-        PROMPT, SamplingParams(detokenize=False, logprobs=3, prompt_logprobs=3)
-    )
+    output = llm.generate(PROMPT, SamplingParams(detokenize=False, logprobs=3, prompt_logprobs=3))
     assert len(output[0].outputs[0].token_ids) > 0
     assert len(output[0].outputs[0].text) == 0
 
@@ -115,9 +111,7 @@ def test_bad_words(llm):
 
         for add_prefix_space in [False, True]:
             prefix = " " if add_prefix_space else ""
-            bad_words_token = tokenizer.encode(
-                prefix + bad_word.lstrip(), add_special_tokens=False
-            )
+            bad_words_token = tokenizer.encode(prefix + bad_word.lstrip(), add_special_tokens=False)
             if not bad_words_token:
                 continue
             for i in range(len(tokens) - len(bad_words_token) + 1):

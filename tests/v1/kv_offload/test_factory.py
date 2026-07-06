@@ -47,11 +47,11 @@ def _make_aphrodite_config(
 ):
     """Build a real AphroditeConfig with kv_transfer_config set for offloading."""
     from aphrodite.config import (
+        AphroditeConfig,
         CacheConfig,
         DeviceConfig,
         ModelConfig,
         SchedulerConfig,
-        AphroditeConfig,
     )
 
     model_config = ModelConfig(
@@ -102,9 +102,7 @@ def _make_kv_cache_config():
     head_size = 1
     dtype = torch.float32
     page_size = 2 * num_kv_heads * head_size * torch.finfo(dtype).bits // 8
-    kv_tensor = KVCacheTensor(
-        size=num_blocks * page_size, shared_by=["layer"], block_stride=0
-    )
+    kv_tensor = KVCacheTensor(size=num_blocks * page_size, shared_by=["layer"], block_stride=0)
     return KVCacheConfig(
         num_blocks=num_blocks,
         kv_cache_tensors=[kv_tensor],
@@ -202,9 +200,7 @@ def test_dynamic_load_via_spec_module_path():
     # Delete from registry to force the dynamic import path
     del OffloadingSpecFactory._registry["CPUOffloadingSpec"]
     # spec_name not in registry → falls through to spec_module_path
-    config.kv_transfer_config.kv_connector_extra_config["spec_module_path"] = (
-        "aphrodite.v1.kv_offload.cpu.spec"
-    )
+    config.kv_transfer_config.kv_connector_extra_config["spec_module_path"] = "aphrodite.v1.kv_offload.cpu.spec"
     spec_cls = OffloadingSpecFactory.get_spec_cls(config)
     assert spec_cls is CPUOffloadingSpec
 
@@ -238,9 +234,7 @@ def test_cpu_spec_missing_cpu_bytes_to_use_raises():
 def test_duplicate_registration_raises():
     """register_spec with existing name → ValueError."""
     with pytest.raises(ValueError, match="is already registered"):
-        OffloadingSpecFactory.register_spec(
-            "CPUOffloadingSpec", "some.module", "SomeClass"
-        )
+        OffloadingSpecFactory.register_spec("CPUOffloadingSpec", "some.module", "SomeClass")
 
 
 # ---------------------------------------------------------------------------
@@ -254,9 +248,7 @@ def test_build_metric_definitions_empty_below_threshold():
 
     config = _make_aphrodite_config(store_threshold=1)
     spec_cls = OffloadingSpecFactory.get_spec_cls(config)
-    metrics = spec_cls.build_metric_definitions(
-        config.kv_transfer_config.kv_connector_extra_config
-    )
+    metrics = spec_cls.build_metric_definitions(config.kv_transfer_config.kv_connector_extra_config)
     assert CPUOffloadingMetrics.STORES_SKIPPED not in metrics
 
 
@@ -266,7 +258,5 @@ def test_build_metric_definitions_returns_counter_at_threshold():
 
     config = _make_aphrodite_config(store_threshold=2)
     spec_cls = OffloadingSpecFactory.get_spec_cls(config)
-    metrics = spec_cls.build_metric_definitions(
-        config.kv_transfer_config.kv_connector_extra_config
-    )
+    metrics = spec_cls.build_metric_definitions(config.kv_transfer_config.kv_connector_extra_config)
     assert CPUOffloadingMetrics.STORES_SKIPPED in metrics

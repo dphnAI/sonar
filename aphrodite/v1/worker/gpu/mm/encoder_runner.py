@@ -28,9 +28,7 @@ class EncoderRunner:
         self.device = device
         self.is_realtime = supports_realtime(model)
 
-        self.inputs_embeds = torch.zeros(
-            max_num_tokens, hidden_size, dtype=dtype, device=device
-        )
+        self.inputs_embeds = torch.zeros(max_num_tokens, hidden_size, dtype=dtype, device=device)
 
     def prepare_mm_inputs(
         self, scheduled_encoder_inputs: dict[str, list[int]]
@@ -49,9 +47,7 @@ class EncoderRunner:
         return mm_hashes, mm_kwargs
 
     @torch.inference_mode()
-    def execute_mm_encoder(
-        self, mm_kwargs: list[tuple[str, MultiModalKwargsItem]]
-    ) -> list[torch.Tensor]:
+    def execute_mm_encoder(self, mm_kwargs: list[tuple[str, MultiModalKwargsItem]]) -> list[torch.Tensor]:
         encoder_outputs: list[torch.Tensor] = []
         for modality, num_items, mm_kwargs_batch in group_and_batch_mm_kwargs(
             mm_kwargs, device=self.device, pin_memory=True
@@ -74,9 +70,7 @@ class EncoderRunner:
         if draft_lookahead:
             num_computed_tokens = num_computed_tokens + draft_lookahead
 
-        is_mm_embed = torch.zeros(
-            total_num_scheduled_tokens, dtype=torch.bool, device="cpu"
-        )
+        is_mm_embed = torch.zeros(total_num_scheduled_tokens, dtype=torch.bool, device="cpu")
 
         # Whether to gather media embeddings this step.
         exclude_embeddings: list[bool] | None = None
@@ -100,9 +94,7 @@ class EncoderRunner:
             cur_query_end = query_end[i]
 
             mm_features = self.encoder_cache.mm_features[req_id]
-            lo, hi = get_mm_features_in_window(
-                mm_features, start=cur_query_start, end=cur_query_end
-            )
+            lo, hi = get_mm_features_in_window(mm_features, start=cur_query_start, end=cur_query_end)
             for idx in range(lo, hi):
                 mm_feature = mm_features[idx]
                 pos_info = mm_feature.mm_position
@@ -112,9 +104,7 @@ class EncoderRunner:
                 start_idx = max(cur_query_start - start_pos, 0)
                 end_idx = min(cur_query_end - start_pos, num_encoder_tokens)
                 assert start_idx < end_idx
-                curr_embeds_start, curr_embeds_end = (
-                    pos_info.get_embeds_indices_in_range(start_idx, end_idx)
-                )
+                curr_embeds_start, curr_embeds_end = pos_info.get_embeds_indices_in_range(start_idx, end_idx)
                 # If there are no embeddings in the current range, we skip
                 # gathering the embeddings.
                 if curr_embeds_start == curr_embeds_end:
@@ -151,9 +141,7 @@ class EncoderRunner:
         mm_embeds: list[torch.Tensor],
         is_mm_embed: torch.Tensor,
     ) -> torch.Tensor:
-        x = self.model.embed_input_ids(
-            input_ids, multimodal_embeddings=mm_embeds, is_multimodal=is_mm_embed
-        )
+        x = self.model.embed_input_ids(input_ids, multimodal_embeddings=mm_embeds, is_multimodal=is_mm_embed)
         # Copy to the pre-allocated buffer for CUDA graphs.
         self.inputs_embeds[: x.shape[0]] = x
         return self.inputs_embeds

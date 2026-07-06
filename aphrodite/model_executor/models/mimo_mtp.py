@@ -26,7 +26,7 @@ import torch
 import torch.nn as nn
 from transformers import PretrainedConfig
 
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
@@ -53,9 +53,7 @@ class MiMoMultiTokenPredictorLayer(nn.Module):
 
         self.token_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hidden_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.input_proj = nn.Linear(
-            config.hidden_size * 2, config.hidden_size, bias=False
-        )
+        self.input_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
         self.mtp_block = Qwen2DecoderLayer(
             config=config,
             cache_config=cache_config,
@@ -77,13 +75,9 @@ class MiMoMultiTokenPredictorLayer(nn.Module):
         inputs_embeds = self.token_layernorm(inputs_embeds)
         previous_hidden_states = self.hidden_layernorm(previous_hidden_states)
 
-        hidden_states = self.input_proj(
-            torch.cat([previous_hidden_states, inputs_embeds], dim=-1)
-        )
+        hidden_states = self.input_proj(torch.cat([previous_hidden_states, inputs_embeds], dim=-1))
 
-        hidden_states, residual = self.mtp_block(
-            positions=positions, hidden_states=hidden_states, residual=None
-        )
+        hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
         hidden_states = residual + hidden_states
         return self.final_layernorm(hidden_states)
 
@@ -154,9 +148,7 @@ class MiMoMTP(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         self.config = aphrodite_config.model_config.hf_config
-        self.model = MiMoMultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = MiMoMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -198,9 +190,7 @@ class MiMoMTP(nn.Module):
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
         assert spec_step_idx == 0, "mimo_mtp only support predict one token now"
-        hidden_states = self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        hidden_states = self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
         return hidden_states
 
     def compute_logits(

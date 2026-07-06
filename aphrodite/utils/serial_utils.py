@@ -49,9 +49,7 @@ MM_METADATA_DTYPES: Mapping[MmMetadataDType, DTypeInfo] = {
     "uint8": DTypeInfo(torch.uint8, torch.uint8, np.uint8),
     "bool": DTypeInfo(torch.bool, torch.uint8, np.uint8),
 }
-_ALL_SERIAL_DTYPES: Mapping[str, DTypeInfo] = {
-    k: v for d in (EMBED_DTYPES, MM_METADATA_DTYPES) for k, v in d.items()
-}
+_ALL_SERIAL_DTYPES: Mapping[str, DTypeInfo] = {k: v for d in (EMBED_DTYPES, MM_METADATA_DTYPES) for k, v in d.items()}
 ENDIANNESS: tuple[Endianness, ...] = get_args(Endianness)
 
 
@@ -75,13 +73,7 @@ def tensor2binary(
 
     dtype_info = _ALL_SERIAL_DTYPES[embed_dtype]
 
-    np_array = (
-        tensor.to(dtype_info.torch_dtype)
-        .flatten()
-        .contiguous()
-        .view(dtype_info.torch_view_dtype)
-        .numpy()
-    )
+    np_array = tensor.to(dtype_info.torch_dtype).flatten().contiguous().view(dtype_info.torch_view_dtype).numpy()
 
     if endianness != "native" and endianness != sys_byteorder:
         np_array = np_array.byteswap()

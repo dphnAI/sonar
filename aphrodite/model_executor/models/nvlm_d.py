@@ -118,9 +118,7 @@ class NVLMMultiModalProcessor(BaseInternVLMultiModalProcessor[NVLMProcessingInfo
             image_num_patches = []
 
         def get_replacement_nvlm(item_idx: int):
-            images = mm_items.get_items(
-                "image", (ImageEmbeddingItems, ImageProcessorItems)
-            )
+            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
 
             if isinstance(images, ImageEmbeddingItems):
                 feature_size = images.get_feature_size(item_idx)
@@ -138,9 +136,7 @@ class NVLMMultiModalProcessor(BaseInternVLMultiModalProcessor[NVLMProcessingInfo
 
             repl = hf_processor.get_image_repl(num_patches, num_features=feature_size)
 
-            return PromptUpdateDetails.select_text(
-                repl.full + "\n", hf_processor.ctx_image_token
-            )
+            return PromptUpdateDetails.select_text(repl.full + "\n", hf_processor.ctx_image_token)
 
         # See note in dummy data regarding why we have the extra newline
         return PromptReplacement(
@@ -181,9 +177,7 @@ class NVLM_D_Model(InternVLChatModel):
     ):
         vision_feature_layer = config.select_layer
         if vision_feature_layer < 0:
-            num_hidden_layers = (
-                config.vision_config.num_hidden_layers + vision_feature_layer + 1
-            )
+            num_hidden_layers = config.vision_config.num_hidden_layers + vision_feature_layer + 1
         else:
             num_hidden_layers = vision_feature_layer + 1
 

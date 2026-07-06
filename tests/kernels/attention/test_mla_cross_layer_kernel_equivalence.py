@@ -15,9 +15,7 @@ cache, and that writes do not bleed into neighbouring layers' segments.
 import pytest
 import torch
 
-pytestmark = pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="MLA cache kernels require CUDA"
-)
+pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="MLA cache kernels require CUDA")
 
 
 def test_concat_and_cache_mla_into_unified_slot_view():
@@ -69,9 +67,7 @@ def test_concat_and_cache_mla_into_unified_slot_view():
     max_diff = (ref.float() - view.float()).abs().max().item()
     assert max_diff == 0.0, f"max|Δ| = {max_diff}"
 
-    neighbour_lo = torch.as_strided(
-        flat, (num_blocks, layer_page_elems), (unified_slot_elems, 1), 0
-    )
+    neighbour_lo = torch.as_strided(flat, (num_blocks, layer_page_elems), (unified_slot_elems, 1), 0)
     neighbour_hi = torch.as_strided(
         flat,
         (num_blocks, layer_page_elems),
@@ -111,18 +107,14 @@ def test_flashmla_dense_decode_unified_slot_view():
     cache_contiguous = kv_data.clone().contiguous()
 
     # (B) unified slot: view one layer -> inflated stride(0), non-zero offset.
-    unified = (
-        torch.randn(num_blocks, n_layers, page, 1, head_dim, device=dev, dtype=dt) * 0.1
-    )
+    unified = torch.randn(num_blocks, n_layers, page, 1, head_dim, device=dev, dtype=dt) * 0.1
     unified[:, layer].copy_(kv_data)
     cache_view = unified[:, layer]
     assert not cache_view.is_contiguous()
     assert cache_view.stride(0) == n_layers * page * 1 * head_dim
 
     max_blk = num_blocks // bs
-    block_table = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(
-        bs, max_blk
-    )
+    block_table = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(bs, max_blk)
     cache_seqlens = torch.full((bs,), max_blk * page, device=dev, dtype=torch.int32)
 
     def run(kc):
@@ -189,9 +181,7 @@ def test_flashinfer_mla_dense_decode_unified_slot_view():
     assert kv_view.stride(0) == n_layers * 1 * page * head_dim
 
     max_blk = num_blocks // bs
-    block_tables = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(
-        bs, max_blk
-    )
+    block_tables = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(bs, max_blk)
     seq_lens = torch.full((bs,), max_blk * page, device=dev, dtype=torch.int32)
     ws = torch.empty(128 * 1024 * 1024, dtype=torch.int8, device=dev)
     scale = head_dim**-0.5
@@ -244,9 +234,7 @@ def test_flashmla_fp8_sparse_decode_unified_slot_view():
 
     # Structurally valid fp8 ds_mla payload: 512B fp8 + 16B f32 scales + 128B
     # bf16 rope (random bytes corrupt the scale region and yield NaNs).
-    nope = (torch.randn(num_blocks, page, 1, 512, device=dev) * 0.1).to(
-        torch.float8_e4m3fn
-    )
+    nope = (torch.randn(num_blocks, page, 1, 512, device=dev) * 0.1).to(torch.float8_e4m3fn)
     scales = torch.ones(num_blocks, page, 1, 4, device=dev, dtype=torch.float32)
     rope = (torch.randn(num_blocks, page, 1, 64, device=dev) * 0.1).to(torch.bfloat16)
     payload = torch.cat(
@@ -263,9 +251,7 @@ def test_flashmla_fp8_sparse_decode_unified_slot_view():
     cache_contiguous = payload.clone().contiguous()
 
     # (B) unified slot: view one layer -> inflated stride(0), non-zero offset.
-    unified = torch.randint(
-        0, 256, (num_blocks, n_layers, page, 1, entry), device=dev, dtype=torch.uint8
-    )
+    unified = torch.randint(0, 256, (num_blocks, n_layers, page, 1, entry), device=dev, dtype=torch.uint8)
     unified[:, layer].copy_(payload)
     cache_view = unified[:, layer]
     assert not cache_view.is_contiguous()
@@ -327,17 +313,13 @@ def test_indexer_k_quant_and_cache_into_unified_slot_view():
         ops.indexer_k_quant_and_cache(k, cache, slot, quant_block_size, "ue8m0")
 
     # Contiguous per-layer reference.
-    ref = torch.zeros(
-        num_blocks, block_size, cache_stride, device=dev, dtype=torch.uint8
-    )
+    ref = torch.zeros(num_blocks, block_size, cache_stride, device=dev, dtype=torch.uint8)
     write(ref)
 
     # Unified slot holding three layer pages per block; carve the middle one.
     n_layers = 3
     layer = 1
-    unified = torch.zeros(
-        num_blocks, n_layers, block_size, cache_stride, device=dev, dtype=torch.uint8
-    )
+    unified = torch.zeros(num_blocks, n_layers, block_size, cache_stride, device=dev, dtype=torch.uint8)
     view = unified[:, layer]
     assert not view.is_contiguous()
     assert view.stride(0) == n_layers * block_size * cache_stride
@@ -389,9 +371,7 @@ def test_flashattn_mla_dense_decode_unified_slot_view():
     assert cache_view.stride(0) == n_layers * page * entry
 
     max_blk = num_blocks // bs
-    block_table = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(
-        bs, max_blk
-    )
+    block_table = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(bs, max_blk)
     seq_lens = torch.full((bs,), max_blk * page, device=dev, dtype=torch.int32)
     cu_seqlens_q = torch.arange(bs + 1, device=dev, dtype=torch.int32)
 
@@ -443,26 +423,20 @@ def test_flashmla_dense_fp8_decode_unified_slot_view():
     layer = 1
 
     q = torch.randn(bs, 1, h_q, head_dim, device=dev, dtype=torch.bfloat16) * 0.1
-    kv_data = (torch.randn(num_blocks, page, head_dim, device=dev) * 0.1).to(
-        torch.float8_e4m3fn
-    )
+    kv_data = (torch.randn(num_blocks, page, head_dim, device=dev) * 0.1).to(torch.float8_e4m3fn)
 
     # (A) contiguous per-layer reference.
     cache_contiguous = kv_data.clone().contiguous()
 
     # (B) unified slot: view one layer -> inflated stride(0), non-zero offset.
-    unified = (torch.randn(num_blocks, n_layers, page, head_dim, device=dev) * 0.1).to(
-        torch.float8_e4m3fn
-    )
+    unified = (torch.randn(num_blocks, n_layers, page, head_dim, device=dev) * 0.1).to(torch.float8_e4m3fn)
     unified[:, layer].copy_(kv_data)
     cache_view = unified[:, layer]
     assert not cache_view.is_contiguous()
     assert cache_view.stride(0) == n_layers * page * head_dim
 
     max_blk = num_blocks // bs
-    block_table = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(
-        bs, max_blk
-    )
+    block_table = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(bs, max_blk)
     cache_seqlens = torch.full((bs,), max_blk * page, device=dev, dtype=torch.int32)
     descale = torch.ones(1, device=dev, dtype=torch.float32)
 
@@ -518,29 +492,21 @@ def test_flashinfer_mla_dense_fp8_decode_unified_slot_view():
 
     # With a quantized KV cache the decode query is quantized to fp8 as well
     # (trtllm-gen has no bf16-query x fp8-cache decode kernel).
-    q = (torch.randn(bs, 1, num_qo_heads, head_dim, device=dev) * 0.1).to(
-        torch.float8_e4m3fn
-    )
-    kv_data = (torch.randn(num_blocks, 1, page, head_dim, device=dev) * 0.1).to(
-        torch.float8_e4m3fn
-    )
+    q = (torch.randn(bs, 1, num_qo_heads, head_dim, device=dev) * 0.1).to(torch.float8_e4m3fn)
+    kv_data = (torch.randn(num_blocks, 1, page, head_dim, device=dev) * 0.1).to(torch.float8_e4m3fn)
 
     # (A) contiguous per-layer reference.
     kv_contiguous = kv_data.clone().contiguous()
 
     # (B) unified slot: view one layer -> inflated stride(0), non-zero offset.
-    unified = (
-        torch.randn(num_blocks, n_layers, 1, page, head_dim, device=dev) * 0.1
-    ).to(torch.float8_e4m3fn)
+    unified = (torch.randn(num_blocks, n_layers, 1, page, head_dim, device=dev) * 0.1).to(torch.float8_e4m3fn)
     unified[:, layer].copy_(kv_data)
     kv_view = unified[:, layer]
     assert not kv_view.is_contiguous()
     assert kv_view.stride(0) == n_layers * 1 * page * head_dim
 
     max_blk = num_blocks // bs
-    block_tables = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(
-        bs, max_blk
-    )
+    block_tables = torch.arange(num_blocks, device=dev, dtype=torch.int32).view(bs, max_blk)
     seq_lens = torch.full((bs,), max_blk * page, device=dev, dtype=torch.int32)
     ws = torch.empty(128 * 1024 * 1024, dtype=torch.int8, device=dev)
     scale = head_dim**-0.5

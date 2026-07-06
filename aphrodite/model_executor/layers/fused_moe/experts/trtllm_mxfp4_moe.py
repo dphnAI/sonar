@@ -40,13 +40,9 @@ class TrtLlmMxfp4ExpertsBase:
 
         self.routing_method_type = moe_config.routing_method
         self.topk = moe_config.experts_per_token
-        self.intermediate_size_per_partition = (
-            moe_config.intermediate_size_per_partition
-        )
+        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
         self.hidden_dim = moe_config.hidden_dim
-        self.hidden_dim_unpadded = (
-            moe_config.hidden_dim_unpadded or moe_config.hidden_dim
-        )
+        self.hidden_dim_unpadded = moe_config.hidden_dim_unpadded or moe_config.hidden_dim
         self.local_num_experts = moe_config.num_local_experts
         self.ep_rank = moe_config.moe_parallel_config.ep_rank
 
@@ -114,9 +110,7 @@ class TrtLlmMxfp4ExpertsBase:
         return False
 
 
-class TrtLlmMxfp4ExpertsMonolithic(
-    TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMonolithic
-):
+class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMonolithic):
     """
     Monolithic version of the MXFP4 TRTLLM kernel (router + experts).
     Wraps flashinfer.trtllm_fp4_block_scale_moe().

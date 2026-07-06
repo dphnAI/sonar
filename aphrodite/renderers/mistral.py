@@ -41,9 +41,7 @@ def safe_apply_chat_template(
     except Exception as e:
         # Log and report any library-related exceptions for further
         # investigation.
-        logger.exception(
-            "An error occurred in `mistral_common` while applying chat template"
-        )
+        logger.exception("An error occurred in `mistral_common` while applying chat template")
         raise ValueError(str(e)) from e
 
 
@@ -55,9 +53,7 @@ class MistralRenderer(BaseRenderer[MistralTokenizer]):
     ) -> None:
         super().__init__(config, tokenizer)
 
-        self._apply_chat_template_async = make_async(
-            safe_apply_chat_template, executor=self._executor
-        )
+        self._apply_chat_template_async = make_async(safe_apply_chat_template, executor=self._executor)
 
     def render_messages(
         self,

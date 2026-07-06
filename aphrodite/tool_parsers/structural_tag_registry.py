@@ -31,10 +31,7 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
 )
 
 ToolChoice: TypeAlias = (
-    Literal["none", "auto", "required"]
-    | ChatCompletionNamedToolChoiceParam
-    | ResponsesToolChoice
-    | None
+    Literal["none", "auto", "required"] | ChatCompletionNamedToolChoiceParam | ResponsesToolChoice | None
 )
 AllowedToolRef: TypeAlias = dict[str, object]
 SimplifiedToolChoice: TypeAlias = Literal["auto", "required", "forced"]
@@ -67,9 +64,7 @@ XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS = frozenset(
     }
 )
 APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS = frozenset({"hermes"})
-SUPPORTED_STRUCTURAL_TAG_MODELS = (
-    XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS | APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
-)
+SUPPORTED_STRUCTURAL_TAG_MODELS = XGRAMMAR_BUILTIN_STRUCTURAL_TAG_MODELS | APHRODITE_BUILTIN_STRUCTURAL_TAG_MODELS
 
 _APHRODITE_STRUCTURAL_TAG_REGISTRY: dict[str, StructuralTagBuilder] = {}
 
@@ -181,10 +176,7 @@ def _dump_tool_choice_for_xgrammar(
             "type": "allowed_tools",
             "allowed_tools": {
                 "mode": tool_choice.mode,
-                "tools": [
-                    _dump_allowed_tool_ref_for_xgrammar(tool)
-                    for tool in tool_choice.tools
-                ],
+                "tools": [_dump_allowed_tool_ref_for_xgrammar(tool) for tool in tool_choice.tools],
             },
         }
 
@@ -192,11 +184,7 @@ def _dump_tool_choice_for_xgrammar(
 
 
 def _dump_allowed_tool_ref_for_xgrammar(tool_ref: AllowedToolRef) -> AllowedToolRef:
-    if (
-        tool_ref.get("type") == "function"
-        and "function" not in tool_ref
-        and "name" in tool_ref
-    ):
+    if tool_ref.get("type") == "function" and "function" not in tool_ref and "name" in tool_ref:
         return {
             "type": "function",
             "function": {"name": tool_ref["name"]},
@@ -224,9 +212,7 @@ def _hermes_tool_tags(tools: list[FunctionToolParam]) -> list[TagFormat]:
     return [
         TagFormat(
             begin=begin + tool.function.name + arguments_field_prefix,
-            content=JSONSchemaFormat(
-                json_schema=_get_function_parameters(tool.function)
-            ),
+            content=JSONSchemaFormat(json_schema=_get_function_parameters(tool.function)),
             end=end,
         )
         for tool in tools
@@ -247,11 +233,7 @@ def get_hermes_structural_tag(
 
     if tool_choice == "auto":
         tags = _hermes_tool_tags(tools)
-        suffix_tag = (
-            TriggeredTagsFormat(triggers=[tool_call_trigger], tags=tags)
-            if tags
-            else AnyTextFormat()
-        )
+        suffix_tag = TriggeredTagsFormat(triggers=[tool_call_trigger], tags=tags) if tags else AnyTextFormat()
     elif tool_choice == "forced":
         suffix_tag = TagsWithSeparatorFormat(
             tags=_hermes_tool_tags(tools),

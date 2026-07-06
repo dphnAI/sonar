@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import pytest
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 from aphrodite.reasoning.hy_v3_reasoning_parser import HYV3ReasoningParser
 from aphrodite.tokenizers import get_tokenizer
+from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "hy_v3"
 MODEL = "tencent/Hy3-preview"
@@ -188,12 +188,8 @@ The capital of Chile is Santiago."""
 REASONING_END_TEST_CASES = [
     pytest.param(STILL_REASONING_PROMPT, False, id="still_reasoning"),
     pytest.param(DONE_REASONING_PROMPT, True, id="done_reasoning"),
-    pytest.param(
-        MULTI_TURN_STILL_REASONING_PROMPT, False, id="multi_turn_still_reasoning"
-    ),
-    pytest.param(
-        MULTI_TURN_DONE_REASONING_PROMPT, True, id="multi_turn_done_reasoning"
-    ),
+    pytest.param(MULTI_TURN_STILL_REASONING_PROMPT, False, id="multi_turn_still_reasoning"),
+    pytest.param(MULTI_TURN_DONE_REASONING_PROMPT, True, id="multi_turn_done_reasoning"),
 ]
 
 
@@ -204,23 +200,17 @@ def test_reasoning(
     hy_v3_tokenizer,
 ):
     output = hy_v3_tokenizer.tokenize(param_dict["output"])
-    output_tokens: list[str] = [
-        hy_v3_tokenizer.convert_tokens_to_string([token]) for token in output
-    ]
+    output_tokens: list[str] = [hy_v3_tokenizer.convert_tokens_to_string([token]) for token in output]
 
     parser_kwargs = {}
     if "reasoning_effort" in param_dict:
-        parser_kwargs["chat_template_kwargs"] = {
-            "reasoning_effort": param_dict["reasoning_effort"]
-        }
+        parser_kwargs["chat_template_kwargs"] = {"reasoning_effort": param_dict["reasoning_effort"]}
     parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
         hy_v3_tokenizer,
         **parser_kwargs,
     )
 
-    reasoning, content = run_reasoning_extraction(
-        parser, output_tokens, streaming=streaming
-    )
+    reasoning, content = run_reasoning_extraction(parser, output_tokens, streaming=streaming)
 
     assert reasoning == param_dict["reasoning"]
     assert content == param_dict["content"]
@@ -231,9 +221,7 @@ def test_reasoning(
 
 
 @pytest.mark.parametrize("prompt, is_reasoning_end", REASONING_END_TEST_CASES)
-def test_is_reasoning_end_full_prompt(
-    prompt: str, is_reasoning_end: bool, hy_v3_tokenizer
-):
+def test_is_reasoning_end_full_prompt(prompt: str, is_reasoning_end: bool, hy_v3_tokenizer):
     parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
         hy_v3_tokenizer,
         chat_template_kwargs={"reasoning_effort": "high"},

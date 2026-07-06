@@ -40,11 +40,7 @@ def _local_to_global_indices(
 ) -> torch.Tensor:
     valid = local_indices >= 0
     local = local_indices.to(torch.int64).clamp_min(0)
-    global_indices = (
-        (local // interleave) * (world * interleave)
-        + rank * interleave
-        + local % interleave
-    )
+    global_indices = (local // interleave) * (world * interleave) + rank * interleave + local % interleave
     return torch.where(valid, global_indices, -1).to(torch.int64)
 
 
@@ -60,14 +56,9 @@ def _ref_stable_topk_from_candidates_fp64(
     device = candidate_scores.device
     select_k = min(k, num_candidates)
     valid = candidate_token_ids >= 0
-    bits = (
-        candidate_scores.to(torch.float32).view(torch.int32).to(torch.int64)
-        & 0xFFFFFFFF
-    )
+    bits = candidate_scores.to(torch.float32).view(torch.int32).to(torch.int64) & 0xFFFFFFFF
     sign = (bits >> 31) & 1
-    score_key = (
-        torch.where(sign.bool(), bits ^ 0xFFFFFFFF, bits ^ 0x80000000) & 0xFFFFFFFF
-    )
+    score_key = torch.where(sign.bool(), bits ^ 0xFFFFFFFF, bits ^ 0x80000000) & 0xFFFFFFFF
     id_key = (~candidate_token_ids.to(torch.int64)) & 0xFFFFFFFF
     key = (score_key << 32) | id_key
     key = torch.where(valid, key, torch.zeros_like(key))
@@ -136,9 +127,7 @@ def _run_decode_topk(
     next_n: int,
     topk: int,
 ) -> torch.Tensor:
-    indices = torch.empty(
-        (logits.shape[0], topk), dtype=torch.int32, device=logits.device
-    )
+    indices = torch.empty((logits.shape[0], topk), dtype=torch.int32, device=logits.device)
     torch.ops._C.top_k_per_row_decode(
         logits,
         next_n,
@@ -158,9 +147,7 @@ def _run_persistent_topk(
     topk: int,
     max_seq_len: int,
 ) -> torch.Tensor:
-    indices = torch.empty(
-        (logits.shape[0], topk), dtype=torch.int32, device=logits.device
-    )
+    indices = torch.empty((logits.shape[0], topk), dtype=torch.int32, device=logits.device)
     workspace = torch.empty(1024 * 1024, dtype=torch.uint8, device=logits.device)
     torch.ops._C.persistent_topk(
         logits,
@@ -184,12 +171,8 @@ def _dcp_attention_from_local_topks(
     local_outs = []
     local_lses = []
     for rank, local_topk in enumerate(local_topks):
-        owned = [
-            pos for pos in range(k.shape[0]) if (pos // interleave) % world == rank
-        ]
-        local_out, local_lse = _attention_from_indices(
-            q, k[owned], v[owned], local_topk.to(torch.int64)
-        )
+        owned = [pos for pos in range(k.shape[0]) if (pos // interleave) % world == rank]
+        local_out, local_lse = _attention_from_indices(q, k[owned], v[owned], local_topk.to(torch.int64))
         local_outs.append(local_out)
         local_lses.append(local_lse)
     return _dcp_lse_merge(local_outs, local_lses)
@@ -222,13 +205,9 @@ def _merge_local_topks_global_with_fake_dcp(
             scores = torch.full_like(indices, float("-inf"), dtype=torch.float32)
         else:
             score_indices = score_indices.clamp_max(logits.shape[1] - 1)
-            scores = logits.gather(1, score_indices).masked_fill(
-                indices < 0, float("-inf")
-            )
+            scores = logits.gather(1, score_indices).masked_fill(indices < 0, float("-inf"))
         global_ids = _local_to_global_indices(indices, rank, world, interleave)
-        packed_per_rank.append(
-            torch.stack((scores.float(), global_ids.to(torch.float32)), dim=-1)
-        )
+        packed_per_rank.append(torch.stack((scores.float(), global_ids.to(torch.float32)), dim=-1))
 
     fake_group = _FakeDCPGroup(torch.cat(packed_per_rank, dim=1).contiguous())
     original_get_dcp_group = sparse_indexer.get_dcp_group
@@ -261,10 +240,7 @@ def test_get_dcp_local_seq_lens_matches_naive(world: int, interleave: int):
     for rank in range(world):
         actual = get_dcp_local_seq_lens(seq_lens, world, rank, interleave)
         expected = torch.tensor(
-            [
-                _local_count(int(seq_len), rank, world, interleave)
-                for seq_len in seq_lens
-            ],
+            [_local_count(int(seq_len), rank, world, interleave) for seq_len in seq_lens],
             dtype=torch.int32,
         )
         torch.testing.assert_close(actual, expected)
@@ -278,10 +254,7 @@ def test_get_dcp_local_seq_lens_can_localize_per_token_bounds():
     for rank in range(world):
         actual = get_dcp_local_seq_lens(seq_lens, world, rank, interleave)
         expected = torch.tensor(
-            [
-                _local_count(int(seq_len), rank, world, interleave)
-                for seq_len in seq_lens
-            ],
+            [_local_count(int(seq_len), rank, world, interleave) for seq_len in seq_lens],
             dtype=torch.int32,
         )
         torch.testing.assert_close(actual, expected)
@@ -295,10 +268,7 @@ def test_get_dcp_local_seq_lens_preserves_mtp_bounds_shape():
 
     actual = get_dcp_local_seq_lens(seq_lens, world, rank, interleave)
     expected = torch.tensor(
-        [
-            [_local_count(int(seq_len), rank, world, interleave) for seq_len in row]
-            for row in seq_lens
-        ],
+        [[_local_count(int(seq_len), rank, world, interleave) for seq_len in row] for row in seq_lens],
         dtype=torch.int32,
     )
 
@@ -312,19 +282,13 @@ def test_get_dcp_local_seq_lens_must_run_after_decode_expansion():
     interleave = 1
     expanded_bounds = torch.tensor([8, 9, 10], dtype=torch.int32)
 
-    localized_after_expansion = get_dcp_local_seq_lens(
-        expanded_bounds, world, rank, interleave
-    )
+    localized_after_expansion = get_dcp_local_seq_lens(expanded_bounds, world, rank, interleave)
     localized_request_len_minus_offsets = get_dcp_local_seq_lens(
         torch.tensor([10], dtype=torch.int32), world, rank
     ) - torch.tensor([2, 1, 0], dtype=torch.int32)
 
-    assert not torch.equal(
-        localized_after_expansion, localized_request_len_minus_offsets
-    )
-    torch.testing.assert_close(
-        localized_after_expansion, torch.tensor([4, 4, 5], dtype=torch.int32)
-    )
+    assert not torch.equal(localized_after_expansion, localized_request_len_minus_offsets)
+    torch.testing.assert_close(localized_after_expansion, torch.tensor([4, 4, 5], dtype=torch.int32))
 
 
 @pytest.mark.parametrize("interleave", [1, 2])
@@ -352,9 +316,7 @@ def test_sparse_dcp_attention_matches_global_topk_attention(interleave: int):
     local_lses = []
     local_topks = []
     for rank in range(world):
-        owned = [
-            pos for pos in range(max_seq_len) if (pos // interleave) % world == rank
-        ]
+        owned = [pos for pos in range(max_seq_len) if (pos // interleave) % world == rank]
         k_local = k[owned]
         v_local = v[owned]
         local_topk = _global_to_local_indices(global_topk, rank, world, interleave)
@@ -369,15 +331,10 @@ def test_sparse_dcp_attention_matches_global_topk_attention(interleave: int):
     torch.testing.assert_close(dcp_lse, ref_lse, atol=1e-5, rtol=1e-5)
 
     gathered_global = torch.cat(
-        [
-            _local_to_global_indices(local_topks[rank], rank, world, interleave)
-            for rank in range(world)
-        ],
+        [_local_to_global_indices(local_topks[rank], rank, world, interleave) for rank in range(world)],
         dim=1,
     )
-    assert set(gathered_global[gathered_global >= 0].tolist()) == set(
-        global_topk.flatten().tolist()
-    )
+    assert set(gathered_global[gathered_global >= 0].tolist()) == set(global_topk.flatten().tolist())
 
 
 def test_local_topk_union_is_not_equivalent_to_global_topk_attention():
@@ -401,14 +358,10 @@ def test_local_topk_union_is_not_equivalent_to_global_topk_attention():
 
     local_topks = []
     for rank in range(world):
-        owned = [
-            pos for pos in range(k.shape[0]) if (pos // interleave) % world == rank
-        ]
+        owned = [pos for pos in range(k.shape[0]) if (pos // interleave) % world == rank]
         local_topks.append(scores[:, owned].topk(topk, dim=-1).indices)
 
-    local_union_out, local_union_lse = _dcp_attention_from_local_topks(
-        q, k, v, local_topks, world, interleave
-    )
+    local_union_out, local_union_lse = _dcp_attention_from_local_topks(q, k, v, local_topks, world, interleave)
 
     assert not torch.allclose(local_union_out, ref_out)
     assert not torch.allclose(local_union_lse, ref_lse)
@@ -439,13 +392,9 @@ def test_sparse_decode_dcp_persistent_topk_matches_non_dcp():
     local_logits = []
     local_topks = []
     for rank in range(world):
-        owned = [
-            pos for pos in range(max_seq_len) if (pos // interleave) % world == rank
-        ]
+        owned = [pos for pos in range(max_seq_len) if (pos // interleave) % world == rank]
         rank_logits = logits[:, owned].contiguous()
-        rank_seq_lens = get_dcp_local_seq_lens(
-            seq_lens, world, rank, interleave
-        ).contiguous()
+        rank_seq_lens = get_dcp_local_seq_lens(seq_lens, world, rank, interleave).contiguous()
         local_logits.append(rank_logits)
         local_topks.append(
             _run_persistent_topk(
@@ -456,9 +405,7 @@ def test_sparse_decode_dcp_persistent_topk_matches_non_dcp():
             )
         )
 
-    merged_global_topks = _merge_local_topks_global_with_fake_dcp(
-        local_logits, local_topks, topk, world, interleave
-    )
+    merged_global_topks = _merge_local_topks_global_with_fake_dcp(local_logits, local_topks, topk, world, interleave)
     # The radix top-K kernel selects a deterministic SET but writes it in
     # nondeterministic (atomicAdd) order; the production path is permutation-
     # invariant (compaction + softmax), so all ranks must agree on the set, not
@@ -471,18 +418,14 @@ def test_sparse_decode_dcp_persistent_topk_matches_non_dcp():
     local_outs = []
     local_lses = []
     for rank, global_topk in enumerate(merged_global_topks):
-        owned = [
-            pos for pos in range(max_seq_len) if (pos // interleave) % world == rank
-        ]
+        owned = [pos for pos in range(max_seq_len) if (pos // interleave) % world == rank]
         local_topk = _global_to_local_indices(
             global_topk.to(torch.int64),
             rank,
             world,
             interleave,
         )
-        local_out, local_lse = _attention_from_indices(
-            q, k[owned], v[owned], local_topk
-        )
+        local_out, local_lse = _attention_from_indices(q, k[owned], v[owned], local_topk)
         local_outs.append(local_out)
         local_lses.append(local_lse)
 
@@ -511,16 +454,8 @@ def test_cutedsl_dcp_candidate_pack_and_select_matches_reference(
     width = valid_width + (8 if use_row_starts else 0)
     topk = 512
     world = 2
-    row_starts = (
-        torch.tensor([0, 2, 4, 1], device=device, dtype=torch.int32)
-        if use_row_starts
-        else None
-    )
-    row_offsets = (
-        row_starts
-        if row_starts is not None
-        else torch.zeros(rows, device=device, dtype=torch.int32)
-    )
+    row_starts = torch.tensor([0, 2, 4, 1], device=device, dtype=torch.int32) if use_row_starts else None
+    row_offsets = row_starts if row_starts is not None else torch.zeros(rows, device=device, dtype=torch.int32)
 
     packed_by_rank = []
     for rank in range(world):
@@ -528,9 +463,7 @@ def test_cutedsl_dcp_candidate_pack_and_select_matches_reference(
         local_topks = []
         for row in range(rows):
             start = int(row_offsets[row].item())
-            local_topks.append(
-                logits[row, start : start + valid_width].topk(topk).indices
-            )
+            local_topks.append(logits[row, start : start + valid_width].topk(topk).indices)
         topk_indices = torch.stack(local_topks).to(torch.int32)
 
         packed = torch.empty((rows, topk, 2), device=device, dtype=torch.float32)
@@ -544,9 +477,7 @@ def test_cutedsl_dcp_candidate_pack_and_select_matches_reference(
             row_starts,
         )
 
-        expected_scores = logits.gather(
-            1, topk_indices.to(torch.long) + row_offsets.to(torch.long).view(-1, 1)
-        )
+        expected_scores = logits.gather(1, topk_indices.to(torch.long) + row_offsets.to(torch.long).view(-1, 1))
         expected_ids = (topk_indices * world + rank).to(torch.float32)
         torch.testing.assert_close(packed[..., 0], expected_scores)
         torch.testing.assert_close(packed[..., 1], expected_ids)
@@ -690,13 +621,9 @@ def test_dcp_filter_compaction_matches_reference(interleave: int, dcp_rank: int)
     seq = max_blocks * block_size
 
     req_id = torch.randint(0, 3, (num_rows,), dtype=torch.int32, device=device)
-    block_table = torch.randint(
-        0, 1000, (3, max_blocks), dtype=torch.int32, device=device
-    )
+    block_table = torch.randint(0, 1000, (3, max_blocks), dtype=torch.int32, device=device)
     # Each row: a dense valid prefix of distinct global token ids, then -1 pad.
-    token_indices = torch.full(
-        (num_rows, num_topk), -1, dtype=torch.int32, device=device
-    )
+    token_indices = torch.full((num_rows, num_topk), -1, dtype=torch.int32, device=device)
     for r in range(num_rows):
         n_valid = int(torch.randint(200, 600, (1,)).item())
         perm = torch.randperm(seq, device=device)[:n_valid].to(torch.int32)
@@ -722,9 +649,7 @@ def test_dcp_filter_compaction_matches_reference(interleave: int, dcp_rank: int)
         local = (owned // (dcp_size * interleave)) * interleave + owned % interleave
         blk = local // block_size
         off = local % block_size
-        expected = (
-            block_table[int(req_id[r].item()), blk].to(torch.int64) * block_size + off
-        )
+        expected = block_table[int(req_id[r].item()), blk].to(torch.int64) * block_size + off
         n = int(valid_counts[r].item())
         assert n == owned.numel()
         assert (out[r, :n] >= 0).all()
@@ -749,32 +674,22 @@ def test_dcp_global_topk_physical_attention_matches_non_dcp(interleave: int):
     k_global = torch.randn(seq_len, head_dim, device=device)
     v_global = torch.randn(seq_len, head_dim, device=device)
     scores = q @ k_global.T
-    global_topk = torch.full(
-        (num_queries, num_topk), -1, dtype=torch.int32, device=device
-    )
-    global_topk[:, :selected_k] = scores.topk(selected_k, dim=-1).indices.to(
-        torch.int32
-    )
+    global_topk = torch.full((num_queries, num_topk), -1, dtype=torch.int32, device=device)
+    global_topk[:, :selected_k] = scores.topk(selected_k, dim=-1).indices.to(torch.int32)
 
-    ref_out, ref_lse = _attention_from_indices(
-        q, k_global, v_global, global_topk[:, :selected_k].to(torch.int64)
-    )
+    ref_out, ref_lse = _attention_from_indices(q, k_global, v_global, global_topk[:, :selected_k].to(torch.int64))
 
     local_outs = []
     local_lses = []
     for rank in range(dcp_size):
-        block_ids = torch.tensor(
-            [[rank * 10 + 1, rank * 10 + 2]], dtype=torch.int32, device=device
-        )
+        block_ids = torch.tensor([[rank * 10 + 1, rank * 10 + 2]], dtype=torch.int32, device=device)
         num_slots = int((block_ids.max().item() + 1) * block_size)
         k_cache = torch.zeros(num_slots, head_dim, device=device)
         v_cache = torch.zeros(num_slots, head_dim, device=device)
         for global_idx in range(seq_len):
             if (global_idx // interleave) % dcp_size != rank:
                 continue
-            local_idx = (
-                global_idx // (dcp_size * interleave)
-            ) * interleave + global_idx % interleave
+            local_idx = (global_idx // (dcp_size * interleave)) * interleave + global_idx % interleave
             block = local_idx // block_size
             offset = local_idx % block_size
             slot = int(block_ids[0, block].item()) * block_size + offset
@@ -794,9 +709,7 @@ def test_dcp_global_topk_physical_attention_matches_non_dcp(interleave: int):
         )
         row_ids = torch.arange(num_queries, device=device)
         assert (slots[row_ids, valid_counts] == -1).all()
-        local_out, local_lse = _attention_from_indices(
-            q, k_cache, v_cache, slots.to(torch.int64)
-        )
+        local_out, local_lse = _attention_from_indices(q, k_cache, v_cache, slots.to(torch.int64))
         local_outs.append(local_out)
         local_lses.append(local_lse)
 
@@ -844,9 +757,7 @@ def test_decode_topk_pads_surplus_with_negative_one():
     seq_lens_list = [0, 3, 5, 8]
     num_rows = len(seq_lens_list)
     logits = torch.randn(num_rows, 16, device=device)
-    seq_lens = torch.tensor(seq_lens_list, dtype=torch.int32, device=device).view(
-        num_rows, next_n
-    )
+    seq_lens = torch.tensor(seq_lens_list, dtype=torch.int32, device=device).view(num_rows, next_n)
     idx = _run_decode_topk(logits, seq_lens, next_n, topk)
     for r, sl in enumerate(seq_lens_list):
         valid = idx[r][idx[r] >= 0]
@@ -866,9 +777,7 @@ def test_persistent_topk_pads_surplus_with_negative_one():
     num_rows = len(seq_lens_list)
     max_seq_len = 600
     logits = torch.randn(num_rows, max_seq_len, device=device)
-    seq_lens = torch.tensor(seq_lens_list, dtype=torch.int32, device=device).view(
-        num_rows, 1
-    )
+    seq_lens = torch.tensor(seq_lens_list, dtype=torch.int32, device=device).view(num_rows, 1)
     idx = _run_persistent_topk(logits, seq_lens, topk, max_seq_len)
     for r, sl in enumerate(seq_lens_list):
         valid = idx[r][idx[r] >= 0]
@@ -921,9 +830,7 @@ def test_sparse_decode_dcp_short_context_matches_non_dcp():
             )
         )
 
-    merged_global_topks = _merge_local_topks_global_with_fake_dcp(
-        local_logits, local_topks, topk, world, interleave
-    )
+    merged_global_topks = _merge_local_topks_global_with_fake_dcp(local_logits, local_topks, topk, world, interleave)
     # The radix top-K kernel selects a deterministic SET but writes it in
     # nondeterministic (atomicAdd) order; the production path is permutation-
     # invariant (compaction + softmax), so all ranks must agree on the set, not
@@ -937,12 +844,8 @@ def test_sparse_decode_dcp_short_context_matches_non_dcp():
     local_lses = []
     for rank, global_topk in enumerate(merged_global_topks):
         owned = [p for p in range(max_seq_len) if (p // interleave) % world == rank]
-        local_topk = _global_to_local_indices(
-            global_topk.to(torch.int64), rank, world, interleave
-        )
-        local_out, local_lse = _attention_from_indices(
-            q, k[owned], v[owned], local_topk
-        )
+        local_topk = _global_to_local_indices(global_topk.to(torch.int64), rank, world, interleave)
+        local_out, local_lse = _attention_from_indices(q, k[owned], v[owned], local_topk)
         local_outs.append(local_out)
         local_lses.append(local_lse)
 

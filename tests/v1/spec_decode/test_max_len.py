@@ -4,11 +4,11 @@
 
 import pytest
 
-from tests.utils import get_attn_backend_list_based_on_platform
 from aphrodite import LLM, SamplingParams
 from aphrodite.config import ModelConfig, ParallelConfig, SpeculativeConfig
 from aphrodite.platforms import current_platform
 from aphrodite.sampling_params import StructuredOutputsParams
+from tests.utils import get_attn_backend_list_based_on_platform
 
 _PROMPTS = [
     "1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1",
@@ -36,9 +36,7 @@ def test_ngram_max_len(num_speculative_tokens: int):
 
 @pytest.mark.parametrize("num_speculative_tokens", [1, 3, 10])
 @pytest.mark.parametrize("attn_backend", get_attn_backend_list_based_on_platform())
-def test_eagle_max_len(
-    monkeypatch: pytest.MonkeyPatch, num_speculative_tokens: int, attn_backend: str
-):
+def test_eagle_max_len(monkeypatch: pytest.MonkeyPatch, num_speculative_tokens: int, attn_backend: str):
     if attn_backend == "ROCM_AITER_FA" and current_platform.is_rocm():
         monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
 
@@ -68,14 +66,8 @@ def test_eagle_max_len(
     output = llm.generate(_PROMPTS, sampling_params)
     for o in output:
         assert o.prompt_token_ids is not None
-        assert (
-            len(o.prompt_token_ids)
-            < 80
-            < len(o.prompt_token_ids) + len(o.outputs[0].token_ids)
-            <= 200
-        ), (
-            "This test is only meaningful if the output "
-            "is longer than the eagle max length"
+        assert len(o.prompt_token_ids) < 80 < len(o.prompt_token_ids) + len(o.outputs[0].token_ids) <= 200, (
+            "This test is only meaningful if the output is longer than the eagle max length"
         )
         assert o.outputs[0].text == "a b c d e " * 15
 

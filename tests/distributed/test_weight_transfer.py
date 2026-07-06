@@ -270,9 +270,7 @@ class TestEngineRegistry:
 
     def test_register_duplicate_raises(self):
         with pytest.raises(ValueError, match="already registered"):
-            WeightTransferEngineFactory.register_engine(
-                "nccl", NCCLWeightTransferEngine
-            )
+            WeightTransferEngineFactory.register_engine("nccl", NCCLWeightTransferEngine)
 
 
 # --- Unit Tests: Sparse patch application (CPU) ---
@@ -283,15 +281,11 @@ class TestSparseNCCLPatchApplication:
 
     def _make_engine(self, model):
         config = WeightTransferConfig(backend="sparse_nccl")
-        return SparseNCCLWeightTransferEngine(
-            config, create_mock_aphrodite_config(), "cpu", model
-        )
+        return SparseNCCLWeightTransferEngine(config, create_mock_aphrodite_config(), "cpu", model)
 
     def _make_model(self, numel: int = 8):
         model = torch.nn.Module()
-        model.register_parameter(
-            "w", torch.nn.Parameter(torch.zeros(numel), requires_grad=False)
-        )
+        model.register_parameter("w", torch.nn.Parameter(torch.zeros(numel), requires_grad=False))
 
         def get_parameter(name):
             assert name == "w"
@@ -381,13 +375,9 @@ def test_nccl_receive_weights_without_init_raises():
         pytest.skip("Need at least 1 GPU for this test")
 
     config = WeightTransferConfig(backend="nccl")
-    engine = NCCLWeightTransferEngine(
-        config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
-    )
+    engine = NCCLWeightTransferEngine(config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module))
 
-    update_info = NCCLWeightTransferUpdateInfo(
-        names=["w"], dtype_names=["float32"], shapes=[[10]]
-    )
+    update_info = NCCLWeightTransferUpdateInfo(names=["w"], dtype_names=["float32"], shapes=[[10]])
 
     with pytest.raises(RuntimeError, match="not initialized"):
         engine.receive_weights(update_info)
@@ -572,9 +562,7 @@ def test_nccl_weight_transfer_between_processes():
 
     assert trainer_result, "Trainer should complete successfully"
     assert result["success"], (
-        f"Weight transfer failed. "
-        f"Received shape: {result['received_shape']}, "
-        f"Received sum: {result['received_sum']}"
+        f"Weight transfer failed. Received shape: {result['received_shape']}, Received sum: {result['received_sum']}"
     )
 
 
@@ -652,9 +640,7 @@ def inference_receive_sparse_tensor(
 
     # Real module holding the target parameter the patch will modify.
     model = torch.nn.Module()
-    model.register_parameter(
-        "w", torch.nn.Parameter(torch.zeros(30, device="cuda"), requires_grad=False)
-    )
+    model.register_parameter("w", torch.nn.Parameter(torch.zeros(30, device="cuda"), requires_grad=False))
     model.get_parameter = lambda name: model.w
 
     update_info = SparseNCCLWeightTransferUpdateInfo(
@@ -681,9 +667,7 @@ def inference_receive_sparse_tensor(
     torch.accelerator.synchronize()
 
     expected = torch.zeros(30, dtype=torch.float32, device=device)
-    expected[[1, 7, 25]] = torch.tensor(
-        [10.0, 20.0, 30.0], dtype=torch.float32, device=device
-    )
+    expected[[1, 7, 25]] = torch.tensor([10.0, 20.0, 30.0], dtype=torch.float32, device=device)
     success = torch.equal(model.w.data, expected)
     engine.shutdown()
     return {
@@ -704,20 +688,13 @@ def test_nccl_sparse_weight_transfer_between_processes():
     master_port = get_open_port()
     world_size = 2
 
-    inference_future = inference_receive_sparse_tensor.remote(
-        master_address, master_port, world_size
-    )
-    trainer_future = trainer_broadcast_sparse_tensor.remote(
-        master_address, master_port, world_size
-    )
+    inference_future = inference_receive_sparse_tensor.remote(master_address, master_port, world_size)
+    trainer_future = trainer_broadcast_sparse_tensor.remote(master_address, master_port, world_size)
 
     trainer_result, result = ray.get([trainer_future, inference_future])
 
     assert trainer_result, "Trainer should complete successfully"
-    assert result["success"], (
-        "Sparse weight transfer failed. "
-        f"Received selected values: {result['selected_values']}"
-    )
+    assert result["success"], f"Sparse weight transfer failed. Received selected values: {result['selected_values']}"
 
 
 # --- Unit Tests: IPCWeightTransferUpdateInfo Validation ---
@@ -1154,9 +1131,7 @@ def test_ipc_weight_transfer_between_processes(mode: str):
     ipc_handle_dict = ray.get(trainer_actor.get_ipc_handle_dict.remote())
 
     inference_result = ray.get(
-        inference_receive_ipc_tensor.options(
-            scheduling_strategy=scheduling_strategy
-        ).remote(ipc_handle_dict, mode=mode)
+        inference_receive_ipc_tensor.options(scheduling_strategy=scheduling_strategy).remote(ipc_handle_dict, mode=mode)
     )
 
     assert inference_result["success"], (
@@ -1172,9 +1147,7 @@ def test_ipc_receive_weights_missing_gpu_uuid_raises():
         pytest.skip("Need at least 1 GPU for this test")
 
     config = WeightTransferConfig(backend="ipc")
-    engine = IPCWeightTransferEngine(
-        config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module)
-    )
+    engine = IPCWeightTransferEngine(config, create_mock_aphrodite_config(), "cuda", MagicMock(spec=torch.nn.Module))
 
     dummy_tensor = torch.ones(10, 10, device="cuda:0")
     _, ipc_handle = reduce_tensor(dummy_tensor)

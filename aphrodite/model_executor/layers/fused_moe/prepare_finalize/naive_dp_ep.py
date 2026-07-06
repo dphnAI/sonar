@@ -23,11 +23,7 @@ def _quantize_and_setup_dispatch(
         a1q = a1
         a1q_scale = None
     else:
-        input_sf = (
-            quant_config.a1_gscale
-            if quant_config.use_nvfp4_w4a4
-            else quant_config.a1_scale
-        )
+        input_sf = quant_config.a1_gscale if quant_config.use_nvfp4_w4a4 else quant_config.a1_scale
 
         # NOTE: swizzling pads the scales to multiple of 128
         # which makes the scales tensor different shape than
@@ -124,14 +120,10 @@ class MoEPrepareAndFinalizeNaiveDPEPModular(mk.FusedMoEPrepareAndFinalizeModular
 
         if apply_router_weight_on_input:
             topk = topk_ids.size(1)
-            assert topk == 1, (
-                "apply_router_weight_on_input is only implemented for topk=1"
-            )
+            assert topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
             a1 = a1 * topk_weights.to(a1.dtype)
 
-        a1q, scales, a1q_scale_orig = _quantize_and_setup_dispatch(
-            a1, quant_config, defer_input_quant
-        )
+        a1q, scales, a1q_scale_orig = _quantize_and_setup_dispatch(a1, quant_config, defer_input_quant)
 
         # When LoRA is active, dispatch the per-token LoRA id along with
         # hidden_states so every rank receives the correct mapping for the
@@ -141,11 +133,7 @@ class MoEPrepareAndFinalizeNaiveDPEPModular(mk.FusedMoEPrepareAndFinalizeModular
         lora_ctx = self._lora_context
         local_token_lora_mapping = None
         if lora_ctx is not None:
-            local_token_lora_mapping = (
-                lora_ctx.punica_wrapper.token_mapping_meta.token_lora_mapping[
-                    : a1.shape[0]
-                ]
-            )
+            local_token_lora_mapping = lora_ctx.punica_wrapper.token_mapping_meta.token_lora_mapping[: a1.shape[0]]
 
         extra_tensors: list[torch.Tensor] | None = None
         if scales is not None:
@@ -176,9 +164,7 @@ class MoEPrepareAndFinalizeNaiveDPEPModular(mk.FusedMoEPrepareAndFinalizeModular
                 assert lora_ctx is not None
                 lora_ctx.local_token_lora_mapping = dispatched_lora_mapping
             if scales is not None:
-                a1q_scale = _unwrap_scale_and_prepare_for_moe(
-                    gathered_extras, quant_config
-                )
+                a1q_scale = _unwrap_scale_and_prepare_for_moe(gathered_extras, quant_config)
             else:
                 a1q_scale = a1q_scale_orig
 
@@ -204,9 +190,7 @@ class MoEPrepareAndFinalizeNaiveDPEPModular(mk.FusedMoEPrepareAndFinalizeModular
             apply_router_weight_on_input=apply_router_weight_on_input,
         )
 
-        output.copy_(
-            get_ep_group().combine(out, is_sequence_parallel=self.is_sequence_parallel)
-        )
+        output.copy_(get_ep_group().combine(out, is_sequence_parallel=self.is_sequence_parallel))
 
 
 class MoEPrepareAndFinalizeNaiveDPEPMonolithic(mk.FusedMoEPrepareAndFinalizeMonolithic):
@@ -251,9 +235,7 @@ class MoEPrepareAndFinalizeNaiveDPEPMonolithic(mk.FusedMoEPrepareAndFinalizeMono
     ) -> mk.PrepareMonolithicResultType:
         """Quantize and Dispatch Router Logits."""
 
-        a1q, scales, a1q_scale_orig = _quantize_and_setup_dispatch(
-            a1, quant_config, defer_input_quant
-        )
+        a1q, scales, a1q_scale_orig = _quantize_and_setup_dispatch(a1, quant_config, defer_input_quant)
 
         res = get_ep_group().dispatch_router_logits(
             a1q,
@@ -277,9 +259,7 @@ class MoEPrepareAndFinalizeNaiveDPEPMonolithic(mk.FusedMoEPrepareAndFinalizeMono
         self,
         fused_expert_output: torch.Tensor,
     ) -> torch.Tensor:
-        out = get_ep_group().combine(
-            fused_expert_output, is_sequence_parallel=self.is_sequence_parallel
-        )
+        out = get_ep_group().combine(fused_expert_output, is_sequence_parallel=self.is_sequence_parallel)
         return out
 
 

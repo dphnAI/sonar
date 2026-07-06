@@ -5,7 +5,7 @@ import pytest
 import torch
 from transformers import CLIPModel
 
-from ....conftest import IMAGE_ASSETS, HfRunner, PromptImageInput, AphroditeRunner
+from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
 from ...utils import check_embeddings_close
 
 HF_TEXT_PROMPTS = [
@@ -105,9 +105,7 @@ def test_models_image(
     model: str,
     dtype: str,
 ) -> None:
-    input_texts_images = [
-        (text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)
-    ]
+    input_texts_images = [(text, asset.pil_image) for text, asset in zip(HF_IMAGE_PROMPTS, image_assets)]
     input_texts = [text for text, _ in input_texts_images]
     input_images = [image for _, image in input_texts_images]
 

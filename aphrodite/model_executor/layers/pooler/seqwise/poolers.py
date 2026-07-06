@@ -62,10 +62,7 @@ class SequencePooler(Pooler):
         self.head = head
 
     def extra_repr(self) -> str:
-        return (
-            f"pooling={self.pooling.__class__.__name__}, "
-            f"head={self.head.__class__.__name__}"
-        )
+        return f"pooling={self.pooling.__class__.__name__}, head={self.head.__class__.__name__}"
 
     def get_supported_tasks(self) -> Set[PoolingTask]:
         tasks = set(POOLING_TASKS)
@@ -122,17 +119,13 @@ def pooler_for_classify(
     aphrodite_config = get_current_aphrodite_config()
     model_config = aphrodite_config.model_config
     if model_config.pooler_config is None:
-        raise ValueError(
-            "model_config.pooler_config must be set for classification pooling"
-        )
+        raise ValueError("model_config.pooler_config must be set for classification pooling")
     head = ClassifierPoolerHead(
         head_dtype=model_config.head_dtype,
         classifier=classifier,
         logit_mean=model_config.pooler_config.logit_mean,
         logit_sigma=model_config.pooler_config.logit_sigma,
-        activation=resolve_classifier_act_fn(
-            model_config, static_num_labels=True, act_fn=act_fn
-        ),
+        activation=resolve_classifier_act_fn(model_config, static_num_labels=True, act_fn=act_fn),
     )
 
     return SequencePooler(pooling=pooling, head=head)

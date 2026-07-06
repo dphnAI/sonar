@@ -34,8 +34,7 @@ class TestTritonMoeForwardExpertMap:
         with (
             patch("triton_kernels.topk.topk") as mock_topk,
             patch(
-                "aphrodite.model_executor.layers.fused_moe.experts."
-                "gpt_oss_triton_kernels_moe.make_routing_data"
+                "aphrodite.model_executor.layers.fused_moe.experts.gpt_oss_triton_kernels_moe.make_routing_data"
             ) as mock_make_routing,
             patch(
                 "aphrodite.model_executor.layers.fused_moe.experts."

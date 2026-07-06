@@ -23,12 +23,8 @@ rms_no_var = lambda x, weight, epsilon, variance_size=None: variance_size is Non
 )
 
 
-@ir.ops.rms_norm.register_impl(
-    "xpu_kernels", supports_args=rms_no_var, supported=XPU_KERNELS_SUPPORTED
-)
-def rms_norm(
-    x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None
-) -> Tensor:
+@ir.ops.rms_norm.register_impl("xpu_kernels", supports_args=rms_no_var, supported=XPU_KERNELS_SUPPORTED)
+def rms_norm(x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None) -> Tensor:
     assert variance_size is None
     if weight is None:
         # Kernel requires weight tensor, pass ones
@@ -38,9 +34,8 @@ def rms_norm(
     return output
 
 
-rms_add_no_var_size = (
-    lambda x, x_residual, weight, epsilon, variance_size=None: variance_size is None
-    and (weight is None or weight.dtype == x.dtype)
+rms_add_no_var_size = lambda x, x_residual, weight, epsilon, variance_size=None: variance_size is None and (
+    weight is None or weight.dtype == x.dtype
 )
 
 

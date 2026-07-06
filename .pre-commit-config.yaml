@@ -43,13 +43,13 @@ repos:
       args: [
         requirements/test/cuda.in,
         -c, requirements/cuda.txt,
-        -o, requirements/test.txt,
+        -o, requirements/test/cuda.txt,
         --index-strategy, unsafe-best-match,
-        --torch-backend, cu129,
+        --torch-backend, cu130,
         --python-platform, x86_64-manylinux_2_28,
         --python-version, "3.12",
       ]
-      files: ^requirements/(common|cuda|test)\.(in|txt)$
+      files: ^requirements/(common|cuda|test/cuda)\.(in|txt)$
 - repo: local
   hooks:
   - id: mypy-local

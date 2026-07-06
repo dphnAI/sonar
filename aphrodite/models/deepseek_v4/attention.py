@@ -33,8 +33,8 @@ if TYPE_CHECKING:
     )
 
 from aphrodite.config import (
-    CacheConfig,
     AphroditeConfig,
+    CacheConfig,
     get_current_aphrodite_config,
 )
 from aphrodite.distributed import get_tensor_model_parallel_world_size
@@ -77,8 +77,7 @@ def _resolve_dsv4_kv_cache_dtype(
     if use_fp8_ds_mla_layout:
         # fp8_ds_mla block format: UE8M0 block-scaled fp8 packed as uint8.
         assert kv_cache_dtype.startswith("fp8"), (
-            f"DeepseekV4 fp8_ds_mla layout only supports fp8 kv-cache, "
-            f"got {kv_cache_dtype}"
+            f"DeepseekV4 fp8_ds_mla layout only supports fp8 kv-cache, got {kv_cache_dtype}"
         )
         if kv_cache_dtype != "fp8_ds_mla":
             if cache_config is not None:
@@ -251,9 +250,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             # aux_stream_list[2] is free here (outer GEMMs joined) for the inner
             # overlap of wq_b+fused_indexer_q_rope_quant vs compressor. None on
             # ROCm, where aux_stream_list is None.
-            indexer_aux_stream = (
-                aux_stream_list[2] if aux_stream_list is not None else None
-            )
+            indexer_aux_stream = aux_stream_list[2] if aux_stream_list is not None else None
             self.indexer = DeepseekV4Indexer(
                 aphrodite_config,
                 config=config,
@@ -276,9 +273,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
 
         assert cache_config is not None, "DeepseekV4 attention requires cache_config"
         # ---- Attention / KV-cache setup ----
-        self.max_num_batched_tokens = (
-            aphrodite_config.scheduler_config.max_num_batched_tokens
-        )
+        self.max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
         self.max_model_len = aphrodite_config.model_config.max_model_len
 
         # Resolve the kv-cache dtype from this backend's block format. The same
@@ -335,9 +330,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         # Metadata-independent input GEMMs + RMSNorm stay in the captured
         # graph; the metadata-dependent rest (q up-proj + kv-insert, indexer,
         # compressor, MLA attention) runs in the eager break.
-        qr_kv, kv_score, indexer_kv_score, indexer_weights = (
-            self.attn_gemm_parallel_execute(hidden_states)
-        )
+        qr_kv, kv_score, indexer_kv_score, indexer_weights = self.attn_gemm_parallel_execute(hidden_states)
         qr, kv = qr_kv.split([self.q_lora_rank, self.head_dim], dim=-1)
         qr, kv = fused_q_kv_rmsnorm(
             qr,
@@ -419,8 +412,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             self.ln_events[0],
             self.ln_events[1:4],
             aux_streams,
-            enable=hidden_states.shape[0]
-            <= envs.APHRODITE_MULTI_STREAM_GEMM_TOKEN_THRESHOLD,
+            enable=hidden_states.shape[0] <= envs.APHRODITE_MULTI_STREAM_GEMM_TOKEN_THRESHOLD,
         )
 
         return qr_kv, kv_score, indexer_kv_score, indexer_weights
@@ -480,9 +472,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             )
         elif self.compressor is not None:
             # wq_b + kv_insert on default, compressor on aux.
-            aux_stream = (
-                self.aux_stream_list[0] if self.aux_stream_list is not None else None
-            )
+            aux_stream = self.aux_stream_list[0] if self.aux_stream_list is not None else None
             compressor = self.compressor
 
             def wq_b_kv_insert() -> torch.Tensor:
@@ -511,9 +501,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         q: torch.Tensor,
         kv: torch.Tensor,
         positions: torch.Tensor,
-        attn_metadata: (
-            dict[str, AttentionMetadata] | list[dict[str, AttentionMetadata]] | None
-        ),
+        attn_metadata: (dict[str, AttentionMetadata] | list[dict[str, AttentionMetadata]] | None),
     ) -> torch.Tensor:
         if not isinstance(attn_metadata, dict):
             # Profile run: kernel doesn't fire; produce a padded tensor so
@@ -599,9 +587,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         return self.backend_cls
 
     def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
-        if (
-            self.compress_ratio <= 1
-        ):  # SWA part. Allocated separately as DeepseekV4SWACache.
+        if self.compress_ratio <= 1:  # SWA part. Allocated separately as DeepseekV4SWACache.
             return None
         # fp8_ds_mla is a UE8M0 block-scaled uint8 layout and needs 576B
         # alignment; plain bf16 / per-tensor fp8 rows use natural element-size
@@ -712,14 +698,10 @@ class DeepseekV4Indexer(nn.Module):
         self.quant_block_size = 128  # TODO: get from config
         self.topk_indices_buffer = topk_indices_buffer
 
-        self.max_model_len = (
-            aphrodite_config.model_config.max_model_len // self.compress_ratio
-        )
+        self.max_model_len = aphrodite_config.model_config.max_model_len // self.compress_ratio
         self.prefix = prefix
 
-        self.max_total_seq_len = (
-            get_max_prefill_buffer_size(aphrodite_config) // self.compress_ratio
-        )
+        self.max_total_seq_len = get_max_prefill_buffer_size(aphrodite_config) // self.compress_ratio
 
         assert cache_config is not None, "Deepseek V4 indexer requires cache_config"
         # NOTE(yifan): FP8 indxer cache use the same layout as V3.2:

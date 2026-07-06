@@ -122,9 +122,7 @@ def assert_incr_detok_str_matches_non_incr_detok_str(
       msg: error message if `assert` fails
     """
     rgx = r"[^a-zA-Z0-9]+"
-    assert re.sub(rgx, "", incremental_detokenization_str) == re.sub(
-        rgx, "", non_incremental_detokenization_str
-    ), msg
+    assert re.sub(rgx, "", incremental_detokenization_str) == re.sub(rgx, "", non_incremental_detokenization_str), msg
 
 
 def compute_correct_cumulative_logprob(completion_output: CompletionOutput) -> float:
@@ -147,12 +145,8 @@ def create_fake_logits(batch_size: int, vocab_size: int) -> torch.Tensor:
     return fake_logits
 
 
-def create_penalty_tensor(
-    batch_size: int, penalty_value: float, device: torch.device
-) -> torch.Tensor:
-    return torch.full(
-        (batch_size,), fill_value=penalty_value, dtype=torch.float, device=device
-    )
+def create_penalty_tensor(batch_size: int, penalty_value: float, device: torch.device) -> torch.Tensor:
+    return torch.full((batch_size,), fill_value=penalty_value, dtype=torch.float, device=device)
 
 
 def create_prompt_tokens_tensor(
@@ -187,9 +181,7 @@ class LogitsprocsTestFakes(NamedTuple):
         Returns:
           Iterator over logits processors
         """
-        return (
-            lp for lp in self.sampling_metadata.logitsprocs.all if isinstance(lp, cls)
-        )
+        return (lp for lp in self.sampling_metadata.logitsprocs.all if isinstance(lp, cls))
 
     def get_logitsprocs(self) -> Iterator[LogitsProcessor]:
         """Iterator over all logits processors."""
@@ -249,9 +241,7 @@ def create_allowed_token_ids(
         if i % 2 == 1:
             continue
         if mask is None:
-            mask = torch.zeros(
-                (batch_size, vocab_size), dtype=torch.bool, device=device
-            )
+            mask = torch.zeros((batch_size, vocab_size), dtype=torch.bool, device=device)
         start = min(i, vocab_size - 1)
         end = min(i + num_allowed_token_ids, vocab_size - 1)
         mask[i, start:end] = True

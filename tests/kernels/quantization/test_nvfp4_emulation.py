@@ -56,9 +56,7 @@ MOE_MODEL_CONFIGS = {
 @pytest.fixture(scope="module")
 def loaded_model_files():
     return {
-        model_id: huggingface_hub.snapshot_download(
-            repo_id=model_id, allow_patterns=config["shards"]
-        )
+        model_id: huggingface_hub.snapshot_download(repo_id=model_id, allow_patterns=config["shards"])
         for model_id, config in MOE_MODEL_CONFIGS.items()
     }
 
@@ -300,9 +298,7 @@ def test_triton_dequantize_nvfp4(monkeypatch, loaded_model_files) -> None:
     # Move the E2M1 lookup table to CUDA ahead of time, as would normally
     # happen during model loading (process_weights_after_loading).  Both the
     # Triton and PyTorch reference paths run on CUDA.
-    nvfp4_emulation_utils.kE2M1ToFloat_handle.val = (
-        nvfp4_emulation_utils.kE2M1ToFloat_handle.val.cuda()
-    )
+    nvfp4_emulation_utils.kE2M1ToFloat_handle.val = nvfp4_emulation_utils.kE2M1ToFloat_handle.val.cuda()
 
     for label, tensor_fp4, tensor_sf, global_scale in test_cases:
         fp4_cuda = tensor_fp4.cuda()
@@ -355,9 +351,7 @@ def test_triton_dequantize_nvfp4(monkeypatch, loaded_model_files) -> None:
                 swizzle=False,
             )
 
-        triton_ms, triton_min, triton_max = triton.testing.do_bench(
-            _triton_bench, quantiles=quantiles
-        )
+        triton_ms, triton_min, triton_max = triton.testing.do_bench(_triton_bench, quantiles=quantiles)
 
         def _reference_bench(
             fp4_cuda=fp4_cuda,
@@ -380,20 +374,12 @@ def test_triton_dequantize_nvfp4(monkeypatch, loaded_model_files) -> None:
                     swizzle=False,
                 )
 
-        ref_ms, ref_min, ref_max = triton.testing.do_bench(
-            _reference_bench, quantiles=quantiles
-        )
+        ref_ms, ref_min, ref_max = triton.testing.do_bench(_reference_bench, quantiles=quantiles)
 
         speedup = ref_ms / triton_ms if triton_ms > 0 else float("inf")
         print(f"  dequantize {label} {shape}:")
-        print(
-            f"    triton:    median={triton_ms:.3f}ms, "
-            f"min={triton_min:.3f}ms, max={triton_max:.3f}ms"
-        )
-        print(
-            f"    reference: median={ref_ms:.3f}ms, "
-            f"min={ref_min:.3f}ms, max={ref_max:.3f}ms"
-        )
+        print(f"    triton:    median={triton_ms:.3f}ms, min={triton_min:.3f}ms, max={triton_max:.3f}ms")
+        print(f"    reference: median={ref_ms:.3f}ms, min={ref_min:.3f}ms, max={ref_max:.3f}ms")
         print(f"    speedup:   {speedup:.2f}x")
 
 
@@ -435,9 +421,7 @@ def test_triton_dequantize_nvfp4(monkeypatch, loaded_model_files) -> None:
     ],
 )
 @pytest.mark.parametrize("global_scale_value", [0.5, 1.0, 0.001])
-def test_triton_nvfp4_quant_dequant(
-    monkeypatch, m: int, k: int, global_scale_value: float
-) -> None:
+def test_triton_nvfp4_quant_dequant(monkeypatch, m: int, k: int, global_scale_value: float) -> None:
     """Test the Triton quant-dequant kernel against the CPU reference."""
     block_size = 16
     x = torch.randn(m, k, dtype=torch.bfloat16, device="cuda")
@@ -460,20 +444,12 @@ def test_triton_nvfp4_quant_dequant(
     # Benchmark (both paths on CUDA tensors for fair comparison)
     quantiles = [0.5, 0.001, 0.999]
 
-    def _triton_bench(
-        input_tensor=x, input_global_scale=global_scale, input_block_size=block_size
-    ):
-        return ref_nvfp4_quant_dequant(
-            input_tensor, input_global_scale, input_block_size
-        )
+    def _triton_bench(input_tensor=x, input_global_scale=global_scale, input_block_size=block_size):
+        return ref_nvfp4_quant_dequant(input_tensor, input_global_scale, input_block_size)
 
-    triton_ms, triton_min, triton_max = triton.testing.do_bench(
-        _triton_bench, quantiles=quantiles
-    )
+    triton_ms, triton_min, triton_max = triton.testing.do_bench(_triton_bench, quantiles=quantiles)
 
-    def _reference_bench(
-        input_tensor=x, input_global_scale=global_scale, input_block_size=block_size
-    ):
+    def _reference_bench(input_tensor=x, input_global_scale=global_scale, input_block_size=block_size):
         with monkeypatch.context() as mp2:
             mp2.setattr(
                 nvfp4_emulation_utils.current_platform,
@@ -482,20 +458,12 @@ def test_triton_nvfp4_quant_dequant(
             )
             ref_nvfp4_quant_dequant(input_tensor, input_global_scale, input_block_size)
 
-    ref_ms, ref_min, ref_max = triton.testing.do_bench(
-        _reference_bench, quantiles=quantiles
-    )
+    ref_ms, ref_min, ref_max = triton.testing.do_bench(_reference_bench, quantiles=quantiles)
 
     speedup = ref_ms / triton_ms if triton_ms > 0 else float("inf")
     print(f"  quant_dequant [{m}x{k}] gs={global_scale_value}:")
-    print(
-        f"    triton:    median={triton_ms:.3f}ms, "
-        f"min={triton_min:.3f}ms, max={triton_max:.3f}ms"
-    )
-    print(
-        f"    reference: median={ref_ms:.3f}ms, "
-        f"min={ref_min:.3f}ms, max={ref_max:.3f}ms"
-    )
+    print(f"    triton:    median={triton_ms:.3f}ms, min={triton_min:.3f}ms, max={triton_max:.3f}ms")
+    print(f"    reference: median={ref_ms:.3f}ms, min={ref_min:.3f}ms, max={ref_max:.3f}ms")
     print(f"    speedup:   {speedup:.2f}x")
 
 
@@ -534,13 +502,7 @@ def _load_nvfp4_moe_weights(
                 if key.startswith(expert_prefix):
                     all_tensors[key] = f.get_tensor(key)
 
-    expert_indices = sorted(
-        {
-            int(key.split(".")[idx_pos])
-            for key in all_tensors
-            if key.endswith(".gate_proj.weight")
-        }
-    )
+    expert_indices = sorted({int(key.split(".")[idx_pos]) for key in all_tensors if key.endswith(".gate_proj.weight")})
     if max_experts is not None:
         expert_indices = expert_indices[:max_experts]
     num_experts = len(expert_indices)
@@ -566,12 +528,8 @@ def _load_nvfp4_moe_weights(
 
     # Stack into MoE format.
     # w1 = [E, 2*intermediate, hidden//2]  (gate + up concatenated)
-    w1 = torch.stack(
-        [torch.cat([g, u], dim=0) for g, u in zip(gate_weights, up_weights)]
-    ).cuda()
-    w1_scale = torch.stack(
-        [torch.cat([g, u], dim=0) for g, u in zip(gate_scales, up_scales)]
-    ).cuda()
+    w1 = torch.stack([torch.cat([g, u], dim=0) for g, u in zip(gate_weights, up_weights)]).cuda()
+    w1_scale = torch.stack([torch.cat([g, u], dim=0) for g, u in zip(gate_scales, up_scales)]).cuda()
     w1_gscale = torch.stack(gate_gscales).cuda()
 
     # w2 = [E, hidden, intermediate//2]
@@ -583,9 +541,7 @@ def _load_nvfp4_moe_weights(
     a2_scale_raw = torch.stack(a2_scales).cuda()
 
     # Apply EMULATION transforms (matches oracle/nvfp4.py).
-    nvfp4_emulation_utils.kE2M1ToFloat_handle.val = (
-        nvfp4_emulation_utils.kE2M1ToFloat_handle.val.cuda()
-    )
+    nvfp4_emulation_utils.kE2M1ToFloat_handle.val = nvfp4_emulation_utils.kE2M1ToFloat_handle.val.cuda()
     a1_gscale = 1.0 / a13_scale_raw.max().to(torch.float32)
     a2_gscale = 1.0 / a2_scale_raw.max().to(torch.float32)
 
@@ -701,16 +657,12 @@ def test_nvfp4_moe_correctness(
     )
 
     torch.manual_seed(42)
-    hidden_states = torch.randn(
-        num_tokens, hidden_dim, dtype=torch.bfloat16, device="cuda"
-    )
+    hidden_states = torch.randn(num_tokens, hidden_dim, dtype=torch.bfloat16, device="cuda")
 
-    topk_weights = torch.randn(
-        num_tokens, top_k, dtype=torch.float32, device="cuda"
-    ).softmax(dim=-1)
-    topk_ids = torch.stack(
-        [torch.randperm(num_experts, device="cuda")[:top_k] for _ in range(num_tokens)]
-    ).to(torch.int32)
+    topk_weights = torch.randn(num_tokens, top_k, dtype=torch.float32, device="cuda").softmax(dim=-1)
+    topk_ids = torch.stack([torch.randperm(num_experts, device="cuda")[:top_k] for _ in range(num_tokens)]).to(
+        torch.int32
+    )
 
     N = w1.size(1)  # 2 * intermediate
     K = hidden_dim

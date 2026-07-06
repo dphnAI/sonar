@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from tests.v1.kv_connector.unit.utils import create_aphrodite_config
 from aphrodite.config import KVEventsConfig, KVTransferConfig
 from aphrodite.distributed.kv_events import BlockRemoved, BlockStored
 from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.events import (
@@ -30,6 +29,7 @@ from aphrodite.v1.kv_offload.base import (
 )
 from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec
 from aphrodite.v1.kv_offload.tiering.spec import TieringOffloadingSpec
+from tests.v1.kv_connector.unit.utils import create_aphrodite_config
 
 _CPU_MEDIUM = CPULoadStoreSpec.medium()
 _FULL_ATTENTION_EVENT_SPEC = OffloadingEventGroupSpec(
@@ -127,9 +127,7 @@ def test_take_events_publishes_routable_block_stored():
         assert event.medium == _CPU_MEDIUM
         assert event.block_hashes == [_wire_hash(_hash(i))]
         assert event.block_size == block_size
-        assert event.token_ids == list(
-            range(i * block_size + 1, (i + 1) * block_size + 1)
-        )
+        assert event.token_ids == list(range(i * block_size + 1, (i + 1) * block_size + 1))
         if i == 0:
             assert event.parent_block_hash is None
         else:
@@ -152,9 +150,7 @@ def test_take_events_factor_gt_1_chunk_store_and_remove():
     block_size = 4
     block_size_factor = 3
     tracker = _tracker()
-    group_config = _group_config(
-        block_size=block_size, block_size_factor=block_size_factor
-    )
+    group_config = _group_config(block_size=block_size, block_size_factor=block_size_factor)
     req = _request(
         block_hashes=[_hash(i) for i in range(6)],
         token_count=block_size * block_size_factor * 2,

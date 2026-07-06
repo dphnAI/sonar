@@ -60,13 +60,9 @@ class LongCatMultiTokenPredictorLayer(nn.Module):
         inputs_embeds = self.enorm(inputs_embeds)
         previous_hidden_states = self.hnorm(previous_hidden_states)
 
-        hidden_states, _ = self.eh_proj(
-            torch.cat([inputs_embeds, previous_hidden_states], dim=-1)
-        )
+        hidden_states, _ = self.eh_proj(torch.cat([inputs_embeds, previous_hidden_states], dim=-1))
 
-        hidden_states, residual = self.mtp_block(
-            positions=positions, hidden_states=hidden_states, residual=None
-        )
+        hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
         hidden_states, _ = self.final_layernorm(hidden_states, residual)
         return hidden_states
 
@@ -130,9 +126,7 @@ class LongCatFlashMTP(nn.Module):
         aphrodite_config.model_config.hf_config.n_routed_experts = None
         self.config = FlashConfig(**aphrodite_config.model_config.hf_config.__dict__)
         self.quant_config = (
-            None
-            if "mtp" in getattr(self.config, "disable_quant_module", [])
-            else aphrodite_config.quant_config
+            None if "mtp" in getattr(self.config, "disable_quant_module", []) else aphrodite_config.quant_config
         )
 
         self.model = LongCatMultiTokenPredictor(
@@ -157,9 +151,7 @@ class LongCatFlashMTP(nn.Module):
         inputs_embeds: torch.Tensor | None = None,
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
-        hidden_states = self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        hidden_states = self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
         return hidden_states
 
     def compute_logits(
@@ -215,9 +207,7 @@ class LongCatFlashMTP(nn.Module):
             spec_layer = self.get_spec_layer_idx_from_weight_name(self.config, name)
             if spec_layer is None:
                 continue
-            name = self._rewrite_spec_layer_name(
-                spec_layer, name, new_to_old_names_mapping
-            )
+            name = self._rewrite_spec_layer_name(spec_layer, name, new_to_old_names_mapping)
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 # Skip non-stacked layers and experts (experts handled below).
                 if weight_name not in name:
@@ -252,10 +242,7 @@ class LongCatFlashMTP(nn.Module):
 
                 # According to DeepSeek-V3 Technical Report, MTP modules
                 # shares embedding layer. We only load the first weights.
-                if (
-                    spec_layer != self.model.mtp_start_layer_idx
-                    and ".layers" not in name
-                ):
+                if spec_layer != self.model.mtp_start_layer_idx and ".layers" not in name:
                     continue
 
                 param = params_dict[name]
@@ -264,9 +251,7 @@ class LongCatFlashMTP(nn.Module):
             loaded_params.add(name)
         spec_layer_id = self.config.num_hidden_layers * 2
         self_attn = self.model.layers[str(spec_layer_id)].mtp_block.self_attn
-        if hasattr(
-            self.quant_config, "weight_block_size"
-        ) and self_attn.kv_b_proj.weight.dtype in (
+        if hasattr(self.quant_config, "weight_block_size") and self_attn.kv_b_proj.weight.dtype in (
             torch.float8_e4m3fn,
             torch.float8_e4m3fnuz,
         ):
@@ -282,24 +267,18 @@ class LongCatFlashMTP(nn.Module):
                 w = self_attn.kv_b_proj.weight
         else:
             w = self_attn.kv_b_proj.weight
-        w_kc, w_vc = w.unflatten(
-            0, (-1, self_attn.qk_nope_head_dim + self_attn.v_head_dim)
-        ).split([self_attn.qk_nope_head_dim, self_attn.v_head_dim], dim=1)
+        w_kc, w_vc = w.unflatten(0, (-1, self_attn.qk_nope_head_dim + self_attn.v_head_dim)).split(
+            [self_attn.qk_nope_head_dim, self_attn.v_head_dim], dim=1
+        )
         self_attn.w_kc = w_kc.transpose(1, 2).contiguous().transpose(1, 2)
         self_attn.w_vc = w_vc.contiguous().transpose(1, 2)
         if self.config.mla_scale_q_lora:
-            self_attn.q_a_layernorm.weight.data *= (
-                self.config.hidden_size / self.config.q_lora_rank
-            ) ** 0.5
+            self_attn.q_a_layernorm.weight.data *= (self.config.hidden_size / self.config.q_lora_rank) ** 0.5
         if self.config.mla_scale_kv_lora:
-            self_attn.kv_a_layernorm.weight.data *= (
-                self.config.hidden_size / self.config.kv_lora_rank
-            ) ** 0.5
+            self_attn.kv_a_layernorm.weight.data *= (self.config.hidden_size / self.config.kv_lora_rank) ** 0.5
         return loaded_params
 
-    def _rewrite_spec_layer_name(
-        self, spec_layer: int, name: str, new_to_old_names_mapping: dict
-    ) -> str:
+    def _rewrite_spec_layer_name(self, spec_layer: int, name: str, new_to_old_names_mapping: dict) -> str:
         """
         Rewrite the weight name to match the format of the original model.
         Add .mtp_block for modules in transformer layer block for spec layer
@@ -332,17 +311,13 @@ class LongCatFlashMTP(nn.Module):
                 break
         if not spec_layer_weight:
             # treat rest weights as weights for transformer layer block
-            name = name.replace(
-                "model.layers.0.", f"model.layers.{spec_layer}.mtp_block."
-            )
+            name = name.replace("model.layers.0.", f"model.layers.{spec_layer}.mtp_block.")
         elif shared_weight:
             # treat shared weights as top level weights
             name = name.replace("model.layers.0.", "model.")
         return name
 
-    def get_spec_layer_idx_from_weight_name(
-        self, config: PretrainedConfig, weight_name: str
-    ) -> int | None:
+    def get_spec_layer_idx_from_weight_name(self, config: PretrainedConfig, weight_name: str) -> int | None:
         if "model.mtp" in weight_name:
             return config.num_hidden_layers * 2
         return None

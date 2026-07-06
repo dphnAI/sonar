@@ -34,7 +34,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -164,9 +164,7 @@ class MiniCPMMoE(nn.Module):
         if weight_name.endswith("w1.weight"):
             param_data[expert_id, 0:shard_size, :] = loaded_weight[shard, :]
         if weight_name.endswith("w3.weight"):
-            param_data[expert_id, shard_size : 2 * shard_size, :] = loaded_weight[
-                shard, :
-            ]
+            param_data[expert_id, shard_size : 2 * shard_size, :] = loaded_weight[shard, :]
         if weight_name.endswith("w2.weight"):
             param_data[expert_id, :, :] = loaded_weight[:, shard]
 
@@ -176,13 +174,9 @@ class MiniCPMMoE(nn.Module):
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
 
-        topk_weights, topk_ids, _ = fused_topk(
-            hidden_states, router_logits, self.top_k, renormalize=True
-        )
+        topk_weights, topk_ids, _ = fused_topk(hidden_states, router_logits, self.top_k, renormalize=True)
 
-        final_hidden_states = fused_experts(
-            hidden_states, self.ws, self.w2s, topk_weights, topk_ids
-        )
+        final_hidden_states = fused_experts(hidden_states, self.ws, self.w2s, topk_weights, topk_ids)
 
         if self.tp_size > 1:
             final_hidden_states = tensor_model_parallel_all_reduce(final_hidden_states)
@@ -220,10 +214,7 @@ class MiniCPMMLP(nn.Module):
         elif hidden_act == "fatrelu":
             self.act_fn = FatreluAndMul(threshold=hidden_act_param)
         else:
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. "
-                "Only silu and fatrelu are supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu and fatrelu are supported for now.")
 
     def forward(self, x):
         gate_up, _ = self.gate_up_proj(x)
@@ -331,9 +322,7 @@ class MiniCPMDecoderLayer(nn.Module):
         self._init_ffn_block()
 
     def _init_attn_block(self):
-        self.input_layernorm = RMSNorm(
-            self.config.hidden_size, eps=self.config.rms_norm_eps
-        )
+        self.input_layernorm = RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.self_attn = MiniCPMAttention(
             hidden_size=self.hidden_size,
             num_heads=self.config.num_attention_heads,
@@ -346,9 +335,7 @@ class MiniCPMDecoderLayer(nn.Module):
         )
 
     def _init_ffn_block(self):
-        self.post_attention_layernorm = RMSNorm(
-            self.config.hidden_size, eps=self.config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
         self.num_experts = getattr(self.config, "num_experts", 0)
         if self.num_experts == 0:
             self.mlp = MiniCPMMLP(
@@ -381,17 +368,13 @@ class MiniCPMDecoderLayer(nn.Module):
             positions=positions,
             hidden_states=hidden_states,
         )
-        hidden_states = residual + hidden_states * (
-            self.config.scale_depth / math.sqrt(self.config.num_hidden_layers)
-        )
+        hidden_states = residual + hidden_states * (self.config.scale_depth / math.sqrt(self.config.num_hidden_layers))
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states * (
-            self.config.scale_depth / math.sqrt(self.config.num_hidden_layers)
-        )
+        hidden_states = residual + hidden_states * (self.config.scale_depth / math.sqrt(self.config.num_hidden_layers))
 
         return hidden_states, None
 
@@ -432,9 +415,7 @@ class MiniCPMModel(nn.Module, EagleModelMixin):
     ):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda prefix: MiniCPMDecoderLayer(
-                config, cache_config, quant_config, prefix=prefix
-            ),
+            lambda prefix: MiniCPMDecoderLayer(config, cache_config, quant_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
 
@@ -460,22 +441,16 @@ class MiniCPMModel(nn.Module, EagleModelMixin):
             residual = intermediate_tensors["residual"]
 
         aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
-        for idx, layer in enumerate(
-            islice(self.layers, self.start_layer, self.end_layer)
-        ):
+        for idx, layer in enumerate(islice(self.layers, self.start_layer, self.end_layer)):
             hidden_states, residual = layer(
                 positions,
                 hidden_states,
                 residual,
             )
-            self._maybe_add_hidden_state(
-                aux_hidden_states, idx + 1, hidden_states, residual
-            )
+            self._maybe_add_hidden_state(aux_hidden_states, idx + 1, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states = self.norm(hidden_states)
 
@@ -534,9 +509,7 @@ class MiniCPMModel(nn.Module, EagleModelMixin):
                         continue
                     param = params_dict[name]
                     weight_loader = param.weight_loader
-                    weight_loader(
-                        param, loaded_weight, weight_name, expert_id=expert_id
-                    )
+                    weight_loader(param, loaded_weight, weight_name, expert_id=expert_id)
                     break
                 else:
                     # Skip loading extra bias for GPTQ models.
@@ -545,17 +518,13 @@ class MiniCPMModel(nn.Module, EagleModelMixin):
                     if is_pp_missing_parameter(name, self):
                         continue
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
 
 
-class MiniCPMForCausalLM(
-    nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3
-):
+class MiniCPMForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -589,9 +558,7 @@ class MiniCPMForCausalLM(
         self.cache_config = cache_config
         self.quant_config = quant_config
 
-        self.model = self._init_model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = self._init_model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -604,9 +571,7 @@ class MiniCPMForCausalLM(
         self.scale_width = self.config.hidden_size / self.config.dim_model_base
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
         if parallel_config.enable_eplb and getattr(config, "num_experts", 0) > 0:
             raise NotImplementedError("EPLB is not supported for MiniCPM yet.")
 
@@ -623,9 +588,7 @@ class MiniCPMForCausalLM(
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors | tuple[torch.Tensor, list[torch.Tensor]]:
-        model_output = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        model_output = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
 
         if isinstance(model_output, tuple) and len(model_output) == 2:
             # Aux hidden states are present.

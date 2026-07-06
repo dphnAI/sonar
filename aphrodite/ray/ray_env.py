@@ -11,9 +11,7 @@ logger = init_logger(__name__)
 CONFIG_HOME = envs.APHRODITE_CONFIG_ROOT
 
 # Env vars that should NOT be copied from the driver to Ray workers.
-RAY_NON_CARRY_OVER_ENV_VARS_FILE = os.path.join(
-    CONFIG_HOME, "ray_non_carry_over_env_vars.json"
-)
+RAY_NON_CARRY_OVER_ENV_VARS_FILE = os.path.join(CONFIG_HOME, "ray_non_carry_over_env_vars.json")
 
 try:
     if os.path.exists(RAY_NON_CARRY_OVER_ENV_VARS_FILE):
@@ -79,9 +77,7 @@ def get_env_vars_to_copy(
     exclude = (exclude_vars or set()) | RAY_NON_CARRY_OVER_ENV_VARS
 
     # -- prefixes (built-in + user-supplied, additive) ----------------------
-    prefixes = DEFAULT_ENV_VAR_PREFIXES | _parse_csv(
-        envs.APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY
-    )
+    prefixes = DEFAULT_ENV_VAR_PREFIXES | _parse_csv(envs.APHRODITE_RAY_EXTRA_ENV_VAR_PREFIXES_TO_COPY)
 
     # -- collect env var names ----------------------------------------------
     # 1. Aphrodite's registered env vars

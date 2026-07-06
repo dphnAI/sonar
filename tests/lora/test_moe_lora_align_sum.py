@@ -38,14 +38,10 @@ def sample_data(num_experts, max_loras, num_tokens, topk_num):
 @pytest.mark.parametrize("num_experts", [64, 128, 256, 512])
 @pytest.mark.parametrize("max_loras", [2, 32])
 @pytest.mark.parametrize("block_size", [16])
-def test_moe_lora_align_block_size(
-    num_tokens, topk_num, num_experts, max_loras, block_size
-):
+def test_moe_lora_align_block_size(num_tokens, topk_num, num_experts, max_loras, block_size):
     # sample data
     random.seed(1)
-    topk_ids, token_lora_mapping = sample_data(
-        num_experts, max_loras, num_tokens, topk_num
-    )
+    topk_ids, token_lora_mapping = sample_data(num_experts, max_loras, num_tokens, topk_num)
 
     # compute paddings
     max_num_tokens_padded = topk_ids.numel() + num_experts * (block_size - 1)
@@ -67,12 +63,8 @@ def test_moe_lora_align_block_size(
         dtype=torch.int32,
         device=DEVICE_TYPE,
     )
-    num_tokens_post_pad = torch.zeros(
-        (max_loras,), dtype=torch.int32, device=DEVICE_TYPE
-    )
-    adapter_enabled = torch.ones(
-        (max_loras + 1,), dtype=torch.int32, device=DEVICE_TYPE
-    )
+    num_tokens_post_pad = torch.zeros((max_loras,), dtype=torch.int32, device=DEVICE_TYPE)
+    adapter_enabled = torch.ones((max_loras + 1,), dtype=torch.int32, device=DEVICE_TYPE)
     lora_ids = torch.arange(max_loras + 2, dtype=torch.int32, device=DEVICE_TYPE)
 
     # call kernel
@@ -162,18 +154,14 @@ def _build_and_run_align(
     max_num_m_blocks = CEILDIV(max_num_tokens_padded, block_size)
 
     if lora_ids_override is None:
-        lora_ids = torch.full(
-            (max_loras + 1,), -1, dtype=torch.int32, device=DEVICE_TYPE
-        )
+        lora_ids = torch.full((max_loras + 1,), -1, dtype=torch.int32, device=DEVICE_TYPE)
         unique_ids = torch.unique(token_lora_mapping, sorted=True)
         lora_ids[: unique_ids.numel()] = unique_ids.to(torch.int32)
     else:
         assert lora_ids_override.numel() == max_loras + 1
         lora_ids = lora_ids_override.to(dtype=torch.int32, device=DEVICE_TYPE)
 
-    adapter_enabled = torch.ones(
-        (max_loras + 1,), dtype=torch.int32, device=DEVICE_TYPE
-    )
+    adapter_enabled = torch.ones((max_loras + 1,), dtype=torch.int32, device=DEVICE_TYPE)
     for slot in disabled_slots:
         adapter_enabled[slot] = 0
 
@@ -189,9 +177,7 @@ def _build_and_run_align(
         dtype=torch.int32,
         device=DEVICE_TYPE,
     )
-    num_tokens_post_pad = torch.full(
-        (max_loras,), SENTINEL_NPAD, dtype=torch.int32, device=DEVICE_TYPE
-    )
+    num_tokens_post_pad = torch.full((max_loras,), SENTINEL_NPAD, dtype=torch.int32, device=DEVICE_TYPE)
 
     ops.moe_lora_align_block_size(
         topk_ids,
@@ -229,14 +215,10 @@ def _build_and_run_align(
 def test_moe_lora_align_block_size_mixed_base_and_lora(max_loras):
     """Regression test for issue #32235: real LoRA slot must not be skipped
     when ``active_lora_ids`` has -1 at position 0."""
-    out = _build_and_run_align(
-        num_lora_tokens=8, num_base_tokens=8, max_loras=max_loras
-    )
+    out = _build_and_run_align(num_lora_tokens=8, num_base_tokens=8, max_loras=max_loras)
 
     # Sanity check on the layout being tested.
-    assert out["lora_ids"][0].item() == -1, (
-        "prepare_tensors layout mismatch: -1 expected at position 0 for mixed batch"
-    )
+    assert out["lora_ids"][0].item() == -1, "prepare_tensors layout mismatch: -1 expected at position 0 for mixed batch"
 
     real_slot = 0
     post_pad = out["num_tokens_post_pad"][real_slot].item()
@@ -244,10 +226,9 @@ def test_moe_lora_align_block_size_mixed_base_and_lora(max_loras):
         f"num_tokens_post_pad[{real_slot}] was never written by the kernel; "
         "the align kernel skipped the real LoRA slot."
     )
-    assert (
-        0 < post_pad <= out["max_num_tokens_padded"]
-        and post_pad % out["block_size"] == 0
-    ), f"num_tokens_post_pad[{real_slot}]={post_pad} is not a valid block-aligned count"
+    assert 0 < post_pad <= out["max_num_tokens_padded"] and post_pad % out["block_size"] == 0, (
+        f"num_tokens_post_pad[{real_slot}]={post_pad} is not a valid block-aligned count"
+    )
 
     expert_row = out["expert_ids"].view(max_loras, -1)[real_slot]
     assert (expert_row != SENTINEL_EXPERT).all(), (
@@ -283,9 +264,7 @@ def test_moe_lora_align_block_size_disabled_adapter_untouched():
         "num_tokens_post_pad[0] was modified for a disabled adapter slot."
     )
     expert_row = out["expert_ids"].view(max_loras, -1)[0]
-    assert (expert_row == SENTINEL_EXPERT).all(), (
-        "expert_ids row for disabled slot 0 was partially written."
-    )
+    assert (expert_row == SENTINEL_EXPERT).all(), "expert_ids row for disabled slot 0 was partially written."
     # Row specifically protected by the sort-kernel adapter_enabled guard.
     sorted_row = out["sorted_token_ids"].view(max_loras, -1)[0]
     assert (sorted_row == SENTINEL_TOKEN).all(), (
@@ -316,9 +295,7 @@ def test_moe_lora_align_block_size_lora_id_oob_guard():
     )
     # The .item() call below syncs and would surface any async
     # illegal-memory-access from the OOB iteration.
-    assert out["num_tokens_post_pad"][0].item() != SENTINEL_NPAD, (
-        "real LoRA slot 0 was skipped by the align kernel"
-    )
+    assert out["num_tokens_post_pad"][0].item() != SENTINEL_NPAD, "real LoRA slot 0 was skipped by the align kernel"
 
 
 if __name__ == "__main__":

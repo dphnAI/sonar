@@ -144,9 +144,7 @@ class TestHf3fsClientResourceManagement:
             client.close()  # third close — must be no-op
 
         assert client._closed is True
-        assert mock_dereg.call_count == 1, (
-            f"deregister_fd called {mock_dereg.call_count} times; expected 1"
-        )
+        assert mock_dereg.call_count == 1, f"deregister_fd called {mock_dereg.call_count} times; expected 1"
         for attr in ("iov_r", "iov_w", "ior_r", "ior_w", "shm_r", "shm_w", "file"):
             assert getattr(client, attr) is None, f"{attr} should be None after close()"
         assert shm_r.closed is True
@@ -229,12 +227,8 @@ class TestHf3fsClientResourceManagement:
                 entries=4,
             )
 
-        assert fake_shm_r.closed is True, (
-            "shm_r was not closed after constructor failure"
-        )
-        assert fake_shm_w.closed is True, (
-            "shm_w was not closed after constructor failure"
-        )
+        assert fake_shm_r.closed is True, "shm_r was not closed after constructor failure"
+        assert fake_shm_w.closed is True, "shm_w was not closed after constructor failure"
 
     def test_constructor_failure_does_not_close_unallocated_shm(self, tmp_path):
         """Failure before SharedMemory is created must not raise AttributeError

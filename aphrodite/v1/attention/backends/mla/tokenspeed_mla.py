@@ -37,14 +37,10 @@ _TOKENSPEED_MAX_Q_LEN = 8
 _g_workspace: dict[torch.device, torch.Tensor] = {}
 
 
-def _get_workspace(
-    device: torch.device, num_heads: int, kv_lora_rank: int
-) -> torch.Tensor:
+def _get_workspace(device: torch.device, num_heads: int, kv_lora_rank: int) -> torch.Tensor:
     from tokenspeed_mla import get_num_sm
 
-    needed = (
-        get_num_sm(device) * num_heads * _TOKENSPEED_MAX_Q_LEN * (kv_lora_rank + 1) * 4
-    )
+    needed = get_num_sm(device) * num_heads * _TOKENSPEED_MAX_Q_LEN * (kv_lora_rank + 1) * 4
     existing = _g_workspace.get(device)
     if existing is None or existing.numel() < needed:
         _g_workspace[device] = torch.empty(needed, dtype=torch.int8, device=device)
@@ -101,10 +97,7 @@ class TokenspeedMLABackend(MLACommonBackend):
         try:
             import tokenspeed_mla  # noqa: F401
         except ImportError:
-            return (
-                "tokenspeed_mla package is not installed. "
-                "Install it with: `uv pip install tokenspeed-mla`"
-            )
+            return "tokenspeed_mla package is not installed. Install it with: `uv pip install tokenspeed-mla`"
 
         # tokenspeed_mla CuTe DSL kernel is shape-specialized for DeepSeek R1
         # MLA dimensions (qk_nope=128, qk_rope=64, v=128). Reject anything else.
@@ -162,16 +155,12 @@ class TokenspeedMLAImpl(MLACommonImpl[MLACommonMetadata]):
         unsupported_features = [alibi_slopes, sliding_window, logits_soft_cap]
         if any(unsupported_features):
             raise NotImplementedError(
-                "TokenspeedMLAImpl does not support one of the following: "
-                "alibi_slopes, sliding_window, logits_soft_cap"
+                "TokenspeedMLAImpl does not support one of the following: alibi_slopes, sliding_window, logits_soft_cap"
             )
 
         if attn_type != AttentionType.DECODER:
             raise NotImplementedError(
-                "Encoder self-attention and "
-                "encoder/decoder cross-attention "
-                "are not implemented for "
-                "TokenspeedMLAImpl"
+                "Encoder self-attention and encoder/decoder cross-attention are not implemented for TokenspeedMLAImpl"
             )
 
         if not is_quantized_kv_cache(self.kv_cache_dtype):
@@ -245,15 +234,11 @@ class TokenspeedMLAImpl(MLACommonImpl[MLACommonMetadata]):
             # always apply. softmax_scale is bmm1; output_scale is bmm2 — both
             # required to recover the correct attention output from the FP8
             # KV cache (V is stored as V_real/k_scale).
-            self.softmax_scale = (
-                self.scale * layer._q_scale_float * layer._k_scale_float
-            )
+            self.softmax_scale = self.scale * layer._q_scale_float * layer._k_scale_float
             self.output_scale = layer._k_scale_float
 
         if self._workspace_buffer is None:
-            self._workspace_buffer = _get_workspace(
-                q.device, self.num_heads, self.kv_lora_rank
-            )
+            self._workspace_buffer = _get_workspace(q.device, self.num_heads, self.kv_lora_rank)
 
         # Aphrodite kv_c_and_k_pe_cache is already (num_blocks, block_size, head_size).
         # tokenspeed_mla_decode wants 3D — pass as-is (no unsqueeze, unlike trtllm).

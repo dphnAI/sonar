@@ -10,19 +10,13 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import get_f
 from aphrodite.platforms import current_platform
 
 
-@pytest.mark.parametrize(
-    "shape", [(31, 128), (32, 128), (63, 256), (64, 256), (16, 512)]
-)
+@pytest.mark.parametrize("shape", [(31, 128), (32, 128), (63, 256), (64, 256), (16, 512)])
 @pytest.mark.parametrize("column_major", [False, True])
 @pytest.mark.parametrize("tma_aligned", [False, True])
 @pytest.mark.parametrize("scale_ue8m0", [False, True])
 @pytest.mark.parametrize("group_size", [64, 128])
-@pytest.mark.skipif(
-    not current_platform.is_cuda_alike(), reason="Only test on CUDA/ROCm."
-)
-def test_per_token_group_quant_fp8(
-    shape, column_major: bool, tma_aligned: bool, scale_ue8m0: bool, group_size: int
-):
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Only test on CUDA/ROCm.")
+def test_per_token_group_quant_fp8(shape, column_major: bool, tma_aligned: bool, scale_ue8m0: bool, group_size: int):
     device = "cuda"
 
     torch.manual_seed(42)
@@ -83,9 +77,7 @@ def test_per_token_group_quant_fp8(
     not current_platform.is_cuda_alike(),
     reason="DeepGEMM not available on this platform",
 )
-def test_per_token_group_quant_fp8_packed(
-    num_tokens, hidden_dim, group_size, poisoned_scales
-):
+def test_per_token_group_quant_fp8_packed(num_tokens, hidden_dim, group_size, poisoned_scales):
     """Test the packed DeepGEMM quantization kernel against the Triton
     reference (row-major, UE8M0 scales)."""
 
@@ -295,9 +287,7 @@ def test_per_token_group_quant_fp8_packed_mantissa_rounds_up():
     not current_platform.is_cuda_alike(),
     reason="DeepGEMM not available on this platform",
 )
-def test_per_token_group_quant_fp8_packed_zero_fills_padded_output_q(
-    num_tokens, hidden_dim
-):
+def test_per_token_group_quant_fp8_packed_zero_fills_padded_output_q(num_tokens, hidden_dim):
     """When output_q is allocated with shape (tma_aligned_mn, k) instead of
     (mn, k), the kernel must overwrite the padded mn rows with zeros so
     callers can use ``torch.empty`` instead of ``torch.zeros``."""
@@ -326,9 +316,7 @@ def test_per_token_group_quant_fp8_packed_zero_fills_padded_output_q(
         dtype=torch.int32,
     )
 
-    torch.ops._C.per_token_group_fp8_quant_packed(
-        x, out_q, out_s_packed, group_size, 1e-10, fp8_min, fp8_max
-    )
+    torch.ops._C.per_token_group_fp8_quant_packed(x, out_q, out_s_packed, group_size, 1e-10, fp8_min, fp8_max)
 
     # Live rows must match the Triton reference.
     with patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False):
@@ -340,8 +328,7 @@ def test_per_token_group_quant_fp8_packed_zero_fills_padded_output_q(
     if tma_aligned_mn > mn:
         padded_bytes = out_q[mn:tma_aligned_mn].view(torch.uint8)
         assert padded_bytes.eq(0).all(), (
-            f"Padded rows [{mn}, {tma_aligned_mn}) not zeroed; "
-            f"{padded_bytes.ne(0).sum().item()} non-zero bytes"
+            f"Padded rows [{mn}, {tma_aligned_mn}) not zeroed; {padded_bytes.ne(0).sum().item()} non-zero bytes"
         )
 
 
@@ -381,9 +368,7 @@ def test_per_token_group_quant_fp8_packed_large_mn():
     )
 
     with patch("aphrodite.platforms.current_platform.is_cuda_alike", return_value=False):
-        ref_q, ref_s = fp8_utils.per_token_group_quant_fp8(
-            x, group_size, use_ue8m0=True
-        )
+        ref_q, ref_s = fp8_utils.per_token_group_quant_fp8(x, group_size, use_ue8m0=True)
 
     assert torch.equal(out_q, ref_q), "Quantized output mismatch"
 
@@ -396,9 +381,7 @@ def test_per_token_group_quant_fp8_packed_large_mn():
     assert groups_per_row % 4 == 0
     ref_exponents = (ref_s.reshape(mn, groups_per_row).view(torch.int32) >> 23) & 0xFF
     exp = ref_exponents.view(mn, k_num_packed, 4)
-    expected = (
-        exp[..., 0] | (exp[..., 1] << 8) | (exp[..., 2] << 16) | (exp[..., 3] << 24)
-    )
+    expected = exp[..., 0] | (exp[..., 1] << 8) | (exp[..., 2] << 16) | (exp[..., 3] << 24)
     assert torch.equal(out_s_packed.cpu(), expected.cpu()), "Packed scale mismatch"
 
 

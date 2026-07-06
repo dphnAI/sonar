@@ -114,9 +114,7 @@ direct_register_custom_op(
 
 
 class TransformersRoutedExperts(RoutedExperts):
-    def get_expert_mapping(
-        self, include_fused: bool = False
-    ) -> list[tuple[str, str, int, str]]:
+    def get_expert_mapping(self, include_fused: bool = False) -> list[tuple[str, str, int, str]]:
         common_names = ("gate_proj", "down_proj", "up_proj")
         common_map = super().get_expert_mapping(*common_names, include_fused)
         mixtral_map = super().get_expert_mapping("w1", "w2", "w3", include_fused)
@@ -157,9 +155,7 @@ class MoEMixin(MixtureOfExperts):
         top_k = getattr_iter(text_config, ["num_experts_per_tok", "top_k"], None)
         assert top_k is not None
         hidden_size = text_config.hidden_size
-        intermediate_size = getattr_iter(
-            text_config, ["moe_intermediate_size", "intermediate_size"], None
-        )
+        intermediate_size = getattr_iter(text_config, ["moe_intermediate_size", "intermediate_size"], None)
         assert intermediate_size is not None
 
         num_shared_experts = getattr_iter(

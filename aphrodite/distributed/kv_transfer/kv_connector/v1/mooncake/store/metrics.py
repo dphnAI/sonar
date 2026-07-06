@@ -25,9 +25,7 @@ def _nearest_rank_percentile(values: list[float], percentile: float) -> float:
     if not values:
         return 0.0
     sorted_values = sorted(values)
-    rank = max(
-        0, min(len(sorted_values) - 1, int(percentile * len(sorted_values) - 1e-12))
-    )
+    rank = max(0, min(len(sorted_values) - 1, int(percentile * len(sorted_values) - 1e-12)))
     return sorted_values[rank]
 
 
@@ -60,21 +58,11 @@ class MooncakeStoreConnectorStats(KVConnectorStats):
             durations = [float(record["duration_seconds"]) for record in records]
             reduced[f"{operation}_count"] = len(records)
             reduced[f"{operation}_avg_ms"] = round(fmean(durations) * 1e3, 3)
-            reduced[f"{operation}_p90_ms"] = round(
-                _nearest_rank_percentile(durations, 0.9) * 1e3, 3
-            )
-            reduced[f"{operation}_total_keys"] = sum(
-                int(record["num_keys"]) for record in records
-            )
-            reduced[f"{operation}_total_bytes"] = sum(
-                int(record["num_bytes"]) for record in records
-            )
-            reduced[f"{operation}_failed_keys"] = sum(
-                int(record["num_failed_keys"]) for record in records
-            )
-            reduced[f"{operation}_error_count"] = sum(
-                1 for record in records if record["status"] == "error"
-            )
+            reduced[f"{operation}_p90_ms"] = round(_nearest_rank_percentile(durations, 0.9) * 1e3, 3)
+            reduced[f"{operation}_total_keys"] = sum(int(record["num_keys"]) for record in records)
+            reduced[f"{operation}_total_bytes"] = sum(int(record["num_bytes"]) for record in records)
+            reduced[f"{operation}_failed_keys"] = sum(int(record["num_failed_keys"]) for record in records)
+            reduced[f"{operation}_error_count"] = sum(1 for record in records if record["status"] == "error")
         return reduced
 
     def record_operation(

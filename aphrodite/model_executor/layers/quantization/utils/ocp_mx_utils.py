@@ -60,9 +60,7 @@ class OCP_MX_Scheme(str, Enum):
             return cls.w_mxfp6_e2m3_a_fp8
         else:
             logger.warning(
-                "input_dtype='%s' and"
-                " weight_dtype='%s' is not supported "
-                "in OCP_MX_Scheme at the moment.",
+                "input_dtype='%s' and weight_dtype='%s' is not supported in OCP_MX_Scheme at the moment.",
                 input_dtype,
                 weight_dtype,
             )

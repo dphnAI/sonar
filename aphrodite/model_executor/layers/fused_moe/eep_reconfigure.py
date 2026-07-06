@@ -50,9 +50,7 @@ def _make_eep_experts(
     unsupported_args = ctor_arg_names - generic_arg_names
     missing_args = set(experts_kwargs) - ctor_arg_names
     if unsupported_args or missing_args:
-        raise NotImplementedError(
-            f"{experts_cls.__name__} experts do not support Elastic EP."
-        )
+        raise NotImplementedError(f"{experts_cls.__name__} experts do not support Elastic EP.")
 
     return experts_cls(**experts_kwargs)
 
@@ -67,9 +65,7 @@ def make_eep_staged_quant_method(
     if getattr(quant_method, "wraps_legacy_quant_method", False):
         return None
 
-    old_batched_format = (
-        module.moe_config.moe_parallel_config.use_batched_activation_format
-    )
+    old_batched_format = module.moe_config.moe_parallel_config.use_batched_activation_format
     new_batched_format = moe_config.moe_parallel_config.use_batched_activation_format
     assert old_batched_format == new_batched_format
 
@@ -78,14 +74,10 @@ def make_eep_staged_quant_method(
         return None
     if moe_kernel.is_monolithic:
         raise NotImplementedError(
-            "Elastic EP full modular-kernel staging is not supported for "
-            "monolithic fused MoE kernels."
+            "Elastic EP full modular-kernel staging is not supported for monolithic fused MoE kernels."
         )
     if quant_method.moe_quant_config is None:
-        raise ValueError(
-            "Elastic EP full modular-kernel staging requires initialized "
-            "MoE quant config."
-        )
+        raise ValueError("Elastic EP full modular-kernel staging requires initialized MoE quant config.")
 
     prepare_finalize = maybe_make_prepare_finalize(
         moe_config,

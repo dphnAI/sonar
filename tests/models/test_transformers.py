@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from ..conftest import HfRunner, AphroditeRunner
+from ..conftest import AphroditeRunner, HfRunner
 from ..utils import multi_gpu_test, prep_prompts
 from .registry import HF_EXAMPLE_MODELS
 from .utils import check_embeddings_close, check_logprobs_close
@@ -79,13 +79,10 @@ def test_models(
     required = Version("5.0.0")
     if model == "allenai/OLMoE-1B-7B-0924" and installed < required:
         pytest.skip(
-            "MoE models with the Transformers modeling backend require "
-            f"transformers>={required}, but got {installed}"
+            f"MoE models with the Transformers modeling backend require transformers>={required}, but got {installed}"
         )
 
-    check_implementation(
-        hf_runner, aphrodite_runner, example_prompts, model, model_impl=model_impl
-    )
+    check_implementation(hf_runner, aphrodite_runner, example_prompts, model, model_impl=model_impl)
 
 
 def test_hybrid_attention(aphrodite_runner: type[AphroditeRunner]) -> None:
@@ -194,9 +191,7 @@ def test_embed_loading(aphrodite_runner, model):
         assert model_config.using_transformers_backend()
 
 
-@pytest.mark.parametrize(
-    "arch", ["TransformersEmbeddingModel", "TransformersForSequenceClassification"]
-)
+@pytest.mark.parametrize("arch", ["TransformersEmbeddingModel", "TransformersForSequenceClassification"])
 def test_pooling(hf_runner, aphrodite_runner, example_prompts, arch):
     model = get_model(arch)
 

@@ -82,9 +82,7 @@ class BatchTranscriptionRequest(TranscriptionRequest):
 
     file_url: str = Field(
         ...,
-        description=(
-            "Either a URL of the audio or a data URL with base64 encoded audio data. "
-        ),
+        description=("Either a URL of the audio or a data URL with base64 encoded audio data. "),
     )
 
     # Override file to be optional and unused for batch processing
@@ -96,8 +94,7 @@ class BatchTranscriptionRequest(TranscriptionRequest):
         """Ensure file field is not provided in batch requests."""
         if isinstance(data, dict) and "file" in data:
             raise APHRODITEValidationError(
-                "The 'file' field is not supported in batch requests. "
-                "Use 'file_url' instead.",
+                "The 'file' field is not supported in batch requests. Use 'file_url' instead.",
                 parameter="file",
             )
         return data
@@ -113,9 +110,7 @@ class BatchTranslationRequest(TranslationRequest):
 
     file_url: str = Field(
         ...,
-        description=(
-            "Either a URL of the audio or a data URL with base64 encoded audio data. "
-        ),
+        description=("Either a URL of the audio or a data URL with base64 encoded audio data. "),
     )
 
     # Override file to be optional and unused for batch processing
@@ -127,8 +122,7 @@ class BatchTranslationRequest(TranslationRequest):
         """Ensure file field is not provided in batch requests."""
         if isinstance(data, dict) and "file" in data:
             raise APHRODITEValidationError(
-                "The 'file' field is not supported in batch requests. "
-                "Use 'file_url' instead.",
+                "The 'file' field is not supported in batch requests. Use 'file_url' instead.",
                 parameter="file",
             )
         return data
@@ -284,14 +278,10 @@ def parse_args():
 
     # Backward compatibility: If --url is set, use it for host
     url_explicit = any(arg == "--url" or arg.startswith("--url=") for arg in sys.argv)
-    host_explicit = any(
-        arg == "--host" or arg.startswith("--host=") for arg in sys.argv
-    )
+    host_explicit = any(arg == "--host" or arg.startswith("--host=") for arg in sys.argv)
     if url_explicit and hasattr(args, "url") and not host_explicit:
         args.host = args.url
-        logger.warning_once(
-            "Using --url for metrics is deprecated. Please use --host instead."
-        )
+        logger.warning_once("Using --url for metrics is deprecated. Please use --host instead.")
 
     return args
 
@@ -316,9 +306,7 @@ class BatchProgressTracker:
             self._pbar.update()
 
     def pbar(self) -> tqdm:
-        enable_tqdm = (
-            not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-        )
+        enable_tqdm = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
         self._pbar = tqdm(
             total=self._total,
             unit="req",
@@ -340,9 +328,7 @@ async def read_file(path_or_url: str) -> str:
             return f.read()
 
 
-async def write_local_file(
-    output_path: str, batch_outputs: list[BatchRequestOutput]
-) -> None:
+async def write_local_file(output_path: str, batch_outputs: list[BatchRequestOutput]) -> None:
     """
     Write the responses to a local file.
     output_path: The path to write the responses to.
@@ -372,25 +358,19 @@ async def upload_data(output_url: str, data_or_file: str, from_file: bool) -> No
         try:
             # We increase the timeout to 1000 seconds to allow
             # for large files (default is 300).
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=1000)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1000)) as session:
                 if from_file:
                     with open(data_or_file, "rb") as file:
                         async with session.put(output_url, data=file) as response:
                             if response.status != 200:
                                 raise Exception(
-                                    f"Failed to upload file.\n"
-                                    f"Status: {response.status}\n"
-                                    f"Response: {response.text()}"
+                                    f"Failed to upload file.\nStatus: {response.status}\nResponse: {response.text()}"
                                 )
                 else:
                     async with session.put(output_url, data=data_or_file) as response:
                         if response.status != 200:
                             raise Exception(
-                                f"Failed to upload data.\n"
-                                f"Status: {response.status}\n"
-                                f"Response: {response.text()}"
+                                f"Failed to upload data.\nStatus: {response.status}\nResponse: {response.text()}"
                             )
 
         except Exception as e:
@@ -408,9 +388,7 @@ async def upload_data(output_url: str, data_or_file: str, from_file: bool) -> No
                 ) from e
 
 
-async def write_file(
-    path_or_url: str, batch_outputs: list[BatchRequestOutput], output_tmp_dir: str
-) -> None:
+async def write_file(path_or_url: str, batch_outputs: list[BatchRequestOutput], output_tmp_dir: str) -> None:
     """
     Write batch_outputs to a file or upload to a URL.
     path_or_url: The path or URL to write batch_outputs to.
@@ -501,21 +479,14 @@ async def download_bytes_from_url(
             ) as resp,
         ):
             if resp.status != 200:
-                raise Exception(
-                    f"Failed to download data from URL: {url}. Status: {resp.status}"
-                )
+                raise Exception(f"Failed to download data from URL: {url}. Status: {resp.status}")
             return await resp.read()
 
     else:
-        raise ValueError(
-            f"Unsupported URL scheme: {parsed.scheme}. "
-            "Supported schemes: http, https, data"
-        )
+        raise ValueError(f"Unsupported URL scheme: {parsed.scheme}. Supported schemes: http, https, data")
 
 
-def make_error_request_output(
-    request: BatchRequestInput, error_msg: str
-) -> BatchRequestOutput:
+def make_error_request_output(request: BatchRequestInput, error_msg: str) -> BatchRequestOutput:
     batch_output = BatchRequestOutput(
         id=f"aphrodite-{random_uuid()}",
         custom_id=request.custom_id,
@@ -528,9 +499,7 @@ def make_error_request_output(
     return batch_output
 
 
-async def make_async_error_request_output(
-    request: BatchRequestInput, error_msg: str
-) -> BatchRequestOutput:
+async def make_async_error_request_output(request: BatchRequestInput, error_msg: str) -> BatchRequestOutput:
     return make_error_request_output(request, error_msg)
 
 
@@ -546,17 +515,13 @@ async def run_request(
 
     if isinstance(response, JSONResponse):
         with contextlib.suppress(pydantic.ValidationError):
-            response = TypeAdapter(AllResponse | ErrorResponse).validate_python(
-                json.loads(response.body)
-            )
+            response = TypeAdapter(AllResponse | ErrorResponse).validate_python(json.loads(response.body))
 
     if isinstance(response, AllResponse):
         batch_output = BatchRequestOutput(
             id=f"aphrodite-{random_uuid()}",
             custom_id=request.custom_id,
-            response=BatchResponseData(
-                body=response, request_id=f"aphrodite-batch-{random_uuid()}"
-            ),
+            response=BatchResponseData(body=response, request_id=f"aphrodite-batch-{random_uuid()}"),
             error=None,
         )
     elif isinstance(response, ErrorResponse):
@@ -570,9 +535,7 @@ async def run_request(
             error=response,
         )
     else:
-        batch_output = make_error_request_output(
-            request, error_msg="Request must not be sent in stream mode"
-        )
+        batch_output = make_error_request_output(request, error_msg="Request must not be sent in stream mode")
 
     tracker.completed()
     return batch_output
@@ -667,15 +630,11 @@ def make_transcription_wrapper(
 
                 if is_translation:
                     # Create TranslationRequest from BatchTranslationRequest
-                    translation_request = TranslationRequest.model_validate(
-                        request_dict
-                    )
+                    translation_request = TranslationRequest.model_validate(request_dict)
                     return await handler_fn(audio_data, translation_request)
                 else:
                     # Create TranscriptionRequest from BatchTranscriptionRequest
-                    transcription_request = TranscriptionRequest.model_validate(
-                        request_dict
-                    )
+                    transcription_request = TranscriptionRequest.model_validate(request_dict)
                     return await handler_fn(audio_data, transcription_request)
             except Exception as e:
                 operation = "translation" if is_translation else "transcription"
@@ -731,39 +690,29 @@ async def build_endpoint_registry(
         "completions": {
             "url_matcher": lambda url: url == "/v1/chat/completions",
             "handler_getter": lambda: (
-                openai_serving_chat.create_chat_completion
-                if openai_serving_chat is not None
-                else None
+                openai_serving_chat.create_chat_completion if openai_serving_chat is not None else None
             ),
             "wrapper_fn": None,
         },
         "embeddings": {
             "url_matcher": lambda url: url == "/v1/embeddings",
-            "handler_getter": lambda: (
-                serving_embedding if serving_embedding is not None else None
-            ),
+            "handler_getter": lambda: (serving_embedding if serving_embedding is not None else None),
             "wrapper_fn": None,
         },
         "score": {
             "url_matcher": lambda url: url.endswith("/score"),
-            "handler_getter": lambda: (
-                serving_scores if serving_scores is not None else None
-            ),
+            "handler_getter": lambda: (serving_scores if serving_scores is not None else None),
             "wrapper_fn": None,
         },
         "rerank": {
             "url_matcher": lambda url: url.endswith("/rerank"),
-            "handler_getter": lambda: (
-                serving_scores if serving_scores is not None else None
-            ),
+            "handler_getter": lambda: (serving_scores if serving_scores is not None else None),
             "wrapper_fn": None,
         },
         "transcriptions": {
             "url_matcher": lambda url: url == "/v1/audio/transcriptions",
             "handler_getter": lambda: (
-                openai_serving_transcription.create_transcription
-                if openai_serving_transcription is not None
-                else None
+                openai_serving_transcription.create_transcription if openai_serving_transcription is not None else None
             ),
             "wrapper_fn": make_transcription_wrapper(
                 is_translation=False,
@@ -773,9 +722,7 @@ async def build_endpoint_registry(
         "translations": {
             "url_matcher": lambda url: url == "/v1/audio/translations",
             "handler_getter": lambda: (
-                openai_serving_translation.create_translation
-                if openai_serving_translation is not None
-                else None
+                openai_serving_translation.create_translation if openai_serving_translation is not None else None
             ),
             "wrapper_fn": make_transcription_wrapper(
                 is_translation=True,
@@ -793,8 +740,7 @@ def validate_run_batch_args(args):
         reasoning_parser := args.structured_outputs_config.reasoning_parser
     ) and reasoning_parser not in valid_reasoning_parsers:
         raise KeyError(
-            f"invalid reasoning parser: {reasoning_parser} "
-            f"(chose from {{ {','.join(valid_reasoning_parsers)} }})"
+            f"invalid reasoning parser: {reasoning_parser} (chose from {{ {','.join(valid_reasoning_parsers)} }})"
         )
 
 

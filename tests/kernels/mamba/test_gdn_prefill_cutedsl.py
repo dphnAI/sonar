@@ -9,9 +9,7 @@ import torch.nn.functional as F
 
 from aphrodite.platforms import current_platform
 
-if not (
-    current_platform.is_cuda() and current_platform.is_device_capability_family(100)
-):
+if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
     pytest.skip(
         reason="GDN CuteDSL prefill requires CUDA SM10x.",
         allow_module_level=True,
@@ -87,15 +85,12 @@ def test_gdn_chunk_cutedsl_correctness(num_seqs: int, state_dtype: torch.dtype):
     A = torch.empty(num_v_heads, device="cuda", dtype=torch.float32).uniform_(0, 16)
     A_log = torch.log(A)
     dt = torch.exp(
-        torch.rand(num_v_heads, device="cuda", dtype=torch.float32)
-        * (math.log(0.1) - math.log(0.001))
+        torch.rand(num_v_heads, device="cuda", dtype=torch.float32) * (math.log(0.1) - math.log(0.001))
         + math.log(0.001)
     )
     dt = torch.clamp(dt, min=1e-4)
     dt_bias = dt + torch.log(-torch.expm1(-dt))
-    g = -A_log.exp().view(1, 1, num_v_heads) * F.softplus(
-        a.float() + dt_bias.view(1, 1, num_v_heads)
-    )
+    g = -A_log.exp().view(1, 1, num_v_heads) * F.softplus(a.float() + dt_bias.view(1, 1, num_v_heads))
     beta = torch.sigmoid(b.float())
     initial_state = (
         torch.randn(
@@ -157,16 +152,12 @@ def test_gdn_chunk_cutedsl_correctness(num_seqs: int, state_dtype: torch.dtype):
 
     # check main kernel
     o_error = (actual_o.float() - ref_o.float()).abs()
-    state_error = (
-        actual_state.float() - ref_state.to(actual_state.dtype).float()
-    ).abs()
+    state_error = (actual_state.float() - ref_state.to(actual_state.dtype).float()).abs()
     assert o_error.max().item() < 2e-3
     assert o_error.mean().item() < 6e-5
     assert state_error.max().item() < 2e-2
     assert state_error.mean().item() < 6e-4
-    core_attn_out_error = (
-        actual_core_attn_out.float() - actual_o.squeeze(0).float()
-    ).abs()
+    core_attn_out_error = (actual_core_attn_out.float() - actual_o.squeeze(0).float()).abs()
     assert core_attn_out_error.max().item() == 0
 
     # check main kernel when core_attn_out is not passed
@@ -184,13 +175,9 @@ def test_gdn_chunk_cutedsl_correctness(num_seqs: int, state_dtype: torch.dtype):
     torch.accelerator.synchronize()
 
     no_buffer_o_error = (no_buffer_o.float() - ref_o.float()).abs()
-    no_buffer_state_error = (
-        no_buffer_state.float() - ref_state.to(no_buffer_state.dtype).float()
-    ).abs()
+    no_buffer_state_error = (no_buffer_state.float() - ref_state.to(no_buffer_state.dtype).float()).abs()
     buffer_o_error = (no_buffer_o.float() - actual_o.float()).abs()
-    buffer_state_error = (
-        no_buffer_state.float() - actual_state.to(no_buffer_state.dtype).float()
-    ).abs()
+    buffer_state_error = (no_buffer_state.float() - actual_state.to(no_buffer_state.dtype).float()).abs()
     assert no_buffer_o_error.max().item() < 2e-3
     assert no_buffer_o_error.mean().item() < 6e-5
     assert no_buffer_state_error.max().item() < 2e-2

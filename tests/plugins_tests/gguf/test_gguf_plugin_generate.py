@@ -54,9 +54,7 @@ def check_model_outputs(
     tokenizer = AutoTokenizer.from_pretrained(model.original_model)
     if tokenizer.chat_template is not None:
         messages = [[{"role": "user", "content": prompt}] for prompt in prompts]
-        prompts = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        prompts = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     # Run gguf model.
     with aphrodite_runner(
@@ -67,9 +65,7 @@ def check_model_outputs(
         max_model_len=MAX_MODEL_LEN,
         tensor_parallel_size=tp_size,
     ) as gguf_model:
-        gguf_outputs = gguf_model.generate_greedy_logprobs(
-            prompts[:-1], max_tokens, num_logprobs
-        )
+        gguf_outputs = gguf_model.generate_greedy_logprobs(prompts[:-1], max_tokens, num_logprobs)
 
     # Run unquantized model.
     # Should run with tp=1, otherwise the test will stuck at
@@ -81,9 +77,7 @@ def check_model_outputs(
         max_model_len=MAX_MODEL_LEN,
         tensor_parallel_size=1,
     ) as original_model:
-        original_outputs = original_model.generate_greedy_logprobs(
-            prompts[:-1], max_tokens, num_logprobs
-        )
+        original_outputs = original_model.generate_greedy_logprobs(prompts[:-1], max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=original_outputs,
@@ -107,9 +101,7 @@ def test_models(
     num_logprobs: int,
     tp_size: int,
 ) -> None:
-    check_model_outputs(
-        aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size
-    )
+    check_model_outputs(aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size)
 
 
 @pytest.mark.parametrize("model", MODELS)
@@ -127,6 +119,4 @@ def test_distributed(
     num_logprobs: int,
     tp_size: int,
 ) -> None:
-    check_model_outputs(
-        aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size
-    )
+    check_model_outputs(aphrodite_runner, example_prompts, model, dtype, max_tokens, num_logprobs, tp_size)

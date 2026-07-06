@@ -43,9 +43,7 @@ def config(cls: type[ConfigT]) -> type[ConfigT]: ...
 
 @overload
 @dataclass_transform(field_specifiers=(PydanticField,))
-def config(
-    *, config: ConfigDict | None = None, **kwargs: Any
-) -> Callable[[type[ConfigT]], type[ConfigT]]: ...
+def config(*, config: ConfigDict | None = None, **kwargs: Any) -> Callable[[type[ConfigT]], type[ConfigT]]: ...
 
 
 @dataclass_transform(field_specifiers=(PydanticField,))
@@ -106,9 +104,7 @@ def get_field(cls: ConfigType, name: str) -> Any:
             default = default.default
 
     if default is MISSING and default_factory is MISSING:
-        logger.warning_once(
-            "%s.%s has no default or default factory.", cls.__name__, name
-        )
+        logger.warning_once("%s.%s has no default or default factory.", cls.__name__, name)
     return field(default=default, default_factory=default_factory, init=init)
 
 
@@ -230,9 +226,7 @@ class SupportsMetricsInfo(Protocol):
 def update_config(config: ConfigT, overrides: dict[str, Any]) -> ConfigT:
     processed_overrides = {}
     for field_name, value in overrides.items():
-        assert hasattr(config, field_name), (
-            f"{type(config)} has no field `{field_name}`"
-        )
+        assert hasattr(config, field_name), f"{type(config)} has no field `{field_name}`"
         current_value = getattr(config, field_name)
         if is_dataclass(current_value) and not is_dataclass(value):
             assert isinstance(value, dict), (
@@ -314,10 +308,7 @@ def normalize_value(x):
     # Dataclasses: represent as (FQN, sorted(field,value) tuple) for stability.
     if is_dataclass(x):
         type_fqn = f"{x.__class__.__module__}.{x.__class__.__qualname__}"
-        items = tuple(
-            (f.name, normalize_value(getattr(x, f.name)))
-            for f in sorted(fields(x), key=lambda f: f.name)
-        )
+        items = tuple((f.name, normalize_value(getattr(x, f.name))) for f in sorted(fields(x), key=lambda f: f.name))
         return (type_fqn, items)
 
     # Containers (generic)
@@ -355,10 +346,7 @@ def get_hash_factors(config: ConfigT, ignored_factors: set[str]) -> dict[str, ob
         try:
             factors[factor] = normalize_value(value)
         except TypeError as e:
-            raise TypeError(
-                f"get_hash_factors: unsupported type for key '{factor}' "
-                f"({type(value).__name__})"
-            ) from e
+            raise TypeError(f"get_hash_factors: unsupported type for key '{factor}' ({type(value).__name__})") from e
     return factors
 
 
@@ -414,10 +402,7 @@ def handle_deprecated(
     else:
         new_names = new_name_or_names
 
-    msg = (
-        f"{old_name} is deprecated and will be removed in {removal_version}. "
-        f"Use {', '.join(new_names)} instead."
-    )
+    msg = f"{old_name} is deprecated and will be removed in {removal_version}. Use {', '.join(new_names)} instead."
     logger.warning(msg)
 
     for new_name in new_names:

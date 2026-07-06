@@ -109,9 +109,7 @@ class CompressedTensorsW4A4Fp4(CompressedTensorsScheme):
 
         # Process weight global scale (CT stores as divisors, i.e. 1/scale)
         weight_global_scale = layer.weight_global_scale.max().to(torch.float32)
-        layer.weight_global_scale = Parameter(
-            1.0 / weight_global_scale, requires_grad=False
-        )
+        layer.weight_global_scale = Parameter(1.0 / weight_global_scale, requires_grad=False)
 
         if not self.use_a16:
             if torch.unique(layer.input_global_scale).numel() != 1:
@@ -124,14 +122,10 @@ class CompressedTensorsW4A4Fp4(CompressedTensorsScheme):
                 )
             # Process input global scale and pre-compute alpha for W4A4 mode
             input_global_scale_inv = layer.input_global_scale.max().to(torch.float32)
-            layer.input_global_scale = Parameter(
-                (1.0 / input_global_scale_inv).to(torch.float32), requires_grad=False
-            )
+            layer.input_global_scale = Parameter((1.0 / input_global_scale_inv).to(torch.float32), requires_grad=False)
 
             # Pre-compute alpha and inverse for runtime quantization
-            layer.input_global_scale_inv = Parameter(
-                input_global_scale_inv, requires_grad=False
-            )
+            layer.input_global_scale_inv = Parameter(input_global_scale_inv, requires_grad=False)
             layer.alpha = Parameter(
                 layer.input_global_scale * layer.weight_global_scale,
                 requires_grad=False,

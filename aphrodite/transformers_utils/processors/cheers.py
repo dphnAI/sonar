@@ -29,10 +29,7 @@ class CheersProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: TextInput
-        | PreTokenizedInput
-        | list[TextInput]
-        | list[PreTokenizedInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         images: ImageInput = None,
         **kwargs: Unpack[CheersProcessorKwargs],
     ):
@@ -59,17 +56,11 @@ class CheersProcessor(ProcessorMixin):
                 if all_ghw:
                     pixel_values["grid_hws"] = torch.cat(all_ghw, dim=0)
             else:
-                pixel_values = self.image_processor(
-                    images, **output_kwargs["images_kwargs"]
-                )
+                pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             pixel_values = {}
 
-        text_inputs = (
-            self.tokenizer(text, **output_kwargs["text_kwargs"])
-            if text is not None
-            else {}
-        )
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"]) if text is not None else {}
 
         return BatchFeature(data={**pixel_values, **text_inputs})
 

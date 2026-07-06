@@ -7,7 +7,7 @@ import torch
 from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
@@ -88,9 +88,7 @@ class KimiMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -120,10 +118,7 @@ class KimiMoE(nn.Module):
         self.layer_idx = layer_idx
 
         if config.hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {config.hidden_act}. "
-                "Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {config.hidden_act}. Only silu is supported for now.")
 
         # Gate always runs at half / full precision for now.
         self.gate = ReplicatedLinear(
@@ -170,9 +165,7 @@ class KimiMoE(nn.Module):
         num_tokens, hidden_size = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_size)
         router_logits, _ = self.gate(hidden_states)
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
         return final_hidden_states.view(num_tokens, hidden_size)
 
 
@@ -345,9 +338,7 @@ class KimiDecoderLayer(nn.Module):
                 prefix=f"{prefix}.mlp",
             )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -415,9 +406,7 @@ class KimiLinearModel(nn.Module):
             self.norm = PPMissingLayer()
 
         world_size = get_tensor_model_parallel_world_size()
-        assert config.num_attention_heads % world_size == 0, (
-            "num_attention_heads must be divisible by world_size"
-        )
+        assert config.num_attention_heads % world_size == 0, "num_attention_heads must be divisible by world_size"
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -449,9 +438,7 @@ class KimiLinearModel(nn.Module):
             )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
@@ -511,9 +498,7 @@ class KimiLinearModel(nn.Module):
                 weight_loader(param, loaded_weight, shard_id)
                 break
             else:
-                for idx, (param_name, weight_name, expert_id, shard_id) in enumerate(
-                    expert_params_mapping
-                ):
+                for idx, (param_name, weight_name, expert_id, shard_id) in enumerate(expert_params_mapping):
                     if weight_name not in name:
                         continue
                     name = name.replace(weight_name, param_name)
@@ -531,11 +516,7 @@ class KimiLinearModel(nn.Module):
                     break
                 else:
                     # Skip loading extra bias for GPTQ models.
-                    if (
-                        name.endswith(".bias")
-                        and name not in params_dict
-                        and not self.config.is_linear_attn
-                    ):  # noqa: E501
+                    if name.endswith(".bias") and name not in params_dict and not self.config.is_linear_attn:  # noqa: E501
                         continue
                     # Remapping the name of FP8 kv-scale.
                     name = maybe_remap_kv_scale_name(name, params_dict)
@@ -545,17 +526,13 @@ class KimiLinearModel(nn.Module):
                         continue
 
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight, **kwargs)
             loaded_params.add(name)
         return loaded_params
 
 
-class KimiLinearForCausalLM(
-    nn.Module, HasInnerState, SupportsPP, MixtureOfExperts, IsHybrid
-):
+class KimiLinearForCausalLM(nn.Module, HasInnerState, SupportsPP, MixtureOfExperts, IsHybrid):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         self.model_config = aphrodite_config.model_config
@@ -563,9 +540,7 @@ class KimiLinearForCausalLM(
         self.config = self.model_config.hf_config
         quant_config = aphrodite_config.quant_config
         self.quant_config = quant_config
-        self.model = KimiLinearModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = KimiLinearModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 self.config.vocab_size,
@@ -576,9 +551,7 @@ class KimiLinearForCausalLM(
         else:
             self.lm_head = PPMissingLayer()
         logit_scale = getattr(self.config, "logit_scale", 1.0)
-        self.logits_processor = LogitsProcessor(
-            self.config.vocab_size, scale=logit_scale
-        )
+        self.logits_processor = LogitsProcessor(self.config.vocab_size, scale=logit_scale)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -591,9 +564,7 @@ class KimiLinearForCausalLM(
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds, **kwargs
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds, **kwargs)
         return hidden_states
 
     @classmethod
@@ -613,9 +584,7 @@ class KimiLinearForCausalLM(
         hf_config = aphrodite_config.model_config.hf_config
         tp_size = parallel_config.tensor_parallel_size
         num_spec = (
-            aphrodite_config.speculative_config.num_speculative_tokens
-            if aphrodite_config.speculative_config
-            else 0
+            aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
         )
         return MambaStateShapeCalculator.kda_state_shape(
             tp_size,
@@ -645,12 +614,8 @@ class KimiLinearForCausalLM(
         return loader.load_weights(weights)
 
 
-def get_spec_layer_idx_from_weight_name(
-    config: KimiLinearConfig, weight_name: str
-) -> int | None:
-    if hasattr(config, "num_nextn_predict_layers") and (
-        config.num_nextn_predict_layers > 0
-    ):
+def get_spec_layer_idx_from_weight_name(config: KimiLinearConfig, weight_name: str) -> int | None:
+    if hasattr(config, "num_nextn_predict_layers") and (config.num_nextn_predict_layers > 0):
         layer_idx = config.num_hidden_layers
         for i in range(config.num_nextn_predict_layers):
             if weight_name.startswith(f"model.layers.{layer_idx + i}."):

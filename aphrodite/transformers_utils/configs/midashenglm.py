@@ -93,11 +93,7 @@ class MiDashengLMConfig(PretrainedConfig):
     ):
         self.audio_encoder_config = DashengConfig(**(audio_encoder_config or {}))
         self.subsample_factor = subsample_factor
-        self.text_config = (
-            Qwen2_5OmniTextConfig(**text_config)
-            if text_config
-            else Qwen2_5OmniTextConfig()
-        )
+        self.text_config = Qwen2_5OmniTextConfig(**text_config) if text_config else Qwen2_5OmniTextConfig()
         self.text_config.rope_parameters = None  # uses_mrope is false
         self.audio_token_id = audio_token_id
         super().__init__(**kwargs)

@@ -35,8 +35,9 @@ struct aphrodite_biased_integer_subbyte : public integer_subbyte<Bits, Signed> {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // "GPTQ" types, i.e. symmetric quantization
-using aphrodite_uint4b8_t = aphrodite_biased_integer_subbyte<4, 8>;      // u4b8
-using aphrodite_uint8b128_t = aphrodite_biased_integer_subbyte<8, 128>;  // u8b128
+using aphrodite_uint4b8_t = aphrodite_biased_integer_subbyte<4, 8>;  // u4b8
+using aphrodite_uint8b128_t =
+    aphrodite_biased_integer_subbyte<8, 128>;  // u8b128
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

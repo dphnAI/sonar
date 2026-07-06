@@ -175,9 +175,7 @@ def test_openvla_processing_info_token_counts() -> None:
     assert info.get_num_image_tokens(image_width=640, image_height=480) == 256
     assert info.get_image_size_with_most_features().width == 224
     assert info.get_image_size_with_most_features().height == 224
-    assert info.get_mm_max_tokens_per_item(seq_len=2048, mm_counts={"image": 1}) == {
-        "image": 256
-    }
+    assert info.get_mm_max_tokens_per_item(seq_len=2048, mm_counts={"image": 1}) == {"image": 256}
 
 
 def test_openvla_prompt_update_inserts_image_tokens_after_bos() -> None:
@@ -185,20 +183,16 @@ def test_openvla_prompt_update_inserts_image_tokens_after_bos() -> None:
     image = Image.new("RGB", (640, 480), color=(255, 255, 255))
     mm_items = MultiModalDataItems({"image": ImageProcessorItems([image])})
 
-    assert (
-        processor._hf_processor_applies_updates("In: test\nOut:", mm_items, {}, {})
-        is False
-    )
+    assert processor._hf_processor_applies_updates("In: test\nOut:", mm_items, {}, {}) is False
 
     prompt_update = processor._get_prompt_updates(mm_items, {}, {})[0]
     resolved = prompt_update.resolve(0)
     content = resolved.content
 
     assert resolved.modality == "image"
-    assert [
-        (match.start_idx, match.end_idx)
-        for match in resolved.iter_matches([1, 10, 11], _FakeTokenizer())
-    ] == [(1, 1)]
+    assert [(match.start_idx, match.end_idx) for match in resolved.iter_matches([1, 10, 11], _FakeTokenizer())] == [
+        (1, 1)
+    ]
     assert content.full == [32000] * 256
 
     is_embed = content.is_embed(None, content.full)

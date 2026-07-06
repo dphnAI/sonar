@@ -250,9 +250,7 @@ class Qwen2Decoder2Encoder(nn.Module):
         elif n_query == 256:
             param_img = self.query_1024.weight
 
-        batch_query_imgs = param_img.unsqueeze(0).expand(
-            bs, -1, -1
-        )  # (batch_size, num_queries, hidden_size)
+        batch_query_imgs = param_img.unsqueeze(0).expand(bs, -1, -1)  # (batch_size, num_queries, hidden_size)
 
         x_combined = torch.cat([x, batch_query_imgs], dim=1)
 

@@ -141,9 +141,7 @@ class TestParseGemma4Args:
         assert result == {"location": "Paris, France"}
 
     def test_multiple_string_values(self):
-        result = _parse_gemma4_args(
-            'location:<|"|>San Francisco<|"|>,unit:<|"|>celsius<|"|>'
-        )
+        result = _parse_gemma4_args('location:<|"|>San Francisco<|"|>,unit:<|"|>celsius<|"|>')
         assert result == {"location": "San Francisco", "unit": "celsius"}
 
     def test_integer_value(self):
@@ -167,9 +165,7 @@ class TestParseGemma4Args:
         assert result == {"param": "null"}
 
     def test_mixed_types(self):
-        result = _parse_gemma4_args(
-            'name:<|"|>test<|"|>,count:42,active:true,score:3.14'
-        )
+        result = _parse_gemma4_args('name:<|"|>test<|"|>,count:42,active:true,score:3.14')
         assert result == {
             "name": "test",
             "count": "42",
@@ -230,9 +226,7 @@ class TestParseGemma4Args:
         assert result == {}
 
         # Stable key before trailing-dot key — stable key is kept
-        result = _parse_gemma4_args(
-            'name:<|"|>test<|"|>,score:3.,count:1', partial=True
-        )
+        result = _parse_gemma4_args('name:<|"|>test<|"|>,score:3.,count:1', partial=True)
         assert result == {"name": "test"}
 
         # Non-partial mode parses trailing dot normally
@@ -293,9 +287,7 @@ class TestExtractToolCalls:
         assert result.content == model_output
 
     def test_single_tool_call(self, parser, mock_request):
-        model_output = (
-            '<|tool_call>call:get_weather{location:<|"|>London<|"|>}<tool_call|>'
-        )
+        model_output = '<|tool_call>call:get_weather{location:<|"|>London<|"|>}<tool_call|>'
         result = parser.extract_tool_calls(model_output, mock_request)
 
         assert result.tools_called is True
@@ -306,10 +298,7 @@ class TestExtractToolCalls:
 
     def test_multiple_arguments(self, parser, mock_request):
         model_output = (
-            "<|tool_call>call:get_weather{"
-            'location:<|"|>San Francisco<|"|>,'
-            'unit:<|"|>celsius<|"|>}'
-            "<tool_call|>"
+            '<|tool_call>call:get_weather{location:<|"|>San Francisco<|"|>,unit:<|"|>celsius<|"|>}<tool_call|>'
         )
         result = parser.extract_tool_calls(model_output, mock_request)
 
@@ -321,9 +310,7 @@ class TestExtractToolCalls:
 
     def test_text_before_tool_call(self, parser, mock_request):
         model_output = (
-            "Let me check the weather for you. "
-            '<|tool_call>call:get_weather{location:<|"|>Paris<|"|>}'
-            "<tool_call|>"
+            'Let me check the weather for you. <|tool_call>call:get_weather{location:<|"|>Paris<|"|>}<tool_call|>'
         )
         result = parser.extract_tool_calls(model_output, mock_request)
 
@@ -362,13 +349,7 @@ class TestExtractToolCalls:
         assert args == {"nested": {"inner": "value"}, "list": ["a", "b"]}
 
     def test_tool_call_with_number_and_boolean(self, parser, mock_request):
-        model_output = (
-            "<|tool_call>call:set_status{"
-            "is_active:true,"
-            "count:42,"
-            "score:3.14}"
-            "<tool_call|>"
-        )
+        model_output = "<|tool_call>call:set_status{is_active:true,count:42,score:3.14}<tool_call|>"
         result = parser.extract_tool_calls(model_output, mock_request)
 
         assert result.tools_called is True
@@ -389,9 +370,7 @@ class TestExtractToolCalls:
 
     def test_hyphenated_function_name(self, parser, mock_request):
         """Ensure function names with hyphens are parsed correctly."""
-        model_output = (
-            '<|tool_call>call:get-weather{location:<|"|>London<|"|>}<tool_call|>'
-        )
+        model_output = '<|tool_call>call:get-weather{location:<|"|>London<|"|>}<tool_call|>'
         result = parser.extract_tool_calls(model_output, mock_request)
 
         assert result.tools_called is True
@@ -399,9 +378,7 @@ class TestExtractToolCalls:
 
     def test_dotted_function_name(self, parser, mock_request):
         """Ensure function names with dots are parsed correctly."""
-        model_output = (
-            '<|tool_call>call:weather.get{location:<|"|>London<|"|>}<tool_call|>'
-        )
+        model_output = '<|tool_call>call:weather.get{location:<|"|>London<|"|>}<tool_call|>'
         result = parser.extract_tool_calls(model_output, mock_request)
 
         assert result.tools_called is True
@@ -438,9 +415,7 @@ class TestStreamingExtraction:
         CHANNEL_END: CHANNEL_END_ID,
     }
 
-    def _simulate_streaming(
-        self, parser: Any, mock_request: Any, chunks: list[str]
-    ) -> list[tuple[Any, str]]:
+    def _simulate_streaming(self, parser: Any, mock_request: Any, chunks: list[str]) -> list[tuple[Any, str]]:
         """Feed chunks through the streaming parser and collect results.
 
         Returns a list of (delta_message, accumulated_text) tuples.
@@ -576,9 +551,7 @@ class TestStreamingExtraction:
         assert parsed == {"location": "London"}
 
         # Specifically assert no double-brace
-        assert args_text.count("}") <= 1, (
-            f"Arguments contain extra closing brace: {args_text!r}"
-        )
+        assert args_text.count("}") <= 1, f"Arguments contain extra closing brace: {args_text!r}"
 
     def test_streaming_no_unquoted_keys(self, parser, mock_request):
         """Verify keys are properly quoted in JSON (Bug #1)."""
@@ -593,12 +566,8 @@ class TestStreamingExtraction:
         args_text = self._collect_arguments(results)
 
         # Must start with { and contain quoted key
-        assert args_text.lstrip().startswith("{"), (
-            f"Arguments don't start with '{{': {args_text!r}"
-        )
-        assert '"location"' in args_text, (
-            f"Key 'location' not properly quoted: {args_text!r}"
-        )
+        assert args_text.lstrip().startswith("{"), f"Arguments don't start with '{{': {args_text!r}"
+        assert '"location"' in args_text, f"Key 'location' not properly quoted: {args_text!r}"
 
     def test_streaming_name_no_call_prefix(self, parser, mock_request):
         """Verify function name has no 'call:' prefix."""
@@ -734,13 +703,9 @@ class TestStreamingExtraction:
         assert parsed_args["content"] == "Buy milk"
 
         # Ensure no raw delimiter fragments leaked into the JSON
-        assert "<|" not in args_text, (
-            f"Partial delimiter leaked into JSON: {args_text!r}"
-        )
+        assert "<|" not in args_text, f"Partial delimiter leaked into JSON: {args_text!r}"
 
-    def test_streaming_does_not_duplicate_plain_text_after_tool_call(
-        self, parser, mock_request
-    ):
+    def test_streaming_does_not_duplicate_plain_text_after_tool_call(self, parser, mock_request):
         """Buffered plain text after a tool call must not corrupt content."""
         chunks = [
             "<|tool_call>",
@@ -752,15 +717,11 @@ class TestStreamingExtraction:
         ]
 
         results = self._simulate_streaming(parser, mock_request, chunks)
-        content_parts = [
-            delta.content for delta, _ in results if delta is not None and delta.content
-        ]
+        content_parts = [delta.content for delta, _ in results if delta is not None and delta.content]
         assert "".join(content_parts) == "<div>"
         assert "<<div>" not in "".join(content_parts)
 
-    def test_streaming_html_argument_does_not_duplicate_tag_prefixes(
-        self, parser, mock_request
-    ):
+    def test_streaming_html_argument_does_not_duplicate_tag_prefixes(self, parser, mock_request):
         """HTML content inside tool arguments must not be duplicated."""
         chunks = [
             "<|tool_call>",
@@ -831,15 +792,11 @@ class TestStreamingExtraction:
 
         # Exactly one delta should carry tool_calls, and it must not be
         # emitted as plain content (which would yield finish_reason="stop").
-        tool_call_deltas = [
-            delta for delta, _ in results if delta is not None and delta.tool_calls
-        ]
-        assert len(tool_call_deltas) == 1, (
-            "Expected exactly one delta carrying the batched tool call"
+        tool_call_deltas = [delta for delta, _ in results if delta is not None and delta.tool_calls]
+        assert len(tool_call_deltas) == 1, "Expected exactly one delta carrying the batched tool call"
+        assert all(delta.content is None for delta, _ in results if delta is not None), (
+            "Complete tool call must not leak as content"
         )
-        assert all(
-            delta.content is None for delta, _ in results if delta is not None
-        ), "Complete tool call must not leak as content"
 
         by_index = self._collect_tool_calls_by_index(results)
         assert set(by_index) == {0}
@@ -861,9 +818,7 @@ class TestStreamingExtraction:
         results = self._simulate_streaming(parser, mock_request, chunks)
 
         by_index = self._collect_tool_calls_by_index(results)
-        assert set(by_index) == {0, 1}, (
-            f"Expected two tool calls (indices 0 and 1), got {sorted(by_index)}"
-        )
+        assert set(by_index) == {0, 1}, f"Expected two tool calls (indices 0 and 1), got {sorted(by_index)}"
 
         assert by_index[0]["name"] == "get_weather"
         assert json.loads(by_index[0]["arguments"]) == {"location": "London"}

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Environment variable definitions for the Aphrodite Metal plugin.
 
 This module is the single source of truth for all ``APHRODITE_METAL_*`` (and
@@ -35,9 +36,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Fraction of unified memory to use.  "auto" (the default) means the
     # plugin calculates the minimal amount needed at startup.
     # Returns the raw string; config.py handles "auto" → sentinel conversion.
-    "APHRODITE_METAL_MEMORY_FRACTION": lambda: os.getenv(
-        "APHRODITE_METAL_MEMORY_FRACTION", "auto"
-    ),
+    "APHRODITE_METAL_MEMORY_FRACTION": lambda: os.getenv("APHRODITE_METAL_MEMORY_FRACTION", "auto"),
     # Whether to use MLX as the compute backend (default True).
     "APHRODITE_METAL_USE_MLX": lambda: os.getenv("APHRODITE_METAL_USE_MLX", "1") == "1",
     # MLX device type: "gpu" (default) or "cpu".
@@ -45,9 +44,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Enable verbose debug logging (default False).
     "APHRODITE_METAL_DEBUG": lambda: os.getenv("APHRODITE_METAL_DEBUG", "0") == "1",
     # Use native Metal paged attention (default True).
-    "APHRODITE_METAL_USE_PAGED_ATTENTION": lambda: (
-        os.getenv("APHRODITE_METAL_USE_PAGED_ATTENTION", "1") == "1"
-    ),
+    "APHRODITE_METAL_USE_PAGED_ATTENTION": lambda: (os.getenv("APHRODITE_METAL_USE_PAGED_ATTENTION", "1") == "1"),
     # Experimental YOCO/KV-sharing fast prefill. Default on for eligible
     # paged-attention models.
     "APHRODITE_METAL_KV_SHARING_FAST_PREFILL": lambda: (
@@ -59,17 +56,13 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # - "text-only-compat": force known-safe multimodal checkpoints onto the
     #   text-only compatibility path.
     # - "multimodal-native": keep native multimodal loading enabled.
-    "APHRODITE_METAL_MULTIMODAL_MODE": lambda: os.getenv(
-        "APHRODITE_METAL_MULTIMODAL_MODE", "auto"
-    ),
+    "APHRODITE_METAL_MULTIMODAL_MODE": lambda: os.getenv("APHRODITE_METAL_MULTIMODAL_MODE", "auto"),
     # Enable content-hash prefix caching (presence-based: set to any
     # value to enable, unset to disable).
     "APHRODITE_METAL_PREFIX_CACHE": lambda: "APHRODITE_METAL_PREFIX_CACHE" in os.environ,
     # Fraction of MLX working set for the prefix cache (raw string;
     # the consumer in model_runner.py validates and applies a default).
-    "APHRODITE_METAL_PREFIX_CACHE_FRACTION": lambda: os.getenv(
-        "APHRODITE_METAL_PREFIX_CACHE_FRACTION", ""
-    ),
+    "APHRODITE_METAL_PREFIX_CACHE_FRACTION": lambda: os.getenv("APHRODITE_METAL_PREFIX_CACHE_FRACTION", ""),
     # Custom cache directory for ModelScope downloads (None if unset).
     "APHRODITE_METAL_MODELSCOPE_CACHE": lambda: os.getenv("APHRODITE_METAL_MODELSCOPE_CACHE"),
     # Optional source directory for csrc/metal when running from unusual installs.

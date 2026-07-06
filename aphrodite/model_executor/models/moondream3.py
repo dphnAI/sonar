@@ -118,9 +118,9 @@ def reconstruct_from_crops(
         out_x = tile_x * (crop_width - 2 * margin_pixels)
         out_y = tile_y * (crop_height - 2 * margin_pixels)
 
-        reconstructed[
-            out_y + y_start : out_y + y_end, out_x + x_start : out_x + x_end
-        ] = crop[y_start:y_end, x_start:x_end]
+        reconstructed[out_y + y_start : out_y + y_end, out_x + x_start : out_x + x_end] = crop[
+            y_start:y_end, x_start:x_end
+        ]
 
     return reconstructed
 
@@ -300,9 +300,7 @@ class Moondream3VisionEncoder(nn.Module):
         patches_w = width // patch_size
 
         # Unfold into patches
-        patches = images.unfold(2, patch_size, patch_size).unfold(
-            3, patch_size, patch_size
-        )
+        patches = images.unfold(2, patch_size, patch_size).unfold(3, patch_size, patch_size)
         # (batch, channels, patches_h, patches_w, patch_size, patch_size)
         patches = patches.permute(0, 2, 3, 1, 4, 5).contiguous()
         # (batch, patches_h, patches_w, channels, patch_size, patch_size)
@@ -460,18 +458,14 @@ class Moondream3TextMoE(nn.Module):
         # Local expert weights (only store experts_per_rank experts)
         # fc1: [experts_per_rank, expert_inner_dim * 2, hidden_size]
         # fc2: [experts_per_rank, hidden_size, expert_inner_dim]
-        self.fc1_weight = nn.Parameter(
-            torch.empty(self.num_local_experts, expert_inner_dim * 2, hidden_size)
-        )
-        self.fc2_weight = nn.Parameter(
-            torch.empty(self.num_local_experts, hidden_size, expert_inner_dim)
-        )
+        self.fc1_weight = nn.Parameter(torch.empty(self.num_local_experts, expert_inner_dim * 2, hidden_size))
+        self.fc2_weight = nn.Parameter(torch.empty(self.num_local_experts, hidden_size, expert_inner_dim))
         self._use_fused_moe = True
 
         local_expert_start = get_tensor_model_parallel_rank() * self.experts_per_rank
         expert_map = torch.full((num_experts,), -1, dtype=torch.int32)
-        expert_map[local_expert_start : local_expert_start + self.num_local_experts] = (
-            torch.arange(self.num_local_experts, dtype=torch.int32)
+        expert_map[local_expert_start : local_expert_start + self.num_local_experts] = torch.arange(
+            self.num_local_experts, dtype=torch.int32
         )
         self.register_buffer("_expert_map", expert_map, persistent=False)
 
@@ -490,9 +484,7 @@ class Moondream3TextMoE(nn.Module):
 
         # Get router logits and compute top-k
         router_logits, _ = self.gate(x)  # [num_tokens, num_experts]
-        topk_logits, topk_ids = torch.topk(
-            router_logits, self.experts_per_token, dim=-1
-        )
+        topk_logits, topk_ids = torch.topk(router_logits, self.experts_per_token, dim=-1)
         # Softmax over selected experts
         topk_weights = F.softmax(topk_logits, dim=-1, dtype=torch.float32).to(x.dtype)
 
@@ -514,8 +506,7 @@ class Moondream3TextMoE(nn.Module):
             except (NotImplementedError, RuntimeError) as exc:
                 self._use_fused_moe = False
                 logger.warning_once(
-                    "Disabling fused Moondream3 MoE path and falling back to "
-                    "the Python expert loop: %s",
+                    "Disabling fused Moondream3 MoE path and falling back to the Python expert loop: %s",
                     str(exc),
                 )
 
@@ -679,12 +670,8 @@ class Moondream3Attention(nn.Module):
                 q_local_dim + 2 * kv_local_dim,
             )
             q_full = qkv_full_sharded[:, :, :q_local_dim].reshape(qkv.shape[0], -1)
-            k_full = qkv_full_sharded[
-                :, :, q_local_dim : q_local_dim + kv_local_dim
-            ].reshape(qkv.shape[0], -1)
-            v_full = qkv_full_sharded[:, :, q_local_dim + kv_local_dim :].reshape(
-                qkv.shape[0], -1
-            )
+            k_full = qkv_full_sharded[:, :, q_local_dim : q_local_dim + kv_local_dim].reshape(qkv.shape[0], -1)
+            v_full = qkv_full_sharded[:, :, q_local_dim + kv_local_dim :].reshape(qkv.shape[0], -1)
             qkv_full = torch.cat([q_full, k_full, v_full], dim=-1).contiguous()
         else:
             qkv_full = qkv
@@ -709,9 +696,7 @@ class Moondream3Attention(nn.Module):
         pos_float = (positions.to(orig_dtype) + 1.0).clamp(min=1e-6)
         pos_log = pos_float.log()  # [num_tokens]
         # alpha[:, None] * pos_log[None, :] -> [num_heads, num_tokens]
-        tau_pos = 1.0 + (
-            torch.sigmoid(self.tau_alpha[:, None] * pos_log[None, :]) - 0.5
-        )  # [H_per_partition, N]
+        tau_pos = 1.0 + (torch.sigmoid(self.tau_alpha[:, None] * pos_log[None, :]) - 0.5)  # [H_per_partition, N]
 
         # Combine token and position components
         tau_q = (tok_q + tau_pos.t()).to(orig_dtype)  # [N, H_per_partition]
@@ -824,9 +809,7 @@ class Moondream3TextModel(nn.Module):
         )
 
         self.post_ln = nn.LayerNorm(config.dim, eps=1e-5, bias=True)
-        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
-            ["hidden_states"], config.dim
-        )
+        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(["hidden_states"], config.dim)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.wte(input_ids)
@@ -849,9 +832,7 @@ class Moondream3TextModel(nn.Module):
             assert intermediate_tensors is not None
             hidden_states = intermediate_tensors["hidden_states"]
 
-        for i, layer in enumerate(
-            islice(self.blocks, self.start_layer, self.end_layer)
-        ):
+        for i, layer in enumerate(islice(self.blocks, self.start_layer, self.end_layer)):
             hidden_states = layer(positions, hidden_states)
 
         if not pp_group.is_last_rank:
@@ -914,10 +895,7 @@ class Moondream3DummyInputsBuilder(BaseDummyInputsBuilder[Moondream3ProcessingIn
     """Dummy inputs builder for profiling."""
 
     def get_dummy_text(self, mm_counts: Mapping[str, int]) -> str:
-        return (
-            "<|endoftext|><image><|md_reserved_0|>query<|md_reserved_1|>"
-            "What is this image?<|md_reserved_2|>"
-        )
+        return "<|endoftext|><image><|md_reserved_0|>query<|md_reserved_1|>What is this image?<|md_reserved_2|>"
 
     def get_dummy_mm_data(
         self,
@@ -962,8 +940,7 @@ class Moondream3MultiModalProcessor(BaseMultiModalProcessor[Moondream3Processing
         )
         if len(token_ids) < 2:
             raise ValueError(
-                "Tokenizer could not encode Moondream3 BOS/image placeholder "
-                f"{self.bos_image_placeholder!r}."
+                f"Tokenizer could not encode Moondream3 BOS/image placeholder {self.bos_image_placeholder!r}."
             )
         return token_ids
 
@@ -1134,21 +1111,13 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             tensors: list[torch.Tensor] = []
             for value in pixel_values:
                 if not isinstance(value, torch.Tensor):
-                    raise TypeError(
-                        "Expected each `pixel_values` element to be a tensor, "
-                        f"got {type(value)!r}."
-                    )
+                    raise TypeError(f"Expected each `pixel_values` element to be a tensor, got {type(value)!r}.")
                 if value.dim() != 4:
-                    raise ValueError(
-                        f"Unsupported pixel_values element shape {tuple(value.shape)}."
-                    )
+                    raise ValueError(f"Unsupported pixel_values element shape {tuple(value.shape)}.")
                 tensors.append(value.contiguous())
             return tensors
 
-        raise TypeError(
-            "pixel_values must be a tensor or a sequence of tensors, "
-            f"got {type(pixel_values)!r}."
-        )
+        raise TypeError(f"pixel_values must be a tensor or a sequence of tensors, got {type(pixel_values)!r}.")
 
     def _split_tilings(
         self,
@@ -1160,23 +1129,16 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
 
         if isinstance(tilings, torch.Tensor):
             if tilings.dim() != 2 or tilings.shape[1] != 2:
-                raise ValueError(
-                    "Expected `tilings` tensor with shape [num_images, 2], got "
-                    f"{tuple(tilings.shape)}."
-                )
+                raise ValueError(f"Expected `tilings` tensor with shape [num_images, 2], got {tuple(tilings.shape)}.")
             tiling_items = tilings.tolist()
         elif isinstance(tilings, (list, tuple)):
             tiling_items = list(tilings)
         else:
-            raise TypeError(
-                "tilings must be None, a tensor or a sequence of tuples, "
-                f"got {type(tilings)!r}."
-            )
+            raise TypeError(f"tilings must be None, a tensor or a sequence of tuples, got {type(tilings)!r}.")
 
         if len(tiling_items) != expected:
             raise ValueError(
-                "Mismatch between the number of pixel_values entries "
-                f"({expected}) and tilings ({len(tiling_items)})."
+                f"Mismatch between the number of pixel_values entries ({expected}) and tilings ({len(tiling_items)})."
             )
 
         normalized: list[tuple[int, int] | None] = []
@@ -1189,9 +1151,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             if isinstance(tiling, (list, tuple)) and len(tiling) == 2:
                 normalized.append((int(tiling[0]), int(tiling[1])))
             else:
-                raise ValueError(
-                    f"Each tiling entry must be a pair of integers, got {tiling!r}."
-                )
+                raise ValueError(f"Each tiling entry must be a pair of integers, got {tiling!r}.")
         return normalized
 
     def _parse_image_inputs(self, **kwargs: object) -> list[Moondream3ImageInput]:
@@ -1200,25 +1160,19 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
             return []
 
         pixel_values_list = self._split_pixel_values(pixel_values)
-        tilings_list = self._split_tilings(
-            kwargs.get("tilings"), len(pixel_values_list)
-        )
+        tilings_list = self._split_tilings(kwargs.get("tilings"), len(pixel_values_list))
 
         image_inputs: list[Moondream3ImageInput] = []
         for value, tiling in zip(pixel_values_list, tilings_list):
             if value.dim() != 4:
-                raise ValueError(
-                    f"Expected 4D tensor for crops, got {tuple(value.shape)}."
-                )
+                raise ValueError(f"Expected 4D tensor for crops, got {tuple(value.shape)}.")
             image_inputs.append(Moondream3ImageInput(pixel_values=value, tiling=tiling))
         return image_inputs
 
     def _encode_image_input(self, image_input: Moondream3ImageInput) -> torch.Tensor:
         pixel_values = image_input.pixel_values
         if pixel_values.dim() != 4:
-            raise ValueError(
-                f"Expected 4D tensor for crops, got {tuple(pixel_values.shape)}."
-            )
+            raise ValueError(f"Expected 4D tensor for crops, got {tuple(pixel_values.shape)}.")
 
         device = self.vision.patch_emb.weight.device
         dtype = self.vision.patch_emb.weight.dtype
@@ -1227,18 +1181,13 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         features = self.vision(pixel_values)
 
         # Grid size = crop_size / patch_size (e.g., 378 / 14 = 27)
-        grid_size = (
-            self.config.vision_config.crop_size
-            // self.config.vision_config.enc_patch_size
-        )
+        grid_size = self.config.vision_config.crop_size // self.config.vision_config.enc_patch_size
         enc_dim = self.config.vision_config.enc_dim
         global_features = features[0]
 
         if features.shape[0] > 1:
             if image_input.tiling is None:
-                raise ValueError(
-                    "Missing tiling metadata for multi-crop Moondream image."
-                )
+                raise ValueError("Missing tiling metadata for multi-crop Moondream image.")
             local = features[1:].contiguous().view(-1, grid_size, grid_size, enc_dim)
             reconstructed = reconstruct_from_crops(
                 local,
@@ -1285,9 +1234,7 @@ class Moondream3ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         embeddings: list[torch.Tensor] = []
         for image_input in image_inputs:
             image_embeddings = self._encode_image_input(image_input)
-            embeddings.append(
-                torch.cat([bos_embedding.to(image_embeddings.dtype), image_embeddings])
-            )
+            embeddings.append(torch.cat([bos_embedding.to(image_embeddings.dtype), image_embeddings]))
         return embeddings
 
     def forward(

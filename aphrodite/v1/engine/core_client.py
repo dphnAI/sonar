@@ -90,14 +90,11 @@ class EngineCoreClient(ABC):
         # TODO: support this for debugging purposes.
         if asyncio_mode and not multiprocess_mode:
             raise NotImplementedError(
-                "Running EngineCore in asyncio without multiprocessing "
-                "is not currently supported."
+                "Running EngineCore in asyncio without multiprocessing is not currently supported."
             )
 
         if multiprocess_mode and asyncio_mode:
-            return EngineCoreClient.make_async_mp_client(
-                aphrodite_config, executor_class, log_stats
-            )
+            return EngineCoreClient.make_async_mp_client(aphrodite_config, executor_class, log_stats)
 
         if multiprocess_mode and not asyncio_mode:
             return SyncMPClient(aphrodite_config, executor_class, log_stats)
@@ -149,9 +146,7 @@ class EngineCoreClient(ABC):
     def reset_mm_cache(self) -> None:
         raise NotImplementedError
 
-    def reset_prefix_cache(
-        self, reset_running_requests: bool = False, reset_connector: bool = False
-    ) -> bool:
+    def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
         raise NotImplementedError
 
     def reset_encoder_cache(self) -> None:
@@ -187,9 +182,7 @@ class EngineCoreClient(ABC):
     def pin_lora(self, lora_id: int) -> bool:
         raise NotImplementedError
 
-    def save_sharded_state(
-        self, path: str, pattern: str | None = None, max_size: int | None = None
-    ) -> None:
+    def save_sharded_state(self, path: str, pattern: str | None = None, max_size: int | None = None) -> None:
         raise NotImplementedError
 
     def collective_rpc(
@@ -218,9 +211,7 @@ class EngineCoreClient(ABC):
     async def add_request_async(self, request: EngineCoreRequest) -> None:
         raise NotImplementedError
 
-    async def profile_async(
-        self, is_start: bool = True, profile_prefix: str | None = None
-    ) -> None:
+    async def profile_async(self, is_start: bool = True, profile_prefix: str | None = None) -> None:
         raise NotImplementedError
 
     async def reset_mm_cache_async(self) -> None:
@@ -311,12 +302,8 @@ class InprocClient(EngineCoreClient):
     def reset_mm_cache(self) -> None:
         self.engine_core.reset_mm_cache()
 
-    def reset_prefix_cache(
-        self, reset_running_requests: bool = False, reset_connector: bool = False
-    ) -> bool:
-        return self.engine_core.reset_prefix_cache(
-            reset_running_requests, reset_connector
-        )
+    def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
+        return self.engine_core.reset_prefix_cache(reset_running_requests, reset_connector)
 
     def reset_encoder_cache(self) -> None:
         self.engine_core.reset_encoder_cache()
@@ -348,9 +335,7 @@ class InprocClient(EngineCoreClient):
     def pin_lora(self, lora_id: int) -> bool:
         return self.engine_core.pin_lora(lora_id)
 
-    def save_sharded_state(
-        self, path: str, pattern: str | None = None, max_size: int | None = None
-    ) -> None:
+    def save_sharded_state(self, path: str, pattern: str | None = None, max_size: int | None = None) -> None:
         self.engine_core.save_sharded_state(path, pattern, max_size)
 
     def collective_rpc(
@@ -395,9 +380,7 @@ class BackgroundResources:
         logger.debug_once("[shutdown] MPClient: background resource cleanup start")
         self.engine_dead = True
         if self.engine_manager is not None:
-            self.engine_manager.shutdown(
-                timeout=envs.APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS
-            )
+            self.engine_manager.shutdown(timeout=envs.APHRODITE_WORKER_SHUTDOWN_TIMEOUT_SECONDS)
         if self.coordinator is not None:
             self.coordinator.shutdown()
 
@@ -522,23 +505,15 @@ class MPClient(EngineCoreClient):
                     bind=True,
                     router_handover=enable_input_socket_handover,
                 )
-                self.resources.output_socket = make_zmq_socket(
-                    self.ctx, output_address, zmq.PULL
-                )
+                self.resources.output_socket = make_zmq_socket(self.ctx, output_address, zmq.PULL)
 
                 # Report bound endpoints back so the parent can forward
                 # them to engines (mirrors the DPCoordinator pattern).
-                actual_address_pipe: Connection | None = client_addresses.get(
-                    "actual_address_pipe"
-                )
+                actual_address_pipe: Connection | None = client_addresses.get("actual_address_pipe")
                 if actual_address_pipe is not None:
                     try:
-                        actual_input = self.input_socket.getsockopt(
-                            zmq.LAST_ENDPOINT
-                        ).decode()
-                        actual_output = self.resources.output_socket.getsockopt(
-                            zmq.LAST_ENDPOINT
-                        ).decode()
+                        actual_input = self.input_socket.getsockopt(zmq.LAST_ENDPOINT).decode()
+                        actual_output = self.resources.output_socket.getsockopt(zmq.LAST_ENDPOINT).decode()
                         actual_address_pipe.send(
                             {
                                 "input_address": actual_input,
@@ -557,30 +532,25 @@ class MPClient(EngineCoreClient):
                     bind=True,
                     router_handover=enable_input_socket_handover,
                 )
-                self.resources.output_socket = make_zmq_socket(
-                    self.ctx, addresses.outputs[0], zmq.PULL
-                )
+                self.resources.output_socket = make_zmq_socket(self.ctx, addresses.outputs[0], zmq.PULL)
 
                 # Resolve ``tcp://host:0`` placeholders to bound endpoints
                 # before engines DEALER-connect. No-op for IPC.
-                addresses.inputs[0] = self.input_socket.getsockopt(
-                    zmq.LAST_ENDPOINT
-                ).decode()
-                addresses.outputs[0] = self.resources.output_socket.getsockopt(
-                    zmq.LAST_ENDPOINT
-                ).decode()
+                addresses.inputs[0] = self.input_socket.getsockopt(zmq.LAST_ENDPOINT).decode()
+                addresses.outputs[0] = self.resources.output_socket.getsockopt(zmq.LAST_ENDPOINT).decode()
 
-                with launch_core_engines(
-                    aphrodite_config, executor_class, log_stats, addresses
-                ) as (engine_manager, coordinator, addresses, tensor_queue):
+                with launch_core_engines(aphrodite_config, executor_class, log_stats, addresses) as (
+                    engine_manager,
+                    coordinator,
+                    addresses,
+                    tensor_queue,
+                ):
                     self.resources.coordinator = coordinator
                     self.resources.engine_manager = engine_manager
 
                 self.stats_update_address = addresses.frontend_stats_publish_address
                 if coordinator is not None:
-                    assert self.stats_update_address == (
-                        coordinator.get_stats_publish_address()
-                    )
+                    assert self.stats_update_address == (coordinator.get_stats_publish_address())
 
             # Serialization setup with tensor queues for multimodal tensor IPC.
             tensor_ipc_sender: TensorIpcSender | None = None
@@ -600,17 +570,11 @@ class MPClient(EngineCoreClient):
             # Client manages local+remote EngineCores in pure internal LB case.
             # Client manages local EngineCores in hybrid and external LB case.
             num_ranks = dp_local_size if parallel_config.local_engines_only else dp_size
-            self.engine_ranks_managed = (
-                [dp_rank] if offline_mode else list(range(dp_rank, dp_rank + num_ranks))
-            )
-            assert parallel_config.data_parallel_size_local <= len(
-                self.engine_ranks_managed
-            )
+            self.engine_ranks_managed = [dp_rank] if offline_mode else list(range(dp_rank, dp_rank + num_ranks))
+            assert parallel_config.data_parallel_size_local <= len(self.engine_ranks_managed)
 
             # ZMQ identity of each engine that this client will talk to.
-            self.core_engines: list[EngineIdentity] = [
-                rank.to_bytes(2, "little") for rank in self.engine_ranks_managed
-            ]
+            self.core_engines: list[EngineIdentity] = [rank.to_bytes(2, "little") for rank in self.engine_ranks_managed]
 
             # Wait for ready messages from each engine on the input socket.
             identities = set(self.core_engines)
@@ -663,9 +627,7 @@ class MPClient(EngineCoreClient):
 
     def _format_exception(self, e: Exception) -> Exception:
         """If errored, use EngineDeadError so root cause is clear."""
-        return (
-            EngineDeadError(suppress_context=True) if self.resources.engine_dead else e
-        )
+        return EngineDeadError(suppress_context=True) if self.resources.engine_dead else e
 
     def ensure_alive(self):
         if self.resources.engine_dead:
@@ -699,17 +661,13 @@ class MPClient(EngineCoreClient):
             if not _self or not _self._finalizer.alive or _self.resources.engine_dead:
                 return
             _self.resources.engine_dead = True
-            logger.warning_once(
-                "[shutdown] MPClient: engine core exited unexpectedly; starting cleanup"
-            )
+            logger.warning_once("[shutdown] MPClient: engine core exited unexpectedly; starting cleanup")
             _self.shutdown()
             # Note: For MPClient, we don't have a failure callback mechanism
             # like MultiprocExecutor, but we set engine_dead flag which will
             # cause subsequent operations to raise EngineDeadError
 
-        Thread(
-            target=monitor_engine_cores, daemon=True, name="MPClientEngineMonitor"
-        ).start()
+        Thread(target=monitor_engine_cores, daemon=True, name="MPClientEngineMonitor").start()
 
     def _apply_ready_response(self, payload: bytes) -> None:
         """Decode an EngineCoreReadyResponse and sync any post-initialization
@@ -754,9 +712,7 @@ class MPClient(EngineCoreClient):
                 assert response.dp_stats_address == self.stats_update_address
 
 
-def _process_utility_output(
-    output: UtilityOutput, utility_results: dict[int, AnyFuture]
-):
+def _process_utility_output(output: UtilityOutput, utility_results: dict[int, AnyFuture]):
     """Set the result from a utility method in the waiting future."""
     future = utility_results.pop(output.call_id)
     failure_message = output.failure_message
@@ -780,9 +736,7 @@ class SyncMPClient(MPClient):
     """Synchronous client for multi-proc EngineCore."""
 
     @instrument(span_name="SyncMPClient init")
-    def __init__(
-        self, aphrodite_config: AphroditeConfig, executor_class: type[Executor], log_stats: bool
-    ):
+    def __init__(self, aphrodite_config: AphroditeConfig, executor_class: type[Executor], log_stats: bool):
         super().__init__(
             asyncio_mode=False,
             aphrodite_config=aphrodite_config,
@@ -898,12 +852,8 @@ class SyncMPClient(MPClient):
     def reset_mm_cache(self) -> None:
         self.call_utility("reset_mm_cache")
 
-    def reset_prefix_cache(
-        self, reset_running_requests: bool = False, reset_connector: bool = False
-    ) -> bool:
-        return self.call_utility(
-            "reset_prefix_cache", reset_running_requests, reset_connector
-        )
+    def reset_prefix_cache(self, reset_running_requests: bool = False, reset_connector: bool = False) -> bool:
+        return self.call_utility("reset_prefix_cache", reset_running_requests, reset_connector)
 
     def reset_encoder_cache(self) -> None:
         self.call_utility("reset_encoder_cache")
@@ -941,9 +891,7 @@ class SyncMPClient(MPClient):
     ) -> list[_R]:
         return self.call_utility("collective_rpc", method, timeout, args, kwargs)
 
-    def save_sharded_state(
-        self, path: str, pattern: str | None = None, max_size: int | None = None
-    ) -> None:
+    def save_sharded_state(self, path: str, pattern: str | None = None, max_size: int | None = None) -> None:
         self.call_utility("save_sharded_state", path, pattern, max_size)
 
 
@@ -991,16 +939,16 @@ class AsyncMPClient(MPClient):
         decoder = self.decoder
         utility_results = self.utility_results
         outputs_queue = self.outputs_queue
-        output_handler: (
-            Callable[[AsyncMPClient, EngineCoreOutputs], Awaitable[None]] | None
-        ) = getattr(self.__class__, "process_engine_outputs", None)
+        output_handler: Callable[[AsyncMPClient, EngineCoreOutputs], Awaitable[None]] | None = getattr(
+            self.__class__, "process_engine_outputs", None
+        )
         _self_ref = weakref.ref(self) if output_handler else None
         output_socket = resources.output_socket
         assert output_socket is not None
 
-        notification_callback_handler: (
-            Callable[[AsyncMPClient, Sequence[Any]], Any] | None
-        ) = getattr(self.__class__, "eep_process_engine_core_notification", None)
+        notification_callback_handler: Callable[[AsyncMPClient, Sequence[Any]], Any] | None = getattr(
+            self.__class__, "eep_process_engine_core_notification", None
+        )
 
         async def process_outputs_socket():
             try:
@@ -1022,13 +970,9 @@ class AsyncMPClient(MPClient):
                             notification_data = outputs.utility_output.result.result
                             assert isinstance(notification_data, Sequence)
                             assert len(notification_data) == 2
-                            asyncio.create_task(
-                                notification_callback_handler(_self, notification_data)
-                            )
+                            asyncio.create_task(notification_callback_handler(_self, notification_data))
                         else:
-                            _process_utility_output(
-                                outputs.utility_output, utility_results
-                            )
+                            _process_utility_output(outputs.utility_output, utility_results)
                         continue
 
                     if output_handler is not None:
@@ -1046,9 +990,7 @@ class AsyncMPClient(MPClient):
             except asyncio.CancelledError:
                 outputs_queue.put_nowait(EngineDeadError())
 
-        resources.output_queue_task = asyncio.create_task(
-            process_outputs_socket(), name="EngineCoreOutputQueueTask"
-        )
+        resources.output_queue_task = asyncio.create_task(process_outputs_socket(), name="EngineCoreOutputQueueTask")
 
     async def get_output_async(self) -> EngineCoreOutputs:
         self._ensure_output_queue_task()
@@ -1073,9 +1015,7 @@ class AsyncMPClient(MPClient):
         message = (request_type.value, *self.encoder.encode(request))
         return self._send_input_message(message, engine, request)
 
-    def _send_input_message(
-        self, message: tuple[bytestr, ...], engine: EngineIdentity, objects: Any
-    ) -> Awaitable[Any]:
+    def _send_input_message(self, message: tuple[bytestr, ...], engine: EngineIdentity, objects: Any) -> Awaitable[Any]:
         """
         objects is a reference to retain until zmq is finished with the
         buffers, in case they were extracted from tensors in the request.
@@ -1101,9 +1041,7 @@ class AsyncMPClient(MPClient):
     async def call_utility_async(self, method: str, *args) -> Any:
         return await self._call_utility_async(method, *args, engine=self.core_engine)
 
-    async def _call_utility_async(
-        self, method: str, *args, engine: EngineIdentity
-    ) -> Any:
+    async def _call_utility_async(self, method: str, *args, engine: EngineIdentity) -> Any:
         call_id = uuid.uuid1().int >> 64
         future = asyncio.get_running_loop().create_future()
         self.utility_results[call_id] = future
@@ -1127,9 +1065,7 @@ class AsyncMPClient(MPClient):
         if request_ids and not self.resources.engine_dead:
             await self._send_input(EngineCoreRequestType.ABORT, request_ids)
 
-    async def pause_scheduler_async(
-        self, mode: PauseMode = "abort", clear_cache: bool = True
-    ) -> None:
+    async def pause_scheduler_async(self, mode: PauseMode = "abort", clear_cache: bool = True) -> None:
         await self.call_utility_async("pause_scheduler", mode, clear_cache)
 
     async def resume_scheduler_async(self) -> None:
@@ -1138,9 +1074,7 @@ class AsyncMPClient(MPClient):
     async def is_scheduler_paused_async(self) -> bool:
         return await self.call_utility_async("is_scheduler_paused")
 
-    async def profile_async(
-        self, is_start: bool = True, profile_prefix: str | None = None
-    ) -> None:
+    async def profile_async(self, is_start: bool = True, profile_prefix: str | None = None) -> None:
         await self.call_utility_async("profile", is_start, profile_prefix)
 
     async def reset_mm_cache_async(self) -> None:
@@ -1149,9 +1083,7 @@ class AsyncMPClient(MPClient):
     async def reset_prefix_cache_async(
         self, reset_running_requests: bool = False, reset_connector: bool = False
     ) -> bool:
-        return await self.call_utility_async(
-            "reset_prefix_cache", reset_running_requests, reset_connector
-        )
+        return await self.call_utility_async("reset_prefix_cache", reset_running_requests, reset_connector)
 
     async def reset_encoder_cache_async(self) -> None:
         await self.call_utility_async("reset_encoder_cache")
@@ -1192,9 +1124,7 @@ class AsyncMPClient(MPClient):
         args: tuple = (),
         kwargs: dict[str, Any] | None = None,
     ) -> list[_R]:
-        return await self.call_utility_async(
-            "collective_rpc", method, timeout, args, kwargs
-        )
+        return await self.call_utility_async("collective_rpc", method, timeout, args, kwargs)
 
 
 class DPAsyncMPClient(AsyncMPClient):
@@ -1228,8 +1158,8 @@ class DPAsyncMPClient(AsyncMPClient):
         self.eep_scaling_cache: ElasticScalingCache | None = None
 
         self.first_req_sock_addr = get_open_zmq_inproc_path()
-        self.first_req_send_socket = self.resources.first_req_send_socket = (
-            make_zmq_socket(self.ctx, self.first_req_sock_addr, zmq.PAIR, bind=True)
+        self.first_req_send_socket = self.resources.first_req_send_socket = make_zmq_socket(
+            self.ctx, self.first_req_sock_addr, zmq.PAIR, bind=True
         )
         try:
             # If we are running in an asyncio event loop, start the stats task.
@@ -1268,11 +1198,7 @@ class DPAsyncMPClient(AsyncMPClient):
 
                 while True:
                     events = await poller.poll()
-                    if (
-                        not self.engines_running
-                        and len(events) == 2
-                        or (events[0][0] == first_req_rcv_socket)
-                    ):
+                    if not self.engines_running and len(events) == 2 or (events[0][0] == first_req_rcv_socket):
                         # Check if this is a regular request notification or
                         # scale up notification
                         buf = first_req_rcv_socket.recv(flags=zmq.NOBLOCK).result()
@@ -1292,26 +1218,18 @@ class DPAsyncMPClient(AsyncMPClient):
                             assert dp_rank == 0
                             assert dp_size == new_engine_count
                             assert not (
-                                parallel_config.data_parallel_hybrid_lb
-                                or parallel_config.data_parallel_external_lb
+                                parallel_config.data_parallel_hybrid_lb or parallel_config.data_parallel_external_lb
                             )
                             num_ranks = dp_size
-                            self.engine_ranks_managed = list(
-                                range(dp_rank, dp_rank + num_ranks)
-                            )
+                            self.engine_ranks_managed = list(range(dp_rank, dp_rank + num_ranks))
                             if len(self.lb_engines) < new_engine_count:
                                 self.lb_engines = self.lb_engines + [
-                                    [0, 0]
-                                    for _ in range(
-                                        new_engine_count - len(self.lb_engines)
-                                    )
+                                    [0, 0] for _ in range(new_engine_count - len(self.lb_engines))
                                 ]
                             else:
                                 self.lb_engines = self.lb_engines[:new_engine_count]
                             # Send scale up notification to coordinator
-                            scale_msg = msgspec.msgpack.encode(
-                                ("SCALE_ELASTIC_EP", new_engine_count)
-                            )
+                            scale_msg = msgspec.msgpack.encode(("SCALE_ELASTIC_EP", new_engine_count))
                             await socket.send(scale_msg)
                             continue
 
@@ -1321,9 +1239,7 @@ class DPAsyncMPClient(AsyncMPClient):
                         assert decoded[0] == "FIRST_REQ"
                         target_eng_index = decoded[1]
                         self.engines_running = True
-                        msg = msgspec.msgpack.encode(
-                            (target_eng_index, self.current_wave)
-                        )
+                        msg = msgspec.msgpack.encode((target_eng_index, self.current_wave))
                         await socket.send(msg)
 
                     buf = None
@@ -1348,13 +1264,9 @@ class DPAsyncMPClient(AsyncMPClient):
                         count_slice = slice(ranks[0], ranks[-1] + 1)
                         sliced_counts = counts[count_slice]
                         self.lb_engines = sliced_counts
-                        logger.debug(
-                            "Received counts: %s (%s)", sliced_counts, count_slice
-                        )
+                        logger.debug("Received counts: %s (%s)", sliced_counts, count_slice)
 
-        resources.stats_update_task = asyncio.create_task(
-            run_engine_stats_update_task()
-        )
+        resources.stats_update_task = asyncio.create_task(run_engine_stats_update_task())
 
     async def add_request_async(self, request: EngineCoreRequest) -> None:
         self._ensure_stats_update_task()
@@ -1406,16 +1318,12 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
 
         assert len(self.core_engines) > 1
 
-        self.eng_start_index = (
-            len(self.core_engines) * self.client_index
-        ) // client_count
+        self.eng_start_index = (len(self.core_engines) * self.client_index) // client_count
 
     def get_core_engine_for_request(self, request: EngineCoreRequest) -> EngineIdentity:
         # Engines are in rank order.
         if (eng_index := request.data_parallel_rank) is None and (
-            eng_index := get_late_interaction_engine_index(
-                request.pooling_params, len(self.core_engines)
-            )
+            eng_index := get_late_interaction_engine_index(request.pooling_params, len(self.core_engines))
         ) is None:
             current_counts = self.lb_engines
             # TODO use P2C alg for larger DP sizes
@@ -1444,33 +1352,24 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         # Only the result from the first engine is returned.
         return (
             await asyncio.gather(
-                *[
-                    self._call_utility_async(method, *args, engine=engine)
-                    for engine in self.core_engines
-                ]
+                *[self._call_utility_async(method, *args, engine=engine) for engine in self.core_engines]
             )
         )[0]
 
     @staticmethod
-    async def process_engine_outputs(
-        self: "DPLBAsyncMPClient", outputs: EngineCoreOutputs
-    ):
+    async def process_engine_outputs(self: "DPLBAsyncMPClient", outputs: EngineCoreOutputs):
         if outputs.finished_requests and self.reqs_in_flight:
             for req_id in outputs.finished_requests:
                 self.reqs_in_flight.pop(req_id, None)
 
     @staticmethod
-    async def eep_process_engine_core_notification(
-        self: "DPLBAsyncMPClient", notification_data: tuple[str, int]
-    ):
+    async def eep_process_engine_core_notification(self: "DPLBAsyncMPClient", notification_data: tuple[str, int]):
         cache = self.eep_scaling_cache
         notification_type_str, dp_rank = notification_data
         try:
             notification_type = EEPNotificationType(notification_type_str)
         except ValueError as e:
-            raise ValueError(
-                f"Unknown EEP notification type: {notification_type_str}"
-            ) from e
+            raise ValueError(f"Unknown EEP notification type: {notification_type_str}") from e
 
         if notification_type == EEPNotificationType.RECONFIGURE_FINISHED:
             from aphrodite.v1.engine import UtilityResult
@@ -1478,30 +1377,22 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
             # NOTE(yongji): process a dummy UtilityOutput to resolve the future
             # awaited in _eep_wait_for_setup_switch_complete(), signaling that
             # all engine cores have completed reconfiguration.
-            dummy_output = UtilityOutput(
-                call_id=EEP_NOTIFICATION_CALL_ID, result=UtilityResult(None)
-            )
+            dummy_output = UtilityOutput(call_id=EEP_NOTIFICATION_CALL_ID, result=UtilityResult(None))
             _process_utility_output(dummy_output, self.utility_results)
             return
         assert cache is not None
         if notification_type not in cache.pending_notifications:
             cache.pending_notifications[notification_type] = set()
         if dp_rank in cache.pending_notifications[notification_type]:
-            raise ValueError(
-                f"Duplicate notification {notification_type} from dp_rank {dp_rank}"
-            )
+            raise ValueError(f"Duplicate notification {notification_type} from dp_rank {dp_rank}")
         cache.pending_notifications[notification_type].add(dp_rank)
-        if len(cache.pending_notifications[notification_type]) >= abs(
-            cache.num_new_core_engines
-        ):
+        if len(cache.pending_notifications[notification_type]) >= abs(cache.num_new_core_engines):
             if notification_type == EEPNotificationType.SHUTDOWN_COMPLETE:
                 assert isinstance(self.resources.engine_manager, CoreEngineActorManager)
                 assert cache.num_new_core_engines < 0
                 old_dp_size = len(cache.existing_core_engines)
                 new_dp_size = old_dp_size + cache.num_new_core_engines
-                self.resources.engine_manager.scale_down_elastic_ep(
-                    old_dp_size, new_dp_size
-                )
+                self.resources.engine_manager.scale_down_elastic_ep(old_dp_size, new_dp_size)
             else:
                 await asyncio.gather(
                     *[
@@ -1537,9 +1428,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         for engine, req_ids in by_engine.items():
             await self._abort_requests(req_ids, engine)
 
-    async def _abort_requests(
-        self, request_ids: list[str], engine: EngineIdentity
-    ) -> None:
+    async def _abort_requests(self, request_ids: list[str], engine: EngineIdentity) -> None:
         await self._send_input(EngineCoreRequestType.ABORT, request_ids, engine)
 
     async def scale_elastic_ep(self, new_data_parallel_size: int) -> None:
@@ -1558,13 +1447,9 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         scale_up = new_data_parallel_size > cur_data_parallel_size
 
         if scale_up:
-            await self._scale_up_elastic_ep(
-                cur_data_parallel_size, new_data_parallel_size
-            )
+            await self._scale_up_elastic_ep(cur_data_parallel_size, new_data_parallel_size)
         else:
-            await self._scale_down_elastic_ep(
-                cur_data_parallel_size, new_data_parallel_size
-            )
+            await self._scale_down_elastic_ep(cur_data_parallel_size, new_data_parallel_size)
 
     async def _eep_wait_for_setup_switch_complete(self) -> None:
         """
@@ -1586,9 +1471,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
 
         parallel_config = self.aphrodite_config.parallel_config
         parallel_config._data_parallel_master_port_list = get_open_ports_list(5)
-        parallel_config.data_parallel_master_port = (
-            parallel_config._data_parallel_master_port_list.pop()
-        )
+        parallel_config.data_parallel_master_port = parallel_config._data_parallel_master_port_list.pop()
 
         ip = parallel_config.data_parallel_master_ip
         store = create_tcp_store(
@@ -1602,9 +1485,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         self._coord_store = store
         return ip, store.port
 
-    async def _scale_up_elastic_ep(
-        self, cur_data_parallel_size: int, new_data_parallel_size: int
-    ) -> None:
+    async def _scale_up_elastic_ep(self, cur_data_parallel_size: int, new_data_parallel_size: int) -> None:
         """Scale up the data parallel size by creating new engine cores
         and reconfiguring existing ones."""
         cur_data_parallel_size = len(self.core_engines)
@@ -1630,9 +1511,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
                 new_data_parallel_master_port_list=parallel_config._data_parallel_master_port_list,
                 coord_store_port=coord_store_port,
             )
-            coro = self._call_utility_async(
-                "reinitialize_distributed", reconfig_request, engine=engine
-            )
+            coro = self._call_utility_async("reinitialize_distributed", reconfig_request, engine=engine)
             reconfig_futures.append(asyncio.create_task(coro))
 
         # Phase 2: Create new engines
@@ -1685,9 +1564,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
         # Notify coordinator about scale up through existing
         # stats_update_task connection
         self._ensure_stats_update_task()
-        scale_up_marker = msgspec.msgpack.encode(
-            ("SCALE_ELASTIC_EP", new_data_parallel_size)
-        )
+        scale_up_marker = msgspec.msgpack.encode(("SCALE_ELASTIC_EP", new_data_parallel_size))
         await self.first_req_send_socket.send(scale_up_marker)
 
         logger.info(
@@ -1695,9 +1572,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
             new_data_parallel_size,
         )
 
-    async def _scale_down_elastic_ep(
-        self, cur_data_parallel_size: int, new_data_parallel_size: int
-    ) -> None:
+    async def _scale_down_elastic_ep(self, cur_data_parallel_size: int, new_data_parallel_size: int) -> None:
         """Scale down the data parallel size by shutting down and
         reconfiguring existing engine cores."""
         cur_data_parallel_size = len(self.core_engines)
@@ -1726,12 +1601,8 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
                 coord_store_port=coord_store_port,
             )
             if cur_dp_rank >= new_data_parallel_size:
-                reconfig_request.new_data_parallel_rank = (
-                    ReconfigureRankType.SHUTDOWN_CURRENT_RANK
-                )
-            coro = self._call_utility_async(
-                "reinitialize_distributed", reconfig_request, engine=engine
-            )
+                reconfig_request.new_data_parallel_rank = ReconfigureRankType.SHUTDOWN_CURRENT_RANK
+            coro = self._call_utility_async("reinitialize_distributed", reconfig_request, engine=engine)
             reconfig_futures.append(asyncio.create_task(coro))
 
         # NOTE(yongji): Immediately stop sending requests to the removing engines.
@@ -1743,9 +1614,7 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
 
         self.aphrodite_config.parallel_config.data_parallel_size = new_data_parallel_size
         self._ensure_stats_update_task()
-        scale_down_marker = msgspec.msgpack.encode(
-            ("SCALE_ELASTIC_EP", new_data_parallel_size)
-        )
+        scale_down_marker = msgspec.msgpack.encode(("SCALE_ELASTIC_EP", new_data_parallel_size))
         await self.first_req_send_socket.send(scale_down_marker)
 
         # NOTE(yongji): Unlike scaling up,

@@ -39,10 +39,7 @@ class MLAPrefillSelectorConfig(NamedTuple):
     )
 
     def __repr__(self):
-        return (
-            f"MLAPrefillSelectorConfig(dtype={self.dtype}, "
-            f"mla_dimensions={self.mla_dimensions})"
-        )
+        return f"MLAPrefillSelectorConfig(dtype={self.dtype}, mla_dimensions={self.mla_dimensions})"
 
 
 def _get_mla_prefill_backend_priorities(
@@ -96,9 +93,7 @@ def get_mla_prefill_backend(
 
     device_capability = current_platform.get_device_capability()
     if device_capability is None:
-        logger.info_once(
-            "Device capability not available, using FlashAttention MLA prefill backend."
-        )
+        logger.info_once("Device capability not available, using FlashAttention MLA prefill backend.")
         return MLAPrefillBackendEnum.FLASH_ATTN.get_class()
 
     attention_config = aphrodite_config.attention_config
@@ -122,9 +117,7 @@ def get_mla_prefill_backend(
         backend_cls: type[MLAPrefillBackend] | None = None
         try:
             backend_cls = selected_backend.get_class()
-            invalid_reasons = backend_cls.validate_configuration(
-                device_capability, selector_config
-            )
+            invalid_reasons = backend_cls.validate_configuration(device_capability, selector_config)
         except ImportError:
             invalid_reasons = ["ImportError"]
         if invalid_reasons:
@@ -164,9 +157,7 @@ def _auto_select_mla_prefill_backend(
         backend_cls: type[MLAPrefillBackend] | None = None
         try:
             backend_cls = backend_enum.get_class()
-            invalid_reasons = backend_cls.validate_configuration(
-                device_capability, selector_config
-            )
+            invalid_reasons = backend_cls.validate_configuration(device_capability, selector_config)
         except ImportError:
             invalid_reasons = ["ImportError"]
         if not invalid_reasons:
@@ -176,12 +167,7 @@ def _auto_select_mla_prefill_backend(
         all_invalid_reasons[backend_enum.name] = invalid_reasons
 
     reasons_str = (
-        "{"
-        + ", ".join(
-            f"{name}: [{', '.join(reasons)}]"
-            for name, reasons in all_invalid_reasons.items()
-        )
-        + "}"
+        "{" + ", ".join(f"{name}: [{', '.join(reasons)}]" for name, reasons in all_invalid_reasons.items()) + "}"
     )
     config_str = repr(selector_config)
     logger.debug_once(
@@ -190,6 +176,4 @@ def _auto_select_mla_prefill_backend(
         reasons_str,
     )
 
-    raise ValueError(
-        f"No valid MLA prefill backend found with {config_str}. Reasons: {reasons_str}."
-    )
+    raise ValueError(f"No valid MLA prefill backend found with {config_str}. Reasons: {reasons_str}.")

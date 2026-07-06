@@ -160,9 +160,7 @@ class KimiK2Parser(ParserEngine):
         thinking = chat_kwargs.get("thinking", None)
         enable_thinking = chat_kwargs.get("enable_thinking", None)
         self.thinking_enabled = (
-            True
-            if thinking is None and enable_thinking is None
-            else bool(thinking) or bool(enable_thinking)
+            True if thinking is None and enable_thinking is None else bool(thinking) or bool(enable_thinking)
         )
         kwargs.setdefault(
             "parser_engine_config",
@@ -206,9 +204,7 @@ class KimiK2Parser(ParserEngine):
     def _handle_tool_end(self, event, deltas) -> None:
         idx = event.tool_index
         if 0 <= idx < len(self._tool_slots) and not self._tool_slots[idx].name_sent:
-            tool_id, tool_name = self._extract_tool_id_and_name(
-                self._tool_slots[idx].name
-            )
+            tool_id, tool_name = self._extract_tool_id_and_name(self._tool_slots[idx].name)
             if tool_name:
                 self._tool_slots[idx].id = tool_id or ""
                 self._tool_slots[idx].name = tool_name
@@ -216,9 +212,7 @@ class KimiK2Parser(ParserEngine):
 
     def _handle_arg_chunk(self, event, deltas) -> None:
         idx = event.tool_index
-        name_sent_before = (
-            0 <= idx < len(self._tool_slots) and self._tool_slots[idx].name_sent
-        )
+        name_sent_before = 0 <= idx < len(self._tool_slots) and self._tool_slots[idx].name_sent
         super()._handle_arg_chunk(event, deltas)
         if (
             event.value

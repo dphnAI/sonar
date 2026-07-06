@@ -46,7 +46,9 @@ SINGLE_AUDIO_BASE_PROMPT = AUDIO_ASSETS.prompts(
     }
 )
 
-MULTI_IMAGE_BASE_PROMPT = f"Image-1: {TEST_IMG_PLACEHOLDER}Image-2: {TEST_IMG_PLACEHOLDER}Describe the two images in detail.\n"  # noqa: E501
+MULTI_IMAGE_BASE_PROMPT = (
+    f"Image-1: {TEST_IMG_PLACEHOLDER}Image-2: {TEST_IMG_PLACEHOLDER}Describe the two images in detail.\n"  # noqa: E501
+)
 VIDEO_BASE_PROMPT = f"{TEST_VIDEO_PLACEHOLDER}Why is this video funny?"
 
 
@@ -111,9 +113,7 @@ class VLMTestInfo(NamedTuple):
 
     # Function for converting ImageAssets to image embeddings;
     # We need to define this explicitly for embedding tests
-    convert_assets_to_embeddings: (
-        Callable[[ImageTestAssets], list[torch.Tensor]] | None
-    ) = None
+    convert_assets_to_embeddings: Callable[[ImageTestAssets], list[torch.Tensor]] | None = None
 
     # Exposed options for Aphrodite runner; we change these in a several tests,
     # but the defaults are derived from AphroditeRunner & the engine defaults
@@ -169,9 +169,7 @@ class VLMTestInfo(NamedTuple):
     # Hack for updating a prompt to take into a local path; currently only used
     # for Qwen-VL, which requires encoding the image path / url into the prompt
     # for HF runner
-    prompt_path_encoder: (
-        Callable[[PosixPath, str, list[ImageAsset] | ImageTestAssets], str] | None
-    ) = None  # noqa: E501
+    prompt_path_encoder: Callable[[PosixPath, str, list[ImageAsset] | ImageTestAssets], str] | None = None  # noqa: E501
 
     # Allows configuring a test to run with custom inputs
     custom_test_opts: list[CustomTestOptions] | None = None

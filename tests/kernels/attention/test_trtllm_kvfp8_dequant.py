@@ -75,9 +75,7 @@ def make_cross_layer_kv_cache(
     )
     fp8_full, scale = to_float8(raw)
     layer_view = fp8_full[:, :, :, 0, :, :]
-    assert not layer_view.is_contiguous(), (
-        f"Expected non-contiguous view, got strides {layer_view.stride()}"
-    )
+    assert not layer_view.is_contiguous(), f"Expected non-contiguous view, got strides {layer_view.stride()}"
     return layer_view, scale
 
 
@@ -100,12 +98,8 @@ def ref_dequant(kv_cache, block_tables, k_scale, v_scale, dequant_dtype):
             if page_idx <= 0:
                 continue
             mock_idx = b * num_pages_per_seq + p + 1
-            out[mock_idx, 0] = (kv_cache[page_idx, 0].float() * k_scale.item()).to(
-                dequant_dtype
-            )
-            out[mock_idx, 1] = (kv_cache[page_idx, 1].float() * v_scale.item()).to(
-                dequant_dtype
-            )
+            out[mock_idx, 0] = (kv_cache[page_idx, 0].float() * k_scale.item()).to(dequant_dtype)
+            out[mock_idx, 1] = (kv_cache[page_idx, 1].float() * v_scale.item()).to(dequant_dtype)
     return out
 
 

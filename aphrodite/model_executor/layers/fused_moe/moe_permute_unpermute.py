@@ -39,41 +39,19 @@ class MoEPermuteScratch:
             assert self.hidden_dtype is not None
 
         self.max_expanded_rows = self.max_num_tokens * self.topk
-        self.token_expert_indices = torch.arange(
-            self.max_expanded_rows, dtype=torch.int32, device=self.device
-        )
-        self.expert_first_token_offset = torch.empty(
-            self.num_local_experts + 1, dtype=torch.int64, device=self.device
-        )
-        self.permuted_idx = torch.empty(
-            self.max_expanded_rows, dtype=torch.int32, device=self.device
-        )
-        self.inv_permuted_idx = torch.empty(
-            self.max_expanded_rows, dtype=torch.int32, device=self.device
-        )
+        self.token_expert_indices = torch.arange(self.max_expanded_rows, dtype=torch.int32, device=self.device)
+        self.expert_first_token_offset = torch.empty(self.num_local_experts + 1, dtype=torch.int64, device=self.device)
+        self.permuted_idx = torch.empty(self.max_expanded_rows, dtype=torch.int32, device=self.device)
+        self.inv_permuted_idx = torch.empty(self.max_expanded_rows, dtype=torch.int32, device=self.device)
         if self.hidden_size is not None:
             hidden_numel = self.max_expanded_rows * self.hidden_size
-            self.permuted_hidden_states = torch.empty(
-                hidden_numel, dtype=self.hidden_dtype, device=self.device
-            )
-        self.permuted_experts_id = torch.empty(
-            self.max_expanded_rows, dtype=torch.int32, device=self.device
-        )
-        self.sorted_row_idx = torch.empty(
-            self.max_expanded_rows, dtype=torch.int32, device=self.device
-        )
-        self.topk_ids_int32 = torch.empty(
-            self.max_expanded_rows, dtype=torch.int32, device=self.device
-        )
-        self.topk_ids_for_sort = torch.empty(
-            self.max_expanded_rows, dtype=torch.int32, device=self.device
-        )
-        sorter_size = torch.ops._moe_C.moe_permute_sort_workspace_size(
-            self.max_expanded_rows, self.num_experts
-        )
-        self.sort_workspace = torch.empty(
-            sorter_size, dtype=torch.int8, device=self.device
-        )
+            self.permuted_hidden_states = torch.empty(hidden_numel, dtype=self.hidden_dtype, device=self.device)
+        self.permuted_experts_id = torch.empty(self.max_expanded_rows, dtype=torch.int32, device=self.device)
+        self.sorted_row_idx = torch.empty(self.max_expanded_rows, dtype=torch.int32, device=self.device)
+        self.topk_ids_int32 = torch.empty(self.max_expanded_rows, dtype=torch.int32, device=self.device)
+        self.topk_ids_for_sort = torch.empty(self.max_expanded_rows, dtype=torch.int32, device=self.device)
+        sorter_size = torch.ops._moe_C.moe_permute_sort_workspace_size(self.max_expanded_rows, self.num_experts)
+        self.sort_workspace = torch.empty(sorter_size, dtype=torch.int8, device=self.device)
         # torch.device("cuda") in config, after initialized,
         # will be changed to cuda:{index}, so we need to refresh here.
         self.device = self.token_expert_indices.device
@@ -137,9 +115,7 @@ def moe_permute(
     """
     n_token, n_hidden = hidden_states.size()
     topk = topk_ids.size(1)
-    assert (n_hidden * hidden_states.element_size()) % 16 == 0, (
-        "permue kernel need hidden dim align to 16B"
-    )
+    assert (n_hidden * hidden_states.element_size()) % 16 == 0, "permue kernel need hidden dim align to 16B"
     permuted_row_size = n_token * topk
     if n_local_expert == -1:
         n_local_expert = n_expert
@@ -155,31 +131,24 @@ def moe_permute(
             hidden_numel = permuted_row_size * n_hidden
             scratch_hidden_states = scratch.permuted_hidden_states
             assert scratch_hidden_states is not None
-            permuted_hidden_states = scratch_hidden_states[:hidden_numel].view(
-                permuted_row_size, n_hidden
-            )
+            permuted_hidden_states = scratch_hidden_states[:hidden_numel].view(permuted_row_size, n_hidden)
     assert permuted_hidden_states.size() == (permuted_row_size, n_hidden), (
-        f"Expected permuted hidden states to be {(permuted_row_size, n_hidden)}"
-        f" but got {permuted_hidden_states.size()}"
+        f"Expected permuted hidden states to be {(permuted_row_size, n_hidden)} but got {permuted_hidden_states.size()}"
     )
 
     if scratch is None:
-        token_expert_indices = torch.arange(
-            0, n_token * topk, dtype=torch.int32, device=hidden_states.device
-        ).reshape((n_token, topk))
-
-        expert_first_token_offset = torch.empty(
-            n_local_expert + 1, dtype=torch.int64, device=hidden_states.device
+        token_expert_indices = torch.arange(0, n_token * topk, dtype=torch.int32, device=hidden_states.device).reshape(
+            (n_token, topk)
         )
+
+        expert_first_token_offset = torch.empty(n_local_expert + 1, dtype=torch.int64, device=hidden_states.device)
         permuted_idx = torch.full(
             (permuted_row_size,),
             n_token * topk,
             dtype=torch.int32,
             device=hidden_states.device,
         )
-        inv_permuted_idx = torch.empty(
-            (n_token, topk), dtype=torch.int32, device=hidden_states.device
-        )
+        inv_permuted_idx = torch.empty((n_token, topk), dtype=torch.int32, device=hidden_states.device)
         topk_ids_int32 = topk_ids.to(torch.int32)
         torch.ops._moe_C.moe_permute(
             hidden_states,
@@ -202,16 +171,10 @@ def moe_permute(
         expert_first_token_offset = scratch.expert_first_token_offset
         permuted_idx = scratch.permuted_idx[:permuted_row_size]
         permuted_idx.fill_(permuted_row_size)
-        inv_permuted_idx = scratch.inv_permuted_idx[:permuted_row_size].view(
-            n_token, topk
-        )
-        permuted_experts_id = scratch.permuted_experts_id[:permuted_row_size].view(
-            n_token, topk
-        )
+        inv_permuted_idx = scratch.inv_permuted_idx[:permuted_row_size].view(n_token, topk)
+        permuted_experts_id = scratch.permuted_experts_id[:permuted_row_size].view(n_token, topk)
         sorted_row_idx = scratch.sorted_row_idx[:permuted_row_size].view(n_token, topk)
-        topk_ids_for_sort = scratch.topk_ids_for_sort[:permuted_row_size].view(
-            n_token, topk
-        )
+        topk_ids_for_sort = scratch.topk_ids_for_sort[:permuted_row_size].view(n_token, topk)
         topk_ids_int32 = scratch.prepare_topk_ids(topk_ids)
         torch.ops._moe_C.moe_permute_with_scratch(
             hidden_states,
@@ -265,9 +228,7 @@ def moe_unpermute(
     """
     topk = topk_weights.size(1)
     n_hidden = permuted_hidden_states.size(-1)
-    assert (n_hidden * permuted_hidden_states.element_size()) % 16 == 0, (
-        "unpermue kernel need hidden dim align to 16B"
-    )
+    assert (n_hidden * permuted_hidden_states.element_size()) % 16 == 0, "unpermue kernel need hidden dim align to 16B"
 
     torch.ops._moe_C.moe_unpermute(
         permuted_hidden_states,

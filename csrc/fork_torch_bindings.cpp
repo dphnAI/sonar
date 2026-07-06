@@ -3,9 +3,10 @@
 // Upstream vLLM registers core/quant ops in the _C_stable_libtorch extension
 // via STABLE_TORCH_LIBRARY. Aphrodite keeps a handful of fork-only kernels that
 // have no upstream equivalent; this file registers them into the SAME
-// torch.ops._C namespace using TORCH_LIBRARY_FRAGMENT so Python can keep calling
-// torch.ops._C.<op>. The heavy kernels live in their own translation units;
-// here we only declare the entry points, adapt argument types, and register.
+// torch.ops._C namespace using TORCH_LIBRARY_FRAGMENT so Python can keep
+// calling torch.ops._C.<op>. The heavy kernels live in their own translation
+// units; here we only declare the entry points, adapt argument types, and
+// register.
 //
 // Currently built: DRY sampler (CPU) and EXL3 quantization (CUDA). The other
 // fork kernels (exl2/aqlm/vptq/gguf/quip/...) remain in csrc but are not built.
@@ -55,13 +56,14 @@ static void aphrodite_exl3_gemm(const at::Tensor& A, const at::Tensor& B,
             mul1, static_cast<int>(force_num_sms));
 }
 
-static void aphrodite_exl3_mgemm(
-    const at::Tensor& A, const at::Tensor& B, at::Tensor& C,
-    const at::Tensor& suh, const at::Tensor& A_had, const at::Tensor& svh,
-    const std::optional<at::Tensor>& indices,
-    const std::optional<at::Tensor>& weights, int64_t k,
-    int64_t force_shape_idx, bool mcg, bool mul1, int64_t min_index,
-    int64_t max_index, int64_t force_num_sms) {
+static void aphrodite_exl3_mgemm(const at::Tensor& A, const at::Tensor& B,
+                                 at::Tensor& C, const at::Tensor& suh,
+                                 const at::Tensor& A_had, const at::Tensor& svh,
+                                 const std::optional<at::Tensor>& indices,
+                                 const std::optional<at::Tensor>& weights,
+                                 int64_t k, int64_t force_shape_idx, bool mcg,
+                                 bool mul1, int64_t min_index,
+                                 int64_t max_index, int64_t force_num_sms) {
   exl3_mgemm(A, B, C, suh, A_had, svh, indices, weights, static_cast<int>(k),
              static_cast<int>(force_shape_idx), static_cast<uint32_t>(mcg),
              static_cast<uint32_t>(mul1), static_cast<int>(min_index),

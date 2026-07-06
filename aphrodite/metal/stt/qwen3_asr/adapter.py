@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Qwen3-ASR runtime adapter for Aphrodite STT execution."""
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ from .transcriber import Qwen3ASRTranscriber
 
 
 class Qwen3ASRRuntimeAdapter(STTRuntimeAdapter):
+    model: Qwen3ASRModel
+
     def __init__(self, model: Qwen3ASRModel, model_path: str) -> None:
         super().__init__(model, model_path)
         self._transcriber: Qwen3ASRTranscriber | None = None
@@ -21,9 +24,7 @@ class Qwen3ASRRuntimeAdapter(STTRuntimeAdapter):
     @property
     def transcriber(self) -> Qwen3ASRTranscriber:
         if self._transcriber is None:
-            self._transcriber = Qwen3ASRTranscriber(
-                self.model, model_path=self._model_path
-            )
+            self._transcriber = Qwen3ASRTranscriber(self.model, model_path=self._model_path)
         return self._transcriber
 
     @property
@@ -67,12 +68,8 @@ class Qwen3ASRRuntimeAdapter(STTRuntimeAdapter):
         """Extract tokens between <asr_text> and <|im_end|>."""
         if self._asr_text_token_id is None:
             tokenizer = self.transcriber.tokenizer
-            self._asr_text_token_id = tokenizer.encode(
-                "<asr_text>", add_special_tokens=False
-            )[0]
-            self._im_end_token_id = tokenizer.encode(
-                "<|im_end|>", add_special_tokens=False
-            )[0]
+            self._asr_text_token_id = tokenizer.encode("<asr_text>", add_special_tokens=False)[0]
+            self._im_end_token_id = tokenizer.encode("<|im_end|>", add_special_tokens=False)[0]
         asr_text_token = self._asr_text_token_id
         im_end_token = self._im_end_token_id
 

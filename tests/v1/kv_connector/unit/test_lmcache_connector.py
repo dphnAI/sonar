@@ -54,19 +54,13 @@ def mock_connector():
     connector._lmcache_engine = MagicMock()
 
     # Make the methods use the real implementation
-    connector.get_kv_connector_kv_cache_events = (
-        LMCacheConnectorV1.get_kv_connector_kv_cache_events.__get__(
-            connector, LMCacheConnectorV1
-        )
-    )
-    connector.update_connector_output = (
-        LMCacheConnectorV1.update_connector_output.__get__(
-            connector, LMCacheConnectorV1
-        )
-    )
-    connector.take_events = LMCacheConnectorV1.take_events.__get__(
+    connector.get_kv_connector_kv_cache_events = LMCacheConnectorV1.get_kv_connector_kv_cache_events.__get__(
         connector, LMCacheConnectorV1
     )
+    connector.update_connector_output = LMCacheConnectorV1.update_connector_output.__get__(
+        connector, LMCacheConnectorV1
+    )
+    connector.take_events = LMCacheConnectorV1.take_events.__get__(connector, LMCacheConnectorV1)
 
     return connector
 
@@ -93,9 +87,7 @@ class TestGetKVConnectorKVCacheEvents:
 
     def test_converts_single_event(self, mock_connector, mock_lmcache_engine_event):
         """Test conversion of a single event from lmcache engine format."""
-        mock_connector._lmcache_engine.get_kv_events.return_value = [
-            mock_lmcache_engine_event
-        ]
+        mock_connector._lmcache_engine.get_kv_events.return_value = [mock_lmcache_engine_event]
 
         result = mock_connector.get_kv_connector_kv_cache_events()
 
@@ -157,9 +149,7 @@ class TestGetKVConnectorKVCacheEvents:
                 self.medium = "DISK"
                 self.lora_name = "lora_example"
 
-        mock_connector._lmcache_engine.get_kv_events.return_value = [
-            MockEventWithLora()
-        ]
+        mock_connector._lmcache_engine.get_kv_events.return_value = [MockEventWithLora()]
 
         result = mock_connector.get_kv_connector_kv_cache_events()
 
@@ -187,9 +177,7 @@ class TestGetKVConnectorKVCacheEvents:
                 self.medium = "GPU"
                 self.lora_name = None
 
-        mock_connector._lmcache_engine.get_kv_events.return_value = [
-            MockEventNoParent()
-        ]
+        mock_connector._lmcache_engine.get_kv_events.return_value = [MockEventNoParent()]
 
         result = mock_connector.get_kv_connector_kv_cache_events()
 
@@ -208,9 +196,7 @@ class TestUpdateConnectorOutput:
 
         assert mock_connector._kv_cache_events is None
 
-    def test_does_nothing_when_kv_cache_events_is_not_lmcache_kv_events(
-        self, mock_connector
-    ):
+    def test_does_nothing_when_kv_cache_events_is_not_lmcache_kv_events(self, mock_connector):
         """Test that method returns early when kv_cache_events is not
         LMCacheKVEvents."""
         # Create a mock object that is not LMCacheKVEvents
@@ -282,9 +268,7 @@ class TestUpdateConnectorOutput:
         assert event1 in all_events
         assert event2 in all_events
 
-    def test_increments_workers_when_kv_cache_events_already_exists(
-        self, mock_connector
-    ):
+    def test_increments_workers_when_kv_cache_events_already_exists(self, mock_connector):
         """Test that worker count is incremented correctly."""
         # Set up existing events with 2 workers
         existing_events = LMCacheKVEvents(num_workers=2)
@@ -565,9 +549,7 @@ class TestIntegrationScenarios:
     def test_full_workflow(self, mock_connector, mock_lmcache_engine_event):
         """Test a complete workflow from getting events to taking them."""
         # Step 1: Get events from lmcache engine
-        mock_connector._lmcache_engine.get_kv_events.return_value = [
-            mock_lmcache_engine_event
-        ]
+        mock_connector._lmcache_engine.get_kv_events.return_value = [mock_lmcache_engine_event]
         kv_events = mock_connector.get_kv_connector_kv_cache_events()
 
         assert kv_events is not None
@@ -657,9 +639,7 @@ class TestIntegrationScenarios:
 
         for cycle in range(3):
             # Get events
-            mock_connector._lmcache_engine.get_kv_events.return_value = [
-                MockEvent(cycle)
-            ]
+            mock_connector._lmcache_engine.get_kv_events.return_value = [MockEvent(cycle)]
             kv_events = mock_connector.get_kv_connector_kv_cache_events()
 
             # Update
@@ -741,9 +721,7 @@ class TestIntegrationScenarios:
 
         # Create ModelRunnerOutput instances for each worker
         worker_outputs = []
-        for i, worker_events in enumerate(
-            [worker0_events, worker1_events, worker2_events]
-        ):
+        for i, worker_events in enumerate([worker0_events, worker1_events, worker2_events]):
             output = ModelRunnerOutput(
                 req_ids=[f"req_{i}"],
                 req_id_to_index={f"req_{i}": 0},
@@ -752,12 +730,8 @@ class TestIntegrationScenarios:
                 prompt_logprobs_dict={},
                 pooler_output=[None],
                 kv_connector_output=KVConnectorOutput(
-                    finished_sending=set([f"req_{i}_send"])
-                    if i < 2
-                    else None,  # Workers 0,1 finished sending
-                    finished_recving=set([f"req_{i}_recv"])
-                    if i > 0
-                    else None,  # Workers 1,2 finished receiving
+                    finished_sending=set([f"req_{i}_send"]) if i < 2 else None,  # Workers 0,1 finished sending
+                    finished_recving=set([f"req_{i}_recv"]) if i > 0 else None,  # Workers 1,2 finished receiving
                     kv_cache_events=worker_events,
                 ),
             )

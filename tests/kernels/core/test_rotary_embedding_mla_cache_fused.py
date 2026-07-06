@@ -9,12 +9,12 @@ import random
 import pytest
 import torch
 
-from tests.kernels.allclose_default import get_default_atol, get_default_rtol
-from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
 from aphrodite import _custom_ops as ops
 from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.allclose_default import get_default_atol, get_default_rtol
+from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
 
 
 @pytest.fixture
@@ -26,13 +26,11 @@ def default_aphrodite_config(monkeypatch):
     to match. Its env gates are cached at import, hence refresh_env_variables().
     """
     from aphrodite._aiter_ops import rocm_aiter_ops
-    from aphrodite.config import CompilationConfig, AphroditeConfig, set_current_aphrodite_config
+    from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
 
     is_rocm = current_platform.is_rocm()
     if is_rocm:
-        config = AphroditeConfig(
-            compilation_config=CompilationConfig(custom_ops=["+rotary_embedding"])
-        )
+        config = AphroditeConfig(compilation_config=CompilationConfig(custom_ops=["+rotary_embedding"]))
     else:
         config = AphroditeConfig()
     try:
@@ -145,9 +143,7 @@ def test_concat_and_cache_mla_rope_fused(
 
     if kv_cache_dtype == "fp8":
         ref_kv_cache = torch.empty_like(ref_temp, dtype=kv_cache.dtype)
-        ops.convert_fp8(
-            ref_kv_cache, ref_temp, kv_cache_scale.item(), kv_dtype=kv_cache_dtype
-        )
+        ops.convert_fp8(ref_kv_cache, ref_temp, kv_cache_scale.item(), kv_dtype=kv_cache_dtype)
     else:
         ref_kv_cache = ref_temp
 
@@ -194,17 +190,11 @@ def test_concat_and_cache_mla_rope_fused(
             kv_dtype=kv_cache_dtype,
         )
         expected_temp = torch.empty_like(ref_kv_cache, dtype=torch.float16)
-        ops.convert_fp8(
-            expected_temp, ref_kv_cache, kv_cache_scale.item(), kv_dtype=kv_cache_dtype
-        )
-        torch.testing.assert_close(
-            result_temp, expected_temp, atol=0.001, rtol=0.15 if rocm_neox else 0.1
-        )
+        ops.convert_fp8(expected_temp, ref_kv_cache, kv_cache_scale.item(), kv_dtype=kv_cache_dtype)
+        torch.testing.assert_close(result_temp, expected_temp, atol=0.001, rtol=0.15 if rocm_neox else 0.1)
     elif rocm_neox:
         torch.testing.assert_close(kv_cache, ref_kv_cache, atol=1e-3, rtol=1e-3)
     else:
         torch.testing.assert_close(kv_cache, ref_kv_cache)
 
-    torch.testing.assert_close(
-        query, ref_q_pe, atol=get_default_atol(query), rtol=get_default_rtol(query)
-    )
+    torch.testing.assert_close(query, ref_q_pe, atol=get_default_atol(query), rtol=get_default_rtol(query))

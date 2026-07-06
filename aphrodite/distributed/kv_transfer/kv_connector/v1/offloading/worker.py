@@ -39,17 +39,13 @@ class OffloadingConnectorWorker:
 
         # job_id -> req_id for in-flight loads.
         self._load_jobs: dict[int, ReqId] = {}
-        self._unsubmitted_store_jobs: list[
-            tuple[int, GPULoadStoreSpec, LoadStoreSpec]
-        ] = []
+        self._unsubmitted_store_jobs: list[tuple[int, GPULoadStoreSpec, LoadStoreSpec]] = []
         self._connector_worker_meta = OffloadingWorkerMetadata()
 
     def _init_worker(self, kv_caches: CanonicalKVCaches) -> None:
         self.worker = self.spec.get_worker(kv_caches)
 
-    def register_kv_caches(
-        self, kv_caches: dict[str, torch.Tensor | list[torch.Tensor]]
-    ):
+    def register_kv_caches(self, kv_caches: dict[str, torch.Tensor | list[torch.Tensor]]):
         kv_cache_config = self.spec.kv_cache_config
         num_blocks = kv_cache_config.num_blocks
 
@@ -77,9 +73,7 @@ class OffloadingConnectorWorker:
             else:
                 per_layer_specs = {}
             for layer_name in group_layer_names:
-                layer_kv_cache_spec = per_layer_specs.get(
-                    layer_name, group_kv_cache_spec
-                )
+                layer_kv_cache_spec = per_layer_specs.get(layer_name, group_kv_cache_spec)
                 if isinstance(layer_kv_cache_spec, AttentionSpec):
                     layer_kv_cache = kv_caches[layer_name]
                     assert isinstance(layer_kv_cache, torch.Tensor)
@@ -87,11 +81,7 @@ class OffloadingConnectorWorker:
                     page = layer_kv_cache_spec.page_size_bytes
                     elem_size = layer_kv_cache.element_size()
                     byte_offset = layer_kv_cache.storage_offset() * elem_size
-                    block_stride_bytes = (
-                        layer_kv_cache.stride(0) * elem_size
-                        if layer_is_packed[layer_name]
-                        else page
-                    )
+                    block_stride_bytes = layer_kv_cache.stride(0) * elem_size if layer_is_packed[layer_name] else page
                     tensors_per_block[layer_name] = (
                         torch.tensor(
                             [],
@@ -105,9 +95,7 @@ class OffloadingConnectorWorker:
                         ),
                     )
                     page_size_bytes[layer_name] = layer_kv_cache_spec.page_size_bytes
-                    unpadded_page_size_bytes[layer_name] = (
-                        layer_kv_cache_spec.real_page_size_bytes
-                    )
+                    unpadded_page_size_bytes[layer_name] = layer_kv_cache_spec.real_page_size_bytes
 
                 elif isinstance(layer_kv_cache_spec, MambaSpec):
                     state_tensors = kv_caches[layer_name]
@@ -138,11 +126,7 @@ class OffloadingConnectorWorker:
                     raise NotImplementedError
 
         packed_kv_cache_tensor = next(
-            (
-                t
-                for t in kv_cache_config.kv_cache_tensors
-                if t.block_stride and t.shared_by
-            ),
+            (t for t in kv_cache_config.kv_cache_tensors if t.block_stride and t.shared_by),
             None,
         )
         if packed_kv_cache_tensor is not None:
@@ -156,10 +140,7 @@ class OffloadingConnectorWorker:
             self._init_worker(
                 CanonicalKVCaches(
                     [CanonicalKVCacheTensor(packed_tensor, block_stride)],
-                    [
-                        [CanonicalKVCacheRef(0, block_stride)]
-                        for _ in kv_cache_config.kv_cache_groups
-                    ],
+                    [[CanonicalKVCacheRef(0, block_stride)] for _ in kv_cache_config.kv_cache_groups],
                 )
             )
             return
@@ -172,21 +153,14 @@ class OffloadingConnectorWorker:
             # every (tuple_idx, page_size) slot; slots where no group has a
             # layer at that index produce an empty shared_by (reserved memory
             # with no corresponding model layer).
-            tensor_layer_names = [
-                n for n in kv_cache_tensor.shared_by if n in tensors_per_block
-            ]
+            tensor_layer_names = [n for n in kv_cache_tensor.shared_by if n in tensors_per_block]
             if not tensor_layer_names:
                 continue
 
             # verify all layers in the group reference the exact same tensors
             assert len({len(tensors_per_block[n]) for n in tensor_layer_names}) == 1
-            assert (
-                len({tensors_per_block[n][0].data_ptr() for n in tensor_layer_names})
-                == 1
-            )
-            assert (
-                len({tensors_per_block[n][0].stride() for n in tensor_layer_names}) == 1
-            )
+            assert len({tensors_per_block[n][0].data_ptr() for n in tensor_layer_names}) == 1
+            assert len({tensors_per_block[n][0].stride() for n in tensor_layer_names}) == 1
 
             # pick the first layer to represent the group
             first_layer_name = tensor_layer_names[0]
@@ -221,18 +195,12 @@ class OffloadingConnectorWorker:
 
         self._init_worker(canonical_kv_caches)
 
-    def register_cross_layers_kv_cache(
-        self, kv_cache: torch.Tensor, attn_backend: type[AttentionBackend]
-    ):
+    def register_cross_layers_kv_cache(self, kv_cache: torch.Tensor, attn_backend: type[AttentionBackend]):
         # verify that num_blocks is at physical position 0 in the cross-layers
         # tensor layout.
-        test_shape = attn_backend.get_kv_cache_shape(
-            num_blocks=1234, block_size=16, num_kv_heads=1, head_size=256
-        )
+        test_shape = attn_backend.get_kv_cache_shape(num_blocks=1234, block_size=16, num_kv_heads=1, head_size=256)
         num_blocks_logical_dim = test_shape.index(1234) + 1
-        physical_to_logical = attn_backend.get_kv_cache_stride_order(
-            include_num_layers_dimension=True
-        )
+        physical_to_logical = attn_backend.get_kv_cache_stride_order(include_num_layers_dimension=True)
         num_blocks_physical_dim = physical_to_logical.index(num_blocks_logical_dim)
         assert num_blocks_physical_dim == 0
 
@@ -255,16 +223,10 @@ class OffloadingConnectorWorker:
             .set_(storage)
             .view(num_blocks, page_size_bytes)
         )
-        kv_cache_tensor = CanonicalKVCacheTensor(
-            tensor=tensor, page_size_bytes=page_size_bytes
-        )
+        kv_cache_tensor = CanonicalKVCacheTensor(tensor=tensor, page_size_bytes=page_size_bytes)
         # in cross layers layout, there's currently only a single group
-        kv_cache_data_ref = CanonicalKVCacheRef(
-            tensor_idx=0, page_size_bytes=page_size_bytes
-        )
-        canonical_kv_caches = CanonicalKVCaches(
-            tensors=[kv_cache_tensor], group_data_refs=[[kv_cache_data_ref]]
-        )
+        kv_cache_data_ref = CanonicalKVCacheRef(tensor_idx=0, page_size_bytes=page_size_bytes)
+        canonical_kv_caches = CanonicalKVCaches(tensors=[kv_cache_tensor], group_data_refs=[[kv_cache_data_ref]])
 
         self._init_worker(canonical_kv_caches)
 
@@ -297,9 +259,7 @@ class OffloadingConnectorWorker:
             # engine step, so that offloading starts AFTER transfers related
             # to token sampling, thereby avoiding delays to token generation.
             assert isinstance(entry.src_spec, GPULoadStoreSpec)
-            self._unsubmitted_store_jobs.append(
-                (job_id, entry.src_spec, entry.dst_spec)
-            )
+            self._unsubmitted_store_jobs.append((job_id, entry.src_spec, entry.dst_spec))
 
     def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str], set[str]]:
         """
@@ -318,10 +278,7 @@ class OffloadingConnectorWorker:
             job_id = transfer_result.job_id
             assert transfer_result.success
             is_load = job_id in self._load_jobs
-            if (
-                transfer_result.transfer_time is not None
-                and transfer_result.transfer_size is not None
-            ):
+            if transfer_result.transfer_time is not None and transfer_result.transfer_size is not None:
                 if is_load:
                     stats = self._connector_worker_meta.transfer_stats.load
                 else:

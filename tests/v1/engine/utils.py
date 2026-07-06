@@ -130,9 +130,7 @@ def _create_random_top_token_test_vector(
 
     # Check if the sampled_token_id occurs in choice_tensor[1:]
     if sampled_token_id in choice_tensor[1:]:
-        sampled_token_rank = (
-            (choice_tensor[1:] == sampled_token_id).nonzero(as_tuple=True)[0].item()
-        )
+        sampled_token_rank = (choice_tensor[1:] == sampled_token_id).nonzero(as_tuple=True)[0].item()
     else:
         # If not found, assign a random int between num_logprobs and 50700
         sampled_token_rank = random.randint(num_logprobs, 50700)
@@ -235,9 +233,7 @@ def generate_dummy_sample_logprobs(
         (
             token_vector,
             sampled_token_rank,
-        ) = _create_random_top_token_test_vector(
-            num_logprobs, 0, len(tokenizer.vocab) - 1, sampled_token_id
-        )
+        ) = _create_random_top_token_test_vector(num_logprobs, 0, len(tokenizer.vocab) - 1, sampled_token_id)
 
         res.append(
             (
@@ -297,9 +293,7 @@ def generate_dummy_prompt_logprobs_tensors(
     )
     return LogprobsTensors(
         token_vector,
-        _create_random_top_logprob_test_matrix(
-            (num_prompt_logprobs, num_logprobs + 1), -100, 0
-        ),
+        _create_random_top_logprob_test_matrix((num_prompt_logprobs, num_logprobs + 1), -100, 0),
         prompt_token_ranks,
     )
 
@@ -335,8 +329,7 @@ class MockEngineCore:
         # For each request, for each sampled token offset,
         # a tuple of
         # (list of topk token ids, list of sample logprob vals, rank)
-        generated_logprobs_raw: list[list[tuple[list[int], list[float], int]]]
-        | None = None,
+        generated_logprobs_raw: list[list[tuple[list[int], list[float], int]]] | None = None,
         # For each request, a tuple of
         # (prompt logprob val matrix, prompt logprob tok id matrix);
         # each matrix has dimensions
@@ -358,9 +351,7 @@ class MockEngineCore:
         self.eos_token_id = eos_token_id
         self.stop_token_ids = stop_token_ids
         self.request_ids = (
-            request_ids
-            if request_ids is not None
-            else [f"request-{i}" for i in range(self.num_requests)]
+            request_ids if request_ids is not None else [f"request-{i}" for i in range(self.num_requests)]
         )
 
     def get_outputs(self, num_active: int = -1) -> list[EngineCoreOutput]:
@@ -368,18 +359,16 @@ class MockEngineCore:
         do_prompt_logprobs = self.do_prompt_logprobs
 
         outputs = []
-        for req_idx, (token_ids, prompt_token_ids) in enumerate(
-            zip(self.tokens_list, self.prompts_list)
-        ):
+        for req_idx, (token_ids, prompt_token_ids) in enumerate(zip(self.tokens_list, self.prompts_list)):
             if num_active != -1 and req_idx >= num_active:
                 break
             if not self.request_finished[req_idx]:
                 token_idx = self.request_token_idx[req_idx]
                 if do_logprobs:
                     assert self.generated_logprobs_raw is not None
-                    (logprobs_token_ids_, logprobs_, sampled_token_ranks_) = (
-                        self.generated_logprobs_raw[req_idx][token_idx]
-                    )
+                    (logprobs_token_ids_, logprobs_, sampled_token_ranks_) = self.generated_logprobs_raw[req_idx][
+                        token_idx
+                    ]
                     logprobs = LogprobsLists(
                         np.array([logprobs_token_ids_]),
                         np.array([logprobs_]),

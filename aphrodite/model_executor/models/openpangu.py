@@ -30,7 +30,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -93,9 +93,7 @@ from aphrodite.v1.attention.backends.flash_attn_diffkv import FlashAttentionDiff
 
 def check_ffn_act_fn(act_fn: str):
     if act_fn != "silu":
-        raise ValueError(
-            f"Unsupported activation: {act_fn}. Only silu is supported for now."
-        )
+        raise ValueError(f"Unsupported activation: {act_fn}. Only silu is supported for now.")
 
 
 class OpenPanguMLP(nn.Module):
@@ -165,13 +163,8 @@ class OpenPanguMoE(nn.Module):
             quant_config=None,
             prefix=f"{prefix}.gate",
         )
-        if (
-            hasattr(config, "router_enable_expert_bias")
-            and config.router_enable_expert_bias
-        ):
-            self.gate.e_score_correction_bias = nn.Parameter(
-                torch.empty(self.n_routed_experts, dtype=torch.float32)
-            )
+        if hasattr(config, "router_enable_expert_bias") and config.router_enable_expert_bias:
+            self.gate.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
         else:
             self.gate.e_score_correction_bias = None
 
@@ -185,9 +178,7 @@ class OpenPanguMoE(nn.Module):
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
 
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = (
-            self.physical_expert_start + self.n_local_physical_experts
-        )
+        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
 
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
@@ -236,14 +227,10 @@ class OpenPanguMoE(nn.Module):
 
         router_logits, _ = self.gate(hidden_states)
 
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
         if self.is_sequence_parallel:
-            final_hidden_states = tensor_model_parallel_all_gather(
-                final_hidden_states, 0
-            )
+            final_hidden_states = tensor_model_parallel_all_gather(final_hidden_states, 0)
             final_hidden_states = final_hidden_states[:num_tokens]
 
         return final_hidden_states.view(num_tokens, hidden_dim)
@@ -276,9 +263,7 @@ class OpenPanguMLAAttention(nn.Module):
         self.kv_lora_rank = kv_lora_rank
         self.tp_size = get_tensor_model_parallel_world_size()
         if num_heads % self.tp_size != 0:
-            raise ValueError(
-                f"num_heads {num_heads} is not divisible by tp_size {self.tp_size}."
-            )
+            raise ValueError(f"num_heads {num_heads} is not divisible by tp_size {self.tp_size}.")
         self.num_local_heads = num_heads // self.tp_size
 
         self.scaling = self.qk_head_dim**-0.5
@@ -361,12 +346,8 @@ class OpenPanguMLAAttention(nn.Module):
             kv_b_proj=self.kv_b_proj,
             rotary_emb=self.rotary_emb,
             o_proj=self.o_proj,
-            fused_qkv_a_proj=self.fused_qkv_a_proj
-            if self.q_lora_rank is not None
-            else None,
-            kv_a_proj_with_mqa=self.kv_a_proj_with_mqa
-            if self.q_lora_rank is None
-            else None,
+            fused_qkv_a_proj=self.fused_qkv_a_proj if self.q_lora_rank is not None else None,
+            kv_a_proj_with_mqa=self.kv_a_proj_with_mqa if self.q_lora_rank is None else None,
             q_a_layernorm=self.q_a_layernorm if self.q_lora_rank is not None else None,
             q_b_proj=self.q_b_proj if self.q_lora_rank is not None else None,
             q_proj=self.q_proj if self.q_lora_rank is None else None,
@@ -419,10 +400,7 @@ class OpenPanguEmbeddedAttention(nn.Module):
         tp_size = get_tensor_model_parallel_world_size()
         self.total_num_heads = num_heads
         if self.total_num_heads % tp_size != 0:
-            raise ValueError(
-                f"total_num_heads {self.total_num_heads} "
-                f"is not divisible by tp_size {tp_size}."
-            )
+            raise ValueError(f"total_num_heads {self.total_num_heads} is not divisible by tp_size {tp_size}.")
         self.num_heads = self.total_num_heads // tp_size
         self.total_num_kv_heads = num_kv_heads
         if self.total_num_kv_heads > tp_size and self.total_num_kv_heads % tp_size != 0:
@@ -433,9 +411,7 @@ class OpenPanguEmbeddedAttention(nn.Module):
                 f"but total_num_kv_heads {self.total_num_kv_heads} "
                 f"is not divisible by tp_size {tp_size}."
             )
-        elif (
-            self.total_num_kv_heads < tp_size and tp_size % self.total_num_kv_heads != 0
-        ):
+        elif self.total_num_kv_heads < tp_size and tp_size % self.total_num_kv_heads != 0:
             # Number of KV heads is less than TP size, so we replicate
             # the KV heads across multiple tensor parallel ranks.
             raise ValueError(
@@ -480,10 +456,7 @@ class OpenPanguEmbeddedAttention(nn.Module):
                 sw_idx = layer_idx % len(interleaved_sliding_window)
                 sliding_window = interleaved_sliding_window[sw_idx]
             else:
-                raise ValueError(
-                    f"{type(interleaved_sliding_window)} "
-                    "for interleaved_sliding_window is not supported."
-                )
+                raise ValueError(f"{type(interleaved_sliding_window)} for interleaved_sliding_window is not supported.")
         else:
             sliding_window = None
 
@@ -518,9 +491,7 @@ class OpenPanguEmbeddedAttention(nn.Module):
     ) -> None:
         is_neox_style = True
         rope_parameters = config.rope_parameters or {}
-        if rope_parameters is not None and rope_parameters.get(
-            "mrope_interleaved", False
-        ):
+        if rope_parameters is not None and rope_parameters.get("mrope_interleaved", False):
             rope_parameters["rope_type"] = "openpangu"
 
         self.rotary_emb = get_rope(
@@ -554,16 +525,10 @@ class OpenPanguSinkAttention(nn.Module):
         self.tp_rank = get_tensor_model_parallel_rank()
         self.total_num_heads = num_heads
         if self.total_num_heads % self.tp_size != 0:
-            raise ValueError(
-                f"total_num_heads {self.total_num_heads} "
-                f"is not divisible by tp_size {self.tp_size}."
-            )
+            raise ValueError(f"total_num_heads {self.total_num_heads} is not divisible by tp_size {self.tp_size}.")
         self.num_heads = self.total_num_heads // self.tp_size
         self.total_num_kv_heads = num_kv_heads
-        if (
-            self.total_num_kv_heads > self.tp_size
-            and self.total_num_kv_heads % self.tp_size != 0
-        ):
+        if self.total_num_kv_heads > self.tp_size and self.total_num_kv_heads % self.tp_size != 0:
             # Number of KV heads is greater than TP size, so we partition
             # the KV heads across multiple tensor parallel ranks.
             raise ValueError(
@@ -616,9 +581,7 @@ class OpenPanguSinkAttention(nn.Module):
 
         self.k_layernorm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
-        self._init_rotary_emb(
-            config, rope_parameters=rope_parameters, quant_config=quant_config
-        )
+        self._init_rotary_emb(config, rope_parameters=rope_parameters, quant_config=quant_config)
 
         if hasattr(config, "interleaved_sliding_window"):
             interleaved_sliding_window = config.interleaved_sliding_window
@@ -628,10 +591,7 @@ class OpenPanguSinkAttention(nn.Module):
                 sw_idx = layer_idx % len(interleaved_sliding_window)
                 sliding_window = interleaved_sliding_window[sw_idx]
             else:
-                raise ValueError(
-                    f"{type(interleaved_sliding_window)} "
-                    "for interleaved_sliding_window is not supported."
-                )
+                raise ValueError(f"{type(interleaved_sliding_window)} for interleaved_sliding_window is not supported.")
         else:
             sliding_window = None
 
@@ -743,9 +703,7 @@ class OpenPanguSinkAttention(nn.Module):
             q,
             k,
             v,
-            output_shape=torch.Size(
-                [q.shape[0], q.shape[1] // self.head_dim * self.v_channels]
-            ),
+            output_shape=torch.Size([q.shape[0], q.shape[1] // self.head_dim * self.v_channels]),
         )
         output, _ = self.o_proj(attn_output)
         return output
@@ -802,9 +760,7 @@ class OpenPanguDecoderLayer(nn.Module):
             and hasattr(config, "v_head_dim")
             and hasattr(config, "kv_lora_rank")
         )
-        self.use_sink_attention = (
-            hasattr(config, "param_sink_number") and config.param_sink_number > 0
-        )
+        self.use_sink_attention = hasattr(config, "param_sink_number") and config.param_sink_number > 0
         if self.use_mla:
             self.self_attn = OpenPanguMLAAttention(
                 config=config,
@@ -813,9 +769,7 @@ class OpenPanguDecoderLayer(nn.Module):
                 qk_nope_head_dim=config.qk_nope_head_dim,
                 qk_rope_head_dim=config.qk_rope_head_dim,
                 v_head_dim=config.v_head_dim,
-                q_lora_rank=(
-                    config.q_lora_rank if hasattr(config, "q_lora_rank") else None
-                ),
+                q_lora_rank=(config.q_lora_rank if hasattr(config, "q_lora_rank") else None),
                 kv_lora_rank=config.kv_lora_rank,
                 max_position_embeddings=max_position_embeddings,
                 cache_config=cache_config,
@@ -823,19 +777,14 @@ class OpenPanguDecoderLayer(nn.Module):
                 prefix=f"{prefix}.self_attn",
             )
         elif self.use_sink_attention:
-            attention_bias = getattr(config, "attention_bias", False) or getattr(
-                config, "bias", False
-            )
+            attention_bias = getattr(config, "attention_bias", False) or getattr(config, "bias", False)
             bias_o_proj = attention_bias
             if hasattr(config, "qkv_bias"):
                 attention_bias = config.qkv_bias
             if getattr(config, "is_causal", True):
                 attn_type = AttentionType.DECODER
             else:
-                raise ValueError(
-                    f"is_causal={config.is_causal} is not support "
-                    "for attention with sink"
-                )
+                raise ValueError(f"is_causal={config.is_causal} is not support for attention with sink")
             rope_parameters = getattr(config, "rope_scaling", None)
             if rope_parameters is None:
                 rope_parameters = {
@@ -846,9 +795,7 @@ class OpenPanguDecoderLayer(nn.Module):
                 config=config,
                 hidden_size=self.hidden_size,
                 num_heads=config.num_attention_heads,
-                num_kv_heads=getattr(
-                    config, "num_key_value_heads", config.num_attention_heads
-                ),
+                num_kv_heads=getattr(config, "num_key_value_heads", config.num_attention_heads),
                 rope_parameters=rope_parameters,
                 max_position_embeddings=max_position_embeddings,
                 quant_config=quant_config,
@@ -859,9 +806,7 @@ class OpenPanguDecoderLayer(nn.Module):
                 attn_type=attn_type,
             )
         else:
-            attention_bias = getattr(config, "attention_bias", False) or getattr(
-                config, "bias", False
-            )
+            attention_bias = getattr(config, "attention_bias", False) or getattr(config, "bias", False)
             bias_o_proj = attention_bias
             if hasattr(config, "qkv_bias"):
                 attention_bias = config.qkv_bias
@@ -877,9 +822,7 @@ class OpenPanguDecoderLayer(nn.Module):
                 config=config,
                 hidden_size=self.hidden_size,
                 num_heads=config.num_attention_heads,
-                num_kv_heads=getattr(
-                    config, "num_key_value_heads", config.num_attention_heads
-                ),
+                num_kv_heads=getattr(config, "num_key_value_heads", config.num_attention_heads),
                 max_position_embeddings=max_position_embeddings,
                 quant_config=quant_config,
                 bias=attention_bias,
@@ -889,10 +832,7 @@ class OpenPanguDecoderLayer(nn.Module):
                 attn_type=attn_type,
             )
 
-        if (
-            getattr(config, "n_routed_experts", None) is not None
-            and layer_idx >= config.first_k_dense_replace
-        ):
+        if getattr(config, "n_routed_experts", None) is not None and layer_idx >= config.first_k_dense_replace:
             self.mlp = OpenPanguMoE(
                 config=config,
                 parallel_config=parallel_config,
@@ -910,23 +850,15 @@ class OpenPanguDecoderLayer(nn.Module):
             )
         self.routed_scaling_factor = getattr(config, "routed_scaling_factor", 1.0)
         self.num_hidden_layers = config.num_hidden_layers
-        self.first_k_dense_replace = getattr(
-            config, "first_k_dense_replace", self.num_hidden_layers
-        )
+        self.first_k_dense_replace = getattr(config, "first_k_dense_replace", self.num_hidden_layers)
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.tp_group = get_tp_group().device_group
         self.sandwich_norm = getattr(config, "sandwich_norm", False)
         if self.sandwich_norm:
-            self.pre_mlp_layernorm = RMSNorm(
-                config.hidden_size, eps=config.rms_norm_eps
-            )
-            self.post_mlp_layernorm = RMSNorm(
-                config.hidden_size, eps=config.rms_norm_eps
-            )
+            self.pre_mlp_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_mlp_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -945,10 +877,7 @@ class OpenPanguDecoderLayer(nn.Module):
             hidden_states=hidden_states,
         )
 
-        if (
-            self.routed_scaling_factor is not None
-            and hidden_states.dtype == torch.float16
-        ):
+        if self.routed_scaling_factor is not None and hidden_states.dtype == torch.float16:
             # Fix FP16 overflow
             # We scale both hidden_states and residual before
             # rmsnorm, and rmsnorm result would not affect by scale.
@@ -962,9 +891,7 @@ class OpenPanguDecoderLayer(nn.Module):
             hidden_states = self.post_attention_layernorm(hidden_states)
             hidden_states, residual = self.pre_mlp_layernorm(hidden_states, residual)
         else:
-            hidden_states, residual = self.post_attention_layernorm(
-                hidden_states, residual
-            )
+            hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
 
         # Fully Connected
         hidden_states = self.mlp(hidden_states)
@@ -997,9 +924,7 @@ class OpenPanguModel(nn.Module):
 
         self.vocab_size = config.vocab_size
 
-        if get_pp_group().is_first_rank or (
-            config.tie_word_embeddings and get_pp_group().is_last_rank
-        ):
+        if get_pp_group().is_first_rank or (config.tie_word_embeddings and get_pp_group().is_last_rank):
             self.embed_tokens = VocabParallelEmbedding(
                 config.vocab_size,
                 config.hidden_size,
@@ -1049,9 +974,7 @@ class OpenPanguModel(nn.Module):
             hidden_states, residual = layer(positions, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
@@ -1065,15 +988,10 @@ class OpenPanguModel(nn.Module):
         loaded_params: set[str],
     ) -> bool:
         for param_name, origin_name, shard_id in attn_mlp_replace_mapping:
-            if origin_name not in weight_name or (
-                ("mlp.experts." in weight_name) and weight_name not in params_dict
-            ):
+            if origin_name not in weight_name or (("mlp.experts." in weight_name) and weight_name not in params_dict):
                 continue
             weight_name_mapped = weight_name.replace(origin_name, param_name)
-            if (
-                param_name == "fused_qkv_a_proj"
-                and weight_name_mapped not in params_dict
-            ):
+            if param_name == "fused_qkv_a_proj" and weight_name_mapped not in params_dict:
                 continue
             else:
                 weight_name = weight_name_mapped
@@ -1188,9 +1106,7 @@ class OpenPanguModel(nn.Module):
                     continue
                 name = maybe_remap_kv_scale_name(name, params_dict)
                 if name.endswith("e_score_correction_bias"):
-                    name = name.replace(
-                        "e_score_correction_bias", "gate.e_score_correction_bias"
-                    )
+                    name = name.replace("e_score_correction_bias", "gate.e_score_correction_bias")
                 if name is None:
                     continue
                 if is_pp_missing_parameter(name, self):
@@ -1225,18 +1141,14 @@ class OpenPanguModelBase(nn.Module, SupportsPP, SupportsLoRA):
         self.config = config
         self.quant_config = quant_config
 
-        self.fuse_qkv_a_proj = (
-            hasattr(config, "q_lora_rank") and config.q_lora_rank is not None
-        )
+        self.fuse_qkv_a_proj = hasattr(config, "q_lora_rank") and config.q_lora_rank is not None
         if self.fuse_qkv_a_proj:
             self.packed_modules_mapping["fused_qkv_a_proj"] = [
                 "q_a_proj",
                 "kv_a_proj_with_mqa",
             ]
 
-        self.model = OpenPanguModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = OpenPanguModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1249,9 +1161,7 @@ class OpenPanguModelBase(nn.Module, SupportsPP, SupportsLoRA):
         else:
             self.lm_head = PPMissingLayer()
         self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -1263,9 +1173,7 @@ class OpenPanguModelBase(nn.Module, SupportsPP, SupportsLoRA):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Cache-policy ownership for the v1 Metal runtime."""
 
 from __future__ import annotations
@@ -9,9 +10,8 @@ from typing import TYPE_CHECKING, Literal
 
 import mlx.core as mx
 import torch
-from aphrodite.logger import init_logger
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheSpec
 
+from aphrodite.logger import init_logger
 from aphrodite.metal.config import (
     PAGED_ATTENTION_DEFAULT_MEMORY_FRACTION,
     PAGED_ATTENTION_MIN_BLOCKS,
@@ -39,6 +39,7 @@ from aphrodite.metal.stt.policy import (
     STT_SCHED_NOMINAL_HEAD_SIZE,
 )
 from aphrodite.metal.v1.model_adapter import ModelAdapter
+from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheSpec
 
 if TYPE_CHECKING:
     from aphrodite.metal.v1.model_runner import MetalModelRunner
@@ -47,9 +48,7 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
-def _turboquant_page_size_bytes(
-    block_size: int, num_kv_heads: int, head_dim: int, k_quant: str, v_quant: str
-) -> int:
+def _turboquant_page_size_bytes(block_size: int, num_kv_heads: int, head_dim: int, k_quant: str, v_quant: str) -> int:
     """Calculate TurboQuant-compressed page size for one layer."""
     k_bits = QUANT_PARAMS[k_quant]["bits"]
     v_bits = V_QUANT_PARAMS[v_quant]["bits"]
@@ -91,8 +90,7 @@ class TurboQuantAttentionSpec(FullAttentionSpec):
     @classmethod
     def merge(cls, specs):
         assert all(isinstance(s, TurboQuantAttentionSpec) for s in specs), (
-            "All attention layers in the same KV cache group must be "
-            "TurboQuantAttentionSpec."
+            "All attention layers in the same KV cache group must be TurboQuantAttentionSpec."
         )
         k_set = {s.k_quant for s in specs}
         v_set = {s.v_quant for s in specs}
@@ -107,15 +105,9 @@ class TurboQuantAttentionSpec(FullAttentionSpec):
             head_size_v=specs[0].head_size_v,
             dtype=specs[0].dtype,
             page_size_padded=specs[0].page_size_padded,
-            sliding_window=cls.merge_window_sizes(
-                {s.sliding_window for s in specs if s.sliding_window is not None}
-            ),
+            sliding_window=cls.merge_window_sizes({s.sliding_window for s in specs if s.sliding_window is not None}),
             attention_chunk_size=cls.merge_window_sizes(
-                {
-                    s.attention_chunk_size
-                    for s in specs
-                    if s.attention_chunk_size is not None
-                }
+                {s.attention_chunk_size for s in specs if s.attention_chunk_size is not None}
             ),
             k_quant=k_set.pop(),
             v_quant=v_set.pop(),
@@ -160,7 +152,7 @@ def _register_turboquant_spec_manager() -> None:
     Aphrodite also maps to ``FullAttentionManager``).
     """
     try:
-        from aphrodite.v1.core.single_type_kv_cache_manager import (
+        from aphrodite.v1.core.single_type_kv_cache_manager import (  # type: ignore[attr-defined]
             FullAttentionManager,
             spec_manager_map,
         )
@@ -239,19 +231,13 @@ class ModelCachePolicy:
         block_size = self._runner.cache_config.block_size
         torch_dtype = MLX_TO_TORCH_DTYPE[self._require_kv_cache_dtype()]
         config = get_config()
-        use_turboquant = (
-            config.turboquant and not self._runner.is_hybrid and not self._runner.is_mla
-        )
+        use_turboquant = config.turboquant and not self._runner.is_hybrid and not self._runner.is_mla
 
         kv_heads_list = self._runner.kv_heads_per_layer
         head_dim_list = self._runner.head_dim_per_layer
-        has_per_layer = kv_heads_list is not None and head_dim_list is not None
         specs: dict[str, KVCacheSpec] = {}
         for layer_idx in range(self._runner.num_layers):
-            if (
-                self._runner.is_hybrid
-                and layer_idx not in self._runner.sdpa_layer_indices
-            ):
+            if self._runner.is_hybrid and layer_idx not in self._runner.sdpa_layer_indices:
                 layer_name = f"layers.{layer_idx}.linear_attn"
                 specs[layer_name] = _build_linear_layer_spec(
                     conv_kernel_dim=self._runner.linear_conv_kernel_dim,
@@ -273,14 +259,8 @@ class ModelCachePolicy:
                     v_quant=config.v_quant,
                 )
             else:
-                kv_h = (
-                    kv_heads_list[layer_idx]
-                    if has_per_layer
-                    else self._runner.num_kv_heads
-                )
-                hd = (
-                    head_dim_list[layer_idx] if has_per_layer else self._runner.head_dim
-                )
+                kv_h = kv_heads_list[layer_idx] if kv_heads_list is not None else self._runner.num_kv_heads
+                hd = head_dim_list[layer_idx] if head_dim_list is not None else self._runner.head_dim
                 layer_name = f"layers.{layer_idx}.self_attn"
                 specs[layer_name] = FullAttentionSpec(
                     block_size=block_size,
@@ -310,11 +290,7 @@ class ModelCachePolicy:
         self._require_supported_per_layer_shapes()
         block_size = self._runner.cache_config.block_size
         dtype_size = self._require_kv_cache_dtype().size
-        num_kv_layers = (
-            self._runner.num_sdpa_layers
-            if self._runner.is_hybrid
-            else self._runner.num_kv_cache_layers
-        )
+        num_kv_layers = self._runner.num_sdpa_layers if self._runner.is_hybrid else self._runner.num_kv_cache_layers
 
         # TurboQuant uses quantized KV cache with different byte layout
         config = get_config()
@@ -336,11 +312,7 @@ class ModelCachePolicy:
             raise RuntimeError("linear_cache_bytes_per_slot() requires a hybrid model")
         dtype_size = self._require_kv_cache_dtype().size
         recurrent_dtype_size = mx.float32.size
-        conv_bytes = (
-            (self._runner.linear_conv_kernel_dim - 1)
-            * self._runner.linear_conv_dim
-            * dtype_size
-        )
+        conv_bytes = (self._runner.linear_conv_kernel_dim - 1) * self._runner.linear_conv_dim * dtype_size
         recurrent_bytes = (
             self._runner.linear_num_v_heads
             * self._runner.linear_value_head_dim
@@ -349,9 +321,7 @@ class ModelCachePolicy:
         )
         return self._runner.num_linear_layers * (conv_bytes + recurrent_bytes)
 
-    def build_paged_attention_backend(
-        self, *, block_size: int
-    ) -> PagedAttentionBackend:
+    def build_paged_attention_backend(self, *, block_size: int) -> PagedAttentionBackend:
         """Create the paged-attention backend for the loaded model."""
         self._require_supported_per_layer_shapes()
         if self._runner.is_hybrid:
@@ -360,18 +330,12 @@ class ModelCachePolicy:
             return self._build_mla_backend(block_size)
         return self._build_mha_backend(block_size)
 
-    def estimate_one_sequence_kv_bytes(
-        self, *, max_model_len: int, block_size: int
-    ) -> int:
+    def estimate_one_sequence_kv_bytes(self, *, max_model_len: int, block_size: int) -> int:
         """Estimate bytes for one max-length sequence of cache state."""
         self._require_supported_per_layer_shapes()
         dtype_size = self._require_kv_cache_dtype().size
         aligned_tokens = -(-max_model_len // block_size) * block_size
-        num_kv_layers = (
-            self._runner.num_sdpa_layers
-            if self._runner.is_hybrid
-            else self._runner.num_kv_cache_layers
-        )
+        num_kv_layers = self._runner.num_sdpa_layers if self._runner.is_hybrid else self._runner.num_kv_cache_layers
 
         # TurboQuant uses quantized KV cache with different byte layout
         config = get_config()
@@ -387,9 +351,7 @@ class ModelCachePolicy:
             )
 
         kv_factor = 1 if self._runner.is_mla else 2
-        sdpa_kv_bytes = (
-            kv_factor * aligned_tokens * dtype_size * self._kv_layer_size_sum()
-        )
+        sdpa_kv_bytes = kv_factor * aligned_tokens * dtype_size * self._kv_layer_size_sum()
         if self._runner.is_hybrid:
             return sdpa_kv_bytes + self.linear_cache_bytes_per_slot()
         return sdpa_kv_bytes
@@ -496,15 +458,11 @@ class ModelCachePolicy:
         kv_heads = self._runner.kv_heads_per_layer
         head_dims = self._runner.head_dim_per_layer
         if (kv_heads is None) != (head_dims is None):
-            raise ValueError(
-                "kv_heads_per_layer and head_dim_per_layer must be set together."
-            )
+            raise ValueError("kv_heads_per_layer and head_dim_per_layer must be set together.")
         if kv_heads is None:
             return
         if get_config().turboquant:
-            raise NotImplementedError(
-                "TurboQuant with per-layer KV shapes is not yet supported."
-            )
+            raise NotImplementedError("TurboQuant with per-layer KV shapes is not yet supported.")
         if self._runner.is_hybrid:
             raise NotImplementedError(
                 "Per-layer KV shapes with hybrid models require "
@@ -516,18 +474,14 @@ class ModelCachePolicy:
 
         For uniform models this equals ``num_kv_layers × kv_heads × head_dim``.
         """
-        num_kv_layers = (
-            self._runner.num_sdpa_layers
-            if self._runner.is_hybrid
-            else self._runner.num_kv_cache_layers
-        )
+        num_kv_layers = self._runner.num_sdpa_layers if self._runner.is_hybrid else self._runner.num_kv_cache_layers
         kv_heads = self._runner.kv_heads_per_layer
         head_dims = self._runner.head_dim_per_layer
         if kv_heads is not None and head_dims is not None:
             return sum(kv_heads[i] * head_dims[i] for i in range(num_kv_layers))
         return num_kv_layers * self._runner.num_kv_heads * self._runner.head_dim
 
-    def _mha_cache_layout(self) -> tuple[int, list[int] | None]:
+    def _mha_cache_layout(self) -> tuple[int, dict[int, int] | None]:
         if self._runner._yoco_cache_mapping is None:
             return self._runner.num_kv_cache_layers, None
 
@@ -582,9 +536,7 @@ class WorkerCachePlanner:
             plan.num_blocks * plan.block_size,
         )
 
-        backend = self._worker.model_runner.build_paged_attention_backend(
-            block_size=plan.block_size
-        )
+        backend = self._worker.model_runner.build_paged_attention_backend(block_size=plan.block_size)
         backend.initialize(plan.num_blocks)
         n_patched = backend.patch_model(self._worker.model_runner.model)
         config = get_config()
@@ -632,16 +584,12 @@ class WorkerCachePlanner:
             self._worker._setup_paged_attention(overhead=overhead)
             backend = self._worker.model_runner._paged_attention_backend
             if backend is None:
-                raise RuntimeError(
-                    "Paged attention backend not initialized for capacity reporting"
-                )
+                raise RuntimeError("Paged attention backend not initialized for capacity reporting")
             block_size_bytes = self._worker.get_cache_block_size_bytes()
             paged_available = backend.num_blocks() * block_size_bytes
             linear_available = 0
             if self._worker.model_runner.is_hybrid:
-                linear_available = self._hybrid_scheduler_linear_capacity(
-                    block_size_bytes
-                )
+                linear_available = self._hybrid_scheduler_linear_capacity(block_size_bytes)
             available = paged_available + linear_available
             if linear_available:
                 logger.info(
@@ -655,8 +603,7 @@ class WorkerCachePlanner:
                 )
             else:
                 logger.info(
-                    "Paged attention: reporting MPS cache capacity "
-                    "(%d blocks × %d bytes = %.2f GB)",
+                    "Paged attention: reporting MPS cache capacity (%d blocks × %d bytes = %.2f GB)",
                     backend.num_blocks(),
                     block_size_bytes,
                     available / 1e9,
@@ -669,16 +616,14 @@ class WorkerCachePlanner:
             max_model_len = self._worker.model_config.max_model_len
             num_blocks = -(-max_model_len // block_size)
             block_size_bytes = self._worker.get_cache_block_size_bytes()
-            available = (
-                num_blocks * block_size_bytes * max_num_seqs
-                + self._hybrid_scheduler_linear_capacity(block_size_bytes)
+            available = num_blocks * block_size_bytes * max_num_seqs + self._hybrid_scheduler_linear_capacity(
+                block_size_bytes
             )
         else:
             one_sequence_bytes = self._worker._one_sequence_kv_bytes()
             available = one_sequence_bytes * max_num_seqs
         logger.info(
-            "MLX path: reporting %.2f GB for scheduler admission control "
-            "(%d max-length sequence%s, max_model_len=%d)",
+            "MLX path: reporting %.2f GB for scheduler admission control (%d max-length sequence%s, max_model_len=%d)",
             available / 1e9,
             max_num_seqs,
             "" if max_num_seqs == 1 else "s",
@@ -697,16 +642,9 @@ class WorkerCachePlanner:
         """
         runner = self._worker.model_runner
         if runner.num_sdpa_layers <= 0:
-            return (
-                runner.linear_cache_bytes_per_slot()
-                * runner.scheduler_config.max_num_seqs
-            )
+            return runner.linear_cache_bytes_per_slot() * runner.scheduler_config.max_num_seqs
         attention_page_size = block_size_bytes // runner.num_sdpa_layers
-        return (
-            runner.num_linear_layers
-            * attention_page_size
-            * runner.scheduler_config.max_num_seqs
-        )
+        return runner.num_linear_layers * attention_page_size * runner.scheduler_config.max_num_seqs
 
     def _paged_attention_plan(self, *, overhead: int) -> _PagedAttentionPlan:
         block_size = self._worker.aphrodite_config.cache_config.block_size
@@ -743,8 +681,7 @@ class WorkerCachePlanner:
 
         memory_num_blocks = kv_budget // per_block_bytes
         max_scheduled_tokens = (
-            self._worker.model_runner.scheduler_config.max_num_seqs
-            * self._worker.model_config.max_model_len
+            self._worker.model_runner.scheduler_config.max_num_seqs * self._worker.model_config.max_model_len
         )
         scheduler_num_blocks = max(
             PAGED_ATTENTION_MIN_BLOCKS,
@@ -790,8 +727,7 @@ class WorkerCachePlanner:
     def _memory_fraction(self) -> float:
         if self._worker.metal_config.is_auto_memory:
             logger.info(
-                "Paged attention: APHRODITE_METAL_MEMORY_FRACTION=auto, "
-                "defaulting to %.2f for paged path",
+                "Paged attention: APHRODITE_METAL_MEMORY_FRACTION=auto, defaulting to %.2f for paged path",
                 PAGED_ATTENTION_DEFAULT_MEMORY_FRACTION,
             )
             return PAGED_ATTENTION_DEFAULT_MEMORY_FRACTION

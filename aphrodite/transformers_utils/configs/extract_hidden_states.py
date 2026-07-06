@@ -53,9 +53,7 @@ class ExtractHiddenStatesConfig(PretrainedConfig):
         pretrained_model_name_or_path: str | os.PathLike,
         **kwargs,
     ) -> "ExtractHiddenStatesConfig":
-        config_dict, kwargs = cls.get_config_dict(
-            pretrained_model_name_or_path, **without_trust_remote_code(kwargs)
-        )
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **without_trust_remote_code(kwargs))
         return cls.from_dict(config_dict, **kwargs)
 
     def to_json_string(self, use_diff: bool = True) -> str:

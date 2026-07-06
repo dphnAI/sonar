@@ -40,9 +40,7 @@ def mhc_pre_ref(
 
     residual_flat = residual.flatten(-2, -1).float()
     sqrsum = residual_flat.square().sum(-1)
-    mixes = (
-        residual_flat @ fn.T * (sqrsum.unsqueeze(-1) / fn.shape[-1] + rms_eps).rsqrt()
-    )
+    mixes = residual_flat @ fn.T * (sqrsum.unsqueeze(-1) / fn.shape[-1] + rms_eps).rsqrt()
 
     hc_scale = torch.cat(
         [
@@ -54,14 +52,10 @@ def mhc_pre_ref(
     mixes = mixes * hc_scale + hc_base
 
     pre_mix = mixes[:, :hc_mult].sigmoid().unsqueeze(-1) + hc_pre_eps
-    post_mix = (
-        mixes[:, hc_mult : 2 * hc_mult].sigmoid() * hc_post_mult_value
-    ).unsqueeze(-1)
+    post_mix = (mixes[:, hc_mult : 2 * hc_mult].sigmoid() * hc_post_mult_value).unsqueeze(-1)
     res_mix = mixes[:, 2 * hc_mult :].view(-1, hc_mult, hc_mult)
 
-    res_mix = sinkhorn_normalize_ref(
-        res_mix, repeat=sinkhorn_repeat, eps=hc_sinkhorn_eps
-    )
+    res_mix = sinkhorn_normalize_ref(res_mix, repeat=sinkhorn_repeat, eps=hc_sinkhorn_eps)
 
     layer_input = (residual * pre_mix).sum(-2).bfloat16()
 
@@ -88,9 +82,7 @@ def hc_head_ref(
     hc_eps: float,
 ) -> torch.Tensor:
     residual_flat = residual.flatten(-2).float()
-    residual_norm = residual_flat * torch.rsqrt(
-        residual_flat.square().mean(dim=-1, keepdim=True) + rms_eps
-    )
+    residual_norm = residual_flat * torch.rsqrt(residual_flat.square().mean(dim=-1, keepdim=True) + rms_eps)
     pre_mix = torch.nn.functional.linear(residual_norm, fn)
     pre_mix = torch.sigmoid(pre_mix * hc_scale + hc_base) + hc_eps
     return torch.sum(pre_mix.unsqueeze(-1) * residual.float(), dim=-2).bfloat16()

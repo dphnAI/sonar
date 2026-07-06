@@ -80,16 +80,10 @@ class ECTransferConfig:
             self.engine_id = str(uuid.uuid4())
 
         if self.ec_role is not None and self.ec_role not in get_args(ECRole):
-            raise ValueError(
-                f"Unsupported ec_role: {self.ec_role}. "
-                f"Supported roles are {get_args(ECRole)}"
-            )
+            raise ValueError(f"Unsupported ec_role: {self.ec_role}. Supported roles are {get_args(ECRole)}")
 
         if self.ec_connector is not None and self.ec_role is None:
-            raise ValueError(
-                "Please specify ec_role when ec_connector "
-                f"is set, supported roles are {get_args(ECRole)}"
-            )
+            raise ValueError(f"Please specify ec_role when ec_connector is set, supported roles are {get_args(ECRole)}")
 
     @property
     def is_ec_transfer_instance(self) -> bool:

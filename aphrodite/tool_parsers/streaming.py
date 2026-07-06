@@ -23,9 +23,7 @@ else:
     TokenizerLike = object
 
 
-def _bracket_level_state(
-    s: str, opening: str = "{", closing: str = "}"
-) -> tuple[int, bool, bool]:
+def _bracket_level_state(s: str, opening: str = "{", closing: str = "}") -> tuple[int, bool, bool]:
     level = 0
     in_string = False
     escaped = False
@@ -163,17 +161,13 @@ def extract_required_tool_call_streaming(
         current_tool_call = obj[-1]
 
         # once parameters have been generated the name is complete as well
-        if not finishes_previous_tool and (
-            "name" not in current_tool_call or "parameters" not in current_tool_call
-        ):
+        if not finishes_previous_tool and ("name" not in current_tool_call or "parameters" not in current_tool_call):
             function_name_returned = False
             delta_message = None
         else:
             if not function_name_returned:
                 # get partly generated arguments from the latest tool call
-                param_match = re.search(
-                    r'.*"parameters":\s*(.*)', current_text, re.DOTALL
-                )
+                param_match = re.search(r'.*"parameters":\s*(.*)', current_text, re.DOTALL)
                 if param_match:
                     arguments = param_match.group(1)
                     arguments_prefix = current_text[: param_match.start(1)]
@@ -197,9 +191,7 @@ def extract_required_tool_call_streaming(
                     tool_calls=[
                         DeltaToolCall(
                             id=tool_call_id,
-                            function=DeltaFunctionCall(
-                                name=current_tool_call["name"], arguments=arguments
-                            ),
+                            function=DeltaFunctionCall(name=current_tool_call["name"], arguments=arguments),
                             index=len(obj) - 1,
                             type="function",
                         )

@@ -63,9 +63,7 @@ class DFlashProposer(SpecDecodeBaseProposer):
             device=device,
         )
 
-        self.arange = torch.arange(
-            self.max_positions + 1, device=device, dtype=torch.int32
-        )
+        self.arange = torch.arange(self.max_positions + 1, device=device, dtype=torch.int32)
 
         # For DFlash we use the input embeddings to embed the mask token
         self.parallel_drafting_hidden_state_tensor = None
@@ -79,7 +77,7 @@ class DFlashProposer(SpecDecodeBaseProposer):
         # flag so flash_attn is not rejected for mm_prefix support.
         arch = base.model_config.model_arch_config
         if arch.is_mm_prefix_lm:
-            base.model_config.model_arch_config = replace(arch, is_mm_prefix_lm=False)
+            base.model_config.model_arch_config = replace(arch, is_mm_prefix_lm=False)  # type: ignore[type-var]
         return replace(
             base,
             attention_config=replace(
@@ -149,9 +147,7 @@ class DFlashProposer(SpecDecodeBaseProposer):
             block_table_stride=cad.block_table_tensor.stride(0),
             # Metadata
             query_start_loc_ptr=cad.query_start_loc,
-            num_rejected_tokens_ptr=(
-                num_rejected_tokens_gpu if has_num_rejected else 0
-            ),
+            num_rejected_tokens_ptr=(num_rejected_tokens_gpu if has_num_rejected else 0),
             # Scalars
             parallel_drafting_token_id=self.parallel_drafting_token_id,
             block_size=self.block_size,
@@ -173,17 +169,12 @@ class DFlashProposer(SpecDecodeBaseProposer):
 
         # Skip num_rejected_tokens (GPU-only); overestimating is fine here.
         new_seq_lens_cpu_upper_bound = (
-            cad.seq_lens_cpu_upper_bound + num_query_per_req
-            if cad.seq_lens_cpu_upper_bound is not None
-            else None
+            cad.seq_lens_cpu_upper_bound + num_query_per_req if cad.seq_lens_cpu_upper_bound is not None else None
         )
         new_cad = CommonAttentionMetadata(
             query_start_loc=new_query_start_loc,
             seq_lens=effective_seq_lens + num_query_per_req,
-            query_start_loc_cpu=(
-                torch.from_numpy(self.token_arange_np[: batch_size + 1]).clone()
-                * num_query_per_req
-            ),
+            query_start_loc_cpu=(torch.from_numpy(self.token_arange_np[: batch_size + 1]).clone() * num_query_per_req),
             _seq_lens_cpu=None,
             _num_computed_tokens_cpu=None,
             seq_lens_cpu_upper_bound=new_seq_lens_cpu_upper_bound,
@@ -216,10 +207,8 @@ class DFlashProposer(SpecDecodeBaseProposer):
         - Multimodal inputs are not currently supported
         """
         num_query_tokens = min(num_tokens, self.max_query_tokens)
-        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = (
-            self._determine_batch_execution_and_padding(
-                num_query_tokens, use_cudagraphs=use_cudagraphs
-            )
+        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = self._determine_batch_execution_and_padding(
+            num_query_tokens, use_cudagraphs=use_cudagraphs
         )
 
         # Slot mapping sized to num_input_tokens (query only), matching
@@ -287,9 +276,7 @@ class DFlashProposer(SpecDecodeBaseProposer):
     def build_per_group_and_layer_attn_metadata(
         self, cad: CommonAttentionMetadata, draft_index: int = 0
     ) -> tuple[list[object], dict[str, object]]:
-        per_group, per_layer = super().build_per_group_and_layer_attn_metadata(
-            cad, draft_index
-        )
+        per_group, per_layer = super().build_per_group_and_layer_attn_metadata(cad, draft_index)
         if not self.dflash_causal:
             # Require all layers to support non-causal attention when required by DFlash
             for layer_name, attn_metadata in per_layer.items():

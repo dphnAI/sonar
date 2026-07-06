@@ -86,28 +86,18 @@ def run_cutlass_moe_fp8(
     assert w2.dtype == torch.float8_e4m3fn
     assert a1q.size(-1) == w1.size(2), "Hidden size mismatch w1"
     assert w1.size(1) == w2.size(2) * 2, "Hidden size mismatch w2"
-    assert (
-        w1_scale.dim() == 1 or w1_scale.size(1) == 1 or w1_scale.shape[1] == w1.size(1)
-    ), "W1 scale shape mismatch"
-    assert (
-        w2_scale.dim() == 1 or w2_scale.size(1) == 1 or w2_scale.shape[1] == w2.size(1)
-    ), "W2 scale shape mismatch"
+    assert w1_scale.dim() == 1 or w1_scale.size(1) == 1 or w1_scale.shape[1] == w1.size(1), "W1 scale shape mismatch"
+    assert w2_scale.dim() == 1 or w2_scale.size(1) == 1 or w2_scale.shape[1] == w2.size(1), "W2 scale shape mismatch"
     assert w1.size(0) == w2.size(0), "Expert number mismatch"
-    assert (
-        a1q_scale is None
-        or a1q_scale.dim() == 0
-        or a1q_scale.size(0) == 1
-        or a1q_scale.size(0) == a1q.shape[0]
-    ), "Input scale shape mismatch"
+    assert a1q_scale is None or a1q_scale.dim() == 0 or a1q_scale.size(0) == 1 or a1q_scale.size(0) == a1q.shape[0], (
+        "Input scale shape mismatch"
+    )
     assert w1.size(0) == w2.size(0), "Weights expert number mismatch"
     assert w1.size(0) == w1_scale.size(0), "w1 scales expert number mismatch"
     assert w1.size(0) == w2_scale.size(0), "w2 scales expert number mismatch"
-    assert (
-        a2_scale is None
-        or a2_scale.dim() == 0
-        or a2_scale.size(0) == 1
-        or a2_scale.size(0) == a1q.shape[0]
-    ), "Intermediate scale shape mismatch"
+    assert a2_scale is None or a2_scale.dim() == 0 or a2_scale.size(0) == 1 or a2_scale.size(0) == a1q.shape[0], (
+        "Intermediate scale shape mismatch"
+    )
     assert out_dtype in [torch.half, torch.bfloat16], "Invalid output dtype"
 
     # NOTE(rob): the expert_map is used for the STANDARD case and
@@ -146,20 +136,14 @@ def run_cutlass_moe_fp8(
     if use_batched_format:
         mm1_out = _resize_cache(workspace13, (local_E * padded_M, N * 2))
         act_out = _resize_cache(workspace2, (local_E * padded_M, N))
-        quant_out = _resize_cache(
-            workspace13.view(dtype=torch.float8_e4m3fn), (local_E * padded_M, N)
-        )
+        quant_out = _resize_cache(workspace13.view(dtype=torch.float8_e4m3fn), (local_E * padded_M, N))
         mm2_out = _resize_cache(workspace2, (local_E * padded_M, K))
     else:
-        a1q_perm = _resize_cache(
-            workspace2.view(dtype=torch.float8_e4m3fn), (M * topk, K)
-        )
+        a1q_perm = _resize_cache(workspace2.view(dtype=torch.float8_e4m3fn), (M * topk, K))
         mm1_out = _resize_cache(workspace13, (M * topk, N * 2))
         act_out = _resize_cache(workspace2, (M * topk, N))
         # original workspace are based on input hidden_states dtype (bf16)
-        quant_out = _resize_cache(
-            workspace13.view(dtype=torch.float8_e4m3fn), (M * topk, N)
-        )
+        quant_out = _resize_cache(workspace13.view(dtype=torch.float8_e4m3fn), (M * topk, N))
         mm2_out = _resize_cache(workspace2, (M * topk, K))
 
     if use_batched_format:
@@ -233,9 +217,7 @@ def run_cutlass_moe_fp8(
 
     apply_moe_activation(activation, act_out, mm1_out)
 
-    a2q, a2q_scale = ops.scaled_fp8_quant(
-        act_out, a2_scale, use_per_token_if_dynamic=per_act_token, output=quant_out
-    )
+    a2q, a2q_scale = ops.scaled_fp8_quant(act_out, a2_scale, use_per_token_if_dynamic=per_act_token, output=quant_out)
 
     ops.cutlass_moe_mm(
         mm2_out,
@@ -366,9 +348,7 @@ class CutlassExpertsFp8Base(mk.FusedMoEExpertsModular):
         if expert_tokens_meta is not None:
             expert_num_tokens = expert_tokens_meta.expert_num_tokens
 
-        use_batched_format = (
-            self.activation_format() == mk.FusedMoEActivationFormat.BatchedExperts
-        )
+        use_batched_format = self.activation_format() == mk.FusedMoEActivationFormat.BatchedExperts
 
         in_dtype = hidden_states.dtype
         run_cutlass_moe_fp8(
@@ -549,12 +529,9 @@ def run_cutlass_moe_fp4(
     assert topk_weights.shape == topk_ids.shape, "topk shape mismatch"
     assert w1_fp4.dtype == torch.uint8, "weight 1 must be uint8"
     assert w2_fp4.dtype == torch.uint8, "weight 2 must be uint8"
-    assert (
-        w1_fp4.ndim == 3
-        and w2_fp4.ndim == 3
-        and w1_blockscale.ndim == 3
-        and w2_blockscale.ndim == 3
-    ), "All Weights must be of rank 3 for cutlass_moe_fp4"
+    assert w1_fp4.ndim == 3 and w2_fp4.ndim == 3 and w1_blockscale.ndim == 3 and w2_blockscale.ndim == 3, (
+        "All Weights must be of rank 3 for cutlass_moe_fp4"
+    )
     m_a, k_a = a.shape
     e_w1, w1_n_actual, half_k_w1 = w1_fp4.shape
     e_w2, k_w2, half_n_w2 = w2_fp4.shape
@@ -563,16 +540,12 @@ def run_cutlass_moe_fp4(
         "Number of experts must match",
         f" between weights. {e_w1}, {e_w2}, {e}",
     )
-    assert k_a == half_k_w1 * 2 and k == k_w2, (
-        "Hidden size mismatch between a, w1 and w2"
-    )
+    assert k_a == half_k_w1 * 2 and k == k_w2, "Hidden size mismatch between a, w1 and w2"
     assert w1_n_actual == w1_n and half_n_w2 * 2 == n, "mismatch in expected `n`"
     assert m == m_a, "input shape mismatch"
     assert 2 * half_k_w1 == k_w2, "Hidden size mismatch w2 and w1"
     assert a.dtype in [torch.half, torch.bfloat16], "Invalid input dtype"
-    assert topk_weights.size(0) == m and topk_ids.size(0) == m, (
-        "topk must be provided for each row of a"
-    )
+    assert topk_weights.size(0) == m and topk_ids.size(0) == m, "topk must be provided for each row of a"
     topk = topk_ids.size(1)
     out_dtype = a.dtype
     num_topk = topk_ids.size(1)
@@ -589,9 +562,7 @@ def run_cutlass_moe_fp4(
 
     if apply_router_weight_on_input:
         # TODO: this only works for topK=1, will need to update for topK>1
-        assert num_topk == 1, (
-            "apply_router_weight_on_input is only implemented for topk=1"
-        )
+        assert num_topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
         a.mul_(topk_weights.to(out_dtype))
 
     # problem shapes should have [m, n, k]
@@ -664,10 +635,7 @@ def run_cutlass_moe_fp4(
     assert output.dtype == out_dtype
     if not apply_router_weight_on_input:
         output.copy_(
-            (
-                c3.view(m, num_topk, k)
-                * topk_weights.view(m, num_topk, 1).to(out_dtype)
-            ).sum(dim=1),
+            (c3.view(m, num_topk, k) * topk_weights.view(m, num_topk, 1).to(out_dtype)).sum(dim=1),
             non_blocking=True,
         )
     else:
@@ -832,12 +800,9 @@ def run_cutlass_moe_mxfp4(
     assert topk_weights.shape == topk_ids.shape, "topk shape mismatch"
     assert w1_fp4.dtype == torch.uint8, "weight 1 must be uint8"
     assert w2_fp4.dtype == torch.uint8, "weight 2 must be uint8"
-    assert (
-        w1_fp4.ndim == 3
-        and w2_fp4.ndim == 3
-        and w1_blockscale.ndim == 3
-        and w2_blockscale.ndim == 3
-    ), "All Weights must be of rank 3 for cutlass_moe_mxfp4"
+    assert w1_fp4.ndim == 3 and w2_fp4.ndim == 3 and w1_blockscale.ndim == 3 and w2_blockscale.ndim == 3, (
+        "All Weights must be of rank 3 for cutlass_moe_mxfp4"
+    )
     m_a, k_a = a.shape
     e_w1, w1_n_actual, half_k_w1 = w1_fp4.shape
     e_w2, k_w2, half_n_w2 = w2_fp4.shape
@@ -863,9 +828,7 @@ def run_cutlass_moe_mxfp4(
     c_map = torch.empty((topk_ids.numel()), dtype=torch.int32, device=device)
 
     if apply_router_weight_on_input:
-        assert num_topk == 1, (
-            "apply_router_weight_on_input is only implemented for topk=1"
-        )
+        assert num_topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
         a.mul_(topk_weights.to(out_dtype))
 
     ops.get_cutlass_moe_mm_data(
@@ -911,9 +874,7 @@ def run_cutlass_moe_mxfp4(
         )
     else:
         apply_moe_activation(activation, c2, c1)
-        int_fp4, int_blockscale = ops.mxfp4_experts_quant(
-            c2, expert_offsets, blockscale_offsets, e, num_topk
-        )
+        int_fp4, int_blockscale = ops.mxfp4_experts_quant(c2, expert_offsets, blockscale_offsets, e, num_topk)
 
     ops.cutlass_mxfp4_moe_mm(
         c3,
@@ -932,10 +893,7 @@ def run_cutlass_moe_mxfp4(
     assert output.dtype == out_dtype
     if not apply_router_weight_on_input:
         output.copy_(
-            (
-                c3.view(m, num_topk, k)
-                * topk_weights.view(m, num_topk, 1).to(out_dtype)
-            ).sum(dim=1),
+            (c3.view(m, num_topk, k) * topk_weights.view(m, num_topk, 1).to(out_dtype)).sum(dim=1),
             non_blocking=True,
         )
     else:
@@ -972,9 +930,7 @@ def swizzle_mxfp4_scales(
     padded_scale_cols = num_k_tiles * 4
 
     # Start with flat scales, pad if needed
-    padded = torch.zeros(
-        padded_N, padded_scale_cols, dtype=torch.uint8, device=scales.device
-    )
+    padded = torch.zeros(padded_N, padded_scale_cols, dtype=torch.uint8, device=scales.device)
     padded[:N, :num_scale_cols] = scales
 
     # Reshape to tile structure:
@@ -998,11 +954,7 @@ class CutlassExpertsMxfp4(mk.FusedMoEExpertsModular):
     def _supports_current_device() -> bool:
         p = current_platform
         capability = p.get_device_capability()
-        return (
-            p.is_cuda()
-            and capability is not None
-            and ops.mxfp4_experts_quant_supported(capability.to_int())
-        )
+        return p.is_cuda() and capability is not None and ops.mxfp4_experts_quant_supported(capability.to_int())
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -1163,18 +1115,14 @@ def run_cutlass_moe_w4a8_fp8(
     assert group_size == 128, f"Only group size 128 supported but got {group_size=}"
 
     assert global_num_experts != -1
-    assert w1.size(2) * 8 == K, (
-        f"w1 hidden size mismatch: got {w1.size(2) * 8}, expected {K=}"
-    )
+    assert w1.size(2) * 8 == K, f"w1 hidden size mismatch: got {w1.size(2) * 8}, expected {K=}"
 
     topk = topk_ids.size(1)
     a1q_perm = _resize_cache(workspace2.view(dtype=torch.float8_e4m3fn), (M * topk, K))
     mm1_out = _resize_cache(workspace13, (M * topk, N * 2))
     act_out = _resize_cache(workspace2, (M * topk, N))
     # original workspace are based on input hidden_states dtype (bf16)
-    quant_out = _resize_cache(
-        workspace13.view(dtype=torch.float8_e4m3fn), (M * topk, N)
-    )
+    quant_out = _resize_cache(workspace13.view(dtype=torch.float8_e4m3fn), (M * topk, N))
     mm2_out = _resize_cache(workspace2, (M * topk, K))
 
     problem_sizes1 = torch.empty((local_E, 3), dtype=torch.int32, device=device)
@@ -1216,9 +1164,7 @@ def run_cutlass_moe_w4a8_fp8(
 
     apply_moe_activation(activation, act_out, mm1_out)
 
-    a2q, a2q_scale = ops.scaled_fp8_quant(
-        act_out, a2_scale, use_per_token_if_dynamic=per_act_token, output=quant_out
-    )
+    a2q, a2q_scale = ops.scaled_fp8_quant(act_out, a2_scale, use_per_token_if_dynamic=per_act_token, output=quant_out)
 
     ops.cutlass_w4a8_moe_mm(
         mm2_out,
@@ -1394,9 +1340,7 @@ class CutlassExpertsW4A8Fp8(mk.FusedMoEExpertsModular):
 
         expert_num_tokens = None
 
-        use_batched_format = (
-            self.activation_format() == mk.FusedMoEActivationFormat.BatchedExperts
-        )
+        use_batched_format = self.activation_format() == mk.FusedMoEActivationFormat.BatchedExperts
         assert not use_batched_format, "batched format not supported"
 
         in_dtype = hidden_states.dtype

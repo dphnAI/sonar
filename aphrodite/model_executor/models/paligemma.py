@@ -80,9 +80,7 @@ class PaliGemmaImageEmbeddingInputs(TensorSchema):
     data: Annotated[torch.Tensor, TensorShape("bn", "ifs", "hs")]
 
 
-PaliGemmaImageInputs: TypeAlias = (
-    PaliGemmaImagePixelInputs | PaliGemmaImageEmbeddingInputs
-)
+PaliGemmaImageInputs: TypeAlias = PaliGemmaImagePixelInputs | PaliGemmaImageEmbeddingInputs
 
 
 class PaliGemmaMultiModalProjector(nn.Module):
@@ -193,9 +191,7 @@ class PaliGemmaMultiModalProcessor(BaseMultiModalProcessor[PaliGemmaProcessingIn
         assert isinstance(bos_token_id, int)
 
         def get_insertion(item_idx: int):
-            images = mm_items.get_items(
-                "image", (ImageEmbeddingItems, ImageProcessorItems)
-            )
+            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
 
             if isinstance(images, ImageEmbeddingItems):
                 num_image_tokens = images.get_feature_size(item_idx)
@@ -219,9 +215,7 @@ class PaliGemmaMultiModalProcessor(BaseMultiModalProcessor[PaliGemmaProcessingIn
         return [
             PromptInsertion(
                 modality="image",
-                target=PromptIndexTargets.prefix(
-                    [bos_token_id] if tokenizer.add_bos_token else []
-                ),
+                target=PromptIndexTargets.prefix([bos_token_id] if tokenizer.add_bos_token else []),
                 insertion=get_insertion,
             )
         ]
@@ -251,9 +245,7 @@ class PaliGemmaMultiModalProcessor(BaseMultiModalProcessor[PaliGemmaProcessingIn
     info=PaliGemmaProcessingInfo,
     dummy_inputs=PaliGemmaDummyInputsBuilder,
 )
-class PaliGemmaForConditionalGeneration(
-    nn.Module, SupportsLoRA, SupportsMultiModal, SupportsPP
-):
+class PaliGemmaForConditionalGeneration(nn.Module, SupportsLoRA, SupportsMultiModal, SupportsPP):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -318,13 +310,9 @@ class PaliGemmaForConditionalGeneration(
             logit_scale = getattr(config, "logit_scale", 1.0)
             self.language_model.logits_processor.scale *= logit_scale
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> PaliGemmaImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> PaliGemmaImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
 

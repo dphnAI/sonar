@@ -1144,15 +1144,15 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
       }
     }
 
-  #define QK_mfma(x)                                             \
+  #define QK_mfma(x)                                                  \
     if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) { \
-      Klocal[x] = convert_b8x8_custom<scalar_t>(Klocalb8[x]);    \
-    }                                                            \
-    for (int h = 0; h < QHLOOP; h++) {                           \
-      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(         \
-          Qlocal[h].xy[0], Klocal[x].xy[0], d_out[h]);           \
-      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(         \
-          Qlocal[h].xy[1], Klocal[x].xy[1], d_out[h]);           \
+      Klocal[x] = convert_b8x8_custom<scalar_t>(Klocalb8[x]);         \
+    }                                                                 \
+    for (int h = 0; h < QHLOOP; h++) {                                \
+      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(              \
+          Qlocal[h].xy[0], Klocal[x].xy[0], d_out[h]);                \
+      d_out[h] = gcn_mfma4x4x4_instr<scalar_t, 4, x, 0>(              \
+          Qlocal[h].xy[1], Klocal[x].xy[1], d_out[h]);                \
     }
     // QK mfma with Q mfma block broadcast
     // Q values across head_size dimension stored across lanes
@@ -1335,7 +1335,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_QKV_mfma4_kernel(
     }
   } else {  // warp in context
   #define SV_mfma(x)                                                  \
-    if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) {      \
+    if constexpr (KV_DTYPE != aphrodite::Fp8KVCacheDataType::kAuto) { \
       Vlocal[vh][x] = convert_b8x8_custom<scalar_t>(Vlocalb8[vh][x]); \
     }                                                                 \
     for (int qh = 0; qh < QHLOOP; qh++) {                             \
@@ -1612,9 +1612,9 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_reduce_kernel(
   OUTT* out_ptr = out + query_start_off * num_heads * HEAD_SIZE +
                   static_cast<int64_t>(head_idx) * HEAD_SIZE;
   if constexpr (std::is_same<OUTT, bit8_t>::value) {
-    out_ptr[threadIdx.x] =
-        __hip_cvt_float_to_fp8(acc, aphrodite::fp8::fp8_type::__default_saturation,
-                               aphrodite::fp8::fp8_type::__default_interpret);
+    out_ptr[threadIdx.x] = __hip_cvt_float_to_fp8(
+        acc, aphrodite::fp8::fp8_type::__default_saturation,
+        aphrodite::fp8::fp8_type::__default_interpret);
   } else {
     out_ptr[threadIdx.x] = from_float<scalar_t>(acc);
   }
@@ -3662,8 +3662,9 @@ void paged_attention(
   const int head_size = query.size(2);
   if (kv_cache_dtype == "auto") {
     if (query.dtype() == at::ScalarType::Half) {
-      CALL_CUSTOM_LAUNCHER_BLK_HEAD(
-          _Float16, _Float16, aphrodite::Fp8KVCacheDataType::kAuto, MFMAType::F16);
+      CALL_CUSTOM_LAUNCHER_BLK_HEAD(_Float16, _Float16,
+                                    aphrodite::Fp8KVCacheDataType::kAuto,
+                                    MFMAType::F16);
     } else if (query.dtype() == at::ScalarType::BFloat16) {
       CALL_CUSTOM_LAUNCHER_BLK_HEAD(__hip_bfloat16, __hip_bfloat16,
                                     aphrodite::Fp8KVCacheDataType::kAuto,

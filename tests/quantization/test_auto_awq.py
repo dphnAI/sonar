@@ -152,21 +152,17 @@ class TestAutoAWQConfigOverrideLogic:
         source = self._get_auto_awq_source()
 
         # Verify the CPU check exists in override method
-        assert "current_platform.is_cpu()" in source, (
-            "override_quantization_method should check is_cpu()"
-        )
-        assert "return None" in source, (
-            "override_quantization_method should return None on CPU"
-        )
+        assert "current_platform.is_cpu()" in source, "override_quantization_method should check is_cpu()"
+        assert "return None" in source, "override_quantization_method should return None on CPU"
 
     def test_quant_method_normalization_in_from_config(self):
         """from_config should normalize quant_method to 'awq' for MoE fallback."""
         source = self._get_auto_awq_source()
 
         # Verify the normalization exists
-        assert (
-            '"quant_method"] = "awq"' in source or "'quant_method'] = 'awq'" in source
-        ), "from_config should set quant_method='awq' in full_config"
+        assert '"quant_method"] = "awq"' in source or "'quant_method'] = 'awq'" in source, (
+            "from_config should set quant_method='awq' in full_config"
+        )
 
 
 # =============================================================================

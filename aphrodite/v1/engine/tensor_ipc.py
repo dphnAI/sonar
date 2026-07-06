@@ -57,10 +57,7 @@ class TensorIpcSender(OOBTensorConsumer):
 
     def set_target_engine(self, target_engine: int) -> None:
         if target_engine != 0:
-            raise IndexError(
-                "TensorIpcSender only supports a single queue; "
-                f"got target engine {target_engine}"
-            )
+            raise IndexError(f"TensorIpcSender only supports a single queue; got target engine {target_engine}")
 
     def new_message(self) -> None:
         self._message_counter += 1
@@ -88,8 +85,7 @@ class TensorIpcSender(OOBTensorConsumer):
             self.queue.put(ipc_data, timeout=10.0)
 
             logger.debug(
-                "Sent tensor %s for (shape=%s, device=%s) "
-                "via IPC queue (shared memory)",
+                "Sent tensor %s for (shape=%s, device=%s) via IPC queue (shared memory)",
                 metadata,
                 tensor.shape,
                 tensor.device,
@@ -98,8 +94,7 @@ class TensorIpcSender(OOBTensorConsumer):
             return metadata
         except Exception as e:
             logger.warning(
-                "Failed to send tensor via IPC queue: %s. "
-                "Falling back to standard serialization.",
+                "Failed to send tensor via IPC queue: %s. Falling back to standard serialization.",
                 e,
             )
             return None
@@ -121,9 +116,7 @@ class TensorIpcReceiver:
         self.queue = queue
         self._tensor_buffers = defaultdict[str, _Sender](_Sender)
 
-    def __call__(
-        self, dtype: str, shape: tuple[int, ...], meta: dict[str, Any]
-    ) -> torch.Tensor:
+    def __call__(self, dtype: str, shape: tuple[int, ...], meta: dict[str, Any]) -> torch.Tensor:
         """Retrieve a tensor from torch.multiprocessing.Queue.
 
         Uses a drain-and-buffer pattern: drains all available tensors from
@@ -154,8 +147,7 @@ class TensorIpcReceiver:
                                 )
                         sender.current_message_id = message_id
                     logger.debug(
-                        "Received tensor %s from sender %s for (shape=%s, device=%s) "
-                        "via IPC queue (shared memory)",
+                        "Received tensor %s from sender %s for (shape=%s, device=%s) via IPC queue (shared memory)",
                         (message_id, tensor_id),
                         sender_id,
                         tensor.shape,
@@ -168,11 +160,7 @@ class TensorIpcReceiver:
             # Store tensor
             sender = self._tensor_buffers[ipc_data.sender_id]
             if sender.current_message_id > ipc_data.message_id:
-                logger.warning(
-                    "Ignoring stale tensor from sender %s", ipc_data.sender_id
-                )
+                logger.warning("Ignoring stale tensor from sender %s", ipc_data.sender_id)
                 continue
 
-            sender.tensors.setdefault(ipc_data.message_id, {})[ipc_data.tensor_id] = (
-                ipc_data.tensor
-            )
+            sender.tensors.setdefault(ipc_data.message_id, {})[ipc_data.tensor_id] = ipc_data.tensor

@@ -170,9 +170,7 @@ class TestResponsesUtils:
         assert message["reasoning"] == "Leroy Jenkins"
         assert message["tool_calls"][0]["id"] == "call_123"
         assert message["tool_calls"][0]["function"]["name"] == "python"
-        assert (
-            message["tool_calls"][0]["function"]["arguments"] == '{"code": "123+456"}'
-        )
+        assert message["tool_calls"][0]["function"]["arguments"] == '{"code": "123+456"}'
 
     def test_construct_chat_messages_preserves_single_item_conversions(self):
         item = ResponseReasoningItem(
@@ -208,10 +206,7 @@ class TestResponsesUtils:
 
         formatted_item = _single_chat_message(item)
         assert formatted_item["role"] == "assistant"
-        assert (
-            formatted_item["reasoning"]
-            == 'Hmm, the user has just started with a simple "Hello,"'
-        )
+        assert formatted_item["reasoning"] == 'Hmm, the user has just started with a simple "Hello,"'
 
         tool_call_output = ResponseFunctionToolCallOutputItem(
             id="temp_id",
@@ -330,9 +325,7 @@ class TestReasoningItemContentPriority:
         formatted = _single_chat_message(item)
         assert formatted["reasoning"] == "Fallback summary text"
         mock_logger.warning.assert_called_once()
-        assert (
-            "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
-        )
+        assert "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
 
     @patch("aphrodite.entrypoints.openai.responses.utils.logger")
     def test_summary_fallback_when_content_empty(self, mock_logger):
@@ -353,9 +346,7 @@ class TestReasoningItemContentPriority:
         formatted = _single_chat_message(item)
         assert formatted["reasoning"] == "Summary when content empty"
         mock_logger.warning.assert_called_once()
-        assert (
-            "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
-        )
+        assert "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
 
     def test_neither_content_nor_summary(self):
         """When neither content nor summary is present, reasoning is empty."""
@@ -416,9 +407,7 @@ class TestReasoningItemContentPriority:
         formatted = _single_chat_message(item)
         assert formatted["reasoning"] == "First summary"
         mock_logger.warning.assert_called_once()
-        assert (
-            "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
-        )
+        assert "summary text as reasoning content" in mock_logger.warning.call_args[0][0]
 
     @patch("aphrodite.entrypoints.openai.responses.utils.logger")
     def test_no_warning_when_content_used(self, mock_logger):
@@ -632,9 +621,7 @@ class TestShouldContinueFinalMessage:
         assert should_continue_final_message([completed_item, in_progress_item]) is True
 
         # Completed as last item -> should not continue
-        assert (
-            should_continue_final_message([in_progress_item, completed_item]) is False
-        )
+        assert should_continue_final_message([in_progress_item, completed_item]) is False
 
     def test_tool_call_returns_false(self):
         """Tool calls should not trigger continuation."""
@@ -816,9 +803,7 @@ class TestConstructChatMessagesCombinePolicy:
         if expected_tool_call_ids is None:
             assert "tool_calls" not in messages[0]
         else:
-            assert [tool_call["id"] for tool_call in messages[0]["tool_calls"]] == (
-                expected_tool_call_ids
-            )
+            assert [tool_call["id"] for tool_call in messages[0]["tool_calls"]] == (expected_tool_call_ids)
 
     @pytest.mark.parametrize(
         ("items", "num_expected_messages"),

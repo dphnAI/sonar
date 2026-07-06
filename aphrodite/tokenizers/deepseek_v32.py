@@ -45,16 +45,12 @@ def get_deepseek_v32_tokenizer(tokenizer: HfTokenizer) -> HfTokenizer:
             # is introduced
             drop_thinking = messages[-1]["role"] == "user"
 
-            encode_config = dict(
-                thinking_mode=thinking_mode, drop_thinking=drop_thinking
-            )
+            encode_config = dict(thinking_mode=thinking_mode, drop_thinking=drop_thinking)
 
             prompt_str = encode_messages(messages, **encode_config)  # type: ignore
 
             if kwargs.get("tokenize", True):
-                tokenizer_kwargs = {
-                    k: kwargs[k] for k in ("truncation", "max_length") if k in kwargs
-                }
+                tokenizer_kwargs = {k: kwargs[k] for k in ("truncation", "max_length") if k in kwargs}
                 return self.encode(
                     prompt_str,
                     add_special_tokens=False,

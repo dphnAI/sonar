@@ -92,9 +92,7 @@ class IOProcessorResponse(OpenAIBaseModel, Generic[T]):
     """
 
 
-PoolingRequest: TypeAlias = (
-    PoolingCompletionRequest | PoolingChatRequest | IOProcessorRequest
-)
+PoolingRequest: TypeAlias = PoolingCompletionRequest | PoolingChatRequest | IOProcessorRequest
 
 
 class PoolingResponseData(OpenAIBaseModel):

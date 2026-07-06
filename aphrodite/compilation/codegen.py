@@ -64,9 +64,7 @@ def generate_execution_code_with_name(
         elif node.op == "call_module":
             target = node.target
             if not with_submod:
-                raise RuntimeError(
-                    f"call_module is not allowed for codegen target {target}."
-                )
+                raise RuntimeError(f"call_module is not allowed for codegen target {target}.")
             if target not in submod_index:
                 submod_index[target] = len(submod_names)
                 submod_names.append(target)
@@ -99,9 +97,7 @@ def generate_execution_code_with_name(
                 args_str = ", ".join(ref(a) for a in node.args)
                 kwargs_str = ", ".join(f"{k}={ref(v)}" for k, v in node.kwargs.items())
                 all_args = ", ".join(filter(None, [args_str, kwargs_str]))
-                lines.append(
-                    f"    {node.name} = {_get_qualified_name(node.target)}({all_args})"
-                )
+                lines.append(f"    {node.name} = {_get_qualified_name(node.target)}({all_args})")
 
         elif node.op == "output":
             assert len(node.args) == 1
@@ -155,9 +151,7 @@ def generate_execution_code(
         by the generated code via __aphrodite_consts__. These objects are
         kept alive for the lifetime of the compiled function.
     """
-    code, submod_names, consts = generate_execution_code_with_name(
-        split_gm, "execution_fn", with_submod=True
-    )
+    code, submod_names, consts = generate_execution_code_with_name(split_gm, "execution_fn", with_submod=True)
     return "import torch\nimport operator\n" + code, submod_names, consts
 
 
@@ -217,9 +211,7 @@ def _node_ref(arg: Any, consts: list[Any], const_index: dict[int, int]) -> str:
         return (
             "{"
             + ", ".join(
-                f"{_node_ref(k, consts, const_index)}: "
-                f"{_node_ref(v, consts, const_index)}"
-                for k, v in arg.items()
+                f"{_node_ref(k, consts, const_index)}: {_node_ref(v, consts, const_index)}" for k, v in arg.items()
             )
             + "}"
         )

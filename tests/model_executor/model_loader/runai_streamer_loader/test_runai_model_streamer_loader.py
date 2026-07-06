@@ -47,14 +47,10 @@ def test_runai_model_loader_download_files(aphrodite_runner):
     reason="Temporarily disabled due to GCS access issues. "
     "TODO: Re-enable this test once the underlying issue is resolved."
 )
-def test_runai_model_loader_download_files_gcs(
-    aphrodite_runner, monkeypatch: pytest.MonkeyPatch
-):
+def test_runai_model_loader_download_files_gcs(aphrodite_runner, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "fake-project")
     monkeypatch.setenv("RUNAI_STREAMER_GCS_USE_ANONYMOUS_CREDENTIALS", "true")
-    monkeypatch.setenv(
-        "CLOUD_STORAGE_EMULATOR_ENDPOINT", "https://storage.googleapis.com"
-    )
+    monkeypatch.setenv("CLOUD_STORAGE_EMULATOR_ENDPOINT", "https://storage.googleapis.com")
     with aphrodite_runner(test_gcs_model, load_format=load_format) as llm:
         deserialized_outputs = llm.generate(prompts, sampling_params)
         assert deserialized_outputs
@@ -63,15 +59,11 @@ def test_runai_model_loader_download_files_gcs(
 def test_runai_passes_revision_by_name():
     # revision must reach download_safetensors_index_file_from_hf as the
     # ``revision`` keyword, not the positional ``subfolder`` slot.
-    fake_self = types.SimpleNamespace(
-        load_config=types.SimpleNamespace(download_dir="/cache", ignore_patterns=[])
-    )
+    fake_self = types.SimpleNamespace(load_config=types.SimpleNamespace(download_dir="/cache", ignore_patterns=[]))
     with (
         patch.object(rsl, "is_runai_obj_uri", return_value=False),
         patch.object(rsl, "download_weights_from_hf", return_value="/folder"),
-        patch.object(
-            rsl, "list_safetensors", return_value=["/folder/model.safetensors"]
-        ),
+        patch.object(rsl, "list_safetensors", return_value=["/folder/model.safetensors"]),
         patch.object(rsl, "download_safetensors_index_file_from_hf") as mock_idx,
     ):
         rsl.RunaiModelStreamerLoader._prepare_weights(fake_self, "org/model", "myrev")
@@ -82,9 +74,7 @@ def test_runai_passes_revision_by_name():
 
 
 def _runai_loader(extra):
-    return rsl.RunaiModelStreamerLoader(
-        LoadConfig(load_format="runai_streamer", model_loader_extra_config=extra)
-    )
+    return rsl.RunaiModelStreamerLoader(LoadConfig(load_format="runai_streamer", model_loader_extra_config=extra))
 
 
 @pytest.mark.parametrize(
@@ -106,9 +96,7 @@ def test_runai_accepts_valid_extra_config():
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("RUNAI_STREAMER_CONCURRENCY", None)
         os.environ.pop("RUNAI_STREAMER_MEMORY_LIMIT", None)
-        loader = _runai_loader(
-            {"distributed": True, "concurrency": 16, "memory_limit": 1024}
-        )
+        loader = _runai_loader({"distributed": True, "concurrency": 16, "memory_limit": 1024})
         assert loader._is_distributed is True
         assert os.environ["RUNAI_STREAMER_CONCURRENCY"] == "16"
         assert os.environ["RUNAI_STREAMER_MEMORY_LIMIT"] == "1024"

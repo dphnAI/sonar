@@ -31,21 +31,13 @@ def apply_parallel_tool_system_prompt(
 # may be added in the future. e.g. llama 3.1 models are not designed to support
 # parallel tool calls.
 @pytest.mark.asyncio
-async def test_parallel_tool_calls(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-):
+async def test_parallel_tool_calls(client: openai.AsyncOpenAI, server_config: ServerConfig):
     if not server_config.get("supports_parallel", True):
-        pytest.skip(
-            "The {} model doesn't support parallel tool calls".format(
-                server_config["model"]
-            )
-        )
+        pytest.skip("The {} model doesn't support parallel tool calls".format(server_config["model"]))
 
     models = await client.models.list()
     model_name: str = models.data[0].id
-    messages = apply_parallel_tool_system_prompt(
-        MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config
-    )
+    messages = apply_parallel_tool_system_prompt(MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config)
     chat_completion = await client.chat.completions.create(
         messages=messages,
         temperature=0,
@@ -163,21 +155,13 @@ async def test_parallel_tool_calls(
 # test: providing parallel tool calls back to the model to get a response
 # (streaming/not)
 @pytest.mark.asyncio
-async def test_parallel_tool_calls_with_results(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-):
+async def test_parallel_tool_calls_with_results(client: openai.AsyncOpenAI, server_config: ServerConfig):
     if not server_config.get("supports_parallel", True):
-        pytest.skip(
-            "The {} model doesn't support parallel tool calls".format(
-                server_config["model"]
-            )
-        )
+        pytest.skip("The {} model doesn't support parallel tool calls".format(server_config["model"]))
 
     models = await client.models.list()
     model_name: str = models.data[0].id
-    messages = apply_parallel_tool_system_prompt(
-        MESSAGES_WITH_PARALLEL_TOOL_RESPONSE, server_config
-    )
+    messages = apply_parallel_tool_system_prompt(MESSAGES_WITH_PARALLEL_TOOL_RESPONSE, server_config)
     chat_completion = await client.chat.completions.create(
         messages=messages,
         temperature=0,
@@ -236,18 +220,14 @@ async def test_parallel_tool_calls_with_results(
 
 
 @pytest.mark.asyncio
-async def test_parallel_tool_calls_false(
-    client: openai.AsyncOpenAI, server_config: ServerConfig
-):
+async def test_parallel_tool_calls_false(client: openai.AsyncOpenAI, server_config: ServerConfig):
     """
     Ensure only one tool call is returned when parallel_tool_calls is False.
     """
 
     models = await client.models.list()
     model_name: str = models.data[0].id
-    messages = apply_parallel_tool_system_prompt(
-        MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config
-    )
+    messages = apply_parallel_tool_system_prompt(MESSAGES_ASKING_FOR_PARALLEL_TOOLS, server_config)
     chat_completion = await client.chat.completions.create(
         messages=messages,
         temperature=0,

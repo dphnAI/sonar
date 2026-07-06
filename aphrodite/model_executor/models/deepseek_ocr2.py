@@ -85,9 +85,7 @@ class DeepseekOCR2ProcessingInfo(BaseProcessingInfo):
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
         return {"image": None}
 
-    def get_num_image_tokens(
-        self, *, image_width: int, image_height: int, cropping: bool = True
-    ) -> int:
+    def get_num_image_tokens(self, *, image_width: int, image_height: int, cropping: bool = True) -> int:
         image_size = IMAGE_SIZE
         base_size = BASE_SIZE
         patch_size = 16
@@ -98,9 +96,7 @@ class DeepseekOCR2ProcessingInfo(BaseProcessingInfo):
                 crop_ratio = [1, 1]
             else:
                 # find the closest aspect ratio to the target
-                crop_ratio = count_tiles(
-                    image_width, image_height, image_size=IMAGE_SIZE
-                )
+                crop_ratio = count_tiles(image_width, image_height, image_size=IMAGE_SIZE)
 
             num_width_tiles, num_height_tiles = crop_ratio
         else:
@@ -124,9 +120,7 @@ class DeepseekOCR2ProcessingInfo(BaseProcessingInfo):
         return ImageSize(width=768 * 2, height=768 * 2)
 
 
-class DeepseekOCR2DummyInputsBuilder(
-    BaseDummyInputsBuilder[DeepseekOCR2ProcessingInfo]
-):
+class DeepseekOCR2DummyInputsBuilder(BaseDummyInputsBuilder[DeepseekOCR2ProcessingInfo]):
     def get_dummy_text(self, mm_counts: Mapping[str, int]) -> str:
         num_images = mm_counts.get("image", 0)
 
@@ -154,9 +148,7 @@ class DeepseekOCR2DummyInputsBuilder(
         }
 
 
-class DeepseekOCR2MultiModalProcessor(
-    BaseMultiModalProcessor[DeepseekOCR2ProcessingInfo]
-):
+class DeepseekOCR2MultiModalProcessor(BaseMultiModalProcessor[DeepseekOCR2ProcessingInfo]):
     def _call_hf_processor(
         self,
         prompt: str,
@@ -173,9 +165,7 @@ class DeepseekOCR2MultiModalProcessor(
 
         else:
             tokenizer = self.info.get_tokenizer()
-            processed_outputs = tokenizer(
-                prompt, add_special_tokens=True, return_tensors="pt"
-            )
+            processed_outputs = tokenizer(prompt, add_special_tokens=True, return_tensors="pt")
 
         return processed_outputs
 
@@ -190,9 +180,7 @@ class DeepseekOCR2MultiModalProcessor(
         return dict(
             pixel_values=MultiModalFieldConfig.batched("image"),
             images_spatial_crop=MultiModalFieldConfig.batched("image"),
-            images_crop=MultiModalFieldConfig.flat_from_sizes(
-                "image", patches_per_image
-            ),
+            images_crop=MultiModalFieldConfig.flat_from_sizes("image", patches_per_image),
         )
 
     def _get_prompt_updates(
@@ -207,9 +195,7 @@ class DeepseekOCR2MultiModalProcessor(
         assert isinstance(image_token_id, int)
 
         def get_replacement_deepseek_vl2(item_idx: int):
-            images = mm_items.get_items(
-                "image", (ImageEmbeddingItems, ImageProcessorItems)
-            )
+            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
 
             if isinstance(images, ImageEmbeddingItems):
                 num_image_tokens = images.get_feature_size(item_idx)
@@ -302,9 +288,7 @@ class DeepseekOCR2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
                 # This is a typo in original implementation
                 self.view_seperator = nn.Parameter(torch.randn(n_embed) * embed_std)
             else:
-                raise ValueError(
-                    f"Only 2D tile_tag is supported currently, got: {self.tile_tag}"
-                )
+                raise ValueError(f"Only 2D tile_tag is supported currently, got: {self.tile_tag}")
 
         with self._mark_language_model(aphrodite_config):
             self.language_model = init_aphrodite_registered_model(
@@ -313,13 +297,9 @@ class DeepseekOCR2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> DeepseekOCRImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> DeepseekOCRImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         images_spatial_crop = kwargs.pop("images_spatial_crop", None)
         images_crop = kwargs.pop("images_crop", None)
@@ -385,17 +365,13 @@ class DeepseekOCR2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
                     dim=0,
                 )
             else:
-                combined = torch.cat(
-                    [global_features, self.view_seperator[None, :]], dim=0
-                )
+                combined = torch.cat([global_features, self.view_seperator[None, :]], dim=0)
 
             images_in_this_batch.append(combined)
 
         return images_in_this_batch
 
-    def _process_image_input(
-        self, image_input: DeepseekOCRImagePixelInputs
-    ) -> torch.Tensor:
+    def _process_image_input(self, image_input: DeepseekOCRImagePixelInputs) -> torch.Tensor:
         pixel_values = image_input.data
         images_crop = image_input.images_crop
         images_spatial_crop = image_input.images_spatial_crop.to(dtype=torch.long)
@@ -426,9 +402,7 @@ class DeepseekOCR2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
         if intermediate_tensors is not None:
             inputs_embeds = None
 
-        hidden_states = self.language_model(
-            input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds
-        )
+        hidden_states = self.language_model(input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds)
 
         return hidden_states
 

@@ -5,11 +5,11 @@ import dataclasses
 import pytest
 import torch
 
-from tests.evals.gsm8k.gsm8k_eval import evaluate_gsm8k_offline
-from tests.utils import large_gpu_mark
 from aphrodite import LLM
 from aphrodite.config import SpeculativeConfig
 from aphrodite.distributed import cleanup_dist_env_and_memory
+from tests.evals.gsm8k.gsm8k_eval import evaluate_gsm8k_offline
+from tests.utils import large_gpu_mark
 
 
 @dataclasses.dataclass
@@ -54,10 +54,7 @@ PEAGLE_CONFIG = SpeculatorTestConfig(
 )
 
 QWEN3_EAGLE3_CONFIG = SpeculatorTestConfig(
-    model_path=(
-        "inference-optimization/"
-        "Qwen3-8B-from-Qwen3-8B_regen-speculators.eagle3-qwen3arch-ckpt1"
-    ),
+    model_path=("inference-optimization/Qwen3-8B-from-Qwen3-8B_regen-speculators.eagle3-qwen3arch-ckpt1"),
     method="eagle3",
     display_name="Qwen3 Eagle3",
     expected_gsm8k_accuracy=0.88,
@@ -159,26 +156,20 @@ def test_speculators_model(aphrodite_runner, example_prompts, monkeypatch, confi
         )
 
         spec_config = aphrodite_config.speculative_config
-        assert spec_config.method == config.method, (
-            f"Expected method='{config.method}', got '{spec_config.method}'"
-        )
+        assert spec_config.method == config.method, f"Expected method='{config.method}', got '{spec_config.method}'"
         if config.parallel_drafting is not None:
             assert spec_config.parallel_drafting is config.parallel_drafting, (
-                f"Expected parallel_drafting={config.parallel_drafting} "
-                f"for {config.display_name} model"
+                f"Expected parallel_drafting={config.parallel_drafting} for {config.display_name} model"
             )
         assert spec_config.num_speculative_tokens > 0, (
-            f"Expected positive speculative tokens, "
-            f"got {spec_config.num_speculative_tokens}"
+            f"Expected positive speculative tokens, got {spec_config.num_speculative_tokens}"
         )
         assert spec_config.model == config.model_path, (
             f"Draft model should be {config.model_path}, got {spec_config.model}"
         )
 
         aphrodite_outputs = aphrodite_model.generate_greedy(example_prompts, max_tokens=20)
-        assert aphrodite_outputs, (
-            f"No outputs generated for speculators model {config.model_path}"
-        )
+        assert aphrodite_outputs, f"No outputs generated for speculators model {config.model_path}"
 
 
 @pytest.mark.slow_test
@@ -208,9 +199,7 @@ def test_speculators_correctness(monkeypatch, config):
     accuracy = results["accuracy"]
     print(f"GSM8K Accuracy: {accuracy:.4f}")
     accuracy_threshold = config.expected_gsm8k_accuracy * (1 - config.accuracy_rtol)
-    assert accuracy >= accuracy_threshold, (
-        f"Expected GSM8K accuracy >= {accuracy_threshold:.3f}, got {accuracy:.3f}"
-    )
+    assert accuracy >= accuracy_threshold, f"Expected GSM8K accuracy >= {accuracy_threshold:.3f}, got {accuracy:.3f}"
 
     current_metrics = spec_llm.get_metrics()
     stats = compute_spec_decode_stats(current_metrics)
@@ -219,15 +208,12 @@ def test_speculators_correctness(monkeypatch, config):
     acceptance_len = stats["acceptance_len"]
     al_threshold = config.expected_acceptance_len * (1 - config.acceptance_len_rtol)
     assert acceptance_len >= al_threshold, (
-        f"{config.display_name} speculators acceptance length too low: "
-        f"{acceptance_len:.2f} < {al_threshold:.2f}"
+        f"{config.display_name} speculators acceptance length too low: {acceptance_len:.2f} < {al_threshold:.2f}"
     )
 
     per_pos_rates = stats["per_pos_acceptance_rates"]
     for i, expected_rate in enumerate(config.expected_per_pos_acceptance_rates):
-        assert i < len(per_pos_rates), (
-            f"Missing per-position acceptance rate for position {i}"
-        )
+        assert i < len(per_pos_rates), f"Missing per-position acceptance rate for position {i}"
         threshold = expected_rate * (1 - config.per_pos_rtol)
         assert per_pos_rates[i] >= threshold, (
             f"Per-position acceptance rate at pos {i} too low: "

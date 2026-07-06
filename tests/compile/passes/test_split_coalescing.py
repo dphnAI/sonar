@@ -5,10 +5,10 @@ import pytest
 import torch
 
 import aphrodite
-from tests.compile.backend import TestBackend
 from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
-from aphrodite.config import CompilationConfig, CompilationMode, PassConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CompilationConfig, CompilationMode, PassConfig
 from aphrodite.platforms import current_platform
+from tests.compile.backend import TestBackend
 
 DEVICE_TYPE = current_platform.device_type
 

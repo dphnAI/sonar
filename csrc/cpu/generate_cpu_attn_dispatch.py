@@ -57,9 +57,7 @@ def encode_params(head_dim: int, isa_type: str, kv_cache: str = "auto") -> int:
     return (head_dim << 16) | (kv_val << 8) | isa_val
 
 
-def _make_case(
-    head_dim: int, isa: str, kv_cache: str = "auto", isa_override: str | None = None
-) -> str:
+def _make_case(head_dim: int, isa: str, kv_cache: str = "auto", isa_override: str | None = None) -> str:
     """Generate a single switch case line."""
     encoded = encode_params(head_dim, isa, kv_cache)
     actual_isa = isa_override if isa_override else isa
@@ -176,10 +174,7 @@ def generate_header_file() -> str:
 
     def _macro_block(guard: str, isa_list: list[str], fp8: bool) -> str:
         """Return one CPU_ATTN_DISPATCH macro block for a given guard."""
-        enc = (
-            "    int64_t encoded_params = encode_cpu_attn_params("
-            "HEAD_DIM, ISA_TYPE, KV_CACHE_IDX); \\"
-        )
+        enc = "    int64_t encoded_params = encode_cpu_attn_params(HEAD_DIM, ISA_TYPE, KV_CACHE_IDX); \\"
         cases = generate_cases_for_isa_group(isa_list, include_fp8=fp8)
         tail = (
             "\n"
@@ -264,9 +259,7 @@ def generate_header_file() -> str:
 
 
 def main():
-    output_path = os.path.join(
-        os.path.dirname(__file__), "cpu_attn_dispatch_generated.h"
-    )
+    output_path = os.path.join(os.path.dirname(__file__), "cpu_attn_dispatch_generated.h")
 
     with open(output_path, "w") as f:
         f.write(generate_header_file())

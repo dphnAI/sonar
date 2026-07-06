@@ -61,9 +61,7 @@ class CachePolicy(ABC):
         """Mark blocks as recently used."""
 
     @abstractmethod
-    def evict(
-        self, n: int, protected: set[OffloadKey]
-    ) -> list[tuple[OffloadKey, BlockStatus]] | None:
+    def evict(self, n: int, protected: set[OffloadKey]) -> list[tuple[OffloadKey, BlockStatus]] | None:
         """
         Evict exactly n blocks, skipping any in protected.
 

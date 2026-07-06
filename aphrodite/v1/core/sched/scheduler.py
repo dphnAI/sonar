@@ -1507,14 +1507,8 @@ class Scheduler(SchedulerInterface):
                 # new_token_ids can be a mixed block of reasoning content, then
                 # the reasoning end marker, then the start of the grammar content.
                 # Trim the reasoning content so the grammar only sees grammar content.
-                advance_token_ids = (
-                    self.structured_output_manager.trim_reasoning_for_advance(
-                        request, new_token_ids
-                    )
-                )
-                if advance_token_ids and not grammar.accept_tokens(
-                    req_id, advance_token_ids
-                ):
+                advance_token_ids = self.structured_output_manager.trim_reasoning_for_advance(request, new_token_ids)
+                if advance_token_ids and not grammar.accept_tokens(req_id, advance_token_ids):
                     logger.error(
                         "Unexpected: grammar rejected tokens %s for request %s. Terminating request.",
                         advance_token_ids,

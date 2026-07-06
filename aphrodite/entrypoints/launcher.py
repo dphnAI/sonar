@@ -139,9 +139,7 @@ def _log_full_routes(app: FastAPI) -> None:
 
 
 def _log_compact_routes(app: FastAPI) -> None:
-    grouped_routes: dict[str, dict[str, set[str]]] = defaultdict(
-        lambda: defaultdict(set)
-    )
+    grouped_routes: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     endpoint_routes: dict[str, set[str]] = defaultdict(set)
     route_count = 0
 
@@ -166,9 +164,7 @@ def _log_compact_routes(app: FastAPI) -> None:
         grouped_routes[group][_normalize_methods(methods)].add(compact_path)
 
     displayed_route_count = sum(
-        len(paths)
-        for method_groups in grouped_routes.values()
-        for paths in method_groups.values()
+        len(paths) for method_groups in grouped_routes.values() for paths in method_groups.values()
     ) + sum(len(endpoints) for endpoints in endpoint_routes.values())
     alias_note = ""
     if displayed_route_count != route_count:
@@ -178,9 +174,7 @@ def _log_compact_routes(app: FastAPI) -> None:
         _route_log_color("Available routes:", _ANSI_BOLD),
         route_count,
         alias_note,
-        _route_log_color(
-            "(set APHRODITE_LOG_ROUTES=full for details)", _ANSI_DIM
-        ),
+        _route_log_color("(set APHRODITE_LOG_ROUTES=full for details)", _ANSI_DIM),
     )
 
     for group in ("Core", "OpenAI", "Kobold", "Docs", "Other"):
@@ -189,9 +183,7 @@ def _log_compact_routes(app: FastAPI) -> None:
         if not method_groups and not endpoints:
             continue
 
-        group_route_count = sum(
-            len(paths) for paths in method_groups.values()
-        ) + len(endpoints)
+        group_route_count = sum(len(paths) for paths in method_groups.values()) + len(endpoints)
         group_label = _route_log_color(
             f"Routes [{group}]:",
             f"{_ANSI_BOLD}{_ROUTE_GROUP_COLORS[group]}",
@@ -237,9 +229,7 @@ async def serve_http(
     _log_routes(app)
 
     # Extract header limit options if present
-    h11_max_incomplete_event_size = uvicorn_kwargs.pop(
-        "h11_max_incomplete_event_size", None
-    )
+    h11_max_incomplete_event_size = uvicorn_kwargs.pop("h11_max_incomplete_event_size", None)
     h11_max_header_count = uvicorn_kwargs.pop("h11_max_header_count", None)
 
     # Set safe defaults if not provided
@@ -299,9 +289,7 @@ async def serve_http(
             timeout,
         )
 
-        await loop.run_in_executor(
-            None, partial(engine_client.shutdown, timeout=timeout)
-        )
+        await loop.run_in_executor(None, partial(engine_client.shutdown, timeout=timeout))
         logger.info_once("[shutdown] API server: engine client stopped")
 
         server.should_exit = True

@@ -111,9 +111,7 @@ def test_gate_disabled_without_connector():
 
     # Request stops early while step 2 is in flight: blocks are freed
     # immediately because deferral is disabled.
-    scheduler.update_from_output(
-        out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID)
-    )
+    scheduler.update_from_output(out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID))
     assert request.is_finished()
     assert not scheduler.deferred_frees
     assert pool.get_num_free_blocks() == num_free_initially
@@ -130,9 +128,7 @@ def test_finish_defers_free_until_inflight_step_done():
 
     # The request stops early (stop token) while the over-scheduled step 2
     # is still in flight: its blocks must NOT return to the pool yet.
-    scheduler.update_from_output(
-        out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID)
-    )
+    scheduler.update_from_output(out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID))
     assert request.is_finished()
     assert len(scheduler.deferred_frees) == 1
     assert pool.get_num_free_blocks() == num_free_running
@@ -161,9 +157,7 @@ def test_finish_frees_immediately_when_no_inflight_step():
     # Synchronous-like flow: out0 is the newest scheduled step and its
     # output is being processed, so no other step can still write the
     # blocks and the free happens immediately.
-    scheduler.update_from_output(
-        out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID)
-    )
+    scheduler.update_from_output(out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID))
     assert request.is_finished()
     assert not scheduler.deferred_frees
     assert pool.get_num_free_blocks() == num_free_initially
@@ -241,9 +235,7 @@ def test_multiple_deferred_frees_drain_in_order():
 
     # Both requests stop early at step 1's output while step 2 is in
     # flight: two deferred entries with the same fence.
-    scheduler.update_from_output(
-        out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID)
-    )
+    scheduler.update_from_output(out0, _make_model_runner_output(out0, token_id=STOP_TOKEN_ID))
     assert len(scheduler.deferred_frees) == 2
     assert pool.get_num_free_blocks() < num_free_initially
 
@@ -312,12 +304,8 @@ def test_max_tokens_finish_frees_immediately_with_other_inflight():
     pool = scheduler.kv_cache_manager.block_pool
 
     # Short request finishes at max_tokens=1; long request keeps running.
-    short = create_requests(
-        num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=1, req_ids=["short"]
-    )[0]
-    long = create_requests(
-        num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=100, req_ids=["long"]
-    )[0]
+    short = create_requests(num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=1, req_ids=["short"])[0]
+    long = create_requests(num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=100, req_ids=["long"])[0]
     scheduler.add_request(short)
     scheduler.add_request(long)
 
@@ -345,16 +333,12 @@ def test_abort_mid_prefill_defers_free():
     deferral must key off is_prefill_chunk: aborting a request whose prefill
     chunk is still in flight must withhold its blocks.
     """
-    scheduler = create_scheduler(
-        model=MODEL, async_scheduling=True, long_prefill_token_threshold=16
-    )
+    scheduler = create_scheduler(model=MODEL, async_scheduling=True, long_prefill_token_threshold=16)
     scheduler.defer_block_free = True
     pool = scheduler.kv_cache_manager.block_pool
     num_free_initially = pool.get_num_free_blocks()
 
-    request = create_requests(
-        num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=5
-    )[0]
+    request = create_requests(num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=5)[0]
     scheduler.add_request(request)
 
     out0 = scheduler.schedule()
@@ -390,9 +374,7 @@ def test_non_async_abort_defers_via_last_sched_seq():
     pool = scheduler.kv_cache_manager.block_pool
     num_free_initially = pool.get_num_free_blocks()
 
-    request = create_requests(
-        num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=5
-    )[0]
+    request = create_requests(num_requests=1, num_tokens=NUM_PROMPT_TOKENS, max_tokens=5)[0]
     scheduler.add_request(request)
 
     out0 = scheduler.schedule()

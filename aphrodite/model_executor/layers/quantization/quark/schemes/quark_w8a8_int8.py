@@ -67,9 +67,7 @@ class QuarkW8A8Int8(QuarkScheme):
 
         # WEIGHT
         weight = ModelWeightParameter(
-            data=torch.empty(
-                sum(output_partition_sizes), input_size_per_partition, dtype=torch.int8
-            ),
+            data=torch.empty(sum(output_partition_sizes), input_size_per_partition, dtype=torch.int8),
             input_dim=1,
             output_dim=0,
             weight_loader=weight_loader,
@@ -108,9 +106,7 @@ class QuarkW8A8Int8(QuarkScheme):
         input_zero_point = None
         input_scale = None
         if self.is_static_input_scheme:
-            input_scale = BaseAphroditeParameter(
-                data=torch.empty(1, dtype=torch.float32), weight_loader=weight_loader
-            )
+            input_scale = BaseAphroditeParameter(data=torch.empty(1, dtype=torch.float32), weight_loader=weight_loader)
 
             input_zero_point = BaseAphroditeParameter(
                 data=torch.empty(1, dtype=torch.int8), weight_loader=weight_loader
@@ -132,7 +128,5 @@ class QuarkW8A8Int8(QuarkScheme):
 
         self.kernel.process_weights_after_loading(layer)
 
-    def apply_weights(
-        self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None
-    ) -> torch.Tensor:
+    def apply_weights(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None) -> torch.Tensor:
         return self.kernel.apply_weights(layer, x, bias)

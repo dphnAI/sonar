@@ -48,17 +48,11 @@ class MaybeInplaceModel(nn.Module):
         self.weight1 = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
         self.weight2 = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
 
-    def forward(
-        self, x: torch.Tensor, residual1: torch.Tensor, residual2: torch.Tensor
-    ):
+    def forward(self, x: torch.Tensor, residual1: torch.Tensor, residual2: torch.Tensor):
         # First maybe_inplace - x & residual1 are donated
-        x_normed1, residual_out1 = ops.fused_add_rms_norm.maybe_inplace(
-            x, residual1, self.weight1, 1e-5
-        )
+        x_normed1, residual_out1 = ops.fused_add_rms_norm.maybe_inplace(x, residual1, self.weight1, 1e-5)
         # Second maybe_inplace - residual2 is donated
-        x_normed2, residual_out2 = ops.fused_add_rms_norm.maybe_inplace(
-            x_normed1, residual2, self.weight2, 1e-5
-        )
+        x_normed2, residual_out2 = ops.fused_add_rms_norm.maybe_inplace(x_normed1, residual2, self.weight2, 1e-5)
         return x_normed2, residual_out1, residual_out2
 
 
@@ -70,17 +64,11 @@ class FunctionalModel(nn.Module):
         self.weight1 = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
         self.weight2 = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
 
-    def forward(
-        self, x: torch.Tensor, residual1: torch.Tensor, residual2: torch.Tensor
-    ):
+    def forward(self, x: torch.Tensor, residual1: torch.Tensor, residual2: torch.Tensor):
         # First functional - no donation
-        x_normed1, residual_out1 = ops.fused_add_rms_norm(
-            x, residual1, self.weight1, 1e-5
-        )
+        x_normed1, residual_out1 = ops.fused_add_rms_norm(x, residual1, self.weight1, 1e-5)
         # Second functional - no donation
-        x_normed2, residual_out2 = ops.fused_add_rms_norm(
-            x_normed1, residual2, self.weight2, 1e-5
-        )
+        x_normed2, residual_out2 = ops.fused_add_rms_norm(x_normed1, residual2, self.weight2, 1e-5)
         return x_normed2, residual_out1, residual_out2
 
 
@@ -92,17 +80,11 @@ class MixedModel(nn.Module):
         self.weight1 = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
         self.weight2 = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
 
-    def forward(
-        self, x: torch.Tensor, residual1: torch.Tensor, residual2: torch.Tensor
-    ):
+    def forward(self, x: torch.Tensor, residual1: torch.Tensor, residual2: torch.Tensor):
         # First maybe_inplace - x & residual1 are donated
-        x_normed1, residual_out1 = ops.fused_add_rms_norm.maybe_inplace(
-            x, residual1, self.weight1, 1e-5
-        )
+        x_normed1, residual_out1 = ops.fused_add_rms_norm.maybe_inplace(x, residual1, self.weight1, 1e-5)
         # Second functional - no donation, x_normed1 must be preserved as it's returned
-        x_normed2, residual_out2 = ops.fused_add_rms_norm(
-            x_normed1, residual2, self.weight2, 1e-5
-        )
+        x_normed2, residual_out2 = ops.fused_add_rms_norm(x_normed1, residual2, self.weight2, 1e-5)
         # Return both to prevent x_normed1 from being optimized away
         return x_normed1, x_normed2, residual_out1, residual_out2
 
@@ -143,16 +125,12 @@ class ModelWithTritonAfterMaybeInplace(nn.Module):
         self.triton_add = triton_add
 
     def forward(self, x: torch.Tensor, residual: torch.Tensor, residual2: torch.Tensor):
-        x_normed, residual_out = ops.fused_add_rms_norm.maybe_inplace(
-            x, residual, self.weight, 1e-5
-        )
+        x_normed, residual_out = ops.fused_add_rms_norm.maybe_inplace(x, residual, self.weight, 1e-5)
 
         x_processed = self.triton_add(x_normed)
 
         # x_processed does not need to be cloned, residual2 does
-        x_normed2, residual_out2 = ops.fused_add_rms_norm(
-            x_processed, residual2, self.weight, 1e-5
-        )
+        x_normed2, residual_out2 = ops.fused_add_rms_norm(x_processed, residual2, self.weight, 1e-5)
         return x_normed2, residual_out2
 
 
@@ -230,8 +208,7 @@ def test_inplace_functionalization(
     assert "fused_add_rms_norm" in lowering_pass.selected_impls
     assert len(lowering_pass.selected_impls["fused_add_rms_norm"]) == 2
     assert all(
-        provider == "aphrodite_c"
-        for node, provider in lowering_pass.selected_impls["fused_add_rms_norm"].items()
+        provider == "aphrodite_c" for node, provider in lowering_pass.selected_impls["fused_add_rms_norm"].items()
     ), lowering_pass.selected_impls
 
     # Verify correct number of donated IDs
@@ -241,8 +218,7 @@ def test_inplace_functionalization(
     # Verify expected number of clones after cleanup
     actual_clones = backend.op_count(torch.ops.aten.clone.default, before=False)
     assert actual_clones == expected_clones, (
-        f"Expected {expected_clones} clones, got {actual_clones}:"
-        f"{backend.print_graphs()}"
+        f"Expected {expected_clones} clones, got {actual_clones}:{backend.print_graphs()}"
     )
 
 
@@ -299,9 +275,7 @@ def test_maybe_inplace_reuse_error(default_aphrodite_config):
 
         def forward(self, x: torch.Tensor, residual: torch.Tensor):
             # x is donated to maybe_inplace
-            x_normed, residual_out = ops.fused_add_rms_norm.maybe_inplace(
-                x, residual, self.weight, 1e-5
-            )
+            x_normed, residual_out = ops.fused_add_rms_norm.maybe_inplace(x, residual, self.weight, 1e-5)
             # ERROR: x is used again after being donated
             return x_normed + x  # This should raise ValueError
 
@@ -348,25 +322,15 @@ class TransformerBlockWithSplits(nn.Module):
         self.intermediate_size = intermediate_size
 
         # Attention-like projection
-        self.attn_proj = nn.Linear(
-            hidden_size, hidden_size, bias=False, dtype=torch.bfloat16
-        )
+        self.attn_proj = nn.Linear(hidden_size, hidden_size, bias=False, dtype=torch.bfloat16)
 
         # Post-attention norm
-        self.post_attn_norm = nn.Parameter(
-            torch.ones(hidden_size, dtype=torch.bfloat16)
-        )
+        self.post_attn_norm = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
 
         # MLP
-        self.gate_proj = nn.Linear(
-            hidden_size, intermediate_size, bias=False, dtype=torch.bfloat16
-        )
-        self.up_proj = nn.Linear(
-            hidden_size, intermediate_size, bias=False, dtype=torch.bfloat16
-        )
-        self.down_proj = nn.Linear(
-            intermediate_size, hidden_size, bias=False, dtype=torch.bfloat16
-        )
+        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False, dtype=torch.bfloat16)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False, dtype=torch.bfloat16)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False, dtype=torch.bfloat16)
 
         # Post-MLP norm
         self.post_mlp_norm = nn.Parameter(torch.ones(hidden_size, dtype=torch.bfloat16))
@@ -377,9 +341,7 @@ class TransformerBlockWithSplits(nn.Module):
         attn_out = self.attn_proj(x)
 
         # Fused add + norm (maybe_inplace: residual1 is donated)
-        normed1, residual1 = ops.fused_add_rms_norm.maybe_inplace(
-            attn_out, residual1, self.post_attn_norm, 1e-5
-        )
+        normed1, residual1 = ops.fused_add_rms_norm.maybe_inplace(attn_out, residual1, self.post_attn_norm, 1e-5)
 
         # Force a graph split here
         normed1 = torch.ops.aphrodite.test_split_marker(normed1)
@@ -390,9 +352,7 @@ class TransformerBlockWithSplits(nn.Module):
         mlp_out = self.down_proj(gate * torch.nn.functional.silu(up))
 
         # Fused add + norm (maybe_inplace: residual1 is donated)
-        normed2, residual2 = ops.fused_add_rms_norm.maybe_inplace(
-            mlp_out, residual1, self.post_mlp_norm, 1e-5
-        )
+        normed2, residual2 = ops.fused_add_rms_norm.maybe_inplace(mlp_out, residual1, self.post_mlp_norm, 1e-5)
 
         return normed2, residual2
 
@@ -420,7 +380,7 @@ def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_aphrodite
     monkeypatch.setenv("APHRODITE_DISABLE_COMPILE_CACHE", "1")
 
     from aphrodite.compilation.backends import AphroditeBackend
-    from aphrodite.config import CompilationConfig, AphroditeConfig
+    from aphrodite.config import AphroditeConfig, CompilationConfig
 
     # Create config with custom splitting op
     store_donation_info = StoreDonationInfoPass()
@@ -454,9 +414,7 @@ def test_piecewise_compilation_with_donated_buffers(monkeypatch, fresh_aphrodite
     # Should have at least 2 submodules (split by test_split_marker op)
     submodules = list(backend.split_gm.named_children())
     num_submodules = len(submodules)
-    assert num_submodules >= 2, (
-        f"Expected at least 2 submodules (split), got {num_submodules}"
-    )
+    assert num_submodules >= 2, f"Expected at least 2 submodules (split), got {num_submodules}"
 
     # Check that donation info was propagated correctly
     donated_inputs_sets = store_donation_info.donated_input_ids_sets

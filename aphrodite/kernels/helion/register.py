@@ -50,10 +50,7 @@ from aphrodite.utils.import_utils import has_helion
 from aphrodite.utils.torch_utils import direct_register_custom_op
 
 if not has_helion():
-    raise ImportError(
-        "register module requires helion to be installed. "
-        "Install it with: pip install helion"
-    )
+    raise ImportError("register module requires helion to be installed. Install it with: pip install helion")
 
 import helion
 from helion.autotuner.base_search import BaseAutotuner
@@ -82,9 +79,7 @@ aphrodite_helion_lib = Library("aphrodite_helion", "FRAGMENT")  # noqa
 ConfigPicker = Callable[[tuple[Any, ...], list[CaseKey]], CaseKey | None]
 
 
-def validate_helion_settings(
-    helion_settings: helion.Settings | None, op_name: str
-) -> None:
+def validate_helion_settings(helion_settings: helion.Settings | None, op_name: str) -> None:
     if helion_settings is None:
         return
 
@@ -225,10 +220,7 @@ class ConfiguredHelionKernel:
         self.configs = config_manager.get_platform_configs(self.op_name, self.platform)
 
         if not self.configs:
-            raise ValueError(
-                f"No configs available for kernel '{self.op_name}' "
-                f"on platform '{self.platform}'"
-            )
+            raise ValueError(f"No configs available for kernel '{self.op_name}' on platform '{self.platform}'")
 
     def _create_decorated_kernel(self) -> Callable[..., Any]:
         self._load_platform_configs()
@@ -246,9 +238,7 @@ class ConfiguredHelionKernel:
             self.op_name,
             self.platform,
         )
-        return create_helion_decorated_kernel(
-            self.raw_kernel_func, self.helion_settings, extra_kwargs
-        )
+        return create_helion_decorated_kernel(self.raw_kernel_func, self.helion_settings, extra_kwargs)
 
 
 class HelionKernelWrapper:
@@ -296,15 +286,12 @@ class HelionKernelWrapper:
 
     def __call__(self, *args, **kwargs):
         if self._disabled:
-            raise RuntimeError(
-                f"Helion kernel '{self.op_name}' is disabled: {self._disabled_reason}"
-            )
+            raise RuntimeError(f"Helion kernel '{self.op_name}' is disabled: {self._disabled_reason}")
         if not _HOP_AVAILABLE:
             op = getattr(torch.ops.aphrodite_helion, self.op_name)
             return op(*args, **kwargs)
         assert self._configured_kernel is not None, (
-            f"Kernel '{self.op_name}' was not initialized. "
-            "Please open an issue on GitHub."
+            f"Kernel '{self.op_name}' was not initialized. Please open an issue on GitHub."
         )
 
         # During Dynamo tracing, this call will be intercepted by our custom
@@ -330,16 +317,12 @@ class HelionKernelWrapper:
             "autotune_effort": autotune_effort,
             "autotune_ignore_errors": True,
         }
-        autotune_kernel = create_helion_decorated_kernel(
-            self.raw_kernel_func, self.helion_settings, extra_kwargs
-        )
+        autotune_kernel = create_helion_decorated_kernel(self.raw_kernel_func, self.helion_settings, extra_kwargs)
         return autotune_kernel.autotune(inputs)
 
     def get_configured_op(self) -> ConfiguredHelionKernel:
         if self._disabled:
-            raise RuntimeError(
-                f"Helion kernel '{self.op_name}' is disabled: {self._disabled_reason}"
-            )
+            raise RuntimeError(f"Helion kernel '{self.op_name}' is disabled: {self._disabled_reason}")
         if self._configured_kernel is None:
             self._configured_kernel = ConfiguredHelionKernel(
                 op_name=self.op_name,
@@ -487,9 +470,7 @@ if _HOP_AVAILABLE:
         registration, and inductor lowering setup.
         """
 
-        def wrap_helion_kernel_wrapper(
-            builder: VariableBuilder, value: HelionKernelWrapper
-        ):
+        def wrap_helion_kernel_wrapper(builder: VariableBuilder, value: HelionKernelWrapper):
             kernel = value.get_configured_op()._decorated_kernel
             if supports_torch_compile_fusion():
                 helion_handler = VariableBuilder._type_dispatch()[Kernel]

@@ -39,9 +39,7 @@ class ScalingMiddleware:
         if get_scaling_elastic_ep():
             # Return 503 Service Unavailable response
             response = JSONResponse(
-                content={
-                    "error": "The model is currently scaling. Please try again later."
-                },
+                content={"error": "The model is currently scaling. Please try again later."},
                 status_code=503,
             )
             return response(scope, receive, send)

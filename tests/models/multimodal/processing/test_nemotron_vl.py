@@ -64,8 +64,7 @@ def _run_check(
     mm_data = {"image": images}
 
     total_expected_num_patches = sum(
-        _get_expected_num_patches(config, image, len(images), min_num, max_num)
-        for image in images
+        _get_expected_num_patches(config, image, len(images), min_num, max_num) for image in images
     )
     print(total_expected_num_patches)
     processed_inputs = processor(

@@ -25,9 +25,7 @@ from aphrodite.transformers_utils.configs.ovis import AIMv2Config
 
 
 class AIMv2SwiGLUFFN(nn.Module):
-    def __init__(
-        self, config: AIMv2Config, quant_config: QuantizationConfig, prefix: str
-    ):
+    def __init__(self, config: AIMv2Config, quant_config: QuantizationConfig, prefix: str):
         super().__init__()
         hidden_features = config.intermediate_size
         in_features = config.hidden_size
@@ -90,9 +88,7 @@ class AIMv2ViTPreprocessor(nn.Module):
 
 
 class AIMv2Attention(nn.Module):
-    def __init__(
-        self, config: AIMv2Config, quant_config: QuantizationConfig, prefix: str
-    ):
+    def __init__(self, config: AIMv2Config, quant_config: QuantizationConfig, prefix: str):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -143,17 +139,11 @@ class AIMv2Attention(nn.Module):
 
 
 class AIMv2Block(nn.Module):
-    def __init__(
-        self, config: AIMv2Config, quant_config: QuantizationConfig, prefix: str
-    ):
+    def __init__(self, config: AIMv2Config, quant_config: QuantizationConfig, prefix: str):
         super().__init__()
-        self.attn = AIMv2Attention(
-            config, quant_config=quant_config, prefix=f"{prefix}.attn"
-        )
+        self.attn = AIMv2Attention(config, quant_config=quant_config, prefix=f"{prefix}.attn")
         self.norm_1 = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = AIMv2SwiGLUFFN(
-            config, quant_config=quant_config, prefix=f"{prefix}.mlp"
-        )
+        self.mlp = AIMv2SwiGLUFFN(config, quant_config=quant_config, prefix=f"{prefix}.mlp")
         self.norm_2 = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -174,10 +164,7 @@ class AIMv2Transformer(nn.Module):
         super().__init__()
 
         self.blocks = nn.ModuleList(
-            [
-                AIMv2Block(config, quant_config, prefix=f"{prefix}.blocks.{i}")
-                for i in range(config.num_hidden_layers)
-            ]
+            [AIMv2Block(config, quant_config, prefix=f"{prefix}.blocks.{i}") for i in range(config.num_hidden_layers)]
         )
         if require_post_norm:
             self.post_trunk_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -228,10 +215,6 @@ class AIMv2Model(torch.nn.Module):
         loader = AutoWeightsLoader(
             self,
             # post_trunk_norm is optional (absent for clip-skip backbones).
-            skip_prefixes=(
-                ["trunk.post_trunk_norm."]
-                if self.trunk.post_trunk_norm is None
-                else None
-            ),
+            skip_prefixes=(["trunk.post_trunk_norm."] if self.trunk.post_trunk_norm is None else None),
         )
         return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)

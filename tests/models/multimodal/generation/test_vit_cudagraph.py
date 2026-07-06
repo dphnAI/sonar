@@ -35,9 +35,7 @@ class VitCudagraphTestConfig:
 def params_with_marks(
     configs: dict[str, VitCudagraphTestConfig],
 ) -> list[pytest.param]:
-    return [
-        pytest.param(model_id, marks=cfg.marks) for model_id, cfg in configs.items()
-    ]
+    return [pytest.param(model_id, marks=cfg.marks) for model_id, cfg in configs.items()]
 
 
 def qwen_vl_chat_template(content: str) -> str:
@@ -49,10 +47,7 @@ def internvl_chat_template(content: str) -> str:
 
 
 def kimi_vl_chat_template(content: str) -> str:
-    return (
-        f"<|im_user|>user<|im_middle|>{content}<|im_end|>"
-        "<|im_assistant|>assistant<|im_middle|>"
-    )
+    return f"<|im_user|>user<|im_middle|>{content}<|im_end|><|im_assistant|>assistant<|im_middle|>"
 
 
 def step3_vl_chat_template(content: str) -> str:
@@ -99,24 +94,18 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
     ),
     "qwen2_vl": VitCudagraphTestConfig(
         model="Qwen/Qwen2-VL-2B-Instruct",
-        image_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|image_pad|><|vision_end|>What is in this image?"
-        ),
+        image_prompt=qwen_vl_chat_template("<|vision_start|><|image_pad|><|vision_end|>What is in this image?"),
         video_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|video_pad|><|vision_end|>"
-            "Describe this video in one sentence."
+            "<|vision_start|><|video_pad|><|vision_end|>Describe this video in one sentence."
         ),
         needs_video_metadata=False,
         marks=[pytest.mark.core_model],
     ),
     "qwen2_5_vl": VitCudagraphTestConfig(
         model="Qwen/Qwen2.5-VL-3B-Instruct",
-        image_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|image_pad|><|vision_end|>What is in this image?"
-        ),
+        image_prompt=qwen_vl_chat_template("<|vision_start|><|image_pad|><|vision_end|>What is in this image?"),
         video_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|video_pad|><|vision_end|>"
-            "Describe this video in one sentence."
+            "<|vision_start|><|video_pad|><|vision_end|>Describe this video in one sentence."
         ),
         needs_video_metadata=False,
         marks=[pytest.mark.core_model],
@@ -125,8 +114,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         model="moonshotai/Kimi-VL-A3B-Instruct",
         modalities=["image"],
         image_prompt=kimi_vl_chat_template(
-            "<|media_start|>image<|media_content|><|media_pad|><|media_end|>"
-            "What is in this image?"
+            "<|media_start|>image<|media_content|><|media_pad|><|media_end|>What is in this image?"
         ),
         needs_video_metadata=False,
         # Single bucket sized to cover the test images' output tokens.
@@ -151,24 +139,18 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
     ),
     "qwen3_vl": VitCudagraphTestConfig(
         model="Qwen/Qwen3-VL-2B-Instruct",
-        image_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|image_pad|><|vision_end|>What is in this image?"
-        ),
+        image_prompt=qwen_vl_chat_template("<|vision_start|><|image_pad|><|vision_end|>What is in this image?"),
         video_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|video_pad|><|vision_end|>"
-            "Describe this video in one sentence."
+            "<|vision_start|><|video_pad|><|vision_end|>Describe this video in one sentence."
         ),
         needs_video_metadata=True,
         marks=[pytest.mark.core_model],
     ),
     "qwen3_5": VitCudagraphTestConfig(
         model="Qwen/Qwen3.5-0.8B",
-        image_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|image_pad|><|vision_end|>What is in this image?"
-        ),
+        image_prompt=qwen_vl_chat_template("<|vision_start|><|image_pad|><|vision_end|>What is in this image?"),
         video_prompt=qwen_vl_chat_template(
-            "<|vision_start|><|video_pad|><|vision_end|>"
-            "Describe this video in one sentence."
+            "<|vision_start|><|video_pad|><|vision_end|>Describe this video in one sentence."
         ),
         needs_video_metadata=True,
         marks=[pytest.mark.core_model],
@@ -177,9 +159,7 @@ MODEL_CONFIGS: dict[str, VitCudagraphTestConfig] = {
         model="OpenGVLab/InternVL3-1B",
         num_video_frames=8,
         image_prompt=internvl_chat_template("<image>\nWhat is in this image?"),
-        video_prompt=internvl_chat_template(
-            "<video>\nDescribe this video in one sentence."
-        ),
+        video_prompt=internvl_chat_template("<video>\nDescribe this video in one sentence."),
         needs_video_metadata=False,
         aphrodite_runner_kwargs={"trust_remote_code": True},
         marks=[pytest.mark.core_model],
@@ -293,9 +273,7 @@ def test_vit_cudagraph_image(model_id, aphrodite_runner, image_assets):
         compilation_config=get_compilation_config(config),
         **config.aphrodite_runner_kwargs,
     ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(
-            image_prompts, config.max_tokens, images=images
-        )
+        outputs = aphrodite_model.generate_greedy(image_prompts, config.max_tokens, images=images)
 
         # Basic validation that we got a response
         assert len(outputs) == 2
@@ -327,16 +305,11 @@ def test_vit_cudagraph_video(model_id, aphrodite_runner, video_assets):
     )
     if config.needs_video_metadata:
         sampled_vids = [
-            sample_frames_with_video_metadata(
-                (asset.np_ndarrays, asset.metadata), config.num_video_frames
-            )
+            sample_frames_with_video_metadata((asset.np_ndarrays, asset.metadata), config.num_video_frames)
             for asset in video_assets
         ]
     else:
-        sampled_vids = [
-            sample_frames_from_video(asset.np_ndarrays, config.num_video_frames)
-            for asset in video_assets
-        ]
+        sampled_vids = [sample_frames_from_video(asset.np_ndarrays, config.num_video_frames) for asset in video_assets]
     videos = [sampled_vids[0]]
 
     with aphrodite_runner(
@@ -348,9 +321,7 @@ def test_vit_cudagraph_video(model_id, aphrodite_runner, video_assets):
         compilation_config=get_compilation_config(config),
         **config.aphrodite_runner_kwargs,
     ) as aphrodite_model:
-        outputs = aphrodite_model.generate_greedy(
-            video_prompts, config.max_tokens, videos=videos
-        )
+        outputs = aphrodite_model.generate_greedy(video_prompts, config.max_tokens, videos=videos)
 
         # Basic validation that we got a response
         assert len(outputs) == 1

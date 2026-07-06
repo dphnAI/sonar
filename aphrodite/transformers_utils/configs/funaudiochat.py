@@ -111,10 +111,6 @@ class FunAudioChatConfig(PretrainedConfig):
         else:
             self.text_config = text_config
 
-        self.hidden_size = (
-            int(self.text_config.hidden_size)
-            if hidden_size is None
-            else int(hidden_size)
-        )
+        self.hidden_size = int(self.text_config.hidden_size) if hidden_size is None else int(hidden_size)
 
         super().__init__(**kwargs)

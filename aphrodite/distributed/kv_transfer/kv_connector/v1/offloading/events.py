@@ -89,9 +89,7 @@ class OffloadingEventsTracker:
 
     def __init__(self, config: OffloadingKVEventsConfig):
         self.config = config
-        self.self_describing_enabled = (
-            config.enable_kv_cache_events and config.self_describing_kv_events
-        )
+        self.self_describing_enabled = config.enable_kv_cache_events and config.self_describing_kv_events
 
         # OffloadKey -> payload snapshot, kept until the eviction event so
         # BlockRemoved can fan out. Bounded: one entry per offloaded chunk.
@@ -200,9 +198,7 @@ class OffloadingEventsTracker:
 
     def _placeholder_stored(self, key: OffloadKey, medium: str) -> BlockStored:
         return BlockStored(
-            block_hashes=[
-                maybe_convert_block_hash(BlockHash(get_offload_block_hash(key)))
-            ],
+            block_hashes=[maybe_convert_block_hash(BlockHash(get_offload_block_hash(key)))],
             parent_block_hash=None,
             token_ids=[],
             lora_id=None,
@@ -231,27 +227,19 @@ class OffloadingEventsTracker:
                 continue
 
             yield BlockStored(
-                block_hashes=list(
-                    maybe_convert_block_hash(h) for h in meta.block_hashes
-                ),
+                block_hashes=list(maybe_convert_block_hash(h) for h in meta.block_hashes),
                 parent_block_hash=(
-                    maybe_convert_block_hash(meta.parent_block_hash)
-                    if meta.parent_block_hash is not None
-                    else None
+                    maybe_convert_block_hash(meta.parent_block_hash) if meta.parent_block_hash is not None else None
                 ),
                 token_ids=list(meta.token_ids),
                 block_size=meta.block_size,
                 lora_id=meta.lora_id,
                 medium=event.medium,
                 lora_name=meta.lora_name,
-                extra_keys=(
-                    list(meta.extra_keys) if meta.extra_keys is not None else None
-                ),
+                extra_keys=(list(meta.extra_keys) if meta.extra_keys is not None else None),
                 group_idx=meta.group_idx,
                 kv_cache_spec_kind=meta.kv_cache_spec.kv_cache_spec_kind,
-                kv_cache_spec_sliding_window=(
-                    meta.kv_cache_spec.kv_cache_spec_sliding_window
-                ),
+                kv_cache_spec_sliding_window=(meta.kv_cache_spec.kv_cache_spec_sliding_window),
             )
 
     def _take_removed_event(self, event: OffloadingEvent) -> Iterable[KVCacheEvent]:
@@ -261,9 +249,7 @@ class OffloadingEventsTracker:
             meta = self._pending_event_metadata.pop(key, None)
             if meta is not None:
                 group_idx = meta.group_idx
-                by_group.setdefault(group_idx, []).extend(
-                    maybe_convert_block_hash(h) for h in meta.block_hashes
-                )
+                by_group.setdefault(group_idx, []).extend(maybe_convert_block_hash(h) for h in meta.block_hashes)
             else:
                 if self.self_describing_enabled:
                     logger.warning_once(

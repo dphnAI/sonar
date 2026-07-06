@@ -33,7 +33,7 @@ from torch import nn
 from transformers.configuration_utils import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
@@ -160,9 +160,7 @@ class BailingAttention(nn.Module):
         position_ids: torch.Tensor,
     ) -> torch.Tensor:
         qkv, _ = self.query_key_value(hidden_states)
-        q, k, v = qkv.split(
-            [self.q_size_per_rank, self.kv_size_per_rank, self.kv_size_per_rank], dim=-1
-        )
+        q, k, v = qkv.split([self.q_size_per_rank, self.kv_size_per_rank, self.kv_size_per_rank], dim=-1)
 
         if self.use_qk_norm:
             q = q.view(-1, self.num_heads, self.head_dim)
@@ -255,20 +253,14 @@ class BailingMoE(nn.Module):
         )
 
         if getattr(config, "moe_router_enable_expert_bias", False):
-            self.gate.expert_bias = nn.Parameter(
-                torch.empty((config.num_experts,), dtype=torch.float32)
-            )
+            self.gate.expert_bias = nn.Parameter(torch.empty((config.num_experts,), dtype=torch.float32))
         else:
             self.gate.expert_bias = None
 
-        self.correction_bias = (
-            self.gate.expert_bias.data if self.gate.expert_bias is not None else None
-        )
+        self.correction_bias = self.gate.expert_bias.data if self.gate.expert_bias is not None else None
 
         if self.score_function is not None:
-            assert (
-                self.score_function == "softmax" and self.correction_bias is None
-            ) or (
+            assert (self.score_function == "softmax" and self.correction_bias is None) or (
                 self.score_function == "sigmoid" and self.correction_bias is not None
             ), (
                 "score_function and correction_bias should be in 2 combination (softmax, None) or (sigmoid, not None)"  # noqa: E501
@@ -319,9 +311,7 @@ class BailingMoE(nn.Module):
         router_logits = self.gate(hidden_states.to(self.router_dtype))
         router_logits = router_logits.to(hidden_states.dtype)
 
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
         return final_hidden_states.view(num_tokens, hidden_size)
 
 
@@ -340,9 +330,7 @@ class BailingMoeBlock(nn.Module):
         intermediate_size = config.intermediate_size
 
         self.input_layernorm = RMSNorm(hidden_size, eps=config.rms_norm_eps)
-        self.attention = BailingAttention(
-            config, cache_config, quant_config, prefix=f"{prefix}.attention"
-        )
+        self.attention = BailingAttention(config, cache_config, quant_config, prefix=f"{prefix}.attention")
 
         self.post_attention_layernorm = RMSNorm(hidden_size, eps=config.rms_norm_eps)
 
@@ -351,9 +339,7 @@ class BailingMoeBlock(nn.Module):
             mlp_class = BailingMLP
         else:
             mlp_class = BailingMoE
-        self.mlp = mlp_class(
-            intermediate_size, config, quant_config, True, prefix=f"{prefix}.mlp"
-        )
+        self.mlp = mlp_class(intermediate_size, config, quant_config, True, prefix=f"{prefix}.mlp")
 
     def forward(
         self,
@@ -395,9 +381,7 @@ class BailingMoeModel(nn.Module):
         self.embed_dim = config.hidden_size
         self.tie_word_embeddings = getattr(config, "tie_word_embeddings", False)
 
-        if get_pp_group().is_first_rank or (
-            self.tie_word_embeddings and get_pp_group().is_last_rank
-        ):
+        if get_pp_group().is_first_rank or (self.tie_word_embeddings and get_pp_group().is_last_rank):
             self.word_embeddings = VocabParallelEmbedding(
                 self.vocab_size,
                 self.embed_dim,
@@ -458,9 +442,7 @@ class BailingMoeModel(nn.Module):
             )
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         else:
             if residual is None:
                 hidden_states = self.norm(hidden_states)
@@ -488,11 +470,7 @@ class BailingMoeModel(nn.Module):
         loaded_params: set[str] = set()
         expert_params_mapping = self.get_expert_mapping()
         for name, loaded_weight in weights:
-            if (
-                hasattr(self.config, "norm_head")
-                and self.config.norm_head
-                and "lm_head.weight" in name
-            ):
+            if hasattr(self.config, "norm_head") and self.config.norm_head and "lm_head.weight" in name:
                 loaded_weight = F.normalize(loaded_weight, dim=0, p=2, eps=1e-7)
 
             for param_name, weight_name, shard_id in stacked_params_mapping:
@@ -545,9 +523,7 @@ class BailingMoeModel(nn.Module):
                         continue
 
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
@@ -577,9 +553,7 @@ class BailingMoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         self.config = config
         self.quant_config = quant_config
         self.max_position_embeddings = config.max_position_embeddings
-        self.model = BailingMoeModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = BailingMoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         self.tie_word_embeddings = getattr(config, "tie_word_embeddings", False)
 
         if get_pp_group().is_last_rank:
@@ -596,9 +570,7 @@ class BailingMoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         else:
             self.lm_head = PPMissingLayer()
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -610,9 +582,7 @@ class BailingMoeForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        model_output = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        model_output = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return model_output
 
     def compute_logits(

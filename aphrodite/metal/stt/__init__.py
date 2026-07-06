@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Speech-to-Text support for Aphrodite Metal."""
 
 from aphrodite.metal.stt.loader import load_model

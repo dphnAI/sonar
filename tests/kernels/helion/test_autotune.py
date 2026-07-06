@@ -17,8 +17,8 @@ import helion
 import helion.language as hl
 from helion.autotuner.base_search import BaseSearch
 
-from tests.kernels.helion.helpers import dummy_kernel_registry
 from aphrodite.kernels.helion.register import create_helion_decorated_kernel
+from tests.kernels.helion.helpers import dummy_kernel_registry
 
 
 def _add_kernel(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:

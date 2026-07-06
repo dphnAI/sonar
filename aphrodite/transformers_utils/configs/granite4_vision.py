@@ -54,21 +54,13 @@ class Granite4VisionConfig(transformers.PretrainedConfig):
         self.use_image_newline_parameter = use_image_newline_parameter
         self.deepstack_layer_map = deepstack_layer_map or vision_layer_to_llm_layer
         self.use_spatial_sampling = (
-            use_spatial_sampling
-            if use_checkerboard_sampling is None
-            else use_checkerboard_sampling
+            use_spatial_sampling if use_checkerboard_sampling is None else use_checkerboard_sampling
         )
-        self.spatial_stride = (
-            spatial_stride if checkerboard_stride is None else checkerboard_stride
-        )
+        self.spatial_stride = spatial_stride if checkerboard_stride is None else checkerboard_stride
         self.spatial_vision_layer = (
-            spatial_vision_layer
-            if checkerboard_vision_layer is None
-            else checkerboard_vision_layer
+            spatial_vision_layer if checkerboard_vision_layer is None else checkerboard_vision_layer
         )
-        self.spatial_target_layers = (
-            spatial_target_layers or checkerboard_llm_layers or [0, 10, 20, 30]
-        )
+        self.spatial_target_layers = spatial_target_layers or checkerboard_llm_layers or [0, 10, 20, 30]
 
         if vision_config is None:
             vision_config = {}
@@ -77,17 +69,13 @@ class Granite4VisionConfig(transformers.PretrainedConfig):
 
         vision_model_type = vision_config.get("model_type", "siglip_vision_model")
         if vision_model_type in transformers.CONFIG_MAPPING:
-            self.vision_config = transformers.CONFIG_MAPPING[vision_model_type](
-                **vision_config
-            )
+            self.vision_config = transformers.CONFIG_MAPPING[vision_model_type](**vision_config)
         else:
             self.vision_config = transformers.PretrainedConfig(**vision_config)
 
         text_model_type = text_config.get("model_type", "granite")
         if text_model_type in transformers.CONFIG_MAPPING:
-            self.text_config = transformers.CONFIG_MAPPING[text_model_type](
-                **text_config
-            )
+            self.text_config = transformers.CONFIG_MAPPING[text_model_type](**text_config)
         else:
             self.text_config = transformers.PretrainedConfig(**text_config)
 

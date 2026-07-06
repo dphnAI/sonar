@@ -14,10 +14,7 @@ def validate_and_normalize_dynamic_sd_schedule(
     ``[(range_start, range_end, num_speculative_tokens), ...]``
     """
     if num_speculative_tokens_per_batch_size is None:
-        raise ValueError(
-            "num_speculative_tokens_per_batch_size is required for "
-            "dynamic speculative decoding."
-        )
+        raise ValueError("num_speculative_tokens_per_batch_size is required for dynamic speculative decoding.")
     if not isinstance(num_speculative_tokens_per_batch_size, list):
         raise ValueError(
             "num_speculative_tokens_per_batch_size must be a non-empty list of "
@@ -41,18 +38,13 @@ def validate_and_normalize_dynamic_sd_schedule(
         )
 
         if range_start <= 0 or range_end <= 0:
-            raise ValueError(
-                f"Batch-size range ({range_start}, {range_end}) must be positive."
-            )
+            raise ValueError(f"Batch-size range ({range_start}, {range_end}) must be positive.")
         if range_start > range_end:
             raise ValueError(
-                "Batch-size range start must be <= end for "
-                f"({range_start}, {range_end}, {num_speculative_tokens})."
+                f"Batch-size range start must be <= end for ({range_start}, {range_end}, {num_speculative_tokens})."
             )
         if num_speculative_tokens < 0:
-            raise ValueError(
-                "num_speculative_tokens_per_batch_size values must be >= 0."
-            )
+            raise ValueError("num_speculative_tokens_per_batch_size values must be >= 0.")
 
         parsed_schedule.append((range_start, range_end, num_speculative_tokens))
 
@@ -67,8 +59,7 @@ def validate_and_normalize_dynamic_sd_schedule(
     first_range_start = parsed_schedule[0][0]
     if first_range_start != 1:
         raise ValueError(
-            "The first batch-size range must start at 1 so every runtime "
-            "batch size has a defined schedule."
+            "The first batch-size range must start at 1 so every runtime batch size has a defined schedule."
         )
 
     return parsed_schedule
@@ -91,9 +82,7 @@ def build_dynamic_sd_schedule_lookup(
     if aphrodite_num_speculative_tokens <= 0:
         raise ValueError("aphrodite_num_speculative_tokens must be > 0.")
 
-    parsed_schedule = validate_and_normalize_dynamic_sd_schedule(
-        num_speculative_tokens_per_batch_size
-    )
+    parsed_schedule = validate_and_normalize_dynamic_sd_schedule(num_speculative_tokens_per_batch_size)
 
     # Index 0 is intentionally unused so that valid runtime batch sizes can be
     # looked up directly as dense_schedule[batch_size].
@@ -132,10 +121,7 @@ def build_dynamic_sd_schedule_lookup(
             break
 
     if last_num_speculative_tokens is None:
-        raise ValueError(
-            "num_speculative_tokens_per_batch_size must contain at least "
-            "one valid batch-size range."
-        )
+        raise ValueError("num_speculative_tokens_per_batch_size must contain at least one valid batch-size range.")
 
     # Fill the tail after the final configured range by carrying forward the
     # last K through aphrodite_max_batch_size.

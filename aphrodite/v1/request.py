@@ -84,14 +84,10 @@ class Request:
         self.sampling_params = sampling_params
         self.pooling_params = pooling_params
         self.lora_request = lora_request
-        self.structured_output_request = StructuredOutputRequest.from_sampling_params(
-            sampling_params
-        )
+        self.structured_output_request = StructuredOutputRequest.from_sampling_params(sampling_params)
         if self.structured_output_request is not None:
             self.structured_output_request.reasoning_ended = reasoning_ended
-            self.structured_output_request.reasoning_parser_kwargs = (
-                reasoning_parser_kwargs
-            )
+            self.structured_output_request.reasoning_parser_kwargs = reasoning_parser_kwargs
         self.arrival_time = arrival_time if arrival_time is not None else time.time()
 
         self.status = RequestStatus.WAITING
@@ -112,9 +108,7 @@ class Request:
                 self.status = RequestStatus.WAITING_FOR_STRUCTURED_OUTPUT_GRAMMAR
 
             if sampling_params.extra_args is not None:
-                self.kv_transfer_params = sampling_params.extra_args.get(
-                    "kv_transfer_params"
-                )
+                self.kv_transfer_params = sampling_params.extra_args.get("kv_transfer_params")
         else:
             raise ValueError("sampling_params and pooling_params can't both be unset")
 
@@ -127,14 +121,10 @@ class Request:
         # Cache per-block prompt-embed hashes to avoid rehashing the same
         # tensor slices when generating extra keys.
         self._prompt_embeds_per_block_hashes: dict[tuple[int, int], bytes] = {}
-        self.num_prompt_tokens = length_from_prompt_token_ids_or_embeds(
-            prompt_token_ids, prompt_embeds
-        )
+        self.num_prompt_tokens = length_from_prompt_token_ids_or_embeds(prompt_token_ids, prompt_embeds)
         self._output_token_ids: list[int] = []
         self._all_token_ids: list[int] = (
-            self.prompt_token_ids.copy()
-            if self.prompt_token_ids is not None
-            else [0] * self.num_prompt_tokens
+            self.prompt_token_ids.copy() if self.prompt_token_ids is not None else [0] * self.num_prompt_tokens
         )
 
         # Used in async scheduling.
@@ -264,15 +254,9 @@ class Request:
         return self.num_encoder_inputs > 0
 
     def get_skip_reading_prefix_cache(self) -> bool:
-        if (
-            self.sampling_params is not None
-            and self.sampling_params.skip_reading_prefix_cache is not None
-        ):
+        if self.sampling_params is not None and self.sampling_params.skip_reading_prefix_cache is not None:
             return self.sampling_params.skip_reading_prefix_cache
-        elif (
-            self.pooling_params is not None
-            and self.pooling_params.skip_reading_prefix_cache is not None
-        ):
+        elif self.pooling_params is not None and self.pooling_params.skip_reading_prefix_cache is not None:
             return self.pooling_params.skip_reading_prefix_cache
         return False
 

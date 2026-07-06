@@ -15,10 +15,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_helion
 
 if not has_helion():
-    raise ImportError(
-        "Helion kernel requires helion to be installed. "
-        "Install it with: pip install helion"
-    )
+    raise ImportError("Helion kernel requires helion to be installed. Install it with: pip install helion")
 
 import helion
 import helion.language as hl
@@ -46,9 +43,7 @@ def generate_inputs() -> dict[CaseKey, tuple[Any, ...]]:
 
     inputs = {}
 
-    for hidden_size, group_size, num_tokens in product(
-        hidden_size_list, group_size_list, num_tokens_list
-    ):
+    for hidden_size, group_size, num_tokens in product(hidden_size_list, group_size_list, num_tokens_list):
         input = torch.randn(num_tokens, hidden_size, device="cuda", dtype=in_dtype)
         output_q = torch.empty(input.shape, device=input.device, dtype=out_dtype)
         output_s = torch.empty(
@@ -110,9 +105,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
     for key in config_keys:
         if key.is_default():
             continue
-        configs.setdefault(key["hidden_size"], {}).setdefault(
-            key["group_size"], []
-        ).append(key["num_tokens"])
+        configs.setdefault(key["hidden_size"], {}).setdefault(key["group_size"], []).append(key["num_tokens"])
 
     if not configs:
         return None
@@ -120,9 +113,7 @@ def pick_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | 
     best_hidden_size = min(configs, key=lambda s: abs(s - hidden_size))
     best_group_size = min(configs[best_hidden_size], key=lambda s: abs(s - group_size))
     available_num_tokens = sorted(configs[best_hidden_size][best_group_size])
-    best_num_tokens = next(
-        (n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1]
-    )
+    best_num_tokens = next((n for n in available_num_tokens if n >= num_tokens), available_num_tokens[-1])
 
     result = CaseKey(
         {
@@ -214,9 +205,7 @@ def per_token_group_fp8_quant(
 
     input = input.view(num_tokens, -1, group_size)
     output_q = output_q.view(num_tokens, -1, group_size)
-    for tile_m, tile_gn, tile_n in hl.tile(
-        [num_tokens, groups_per_row, group_size], block_size=[1, None, group_size]
-    ):
+    for tile_m, tile_gn, tile_n in hl.tile([num_tokens, groups_per_row, group_size], block_size=[1, None, group_size]):
         x_blk = input[tile_m, tile_gn, tile_n]
         y_s_blk = torch.clamp(torch.amax(torch.abs(x_blk), dim=-1), min=eps)
         y_s_blk = y_s_blk / fp8_max
@@ -224,9 +213,7 @@ def per_token_group_fp8_quant(
         if scale_ue8m0:
             y_s_blk = torch.exp2(torch.ceil(torch.log2(y_s_blk)))
 
-        y_q_blk = torch.clamp(x_blk / y_s_blk[:, :, None], fp8_min, fp8_max).to(
-            output_q.dtype
-        )
+        y_q_blk = torch.clamp(x_blk / y_s_blk[:, :, None], fp8_min, fp8_max).to(output_q.dtype)
 
         output_s[tile_m, tile_gn] = y_s_blk
         output_q[tile_m, tile_gn, tile_n] = y_q_blk

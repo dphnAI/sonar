@@ -32,9 +32,7 @@ def get_configured_preferred_segment(
     if preferred_segment is not None:
         return preferred_segment
     if extra_config.get("preferred_segment") is not None:
-        raise ValueError(
-            "Mooncake preferred_segment override must be a non-empty string"
-        )
+        raise ValueError("Mooncake preferred_segment override must be a non-empty string")
 
     env_value = normalize_string_override(envs.MOONCAKE_PREFERRED_SEGMENT)
     if env_value is not None:

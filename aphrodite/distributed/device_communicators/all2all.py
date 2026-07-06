@@ -54,10 +54,7 @@ class AgRsAll2AllManager(All2AllManagerBase):
         router_logits: torch.Tensor,
         is_sequence_parallel: bool = False,
         extra_tensors: list[torch.Tensor] | None = None,
-    ) -> (
-        tuple[torch.Tensor, torch.Tensor]
-        | tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
         """
         Gather hidden_states and router_logits from all dp ranks.
         """
@@ -122,9 +119,7 @@ class AgRsAll2AllManager(All2AllManagerBase):
 
         return hidden_states, topk_weights, topk_ids, gathered_tensors[3:]
 
-    def combine(
-        self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False
-    ) -> torch.Tensor:
+    def combine(self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False) -> torch.Tensor:
         """
         Reduce-scatter hidden_states across all dp ranks.
         """
@@ -183,9 +178,7 @@ class DeepEPAll2AllManagerBase(All2AllManagerBase):
     ):
         raise NotImplementedError
 
-    def combine(
-        self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False
-    ) -> torch.Tensor:
+    def combine(self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False) -> torch.Tensor:
         raise NotImplementedError
 
     def destroy(self):
@@ -232,17 +225,14 @@ class DeepEPHTAll2AllManager(DeepEPAll2AllManagerBase):
 
     def get_handle(self, kwargs):
         assert len(kwargs) == 0, (
-            "DeepEPHTAll2AllManager expects no arguments. All the required "
-            "args are computed in the Manager itself."
+            "DeepEPHTAll2AllManager expects no arguments. All the required args are computed in the Manager itself."
         )
 
         import deep_ep  # type: ignore[import-not-found]
 
         buffer_kwargs = self._make_all2all_kwargs()
         logger.debug("DeepEP all2all args %s", buffer_kwargs)
-        handle: deep_ep.Buffer = self.handle_cache.get_or_create(
-            buffer_kwargs, deep_ep.Buffer
-        )
+        handle: deep_ep.Buffer = self.handle_cache.get_or_create(buffer_kwargs, deep_ep.Buffer)
         return handle
 
     def set_num_sms(self, num_sms: int):
@@ -322,9 +312,7 @@ class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
 
         buffer_kwargs = self._make_all2all_kwargs(**kwargs)
         logger.debug("DeepEP all2all args %s", buffer_kwargs)
-        handle: deep_ep.Buffer = self.handle_cache.get_or_create(
-            buffer_kwargs, deep_ep.Buffer
-        )
+        handle: deep_ep.Buffer = self.handle_cache.get_or_create(buffer_kwargs, deep_ep.Buffer)
         DeepEPLLAll2AllManager._buffer = handle
         return handle
 
@@ -336,9 +324,7 @@ class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
         buf = DeepEPLLAll2AllManager._buffer
         assert buf is not None
         if DeepEPLLAll2AllManager._mask is None:
-            DeepEPLLAll2AllManager._mask = torch.zeros(
-                self.world_size, device="cuda", dtype=torch.int32
-            )
+            DeepEPLLAll2AllManager._mask = torch.zeros(self.world_size, device="cuda", dtype=torch.int32)
         buf.low_latency_query_mask_buffer(DeepEPLLAll2AllManager._mask)
         return DeepEPLLAll2AllManager._mask
 
@@ -395,9 +381,7 @@ class NixlEPAll2AllManager(All2AllManagerBase):
             num_ranks=self.max_num_ep_ranks,
             num_experts=max_num_global_experts,
         )
-        assert NixlEPAll2AllManager._buffer is None, (
-            "NIXL EP buffer already initialized"
-        )
+        assert NixlEPAll2AllManager._buffer is None, "NIXL EP buffer already initialized"
         buffer = Buffer(
             rank=self.rank,
             tcp_store_group=self.tcp_store_group.store,
@@ -487,13 +471,9 @@ class NixlEPAll2AllManager(All2AllManagerBase):
             stage = bool(kwargs.get("stage", False))
             state = NixlEPAll2AllManager._buffer
             if state is None:
-                assert not stage, (
-                    "NIXL EP staged initialization requires an existing buffer"
-                )
+                assert not stage, "NIXL EP staged initialization requires an existing buffer"
                 max_num_tokens_per_dp_rank = kwargs["max_num_tokens_per_dp_rank"]
-                num_experts_per_rank = (
-                    kwargs["num_global_experts"] // kwargs["num_ep_ranks"]
-                )
+                num_experts_per_rank = kwargs["num_global_experts"] // kwargs["num_ep_ranks"]
                 self._init_buffer(
                     max_num_tokens_per_dp_rank=max_num_tokens_per_dp_rank,
                     token_hidden_size=kwargs["token_hidden_size"],
@@ -519,9 +499,7 @@ class NixlEPAll2AllManager(All2AllManagerBase):
     ):
         raise NotImplementedError
 
-    def combine(
-        self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False
-    ) -> torch.Tensor:
+    def combine(self, hidden_states: torch.Tensor, is_sequence_parallel: bool = False) -> torch.Tensor:
         raise NotImplementedError
 
     def destroy(self):
@@ -539,9 +517,7 @@ class NixlEPAll2AllManager(All2AllManagerBase):
         state = NixlEPAll2AllManager._buffer
         assert state is not None
         if NixlEPAll2AllManager._mask is None:
-            NixlEPAll2AllManager._mask = torch.zeros(
-                self.max_num_ep_ranks, device="cuda", dtype=torch.int32
-            )
+            NixlEPAll2AllManager._mask = torch.zeros(self.max_num_ep_ranks, device="cuda", dtype=torch.int32)
         state.buffer.query_mask_buffer(NixlEPAll2AllManager._mask)
         return NixlEPAll2AllManager._mask[: state.active_ep_size]
 
@@ -566,9 +542,7 @@ class FlashInferNVLinkTwoSidedManager(All2AllManagerBase):
     world_size: int
 
     def __init__(self, cpu_group, tcp_store_group=None):
-        assert has_flashinfer_nvlink_two_sided(), (
-            "flashinfer all2all module not found. Please install/check flashinfer"
-        )  # noqa
+        assert has_flashinfer_nvlink_two_sided(), "flashinfer all2all module not found. Please install/check flashinfer"  # noqa
         super().__init__(cpu_group, tcp_store_group)
         logger.debug(
             "Initialize for flashinfer All2All rank=%d, world size=%d",
@@ -611,18 +585,14 @@ class FlashInferNVLinkTwoSidedManager(All2AllManagerBase):
         )
 
         self.workspace_tensor = MnnvlMoe.get_moe_workspaces(self.mapping, ep_config)
-        self.prepare_workspace_tensor = MnnvlMoe.get_moe_prepare_workspace(
-            self.mapping, ep_config
-        )
+        self.prepare_workspace_tensor = MnnvlMoe.get_moe_prepare_workspace(self.mapping, ep_config)
 
         self.world_size = world_size
         self.rank = rank
         self.gpus_per_node = gpus_per_node
         self.initialized = True
 
-        logger.info(
-            "FlashInfer All2All initialized for rank %s, size %s", rank, world_size
-        )
+        logger.info("FlashInfer All2All initialized for rank %s, size %s", rank, world_size)
 
     def ensure_alltoall_workspace_initialized(self):
         """Ensure workspace is initialized"""
@@ -645,11 +615,7 @@ class FlashInferNVLinkTwoSidedManager(All2AllManagerBase):
 
     def cleanup(self):
         """Clean up workspace"""
-        if (
-            self.initialized
-            and self.workspace_tensor is not None
-            and self.prepare_workspace_tensor is not None
-        ):
+        if self.initialized and self.workspace_tensor is not None and self.prepare_workspace_tensor is not None:
             try:
                 del self.workspace_tensor
                 del self.prepare_workspace_tensor
@@ -674,8 +640,7 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
 
     def __init__(self, cpu_group):
         assert has_flashinfer_nvlink_one_sided(), (
-            "flashinfer trtllm_moe_alltoall module not found. "
-            "Please install/check flashinfer"
+            "flashinfer trtllm_moe_alltoall module not found. Please install/check flashinfer"
         )
         super().__init__(cpu_group)
         logger.debug(
@@ -738,10 +703,7 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
                 f"heterogeneous num_experts across MoE layers (got "
                 f"{num_experts}, was built with {self.num_experts})"
             )
-            if (
-                needed_workspace_size <= self.workspace_size
-                and max_num_tokens <= self.max_num_tokens
-            ):
+            if needed_workspace_size <= self.workspace_size and max_num_tokens <= self.max_num_tokens:
                 return
 
         self.workspace_size = max(self.workspace_size, needed_workspace_size)
@@ -813,9 +775,7 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
             try:
                 del self.moe_alltoall
             except Exception as e:
-                logger.warning(
-                    "Failed to cleanup FlashInfer One-sided NVLink workspace: %s", e
-                )
+                logger.warning("Failed to cleanup FlashInfer One-sided NVLink workspace: %s", e)
             finally:
                 self.moe_alltoall = None
                 self.mapping = None
@@ -858,9 +818,7 @@ class MoriAll2AllManager(All2AllManagerBase):
 
         from aphrodite.platforms.rocm import on_gfx942, on_gfx950
 
-        assert on_gfx942() or on_gfx950(), (
-            "mori currently only support arch gfx942 and gfx950"
-        )
+        assert on_gfx942() or on_gfx950(), "mori currently only support arch gfx942 and gfx950"
 
         if not self.internode:
             # single node
@@ -884,9 +842,7 @@ class MoriAll2AllManager(All2AllManagerBase):
                 block_num = 64
                 rdma_block_num = 32
             else:
-                raise NotImplementedError(
-                    "mori currently only support arch gfx942 and gfx950"
-                )
+                raise NotImplementedError("mori currently only support arch gfx942 and gfx950")
 
         return dict(
             rank=rank,
@@ -918,9 +874,7 @@ class MoriAll2AllManager(All2AllManagerBase):
 
         mori_kwargs = self._make_all2all_kwargs(**kwargs)
         logger.debug("MoRI all2all args %s", mori_kwargs)
-        handle: mori.ops.EpDispatchCombineOp = self.handle_cache.get_or_create(
-            mori_kwargs, self._make_handle
-        )
+        handle: mori.ops.EpDispatchCombineOp = self.handle_cache.get_or_create(mori_kwargs, self._make_handle)
         return handle
 
 
@@ -948,9 +902,7 @@ class DeepEPV2All2AllManager(All2AllManagerBase):
         use_fp8_dispatch: bool,
     ) -> dict:
         return dict(
-            group=self._device_group
-            if self._device_group is not None
-            else self.cpu_group,
+            group=self._device_group if self._device_group is not None else self.cpu_group,
             num_max_tokens_per_rank=num_max_tokens_per_rank,
             hidden=hidden,
             num_topk=num_topk,
@@ -967,9 +919,7 @@ class DeepEPV2All2AllManager(All2AllManagerBase):
         num_experts = kwargs.pop("num_experts", 256)
         buffer_kwargs = self._make_all2all_kwargs(**kwargs)
         logger.debug("DeepEP v2 all2all args %s", buffer_kwargs)
-        handle: deep_ep.ElasticBuffer = self.handle_cache.get_or_create(
-            buffer_kwargs, deep_ep.ElasticBuffer
-        )
+        handle: deep_ep.ElasticBuffer = self.handle_cache.get_or_create(buffer_kwargs, deep_ep.ElasticBuffer)
         if self._num_sms is None:
             self._num_sms = handle.get_theoretical_num_sms(
                 num_experts=num_experts,

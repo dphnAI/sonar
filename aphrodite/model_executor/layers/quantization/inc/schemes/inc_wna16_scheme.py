@@ -47,8 +47,7 @@ class INCWna16Scheme(INCScheme):
                     return INCLinearMethod(INCARKLinearMethod(layer_config))
 
                 logger.debug(
-                    "ARK backend is unavailable for layer %s; "
-                    "falling back to the default XPU INC path. Error: %s",
+                    "ARK backend is unavailable for layer %s; falling back to the default XPU INC path. Error: %s",
                     prefix,
                     ark_error or "unknown error",
                 )
@@ -68,8 +67,7 @@ class INCWna16Scheme(INCScheme):
                     return INCLinearMethod(INCARKLinearMethod(layer_config))
 
                 logger.debug(
-                    "ARK backend is unavailable for layer %s; "
-                    "falling back to the default CPU INC path. Error: %s",
+                    "ARK backend is unavailable for layer %s; falling back to the default CPU INC path. Error: %s",
                     prefix,
                     ark_error or "unknown error",
                 )

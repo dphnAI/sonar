@@ -33,9 +33,7 @@ class CompilerInterface:
     # This is a class-level attribute.
     name: str
 
-    def initialize_cache(
-        self, cache_dir: str, disable_cache: bool = False, prefix: str = ""
-    ) -> None:
+    def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
         """
         when the Aphrodite process uses `cache_dir` as the cache directory,
         the compiler should initialize itself with the cache directory,
@@ -193,9 +191,7 @@ def get_inductor_factors() -> list[Any]:
 def is_compile_cache_enabled(
     aphrodite_additional_inductor_config: dict[str, Any],
 ) -> bool:
-    aphrodite_inductor_config_disable_cache = aphrodite_additional_inductor_config.get(
-        "force_disable_caches", False
-    )
+    aphrodite_inductor_config_disable_cache = aphrodite_additional_inductor_config.get("force_disable_caches", False)
 
     # TODO(gmagogsfm): Replace torch._inductor.config.force_disable_caches
     # with torch.compiler.config.force_disable_caches when minimum PyTorch
@@ -222,9 +218,7 @@ def _patch_standalone_compile_atomic_save() -> None:
 
     original_save = cls.save
 
-    def _save(
-        self: Any, *, path: str, format: Literal["binary", "unpacked"] = "binary"
-    ) -> None:
+    def _save(self: Any, *, path: str, format: Literal["binary", "unpacked"] = "binary") -> None:
         if format != "binary":
             return original_save(self, path=path, format=format)
         from torch._dynamo.utils import dynamo_timed
@@ -267,14 +261,10 @@ class InductorStandaloneAdaptor(CompilerInterface):
 
     def compute_hash(self, aphrodite_config: AphroditeConfig) -> str:
         factors = get_inductor_factors()
-        hash_str: str = safe_hash(
-            str(factors).encode(), usedforsecurity=False
-        ).hexdigest()[:10]
+        hash_str: str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
         return hash_str
 
-    def initialize_cache(
-        self, cache_dir: str, disable_cache: bool = False, prefix: str = ""
-    ) -> None:
+    def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
         self.cache_dir = cache_dir
 
     def compile(
@@ -425,9 +415,7 @@ class InductorStandaloneAdaptor(CompilerInterface):
         assert isinstance(handle[0], str)
         assert isinstance(handle[1], str)
         path = handle[1]
-        inductor_compiled_graph = torch._inductor.CompiledArtifact.load(
-            path=path, format=self.save_format
-        )
+        inductor_compiled_graph = torch._inductor.CompiledArtifact.load(path=path, format=self.save_format)
         compilation_counter.num_compiled_artifacts_loaded += 1
         from torch._inductor.compile_fx import graph_returns_tuple
 
@@ -455,14 +443,10 @@ class InductorAdaptor(CompilerInterface):
 
     def compute_hash(self, aphrodite_config: AphroditeConfig) -> str:
         factors = get_inductor_factors()
-        hash_str: str = safe_hash(
-            str(factors).encode(), usedforsecurity=False
-        ).hexdigest()[:10]
+        hash_str: str = safe_hash(str(factors).encode(), usedforsecurity=False).hexdigest()[:10]
         return hash_str
 
-    def initialize_cache(
-        self, cache_dir: str, disable_cache: bool = False, prefix: str = ""
-    ) -> None:
+    def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
         self.cache_dir = cache_dir
         self.prefix = prefix
         self.base_cache_dir = cache_dir[: -len(prefix)] if prefix else cache_dir
@@ -522,10 +506,7 @@ class InductorAdaptor(CompilerInterface):
                 nonlocal file_path
                 compiled_fn = inductor_compiled_graph.current_callable
                 file_path = compiled_fn.__code__.co_filename  # noqa
-                if (
-                    not file_path.startswith(self.base_cache_dir)
-                    and compiled_fn.__closure__ is not None
-                ):
+                if not file_path.startswith(self.base_cache_dir) and compiled_fn.__closure__ is not None:
                     # hooked in the align_inputs_from_check_idxs function
                     # in torch/_inductor/utils.py
                     for cell in compiled_fn.__closure__:
@@ -603,19 +584,13 @@ class InductorAdaptor(CompilerInterface):
             # get hit.
             # TODO(zou3519): we're going to replace this all with
             # standalone_compile sometime.
-            stack.enter_context(
-                torch._inductor.config.patch(fx_graph_remote_cache=False)
-            )
+            stack.enter_context(torch._inductor.config.patch(fx_graph_remote_cache=False))
             # InductorAdaptor (unfortunately) requires AOTAutogradCache
             # to be turned off to run. It will fail to acquire the hash_str
             # and error if not.
             # StandaloneInductorAdaptor (PyTorch 2.8+) fixes this problem.
-            stack.enter_context(
-                torch._functorch.config.patch(enable_autograd_cache=False)
-            )
-            stack.enter_context(
-                torch._functorch.config.patch(enable_remote_autograd_cache=False)
-            )
+            stack.enter_context(torch._functorch.config.patch(enable_autograd_cache=False))
+            stack.enter_context(torch._functorch.config.patch(enable_remote_autograd_cache=False))
 
             # Clear the tracing context before calling compile_fx.
             # Aphrodite calls compile_fx from within a PiecewiseCompileInterpreter
@@ -652,9 +627,7 @@ class InductorAdaptor(CompilerInterface):
                     "remove ~/.cache/aphrodite/torch_compile_cache and try again "
                     "to see the real issue. "
                 )
-            assert file_path is not None, (
-                "failed to get the file path of the compiled graph"
-            )
+            assert file_path is not None, "failed to get the file path of the compiled graph"
         return compiled_graph, (hash_str, file_path)
 
     def load(
@@ -695,12 +668,9 @@ class InductorAdaptor(CompilerInterface):
             from torch._inductor.output_code import CompiledFxGraphConstantsWithGm
 
             constants = CompiledFxGraphConstantsWithGm(graph)
-            inductor_compiled_graph, _ = FxGraphCache._lookup_graph(
-                hash_str, example_inputs, True, None, constants
-            )
+            inductor_compiled_graph, _ = FxGraphCache._lookup_graph(hash_str, example_inputs, True, None, constants)
             assert inductor_compiled_graph is not None, (
-                "Inductor cache lookup failed. Please remove "
-                f"the cache directory and try again."  # noqa
+                f"Inductor cache lookup failed. Please remove the cache directory and try again."  # noqa
             )
 
         # Inductor calling convention (function signature):
@@ -755,9 +725,7 @@ def set_inductor_config(config: dict[str, Any], compile_range: Range) -> None:
         # for a specific batch size, tuning triton kernel parameters
         # can be beneficial
         config["max_autotune"] = envs.APHRODITE_ENABLE_INDUCTOR_MAX_AUTOTUNE
-        config["coordinate_descent_tuning"] = (
-            envs.APHRODITE_ENABLE_INDUCTOR_COORDINATE_DESCENT_TUNING
-        )
+        config["coordinate_descent_tuning"] = envs.APHRODITE_ENABLE_INDUCTOR_COORDINATE_DESCENT_TUNING
 
 
 def set_functorch_config() -> None:

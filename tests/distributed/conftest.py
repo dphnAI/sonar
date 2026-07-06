@@ -176,12 +176,8 @@ def enable_ray_v2_backend():
     import ray
 
     saved = {
-        "APHRODITE_USE_RAY_V2_EXECUTOR_BACKEND": os.environ.get(
-            "APHRODITE_USE_RAY_V2_EXECUTOR_BACKEND"
-        ),
-        "APHRODITE_ENABLE_V1_MULTIPROCESSING": os.environ.get(
-            "APHRODITE_ENABLE_V1_MULTIPROCESSING"
-        ),
+        "APHRODITE_USE_RAY_V2_EXECUTOR_BACKEND": os.environ.get("APHRODITE_USE_RAY_V2_EXECUTOR_BACKEND"),
+        "APHRODITE_ENABLE_V1_MULTIPROCESSING": os.environ.get("APHRODITE_ENABLE_V1_MULTIPROCESSING"),
     }
     os.environ["APHRODITE_USE_RAY_V2_EXECUTOR_BACKEND"] = "1"
     os.environ["APHRODITE_ENABLE_V1_MULTIPROCESSING"] = "0"

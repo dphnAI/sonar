@@ -32,9 +32,7 @@ class XPUWorker(Worker):
         distributed_init_method: str,
         is_driver_worker: bool = False,
     ):
-        super().__init__(
-            aphrodite_config, local_rank, rank, distributed_init_method, is_driver_worker
-        )
+        super().__init__(aphrodite_config, local_rank, rank, distributed_init_method, is_driver_worker)
         device_config = self.device_config
         assert device_config.device_type == "xpu"
         assert current_platform.is_xpu()
@@ -44,18 +42,14 @@ class XPUWorker(Worker):
         # Offset local_rank by the local DP shard.
         parallel_config = self.parallel_config
         if (
-            parallel_config.distributed_executor_backend
-            not in ("ray", "external_launcher")
+            parallel_config.distributed_executor_backend not in ("ray", "external_launcher")
             and parallel_config.data_parallel_backend != "ray"
             and parallel_config.nnodes_within_dp == 1
         ):
             dp_local_rank = parallel_config.data_parallel_rank_local
             if dp_local_rank is None:
                 dp_local_rank = parallel_config.data_parallel_index
-            tp_pp_world_size = (
-                parallel_config.pipeline_parallel_size
-                * parallel_config.tensor_parallel_size
-            )
+            tp_pp_world_size = parallel_config.pipeline_parallel_size * parallel_config.tensor_parallel_size
             self.local_rank += dp_local_rank * tp_pp_world_size
 
             visible_device_count = torch.accelerator.device_count()
@@ -69,25 +63,17 @@ class XPUWorker(Worker):
             )
 
         device = self.device_config.device
-        if (
-            isinstance(device, torch.device)
-            and device.type == "xpu"
-            and current_platform.is_xpu()
-        ):
+        if isinstance(device, torch.device) and device.type == "xpu" and current_platform.is_xpu():
             self.device = torch.device(f"xpu:{self.local_rank}")
             torch.accelerator.set_device_index(self.device)
             current_platform.check_if_supports_dtype(self.model_config.dtype)
             torch.accelerator.empty_cache()
-            self.init_gpu_memory = torch.xpu.get_device_properties(
-                self.local_rank
-            ).total_memory
+            self.init_gpu_memory = torch.xpu.get_device_properties(self.local_rank).total_memory
         else:
             raise RuntimeError(f"Not support device type: {self.device_config.device}")
 
         ENV_CCL_ATL_TRANSPORT = os.getenv("CCL_ATL_TRANSPORT", "ofi")
-        ENV_LOCAL_WORLD_SIZE = os.getenv(
-            "LOCAL_WORLD_SIZE", str(self.parallel_config.world_size)
-        )
+        ENV_LOCAL_WORLD_SIZE = os.getenv("LOCAL_WORLD_SIZE", str(self.parallel_config.world_size))
         os.environ["CCL_ATL_TRANSPORT"] = ENV_CCL_ATL_TRANSPORT
         os.environ["LOCAL_WORLD_SIZE"] = ENV_LOCAL_WORLD_SIZE
         os.environ["LOCAL_RANK"] = str(self.local_rank)
@@ -118,9 +104,7 @@ class XPUWorker(Worker):
         self.init_snapshot = init_snapshot = MemorySnapshot(device=self.device)
         self.requested_memory = request_memory(init_snapshot, self.cache_config)
         logger.debug("worker init memory snapshot: %r", self.init_snapshot)
-        logger.debug(
-            "worker requested memory: %sGiB", format_gib(self.requested_memory)
-        )
+        logger.debug("worker requested memory: %sGiB", format_gib(self.requested_memory))
 
         # Initialize workspace manager
         num_ubatches = 2 if self.aphrodite_config.parallel_config.enable_dbo else 1
@@ -149,9 +133,7 @@ class XPUWorker(Worker):
             from aphrodite.distributed.utils import get_worker_rank_suffix
 
             rank_suffix = get_worker_rank_suffix(global_rank=self.rank)
-            trace_name = (
-                f"{profile_prefix}_{rank_suffix}" if profile_prefix else rank_suffix
-            )
+            trace_name = f"{profile_prefix}_{rank_suffix}" if profile_prefix else rank_suffix
 
             self.profiler = TorchProfilerWrapper(
                 self.profiler_config,

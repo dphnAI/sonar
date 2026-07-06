@@ -7,10 +7,6 @@ import itertools
 import pytest
 import torch
 
-from tests.kernels.quant_utils import (
-    native_per_token_group_quant_fp8,
-    native_w8a8_block_matmul,
-)
 from aphrodite.config import AphroditeConfig
 from aphrodite.model_executor.kernels.linear.scaled_mm.cutlass import cutlass_scaled_mm
 from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
@@ -29,6 +25,10 @@ from aphrodite.utils.flashinfer import (
     has_flashinfer_fp8_blockscale_gemm,
 )
 from aphrodite.utils.import_utils import has_deep_gemm
+from tests.kernels.quant_utils import (
+    native_per_token_group_quant_fp8,
+    native_w8a8_block_matmul,
+)
 
 if current_platform.get_device_capability() < (9, 0):
     pytest.skip("FP8 Triton requires CUDA 9.0 or higher", allow_module_level=True)
@@ -79,9 +79,7 @@ def setup_cuda():
     ),
 )
 @torch.inference_mode()
-def test_per_token_group_quant_fp8(
-    num_tokens, d, dtype, group_size, column_major_scales, tma_aligned_scales, seed
-):
+def test_per_token_group_quant_fp8(num_tokens, d, dtype, group_size, column_major_scales, tma_aligned_scales, seed):
     torch.manual_seed(seed)
     x = torch.rand(num_tokens, d, dtype=dtype)
 
@@ -129,15 +127,13 @@ def test_w8a8_block_fp8_matmul(M, N, K, block_size, out_dtype, seed):
     ref_out = native_w8a8_block_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
     out = w8a8_triton_block_scaled_mm(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
 
-    rel_diff = torch.mean(
-        torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))
-    ) / torch.mean(torch.abs(ref_out.to(torch.float32)))
+    rel_diff = torch.mean(torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))) / torch.mean(
+        torch.abs(ref_out.to(torch.float32))
+    )
     assert rel_diff < 0.001
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="CUTLASS only supported on CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUTLASS only supported on CUDA platform.")
 @torch.inference_mode()
 def test_w8a8_block_fp8_cutlass_matmul():
     # Test simple case where weight.shape % 128 != 0,
@@ -165,20 +161,16 @@ def test_w8a8_block_fp8_cutlass_matmul():
 
     Bs = torch.rand(n_tiles, k_tiles, dtype=torch.float32) * factor_for_scale
 
-    A_fp8, As = per_token_group_quant_fp8(
-        A_fp32, block_size[1], column_major_scales=False
-    )
+    A_fp8, As = per_token_group_quant_fp8(A_fp32, block_size[1], column_major_scales=False)
     # CUTLASS uses column-major format for scales
-    A_fp8_cutlass, As_cutlass = per_token_group_quant_fp8(
-        A_fp32, block_size[1], column_major_scales=True
-    )
+    A_fp8_cutlass, As_cutlass = per_token_group_quant_fp8(A_fp32, block_size[1], column_major_scales=True)
 
     ref_out = native_w8a8_block_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
     out = cutlass_scaled_mm(A_fp8_cutlass, B_fp8, As_cutlass, Bs, block_size, out_dtype)
 
-    rel_diff = torch.mean(
-        torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))
-    ) / torch.mean(torch.abs(ref_out.to(torch.float32)))
+    rel_diff = torch.mean(torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))) / torch.mean(
+        torch.abs(ref_out.to(torch.float32))
+    )
     assert rel_diff < 0.001
 
 
@@ -206,9 +198,7 @@ def test_w8a8_block_fp8_deep_gemm_matmul(M, N, K, block_size, out_dtype, seed):
     ):
         pytest.skip(f"Skipping test; invalid size {M}, {N}, {K}")
 
-    A_fp8, As_fp8 = per_token_group_quant_fp8(
-        A_fp32, block_size[1], column_major_scales=True, tma_aligned_scales=True
-    )
+    A_fp8, As_fp8 = per_token_group_quant_fp8(A_fp32, block_size[1], column_major_scales=True, tma_aligned_scales=True)
     B_fp8, Bs_fp8 = per_block_cast_to_fp8(B_fp32, block_size=block_size)
 
     As = As_fp8.to(torch.float32)
@@ -218,15 +208,13 @@ def test_w8a8_block_fp8_deep_gemm_matmul(M, N, K, block_size, out_dtype, seed):
 
     out = torch.zeros((M, N), device="cuda", dtype=out_dtype)
 
-    assert As_fp8.shape == (M, (K + 127) // 128), (
-        f"{As_fp8.shape} != {(M, (K + 127) // 128)}"
-    )
+    assert As_fp8.shape == (M, (K + 127) // 128), f"{As_fp8.shape} != {(M, (K + 127) // 128)}"
 
     fp8_gemm_nt((A_fp8, As_fp8), (B_fp8, Bs_fp8), out)
 
-    rel_diff = torch.mean(
-        torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))
-    ) / torch.mean(torch.abs(ref_out.to(torch.float32)))
+    rel_diff = torch.mean(torch.abs(out.to(torch.float32) - ref_out.to(torch.float32))) / torch.mean(
+        torch.abs(ref_out.to(torch.float32))
+    )
     assert rel_diff < 0.001
 
 
@@ -241,9 +229,7 @@ def test_w8a8_block_fp8_deep_gemm_matmul(M, N, K, block_size, out_dtype, seed):
 @torch.inference_mode()
 def test_w8a8_block_fp8_flashinfer_matmul(M, N, K, block_size, out_dtype, seed):
     if not has_flashinfer_fp8_blockscale_gemm():
-        pytest.skip(
-            "FlashInfer block GEMM not available (requires SM90+ and FlashInfer)"
-        )
+        pytest.skip("FlashInfer block GEMM not available (requires SM90+ and FlashInfer)")
     # only aligned sizes
     if K % 128 != 0 or N % 64 != 0:
         pytest.skip(f"Skipping test; invalid size {M}, {N}, {K}")
@@ -271,7 +257,7 @@ def test_w8a8_block_fp8_flashinfer_matmul(M, N, K, block_size, out_dtype, seed):
         out_dtype=out_dtype,
     )
 
-    rel_diff = torch.mean(
-        torch.abs(out.to(torch.bfloat16) - ref_out.to(torch.bfloat16))
-    ) / torch.mean(torch.abs(ref_out.to(torch.bfloat16)))
+    rel_diff = torch.mean(torch.abs(out.to(torch.bfloat16) - ref_out.to(torch.bfloat16))) / torch.mean(
+        torch.abs(ref_out.to(torch.bfloat16))
+    )
     assert rel_diff < 0.001

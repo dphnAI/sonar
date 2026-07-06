@@ -5,12 +5,6 @@ import json
 
 import pytest
 
-from tests.parser.engine.conftest import make_mock_tokenizer
-from tests.parser.engine.streaming_helpers import (
-    collect_function_name,
-    collect_tool_arguments,
-    simulate_tool_streaming,
-)
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
     FunctionDefinition,
@@ -20,6 +14,12 @@ from aphrodite.parser.minimax_m2 import (
     TOOL_CALL_END,
     TOOL_CALL_START,
     MinimaxM2Parser,
+)
+from tests.parser.engine.conftest import make_mock_tokenizer
+from tests.parser.engine.streaming_helpers import (
+    collect_function_name,
+    collect_tool_arguments,
+    simulate_tool_streaming,
 )
 
 
@@ -216,9 +216,7 @@ class TestStreaming:
             "city": "Seattle",
         }
 
-    def test_streaming_invalid_tool_name_is_rejected(
-        self, mock_tokenizer, mock_request
-    ):
+    def test_streaming_invalid_tool_name_is_rejected(self, mock_tokenizer, mock_request):
         tools = make_tools("search")
         parser = MinimaxM2Parser(mock_tokenizer)
         mock_request.tools = tools

@@ -58,7 +58,8 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
     // NOTE: Would be nice to have interleaved sin/cos so we could just load
     // both at the same time.
     qk_t cos = static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx));
-    qk_t sin = static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx + embed_dim));
+    qk_t sin =
+        static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx + embed_dim));
 
     qk_t* q_pe_head_ptr =
         q_pe + token_idx * q_pe_stride_token + head_idx * q_pe_stride_head;
@@ -92,7 +93,8 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
     int pair_idx = i;
 
     qk_t cos = static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx));
-    qk_t sin = static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx + embed_dim));
+    qk_t sin =
+        static_cast<qk_t>(APHRODITE_LDG(cos_sin_ptr + pair_idx + embed_dim));
 
     qk_t* k_pe_head_ptr = k_pe + token_idx * k_pe_stride;
 
@@ -164,15 +166,15 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
 
 #define CALL_CONCAT_AND_CACHE_MLA_ROPE_FUSED(RAW_KV_T, CACHE_T, KV_DTYPE)  \
   do {                                                                     \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                   \
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                              \
         q_pe.scalar_type(), "qk_scalar_type", [&] {                        \
           using qk_t = scalar_t;                                           \
-          APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                             \
+          APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                        \
               rope_cos_sin_cache.scalar_type(),                            \
               "rope_cos_sin_cache_scalar_type", [&] {                      \
                 using cos_sin_t = scalar_t;                                \
                 if (rope_is_neox) {                                        \
-                  aphrodite::concat_and_cache_mla_rope_fused_kernel<            \
+                  aphrodite::concat_and_cache_mla_rope_fused_kernel<       \
                       qk_t, cos_sin_t, true, RAW_KV_T, CACHE_T, KV_DTYPE>  \
                       <<<grid, block, 0, stream>>>(                        \
                           positions.const_data_ptr<int64_t>(),             \
@@ -189,7 +191,7 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
                           block_size,                                      \
                           kv_cache_quant_scale.const_data_ptr<float>());   \
                 } else {                                                   \
-                  aphrodite::concat_and_cache_mla_rope_fused_kernel<            \
+                  aphrodite::concat_and_cache_mla_rope_fused_kernel<       \
                       qk_t, cos_sin_t, false, RAW_KV_T, CACHE_T, KV_DTYPE> \
                       <<<grid, block, 0, stream>>>(                        \
                           positions.const_data_ptr<int64_t>(),             \

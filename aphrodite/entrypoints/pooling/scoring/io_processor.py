@@ -55,10 +55,7 @@ class ScoringIOProcessor(PoolingIOProcessor):
         if value < 0:
             raise ValueError(f"{name} must be a non-negative integer")
         if value >= self.model_config.max_model_len:
-            raise ValueError(
-                f"{name} ({value}) must be less "
-                f"than max_model_len ({self.model_config.max_model_len})."
-            )
+            raise ValueError(f"{name} ({value}) must be less than max_model_len ({self.model_config.max_model_len}).")
 
     def _get_token_limits(
         self,
@@ -70,11 +67,7 @@ class ScoringIOProcessor(PoolingIOProcessor):
             max_tokens_per_query = getattr(request, "max_tokens_per_query", 0)
             max_tokens_per_doc = getattr(request, "max_tokens_per_doc", 0)
         else:
-            extra = (
-                (pooling_params.extra_kwargs or {})
-                if pooling_params is not None
-                else {}
-            )
+            extra = (pooling_params.extra_kwargs or {}) if pooling_params is not None else {}
             max_tokens_per_query = extra.get("max_tokens_per_query", 0)
             max_tokens_per_doc = extra.get("max_tokens_per_doc", 0)
 
@@ -95,16 +88,12 @@ class ScoringIOProcessor(PoolingIOProcessor):
         data_2 = scoring_data.data_2
         if max_tokens_per_query > 0:
             data_1 = [
-                truncate_text_to_tokens(d, self.tokenizer, max_tokens_per_query)
-                if isinstance(d, str)
-                else d
+                truncate_text_to_tokens(d, self.tokenizer, max_tokens_per_query) if isinstance(d, str) else d
                 for d in data_1
             ]
         if max_tokens_per_doc > 0:
             data_2 = [
-                truncate_text_to_tokens(d, self.tokenizer, max_tokens_per_doc)
-                if isinstance(d, str)
-                else d
+                truncate_text_to_tokens(d, self.tokenizer, max_tokens_per_doc) if isinstance(d, str) else d
                 for d in data_2
             ]
         return ScoringData(data_1=data_1, data_2=data_2)
@@ -144,13 +133,9 @@ class BiEncoderIOProcessor(ScoringIOProcessor):
 
         scoring_data = self.valid_inputs(data_1, data_2)
 
-        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(
-            request=request
-        )
+        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(request=request)
         if max_tokens_per_query > 0 or max_tokens_per_doc > 0:
-            scoring_data = self._truncate_scoring_data(
-                scoring_data, max_tokens_per_query, max_tokens_per_doc
-            )
+            scoring_data = self._truncate_scoring_data(scoring_data, max_tokens_per_query, max_tokens_per_doc)
 
         tok_params = request.build_tok_params(self.model_config)
         engine_inputs = self._pre_process(
@@ -173,9 +158,7 @@ class BiEncoderIOProcessor(ScoringIOProcessor):
         assert ctx.final_res_batch is not None
         assert isinstance(ctx.n_queries, int)
 
-        ctx.final_res_batch = self._post_process(
-            outputs=ctx.final_res_batch, n_queries=ctx.n_queries
-        )
+        ctx.final_res_batch = self._post_process(outputs=ctx.final_res_batch, n_queries=ctx.n_queries)
 
     #######################################
     # offline APIs
@@ -184,19 +167,13 @@ class BiEncoderIOProcessor(ScoringIOProcessor):
         assert isinstance(ctx.prompts, ScoringData)
         assert not isinstance(ctx.pooling_params, Sequence)
 
-        tok_params = self.renderer.default_cmpl_tok_params.with_kwargs(
-            **(ctx.tokenization_kwargs or {})
-        )
+        tok_params = self.renderer.default_cmpl_tok_params.with_kwargs(**(ctx.tokenization_kwargs or {}))
 
-        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(
-            pooling_params=ctx.pooling_params
-        )
+        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(pooling_params=ctx.pooling_params)
 
         scoring_data = ctx.prompts
         if max_tokens_per_query > 0 or max_tokens_per_doc > 0:
-            scoring_data = self._truncate_scoring_data(
-                scoring_data, max_tokens_per_query, max_tokens_per_doc
-            )
+            scoring_data = self._truncate_scoring_data(scoring_data, max_tokens_per_query, max_tokens_per_doc)
 
         return self._pre_process(scoring_data, tok_params)
 
@@ -217,9 +194,7 @@ class BiEncoderIOProcessor(ScoringIOProcessor):
         prompt_extras: dict[str, Any] | None = None,
     ) -> Sequence[EngineInput]:
         data_1 = score_data_to_prompts(scoring_data.data_1, "query", self.model_config)
-        data_2 = score_data_to_prompts(
-            scoring_data.data_2, "document", self.model_config
-        )
+        data_2 = score_data_to_prompts(scoring_data.data_2, "document", self.model_config)
 
         return self._preprocess_cmpl_offline(
             prompts=data_1 + data_2, tok_params=tok_params, prompt_extras=prompt_extras
@@ -234,9 +209,7 @@ class BiEncoderIOProcessor(ScoringIOProcessor):
 
         final_res_batch: list[PoolingRequestOutput] = []
         for emb_1, emb_2 in zip(emb_data_1, emb_data_2):
-            pair_score = F.cosine_similarity(
-                emb_1.outputs.data.float(), emb_2.outputs.data.float(), dim=0
-            )
+            pair_score = F.cosine_similarity(emb_1.outputs.data.float(), emb_2.outputs.data.float(), dim=0)
 
             padding: list[int] = []
             if self.pad_token_id is not None:
@@ -310,9 +283,7 @@ class FlashLateInteractionIOProcessor(LateInteractionIOProcessor):
 
         # Expand queries if 1:N scoring
         if len(ctx.query_final_res_batch) == 1:
-            ctx.query_final_res_batch = ctx.query_final_res_batch * len(
-                ctx.final_res_batch
-            )
+            ctx.query_final_res_batch = ctx.query_final_res_batch * len(ctx.final_res_batch)
 
         final_res_batch: list[PoolingRequestOutput] = []
         for d1, d2 in zip(ctx.query_final_res_batch, ctx.final_res_batch):
@@ -369,9 +340,7 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
 
         scoring_data = self.valid_inputs(data_1, data_2)
 
-        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(
-            request=request
-        )
+        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(request=request)
 
         tok_params = request.build_tok_params(self.model_config)
         pooling_params = self.create_pooling_params(request)
@@ -400,13 +369,9 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
         assert isinstance(ctx.prompts, ScoringData)
         assert not isinstance(ctx.pooling_params, Sequence)
 
-        tok_params = self.renderer.default_cmpl_tok_params.with_kwargs(
-            **(ctx.tokenization_kwargs or {})
-        )
+        tok_params = self.renderer.default_cmpl_tok_params.with_kwargs(**(ctx.tokenization_kwargs or {}))
 
-        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(
-            pooling_params=ctx.pooling_params
-        )
+        max_tokens_per_query, max_tokens_per_doc = self._get_token_limits(pooling_params=ctx.pooling_params)
 
         prompt_extras = ctx.pooling_params.extra_kwargs if ctx.pooling_params else None
         engine_inputs, pooling_params_list = self._pre_process(
@@ -436,11 +401,7 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
     ) -> tuple[Sequence[EngineInput], list[PoolingParams]]:
         arrival_time = time.time()
         engine_prompt_extras = (
-            {
-                k: v
-                for k in ("mm_processor_kwargs", "cache_salt")
-                if (v := prompt_extras.get(k)) is not None
-            }
+            {k: v for k in ("mm_processor_kwargs", "cache_salt") if (v := prompt_extras.get(k)) is not None}
             if prompt_extras
             else None
         )
@@ -464,9 +425,7 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
                 chat_template=chat_template,
                 max_tokens_per_query=max_tokens_per_query,
                 max_tokens_per_doc=max_tokens_per_doc,
-                chat_template_kwargs=prompt_extras.get("chat_template_kwargs")
-                if prompt_extras
-                else None,
+                chat_template_kwargs=prompt_extras.get("chat_template_kwargs") if prompt_extras else None,
             )
 
             if token_type_ids := engine_prompt.pop("token_type_ids", None):
@@ -484,9 +443,7 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
             if engine_prompt_extras:
                 target_prompt = extract_target_prompt(self.model_config, engine_prompt)
                 target_prompt.update(engine_prompt_extras)
-            engine_inputs.append(
-                self.renderer.process_for_engine(engine_prompt, arrival_time)
-            )
+            engine_inputs.append(self.renderer.process_for_engine(engine_prompt, arrival_time))
         return engine_inputs, pooling_params_list
 
     def get_score_prompt(
@@ -510,9 +467,7 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
 
         # Apply truncation before defining closures
         if max_tokens_per_query > 0 and isinstance(prompt_1, str):
-            prompt_1 = truncate_text_to_tokens(
-                prompt_1, tokenizer, max_tokens_per_query
-            )
+            prompt_1 = truncate_text_to_tokens(prompt_1, tokenizer, max_tokens_per_query)
         if max_tokens_per_doc > 0 and isinstance(prompt_2, str):
             prompt_2 = truncate_text_to_tokens(prompt_2, tokenizer, max_tokens_per_doc)
 
@@ -530,26 +485,18 @@ class CrossEncoderIOProcessor(ScoringIOProcessor):
                 if self.use_sep_token:
                     # cross_encoder models defaults to using separating token.
                     if max_tokens_per_doc > 0 and isinstance(prompt_2, str):
-                        query_tokens = tokenizer.encode(
-                            prompt_1, add_special_tokens=False
-                        )
+                        query_tokens = tokenizer.encode(prompt_1, add_special_tokens=False)
                         num_special = get_num_special_tokens_for_pair(tokenizer)
-                        doc_limit_max_length = (
-                            len(query_tokens) + max_tokens_per_doc + num_special
-                        )
+                        doc_limit_max_length = len(query_tokens) + max_tokens_per_doc + num_special
                         existing_max_length = local_kwargs.get("max_length")
                         if existing_max_length is not None:
-                            effective_max_length = min(
-                                doc_limit_max_length, existing_max_length
-                            )
+                            effective_max_length = min(doc_limit_max_length, existing_max_length)
                         else:
                             effective_max_length = doc_limit_max_length
                         local_kwargs["truncation"] = "only_second"
                         local_kwargs["max_length"] = effective_max_length
 
-                    prompt_inputs = tokenizer(
-                        text=prompt_1, text_pair=prompt_2, **local_kwargs
-                    )
+                    prompt_inputs = tokenizer(text=prompt_1, text_pair=prompt_2, **local_kwargs)
                     full_prompt = tokenizer.decode(prompt_inputs["input_ids"])
                 else:
                     # `llm as reranker` defaults to not using separating token.
@@ -642,10 +589,7 @@ class JinaRankingIOProcessorMixin:
             special_tokens = default_special_tokens
 
         query = JinaRankingIOProcessorMixin.sanitize_input(query, special_tokens)
-        docs = [
-            JinaRankingIOProcessorMixin.sanitize_input(doc, special_tokens)
-            for doc in docs
-        ]
+        docs = [JinaRankingIOProcessorMixin.sanitize_input(doc, special_tokens) for doc in docs]
 
         prefix = (
             "<|im_start|>system\n"
@@ -670,10 +614,7 @@ class JinaRankingIOProcessorMixin:
         if instruction:
             prompt += f"<instruct>\n{instruction}\n</instruct>\n"
 
-        doc_prompts = [
-            f'<passage id="{i}">\n{doc}{doc_emb_token}\n</passage>'
-            for i, doc in enumerate(docs)
-        ]
+        doc_prompts = [f'<passage id="{i}">\n{doc}{doc_emb_token}\n</passage>' for i, doc in enumerate(docs)]
         prompt += "\n".join(doc_prompts) + "\n"
         prompt += f"<query>\n{query}{query_emb_token}\n</query>"
 
@@ -684,9 +625,7 @@ class JinaRankingIOProcessorMixin:
         text: list[str] = []
         for prompt in data:
             if not isinstance(prompt, str):
-                raise ValueError(
-                    "The JinaForRanking model only supports text as input."
-                )
+                raise ValueError("The JinaForRanking model only supports text as input.")
             text.append(prompt)
         return text
 
@@ -707,14 +646,9 @@ class JinaRankingIOProcessor(LateInteractionIOProcessor, JinaRankingIOProcessorM
         if len(queries) == 1:
             prompts = [self.format_docs_prompts_func(query=queries[0], docs=docs)]
         else:
-            prompts = [
-                self.format_docs_prompts_func(query=q, docs=[d])
-                for q, d in zip(queries, docs)
-            ]
+            prompts = [self.format_docs_prompts_func(query=q, docs=[d]) for q, d in zip(queries, docs)]
 
-        return self._preprocess_cmpl_offline(
-            prompts=prompts, tok_params=tok_params, prompt_extras=prompt_extras
-        )
+        return self._preprocess_cmpl_offline(prompts=prompts, tok_params=tok_params, prompt_extras=prompt_extras)
 
     def _post_process(self, outputs: list[PoolingRequestOutput], n_queries: int):
         final_res_batch: list[PoolingRequestOutput] = []

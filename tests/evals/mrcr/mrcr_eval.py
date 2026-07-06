@@ -67,9 +67,7 @@ def _load_mrcr_samples(
     try:
         from datasets import load_dataset
     except ImportError as e:
-        raise ImportError(
-            "MRCR eval requires `datasets`. Install with: uv pip install datasets"
-        ) from e
+        raise ImportError("MRCR eval requires `datasets`. Install with: uv pip install datasets") from e
 
     max_chars = max_prompt_tokens * CHARS_PER_TOKEN
     per_bucket = num_samples // len(needles)
@@ -181,9 +179,7 @@ def evaluate_mrcr(
         model_name = discovered_model
     if max_prompt_tokens is None:
         if server_max_len is None:
-            raise RuntimeError(
-                "Server did not advertise max_model_len; pass --max-prompt-tokens."
-            )
+            raise RuntimeError("Server did not advertise max_model_len; pass --max-prompt-tokens.")
         max_prompt_tokens = max(512, server_max_len - max_tokens - PROMPT_SAFETY_BUFFER)
     print(
         f"Model: {model_name} | max_prompt_tokens={max_prompt_tokens} "
@@ -199,10 +195,7 @@ def evaluate_mrcr(
         model_name=model_name,
     )
     tok_counts = [s["n_tokens"] for s in samples]
-    print(
-        f"Loaded {len(samples)} samples (needles={needles}, "
-        f"tokens={min(tok_counts)}-{max(tok_counts)})"
-    )
+    print(f"Loaded {len(samples)} samples (needles={needles}, tokens={min(tok_counts)}-{max(tok_counts)})")
 
     async def run():
         sem = asyncio.Semaphore(concurrency)
@@ -226,31 +219,17 @@ def evaluate_mrcr(
 
         timeout = aiohttp.ClientTimeout(total=1800)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            await tqdm.gather(
-                *[one(session, i) for i in range(len(samples))], desc="MRCR"
-            )
+            await tqdm.gather(*[one(session, i) for i in range(len(samples))], desc="MRCR")
         return responses, out_tokens
 
     tic = time.perf_counter()
     responses, out_tokens = asyncio.run(run())
     latency = time.perf_counter() - tic
 
-    scores = np.array(
-        [
-            score_mrcr(r, s["answer"], s["random_string_to_prepend"])
-            for r, s in zip(responses, samples)
-        ]
-    )
-    prefix_hits = np.array(
-        [
-            r.startswith(s["random_string_to_prepend"])
-            for r, s in zip(responses, samples)
-        ]
-    )
+    scores = np.array([score_mrcr(r, s["answer"], s["random_string_to_prepend"]) for r, s in zip(responses, samples)])
+    prefix_hits = np.array([r.startswith(s["random_string_to_prepend"]) for r, s in zip(responses, samples)])
     per_needle = {
-        f"match_ratio_n{n}": float(
-            scores[np.array([s["n_needles"] == n for s in samples])].mean()
-        )
+        f"match_ratio_n{n}": float(scores[np.array([s["n_needles"] == n for s in samples])].mean())
         for n in needles
         if any(s["n_needles"] == n for s in samples)
     }
@@ -275,9 +254,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description="MRCR evaluation for Aphrodite serve")
     p.add_argument("--model", default=None, help="Default: discovered from /v1/models")
     p.add_argument("--num-samples", type=int, default=40)
-    p.add_argument(
-        "--needles", type=int, nargs="+", default=[2, 4, 8], choices=[2, 4, 8]
-    )
+    p.add_argument("--needles", type=int, nargs="+", default=[2, 4, 8], choices=[2, 4, 8])
     p.add_argument(
         "--max-prompt-tokens",
         type=int,
@@ -293,8 +270,7 @@ def main() -> None:
     p.add_argument(
         "--extra-body",
         default=None,
-        help="JSON merged into each request. "
-        "Pass '{}' to disable the default enable_thinking=false.",
+        help="JSON merged into each request. Pass '{}' to disable the default enable_thinking=false.",
     )
     p.add_argument("--save-results", default=None)
     args = p.parse_args()

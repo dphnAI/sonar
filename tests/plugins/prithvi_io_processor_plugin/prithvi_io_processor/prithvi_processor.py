@@ -200,11 +200,7 @@ def load_image(
                 if len(julian_day) == 3:
                     julian_day = int(julian_day)
                 else:
-                    julian_day = (
-                        datetime.datetime.strptime(julian_day, "%m%d")
-                        .timetuple()
-                        .tm_yday
-                    )
+                    julian_day = datetime.datetime.strptime(julian_day, "%m%d").timetuple().tm_yday
                 temporal_coords.append([year, julian_day])
         except Exception:
             logger.exception("Could not extract timestamp for %s", file)
@@ -280,9 +276,7 @@ class PrithviMultimodalDataProcessor(IOProcessor[ImagePrompt, ImageRequestOutput
         )
 
         batch = torch.tensor(input_data)
-        windows = batch.unfold(3, self.img_size, self.img_size).unfold(
-            4, self.img_size, self.img_size
-        )
+        windows = batch.unfold(3, self.img_size, self.img_size).unfold(4, self.img_size, self.img_size)
         self.h1, self.w1 = windows.shape[3:5]
         windows = rearrange(
             windows,
@@ -292,11 +286,7 @@ class PrithviMultimodalDataProcessor(IOProcessor[ImagePrompt, ImageRequestOutput
         )
 
         # Split into batches if number of windows > batch_size
-        num_batches = (
-            windows.shape[0] // self.batch_size
-            if windows.shape[0] > self.batch_size
-            else 1
-        )
+        num_batches = windows.shape[0] // self.batch_size if windows.shape[0] > self.batch_size else 1
         windows = torch.tensor_split(windows, num_batches, dim=0)
 
         if temporal_coords:
@@ -311,9 +301,7 @@ class PrithviMultimodalDataProcessor(IOProcessor[ImagePrompt, ImageRequestOutput
         prompts = []
         for window in windows:
             # Apply standardization
-            window = self.datamodule.test_transform(
-                image=window.squeeze().numpy().transpose(1, 2, 0)
-            )
+            window = self.datamodule.test_transform(image=window.squeeze().numpy().transpose(1, 2, 0))
             window = self.datamodule.aug(window)["image"]
             prompts.append(
                 {
@@ -374,9 +362,7 @@ class PrithviMultimodalDataProcessor(IOProcessor[ImagePrompt, ImageRequestOutput
         if not self.meta_data:
             raise ValueError("No metadata available for the current task")
         self.meta_data.update(count=1, dtype="uint8", compress="lzw", nodata=0)
-        out_data = save_geotiff(
-            _convert_np_uint8(pred_imgs), self.meta_data, out_format
-        )
+        out_data = save_geotiff(_convert_np_uint8(pred_imgs), self.meta_data, out_format)
 
         return ImageRequestOutput(
             type=out_format,

@@ -126,8 +126,7 @@ def test_v1_generation_is_deterministic_across_batch_sizes_with_needle(
         passes = num_trials - mismatches
         # Dump how many passed vs failed
         print(
-            f"[determinism] total={num_trials}, passed={passes}, "
-            f"failed={mismatches}, max_batch_size={max_batch_size}"
+            f"[determinism] total={num_trials}, passed={passes}, failed={mismatches}, max_batch_size={max_batch_size}"
         )
 
         if mismatches > 0:
@@ -218,10 +217,7 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
         assert len(outs) == 1
         step_logprobs, token_ids = _extract_step_logprobs(outs[0])
         if step_logprobs is None:
-            pytest.skip(
-                "Logits are not available on RequestOutput; "
-                "enable logprobs return to run this test."
-            )
+            pytest.skip("Logits are not available on RequestOutput; enable logprobs return to run this test.")
         bs1_logprobs_per_prompt.append(step_logprobs)
         bs1_tokens_per_prompt.append(token_ids)
         print(f"[BS=1] Prompt {idx} generated tokens: {token_ids}")
@@ -243,10 +239,7 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
         print(f"[BS={len(prompts)}] Prompt {idx} generated tokens: {tokens}")
         step_logprobs, token_ids = _extract_step_logprobs(o)
         if step_logprobs is None:
-            pytest.skip(
-                "Logits are not available on RequestOutput; "
-                "enable logprobs return to run this test."
-            )
+            pytest.skip("Logits are not available on RequestOutput; enable logprobs return to run this test.")
         bsN_logprobs_per_prompt.append(step_logprobs)
         bsN_tokens_per_prompt.append(token_ids)
 
@@ -261,10 +254,7 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
         )
     ):
         if len(logprobs_bs1) != len(logprobs_bsN):
-            reason = (
-                f"Different number of steps: {len(logprobs_bs1)} (BS=1) "
-                f"vs {len(logprobs_bsN)} (BS=N)"
-            )
+            reason = f"Different number of steps: {len(logprobs_bs1)} (BS=1) vs {len(logprobs_bsN)} (BS=N)"
             failed_prompts.append(
                 {
                     "prompt_idx": i,
@@ -287,12 +277,8 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
                     "prompt_preview": prompts[i][:100],
                     "bs1_tokens": tokens_bs1,
                     "bsN_tokens": tokens_bsN,
-                    "bs1_all_logprobs": [
-                        logprobs_bs1[s].tolist() for s in range(len(logprobs_bs1))
-                    ],
-                    "bsN_all_logprobs": [
-                        logprobs_bsN[s].tolist() for s in range(len(logprobs_bsN))
-                    ],
+                    "bs1_all_logprobs": [logprobs_bs1[s].tolist() for s in range(len(logprobs_bs1))],
+                    "bsN_all_logprobs": [logprobs_bsN[s].tolist() for s in range(len(logprobs_bsN))],
                 }
             )
             continue
@@ -328,12 +314,8 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
                         "prompt_preview": prompts[i][:100],
                         "bs1_tokens": tokens_bs1,
                         "bsN_tokens": tokens_bsN,
-                        "bs1_all_logprobs": [
-                            logprobs_bs1[s].tolist() for s in range(len(logprobs_bs1))
-                        ],
-                        "bsN_all_logprobs": [
-                            logprobs_bsN[s].tolist() for s in range(len(logprobs_bsN))
-                        ],
+                        "bs1_all_logprobs": [logprobs_bs1[s].tolist() for s in range(len(logprobs_bs1))],
+                        "bsN_all_logprobs": [logprobs_bsN[s].tolist() for s in range(len(logprobs_bsN))],
                     }
                 )
                 break
@@ -341,10 +323,7 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
     # Print summary of all failures
     if failed_prompts:
         print(f"\n{'=' * 80}")
-        fail_msg = (
-            f"BATCH INVARIANCE FAILURES: {len(failed_prompts)}/"
-            f"{len(prompts)} prompts failed"
-        )
+        fail_msg = f"BATCH INVARIANCE FAILURES: {len(failed_prompts)}/{len(prompts)} prompts failed"
         print(fail_msg)
         print(f"{'=' * 80}")
         for fail in failed_prompts:
@@ -369,8 +348,7 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
 
         # Fail the test with summary
         msg = (
-            f"Batch invariance violated in {len(failed_prompts)}/"
-            f"{len(prompts)} prompts. See output above for details."
+            f"Batch invariance violated in {len(failed_prompts)}/{len(prompts)} prompts. See output above for details."
         )
         pytest.fail(msg)
 
@@ -430,9 +408,7 @@ def test_simple_generation(backend):
     "backend",
     BACKENDS,
 )
-def test_logprobs_without_batch_invariance_should_fail(
-    backend, monkeypatch: pytest.MonkeyPatch
-):
+def test_logprobs_without_batch_invariance_should_fail(backend, monkeypatch: pytest.MonkeyPatch):
     """
     This test is the inverse of test_logprobs_bitwise_batch_invariance_bs1_vs_bsN.
     It DISABLES batch invariance mode and expects to see non-deterministic behavior
@@ -498,10 +474,7 @@ def test_logprobs_without_batch_invariance_should_fail(
         assert len(outs) == 1
         step_logprobs, token_ids = _extract_step_logprobs(outs[0])
         if step_logprobs is None:
-            pytest.skip(
-                "Logits are not available on RequestOutput; "
-                "enable logprobs return to run this test."
-            )
+            pytest.skip("Logits are not available on RequestOutput; enable logprobs return to run this test.")
         bs1_logprobs_per_prompt.append(step_logprobs)
         bs1_tokens_per_prompt.append(token_ids)
         print(f"[BS=1] Prompt {idx} generated tokens: {token_ids}")
@@ -522,10 +495,7 @@ def test_logprobs_without_batch_invariance_should_fail(
         print(f"[BS={len(prompts)}] Prompt {idx} generated tokens: {tokens}")
         step_logprobs, token_ids = _extract_step_logprobs(o)
         if step_logprobs is None:
-            pytest.skip(
-                "Logits are not available on RequestOutput; "
-                "enable logprobs return to run this test."
-            )
+            pytest.skip("Logits are not available on RequestOutput; enable logprobs return to run this test.")
         bsN_logprobs_per_prompt.append(step_logprobs)
         bsN_tokens_per_prompt.append(token_ids)
 
@@ -540,10 +510,7 @@ def test_logprobs_without_batch_invariance_should_fail(
         )
     ):
         if len(logprobs_bs1) != len(logprobs_bsN):
-            reason = (
-                f"Different number of steps: {len(logprobs_bs1)} (BS=1) "
-                f"vs {len(logprobs_bsN)} (BS=N)"
-            )
+            reason = f"Different number of steps: {len(logprobs_bs1)} (BS=1) vs {len(logprobs_bsN)} (BS=N)"
             differences_found.append(
                 {
                     "prompt_idx": i,
@@ -586,10 +553,7 @@ def test_logprobs_without_batch_invariance_should_fail(
 
             if not torch.equal(a, b):
                 max_diff = torch.abs(a - b).max().item()
-                print(
-                    f"\n[EXPECTED DIVERGENCE FOUND] Prompt {i}, "
-                    f"Token {t}: max_diff={max_diff:.6e}"
-                )
+                print(f"\n[EXPECTED DIVERGENCE FOUND] Prompt {i}, Token {t}: max_diff={max_diff:.6e}")
                 bs1_tok = tokens_bs1[t] if t < len(tokens_bs1) else "N/A"
                 bsN_tok = tokens_bsN[t] if t < len(tokens_bsN) else "N/A"
                 print(f"  Token IDs: bs1={bs1_tok}, bsN={bsN_tok}")
@@ -709,10 +673,7 @@ def test_decode_logprobs_match_prefill_logprobs(
         # Extract decode logprobs and tokens
         decode_logprobs, token_ids = _extract_step_logprobs(decode_output)
         if decode_logprobs is None:
-            pytest.skip(
-                "Logprobs are not available on RequestOutput; "
-                "enable logprobs return to run this test."
-            )
+            pytest.skip("Logprobs are not available on RequestOutput; enable logprobs return to run this test.")
 
         print(f"[Prompt {prompt_idx}] Generated {len(token_ids)} tokens: {token_ids}")
         print(f"[Prompt {prompt_idx}] Decode logprobs: {decode_logprobs.tolist()}")
@@ -758,13 +719,8 @@ def test_decode_logprobs_match_prefill_logprobs(
                 logprobs=5,
             )
 
-            print(
-                f"  [Token {token_idx}] Running prefill for prefix "
-                f"(len={len(prefix_prompt)})..."
-            )
-            prefill_output = llm.generate([prefix_prompt], prefill_sp, use_tqdm=False)[
-                0
-            ]
+            print(f"  [Token {token_idx}] Running prefill for prefix (len={len(prefix_prompt)})...")
+            prefill_output = llm.generate([prefix_prompt], prefill_sp, use_tqdm=False)[0]
             prefill_logprobs, prefill_token_ids = _extract_step_logprobs(prefill_output)
 
             if prefill_logprobs is None:
@@ -776,14 +732,8 @@ def test_decode_logprobs_match_prefill_logprobs(
             prefill_logprob = prefill_logprobs[0].item()
             decode_logprob = decode_logprobs[token_idx].item()
 
-            print(
-                f"  [Token {token_idx}] Decode token: {current_token}, "
-                f"logprob: {decode_logprob:.8f}"
-            )
-            print(
-                f"  [Token {token_idx}] Prefill token: {prefill_token}, "
-                f"logprob: {prefill_logprob:.8f}"
-            )
+            print(f"  [Token {token_idx}] Decode token: {current_token}, logprob: {decode_logprob:.8f}")
+            print(f"  [Token {token_idx}] Prefill token: {prefill_token}, logprob: {prefill_logprob:.8f}")
 
             # Check if tokens match
             if current_token != prefill_token:
@@ -855,14 +805,8 @@ def test_decode_logprobs_match_prefill_logprobs(
                 print(f"\n  [Failure {i + 1}] Token position {fail['token_idx']}:")
                 print(f"    Reason: {fail['reason']}")
                 print(f"    Prefix text: '{fail['prefix_text']}...'")
-                print(
-                    f"    Decode:  token={fail['decode_token']}, "
-                    f"logprob={fail['decode_logprob']:.10f}"
-                )
-                print(
-                    f"    Prefill: token={fail['prefill_token']}, "
-                    f"logprob={fail['prefill_logprob']:.10f}"
-                )
+                print(f"    Decode:  token={fail['decode_token']}, logprob={fail['decode_logprob']:.10f}")
+                print(f"    Prefill: token={fail['prefill_token']}, logprob={fail['prefill_logprob']:.10f}")
                 if "diff" in fail:
                     print(f"    Difference: {fail['diff']:.10e}")
                     # Show in hex to see bitwise difference
@@ -886,20 +830,14 @@ def test_decode_logprobs_match_prefill_logprobs(
                     print(f"    Context (tokens {start} to {end - 1}):")
                     for j in range(start, end):
                         marker = " <-- MISMATCH" if j == token_idx else ""
-                        print(
-                            f"      [{j}] token={all_tokens[j]}, "
-                            f"logprob={all_logprobs[j]:.8f}{marker}"
-                        )
+                        print(f"      [{j}] token={all_tokens[j]}, logprob={all_logprobs[j]:.8f}{marker}")
 
             if len(failures) > 5:
                 print(f"\n  ... and {len(failures) - 5} more failures for this prompt")
 
         print(f"\n{'=' * 80}\n")
 
-        pytest.fail(
-            f"Decode logprobs do not match prefill logprobs: "
-            f"{len(failed_comparisons)} mismatches found."
-        )
+        pytest.fail(f"Decode logprobs do not match prefill logprobs: {len(failed_comparisons)} mismatches found.")
     else:
         print("✓ SUCCESS: All decode logprobs match prefill logprobs bitwise!")
         print(f"{'=' * 80}\n")

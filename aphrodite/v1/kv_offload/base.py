@@ -462,15 +462,11 @@ class OffloadingWorker(ABC):
     submit_load, so there is no (src_medium, dst_medium) routing."""
 
     @abstractmethod
-    def submit_store(
-        self, job_id: int, src_spec: GPULoadStoreSpec, dst_spec: LoadStoreSpec
-    ) -> bool:
+    def submit_store(self, job_id: int, src_spec: GPULoadStoreSpec, dst_spec: LoadStoreSpec) -> bool:
         """Async GPU -> offloaded medium."""
 
     @abstractmethod
-    def submit_load(
-        self, job_id: int, src_spec: LoadStoreSpec, dst_spec: GPULoadStoreSpec
-    ) -> bool:
+    def submit_load(self, job_id: int, src_spec: LoadStoreSpec, dst_spec: GPULoadStoreSpec) -> bool:
         """Async offloaded medium -> GPU."""
 
     @abstractmethod
@@ -487,9 +483,7 @@ class OffloadingSpec(ABC):
     """Spec for an offloading connector"""
 
     @classmethod
-    def build_metric_definitions(
-        cls, extra_config: dict[str, Any]
-    ) -> dict[str, "OffloadingMetricMetadata"]:
+    def build_metric_definitions(cls, extra_config: dict[str, Any]) -> dict[str, "OffloadingMetricMetadata"]:
         """Return Prometheus metric definitions emitted by this spec."""
         return {}
 
@@ -506,26 +500,19 @@ class OffloadingSpec(ABC):
         self.extra_config = kv_transfer_config.kv_connector_extra_config
         kv_events_config = aphrodite_config.kv_events_config
         self.kv_events_config = OffloadingKVEventsConfig(
-            enable_kv_cache_events=(
-                kv_events_config is not None and kv_events_config.enable_kv_cache_events
-            ),
-            self_describing_kv_events=bool(
-                self.extra_config.get("self_describing_kv_events", False)
-            ),
+            enable_kv_cache_events=(kv_events_config is not None and kv_events_config.enable_kv_cache_events),
+            self_describing_kv_events=bool(self.extra_config.get("self_describing_kv_events", False)),
         )
 
         # When True, only prompt (prefill) blocks are offloaded; decode-phase
         # blocks (KV generated after the prompt) are skipped. Useful when prior
         # turns' generated tokens are dropped before the next turn (e.g.
         # reasoning models that strip thinking).
-        self.offload_prompt_only: bool = bool(
-            self.extra_config.get("offload_prompt_only", True)
-        )
+        self.offload_prompt_only: bool = bool(self.extra_config.get("offload_prompt_only", True))
 
         parallel_config = aphrodite_config.parallel_config
         context_parallel_factor = (
-            parallel_config.decode_context_parallel_size
-            * parallel_config.prefill_context_parallel_size
+            parallel_config.decode_context_parallel_size * parallel_config.prefill_context_parallel_size
         )
 
         # gpu block size per group
@@ -536,9 +523,7 @@ class OffloadingSpec(ABC):
 
         # hash_block_size must match what the scheduler uses for
         # Request.block_hashes (resolved via resolve_kv_cache_block_sizes).
-        _, self.hash_block_size = resolve_kv_cache_block_sizes(
-            kv_cache_config, aphrodite_config
-        )
+        _, self.hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
 
         for block_size in self.gpu_block_size:
             assert block_size % self.hash_block_size == 0, (

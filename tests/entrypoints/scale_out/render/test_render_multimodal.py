@@ -7,8 +7,8 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.multimodal.utils import encode_image_url
+from tests.utils import RemoteOpenAIServer
 
 VISION_MODEL_NAME = "Qwen/Qwen3-VL-2B-Instruct"
 
@@ -41,9 +41,7 @@ def vision_server():
 
 @pytest_asyncio.fixture
 async def vision_client(vision_server):
-    async with httpx.AsyncClient(
-        base_url=vision_server.url_for(""), timeout=60.0
-    ) as http_client:
+    async with httpx.AsyncClient(base_url=vision_server.url_for(""), timeout=60.0) as http_client:
         yield http_client
 
 

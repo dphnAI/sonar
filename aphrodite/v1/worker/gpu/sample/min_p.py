@@ -45,9 +45,7 @@ def _min_p_kernel(
         tl.store(logits_ptr + token_idx * logits_stride + block, logits, mask=mask)
 
 
-def apply_min_p(
-    logits: torch.Tensor, expanded_idx_mapping: torch.Tensor, min_p: torch.Tensor
-) -> None:
+def apply_min_p(logits: torch.Tensor, expanded_idx_mapping: torch.Tensor, min_p: torch.Tensor) -> None:
     num_tokens, vocab_size = logits.shape
     BLOCK_SIZE = 1024
     _min_p_kernel[(num_tokens,)](

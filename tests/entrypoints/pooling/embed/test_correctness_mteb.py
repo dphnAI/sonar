@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from aphrodite.platforms import current_platform
 from tests.models.language.pooling_mteb_test.mteb_embed_utils import (
     MTEB_EMBED_TASKS,
     MTEB_EMBED_TOL,
@@ -11,7 +12,6 @@ from tests.models.language.pooling_mteb_test.mteb_embed_utils import (
     run_mteb_embed_task,
 )
 from tests.utils import RemoteOpenAIServer
-from aphrodite.platforms import current_platform
 
 os.environ["APHRODITE_LOGGING_LEVEL"] = "WARNING"
 

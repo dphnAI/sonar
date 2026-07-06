@@ -70,9 +70,7 @@ def test_per_token_head_kv_cache_accuracy(
             kv_cache_dtype="auto",
             attention_config={"backend": backend},
         ) as aphrodite_model:
-            baseline_outputs = aphrodite_model.generate_greedy_logprobs(
-                example_prompts, max_tokens, NUM_LOG_PROBS
-            )
+            baseline_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
 
         with aphrodite_runner(
             test_model,
@@ -83,9 +81,7 @@ def test_per_token_head_kv_cache_accuracy(
             calculate_kv_scales=True,
             attention_config={"backend": backend},
         ) as aphrodite_model:
-            test_outputs = aphrodite_model.generate_greedy_logprobs(
-                example_prompts, max_tokens, NUM_LOG_PROBS
-            )
+            test_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, NUM_LOG_PROBS)
 
         check_logprobs_close(
             outputs_0_lst=baseline_outputs,

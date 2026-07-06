@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Whisper STT implementation (model-owned package)."""
 
 from .config import WhisperConfig

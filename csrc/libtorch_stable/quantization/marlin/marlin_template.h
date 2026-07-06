@@ -38,24 +38,25 @@ namespace MARLIN_NAMESPACE_NAME {
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 750
 
-template <typename scalar_t,  // compute dtype, half or nv_float16
-          const aphrodite::ScalarTypeId b_type_id,  // weight MarlinScalarType id
-          const aphrodite::ScalarTypeId s_type_id,  // weight scale ScalarType id
-          const int threads,          // number of threads in a threadblock
-          const int thread_m_blocks,  // number of 16x16 blocks in the m
-                                      // dimension (batchsize) of the
-                                      // threadblock
-          const int thread_n_blocks,  // same for n dimension (output)
-          const int thread_k_blocks,  // same for k dimension (reduction)
-          const bool m_block_size_8,  // whether m_block_size == 8
-                                      // only works when thread_m_blocks == 1
-          const int stages,  // number of stages for the async global->shared
-                             // fetch pipeline
-          const bool has_act_order,  // whether act_order is enabled
-          const int group_blocks,    // number of consecutive 16x16 blocks
-                                     // with a separate quantization scale
-          const bool is_zp_float     // is zero point of float16 type?
-          >
+template <
+    typename scalar_t,  // compute dtype, half or nv_float16
+    const aphrodite::ScalarTypeId b_type_id,  // weight MarlinScalarType id
+    const aphrodite::ScalarTypeId s_type_id,  // weight scale ScalarType id
+    const int threads,          // number of threads in a threadblock
+    const int thread_m_blocks,  // number of 16x16 blocks in the m
+                                // dimension (batchsize) of the
+                                // threadblock
+    const int thread_n_blocks,  // same for n dimension (output)
+    const int thread_k_blocks,  // same for k dimension (reduction)
+    const bool m_block_size_8,  // whether m_block_size == 8
+                                // only works when thread_m_blocks == 1
+    const int stages,           // number of stages for the async global->shared
+                                // fetch pipeline
+    const bool has_act_order,   // whether act_order is enabled
+    const int group_blocks,     // number of consecutive 16x16 blocks
+                                // with a separate quantization scale
+    const bool is_zp_float      // is zero point of float16 type?
+    >
 __global__ void Marlin(
     const int4* __restrict__ A,  // fp16 input matrix of shape mxk
     const int4* __restrict__ B,  // 4bit quantized weight matrix of shape kxn
@@ -287,18 +288,20 @@ __global__ void Marlin(
 
   #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 750
   // Turing TensorCore only supports fp16 and int8
-  if constexpr (a_type_id != aphrodite::kFloat16.id() && a_type_id != aphrodite::kS8.id())
+  if constexpr (a_type_id != aphrodite::kFloat16.id() &&
+                a_type_id != aphrodite::kS8.id())
     return;
   #endif
 
   #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 750
-  constexpr auto num_bits = aphrodite::ScalarType::from_id(b_type_id).size_bits();
+  constexpr auto num_bits =
+      aphrodite::ScalarType::from_id(b_type_id).size_bits();
   // Disable use_fp16_accum for NVFP4 and cases when group_size == -1 &&
   // num_bits == 4
-  constexpr bool use_fp16_accum =
-      a_type_id == aphrodite::kFloat16.id() &&
-      (!(b_type_id == aphrodite::kFE2M1f.id() && s_type_id == aphrodite::kFE4M3fn.id()) &&
-       !(group_blocks == -1 && num_bits == 4));
+  constexpr bool use_fp16_accum = a_type_id == aphrodite::kFloat16.id() &&
+                                  (!(b_type_id == aphrodite::kFE2M1f.id() &&
+                                     s_type_id == aphrodite::kFE4M3fn.id()) &&
+                                   !(group_blocks == -1 && num_bits == 4));
   #else
   constexpr bool use_fp16_accum = false;
   #endif
@@ -342,12 +345,14 @@ __global__ void Marlin(
     static_assert(std::is_same<scalar_t, c_scalar_t>::value);
   }
   constexpr bool has_zp = b_type == aphrodite::kU4 || b_type == aphrodite::kU8;
-  constexpr bool is_int_type = b_type == aphrodite::kU4 || b_type == aphrodite::kU8 ||
-                               b_type == aphrodite::kS4 || b_type == aphrodite::kS8 ||
-                               b_type == aphrodite::kU4B8 || b_type == aphrodite::kU8B128;
+  constexpr bool is_int_type =
+      b_type == aphrodite::kU4 || b_type == aphrodite::kU8 ||
+      b_type == aphrodite::kS4 || b_type == aphrodite::kS8 ||
+      b_type == aphrodite::kU4B8 || b_type == aphrodite::kU8B128;
   // see comments of dequant.h for more details
   constexpr bool dequant_skip_flop =
-      is_a_8bit || (b_type == aphrodite::kFE4M3fn && !(s_type == aphrodite::kFE8M0fnu)) ||
+      is_a_8bit ||
+      (b_type == aphrodite::kFE4M3fn && !(s_type == aphrodite::kFE8M0fnu)) ||
       b_type == aphrodite::kFE2M1f && s_type == aphrodite::kFE4M3fn ||
       has_zp && !is_zp_float && !std::is_same<scalar_t, nv_bfloat16>::value ||
       has_zp && !is_zp_float && !(b_type == aphrodite::kU8);
@@ -1210,7 +1215,8 @@ __global__ void Marlin(
       }
     }
 
-    if constexpr (s_type == aphrodite::kFE4M3fn || s_type == aphrodite::kFE8M0fnu) {
+    if constexpr (s_type == aphrodite::kFE4M3fn ||
+                  s_type == aphrodite::kFE8M0fnu) {
       int s_quant_0 = reinterpret_cast<int*>(frag_s[k2])[0];
       int s_quant_1 = reinterpret_cast<int*>(frag_s[k2])[1];
 
@@ -1652,7 +1658,8 @@ __global__ void Marlin(
     // We first reorder in shared memory to guarantee the most efficient final
     // global write patterns
     auto write = [&](int idx, float c0, float c1, FragS& s, FragS& b_bias) {
-      if constexpr (b_type == aphrodite::kFE2M1f && s_type == aphrodite::kFE4M3fn) {
+      if constexpr (b_type == aphrodite::kFE2M1f &&
+                    s_type == aphrodite::kFE4M3fn) {
         c0 *= global_scale_f32;
         c1 *= global_scale_f32;
       }

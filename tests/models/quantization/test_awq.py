@@ -7,7 +7,7 @@ import torch
 
 from aphrodite.multimodal.image import rescale_image_size
 
-from ...conftest import IMAGE_ASSETS, ImageTestAssets, AphroditeRunner
+from ...conftest import IMAGE_ASSETS, AphroditeRunner, ImageTestAssets
 from ..utils import check_logprobs_close
 
 HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
@@ -57,9 +57,7 @@ def run_awq_test(
         default_torch_num_threads=1,
     ) as aphrodite_model:
         source_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(
-                prompts, max_tokens, num_logprobs=num_logprobs, images=images
-            )
+            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
             for prompts, images in inputs_per_image
         ]
 
@@ -74,15 +72,11 @@ def run_awq_test(
         default_torch_num_threads=1,
     ) as aphrodite_model:
         quant_outputs_per_image = [
-            aphrodite_model.generate_greedy_logprobs(
-                prompts, max_tokens, num_logprobs=num_logprobs, images=images
-            )
+            aphrodite_model.generate_greedy_logprobs(prompts, max_tokens, num_logprobs=num_logprobs, images=images)
             for prompts, images in inputs_per_image
         ]
 
-    for source_outputs, quant_outputs in zip(
-        source_outputs_per_image, quant_outputs_per_image
-    ):
+    for source_outputs, quant_outputs in zip(source_outputs_per_image, quant_outputs_per_image):
         # TODO: Check whether using original CLIPVisionModel can improve
         # consistency against HF
         check_logprobs_close(

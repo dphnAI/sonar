@@ -52,15 +52,11 @@ def awq_dequantize_torch(
     bits = 4
     shifts = torch.arange(0, 32, bits, device=qzeros.device)
 
-    iweights = torch.bitwise_right_shift(qweight[:, :, None], shifts[None, None, :]).to(
-        torch.int8
-    )
+    iweights = torch.bitwise_right_shift(qweight[:, :, None], shifts[None, None, :]).to(torch.int8)
 
     iweights = iweights.view(iweights.shape[0], -1)
 
-    zeros = torch.bitwise_right_shift(qzeros[:, :, None], shifts[None, None, :]).to(
-        torch.int8
-    )
+    zeros = torch.bitwise_right_shift(qzeros[:, :, None], shifts[None, None, :]).to(torch.int8)
     zeros = zeros.view(qzeros.shape[0], -1)
     zeros = reverse_awq_order(zeros)
 
@@ -112,9 +108,7 @@ def test_dequantize(qweight_rows, qweight_cols, group_size):
 
     iweights_triton = awq_dequantize_triton(qweight, scales, zeros)
 
-    assert not torch.any(torch.isinf(iweights_triton)) and not torch.any(
-        torch.isnan(iweights_triton)
-    )
+    assert not torch.any(torch.isinf(iweights_triton)) and not torch.any(torch.isnan(iweights_triton))
 
     iweights_torch = awq_dequantize_torch(qweight, scales, zeros, group_size)
 
@@ -150,28 +144,18 @@ def test_gemm(N, K, M, splitK, group_size):
     set_random_seed(0)
 
     input = torch.rand((input_rows, input_cols), dtype=input_dtype, device=device)
-    qweight = torch.randint(
-        0, torch.iinfo(torch.int32).max, (qweight_rows, qweight_cols), device=device
-    )
-    qzeros = torch.randint(
-        0, torch.iinfo(torch.int32).max, (qzeros_rows, qzeros_cols), device=device
-    )
+    qweight = torch.randint(0, torch.iinfo(torch.int32).max, (qweight_rows, qweight_cols), device=device)
+    qzeros = torch.randint(0, torch.iinfo(torch.int32).max, (qzeros_rows, qzeros_cols), device=device)
     scales = torch.rand((scales_rows, scales_cols), dtype=scales_dtype, device=device)
 
     output_triton = awq_gemm_triton(input, qweight, scales, qzeros, split_k_iters)
 
-    assert not torch.any(torch.isinf(output_triton)) and not torch.any(
-        torch.isnan(output_triton)
-    )
+    assert not torch.any(torch.isinf(output_triton)) and not torch.any(torch.isnan(output_triton))
 
     dequantized_weights = awq_dequantize_triton(qweight, scales, qzeros)
 
     output_torch = torch.matmul(input, dequantized_weights)
 
-    assert not torch.any(torch.isinf(output_torch)) and not torch.any(
-        torch.isnan(output_torch)
-    )
+    assert not torch.any(torch.isinf(output_torch)) and not torch.any(torch.isnan(output_torch))
 
-    torch.testing.assert_close(
-        output_triton.cpu(), output_torch.cpu(), atol=1e-1, rtol=1e-1
-    )
+    torch.testing.assert_close(output_triton.cpu(), output_torch.cpu(), atol=1e-1, rtol=1e-1)

@@ -55,10 +55,7 @@ def has_flashinfer() -> bool:
     # When not using flashinfer cubin,
     # Also check if nvcc is available since it's required to JIT compile flashinfer
     if not has_flashinfer_cubin() and shutil.which("nvcc") is None:
-        logger.debug_once(
-            "FlashInfer unavailable since nvcc was not found "
-            "and not using pre-downloaded cubins"
-        )
+        logger.debug_once("FlashInfer unavailable since nvcc was not found and not using pre-downloaded cubins")
         return False
     return True
 
@@ -88,9 +85,7 @@ def _get_submodule(module_name: str) -> Any | None:
 
 
 # General lazy import wrapper
-def _lazy_import_wrapper(
-    module_name: str, attr_name: str, fallback_fn: Callable[..., Any] = _missing
-):
+def _lazy_import_wrapper(module_name: str, attr_name: str, fallback_fn: Callable[..., Any] = _missing):
     """Create a lazy import wrapper for a specific function."""
 
     @functools.cache
@@ -110,18 +105,12 @@ def _lazy_import_wrapper(
 
 
 # Create lazy wrappers for each function
-flashinfer_trtllm_bf16_moe = _lazy_import_wrapper(
-    "flashinfer.fused_moe", "trtllm_bf16_moe"
-)
-flashinfer_trtllm_fp8_block_scale_moe = _lazy_import_wrapper(
-    "flashinfer.fused_moe", "trtllm_fp8_block_scale_moe"
-)
+flashinfer_trtllm_bf16_moe = _lazy_import_wrapper("flashinfer.fused_moe", "trtllm_bf16_moe")
+flashinfer_trtllm_fp8_block_scale_moe = _lazy_import_wrapper("flashinfer.fused_moe", "trtllm_fp8_block_scale_moe")
 flashinfer_trtllm_fp8_per_tensor_scale_moe = _lazy_import_wrapper(
     "flashinfer.fused_moe", "trtllm_fp8_per_tensor_scale_moe"
 )
-flashinfer_cutlass_fused_moe = _lazy_import_wrapper(
-    "flashinfer.fused_moe", "cutlass_fused_moe"
-)
+flashinfer_cutlass_fused_moe = _lazy_import_wrapper("flashinfer.fused_moe", "cutlass_fused_moe")
 flashinfer_cutedsl_grouped_gemm_nt_masked = _lazy_import_wrapper(
     "flashinfer.cute_dsl.blockscaled_gemm", "grouped_gemm_nt_masked"
 )
@@ -130,24 +119,12 @@ nvfp4_batched_quantize = _lazy_import_wrapper("flashinfer", "nvfp4_batched_quant
 silu_and_mul_scaled_nvfp4_experts_quantize = _lazy_import_wrapper(
     "flashinfer", "silu_and_mul_scaled_nvfp4_experts_quantize"
 )
-scaled_fp4_grouped_quantize = _lazy_import_wrapper(
-    "flashinfer", "scaled_fp4_grouped_quantize"
-)
-nvfp4_block_scale_interleave = _lazy_import_wrapper(
-    "flashinfer.fp4_quantization", "block_scale_interleave"
-)
-flashinfer_cute_dsl_fused_moe_nvfp4 = _lazy_import_wrapper(
-    "flashinfer", "cute_dsl_fused_moe_nvfp4"
-)
-flashinfer_convert_sf_to_mma_layout = _lazy_import_wrapper(
-    "flashinfer.cute_dsl.utils", "convert_sf_to_mma_layout"
-)
-flashinfer_b12x_fused_moe = _lazy_import_wrapper(
-    "flashinfer.fused_moe", "b12x_fused_moe"
-)
-trtllm_fp4_block_scale_moe = _lazy_import_wrapper(
-    "flashinfer", "trtllm_fp4_block_scale_moe"
-)
+scaled_fp4_grouped_quantize = _lazy_import_wrapper("flashinfer", "scaled_fp4_grouped_quantize")
+nvfp4_block_scale_interleave = _lazy_import_wrapper("flashinfer.fp4_quantization", "block_scale_interleave")
+flashinfer_cute_dsl_fused_moe_nvfp4 = _lazy_import_wrapper("flashinfer", "cute_dsl_fused_moe_nvfp4")
+flashinfer_convert_sf_to_mma_layout = _lazy_import_wrapper("flashinfer.cute_dsl.utils", "convert_sf_to_mma_layout")
+flashinfer_b12x_fused_moe = _lazy_import_wrapper("flashinfer.fused_moe", "b12x_fused_moe")
+trtllm_fp4_block_scale_moe = _lazy_import_wrapper("flashinfer", "trtllm_fp4_block_scale_moe")
 flashinfer_trtllm_batch_decode_with_kv_cache_mla = _lazy_import_wrapper(
     "flashinfer.decode",
     "trtllm_batch_decode_with_kv_cache_mla",
@@ -206,10 +183,7 @@ def has_flashinfer_nvlink_one_sided() -> bool:
 @functools.cache
 def has_flashinfer_moe() -> bool:
     """Return `True` if FlashInfer MoE module is available."""
-    return (
-        has_flashinfer()
-        and importlib.util.find_spec("flashinfer.fused_moe") is not None
-    )
+    return has_flashinfer() and importlib.util.find_spec("flashinfer.fused_moe") is not None
 
 
 @functools.cache
@@ -235,9 +209,7 @@ def has_flashinfer_sparse_mla_sm120() -> bool:
 @functools.cache
 def has_flashinfer_cutedsl() -> bool:
     """Return ``True`` if FlashInfer cutedsl module is available."""
-    return (
-        has_flashinfer() and importlib.util.find_spec("flashinfer.cute_dsl") is not None
-    )
+    return has_flashinfer() and importlib.util.find_spec("flashinfer.cute_dsl") is not None
 
 
 @functools.cache
@@ -319,9 +291,7 @@ def has_flashinfer_b12x_gemm() -> bool:
         return False
     # FlashInfer 0.6.11 renamed Sm120BlockScaledDenseGemmKernel ->
     # Sm120B12xBlockScaledDenseGemmKernel (commit 223f2a49). Accept either.
-    return hasattr(mod, "Sm120B12xBlockScaledDenseGemmKernel") or hasattr(
-        mod, "Sm120BlockScaledDenseGemmKernel"
-    )
+    return hasattr(mod, "Sm120B12xBlockScaledDenseGemmKernel") or hasattr(mod, "Sm120BlockScaledDenseGemmKernel")
 
 
 @functools.cache
@@ -408,15 +378,11 @@ def force_use_trtllm_attention() -> bool | None:
     return aphrodite_config.attention_config.use_trtllm_attention
 
 
-def can_use_trtllm_attention(
-    num_qo_heads: int, num_kv_heads: int, is_prefill: bool = False
-) -> bool:
+def can_use_trtllm_attention(num_qo_heads: int, num_kv_heads: int, is_prefill: bool = False) -> bool:
     """Check if the current configuration supports TRTLLM attention."""
     if force_use_trtllm_attention() is False:
         return False
-    return supports_trtllm_attention(is_prefill=is_prefill) and (
-        num_qo_heads % num_kv_heads == 0
-    )
+    return supports_trtllm_attention(is_prefill=is_prefill) and (num_qo_heads % num_kv_heads == 0)
 
 
 def use_trtllm_attention(
@@ -442,8 +408,7 @@ def use_trtllm_attention(
     # Decode context parallel is not supported
     if dcp_world_size > 1:
         logger.warning_once(
-            "Trtllm does not support returning LSE and as a result "
-            "does not support DCP, reverting to FlashInfer"
+            "Trtllm does not support returning LSE and as a result does not support DCP, reverting to FlashInfer"
         )
         return False
 
@@ -488,9 +453,7 @@ def use_trtllm_attention(
         if is_prefill:
             # Prefill auto-detection
             use_trtllm = kv_cache_dtype == "auto"
-        elif current_platform.is_device_capability(90) and kv_cache_dtype.startswith(
-            "fp8"
-        ):
+        elif current_platform.is_device_capability(90) and kv_cache_dtype.startswith("fp8"):
             # SM90 + FP8 KV cache: prefer the XQA decode kernel. XQA does not
             # support NVFP4 KV (that is an SM100 trtllm-gen path only).
             use_trtllm = True
@@ -505,9 +468,7 @@ def use_trtllm_attention(
         return use_trtllm
 
     # CLI argument is set to 1 - respect it
-    logger.info_once(
-        "Using TRTLLM attention (--attention-config.use_trtllm_attention is set to 1)"
-    )
+    logger.info_once("Using TRTLLM attention (--attention-config.use_trtllm_attention is set to 1)")
     return True
 
 
@@ -662,31 +623,23 @@ if has_flashinfer():
         dtype: torch.dtype,
         backend: str,
     ) -> torch.Tensor:
-        return torch.empty(
-            A.shape[0], A.shape[1], B.shape[2], dtype=dtype, device=A.device
-        )
+        return torch.empty(A.shape[0], A.shape[1], B.shape[2], dtype=dtype, device=A.device)
 
     @torch.library.custom_op(
         "aphrodite::flashinfer_nvfp4_quantize",
         mutates_args=[],
         device_types="cuda",
     )
-    def flashinfer_nvfp4_quantize(
-        a: torch.Tensor, a_global_sf: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def flashinfer_nvfp4_quantize(a: torch.Tensor, a_global_sf: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         from flashinfer import SfLayout
         from flashinfer import nvfp4_quantize as nvfp4_quantize_
 
-        return nvfp4_quantize_(
-            a, a_global_sf, sfLayout=SfLayout.layout_8x4, do_shuffle=False
-        )
+        return nvfp4_quantize_(a, a_global_sf, sfLayout=SfLayout.layout_8x4, do_shuffle=False)
 
     @torch.library.register_fake(
         "aphrodite::flashinfer_nvfp4_quantize",
     )
-    def flashinfer_nvfp4_quantize_fake(
-        a: torch.Tensor, a_global_sf: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def flashinfer_nvfp4_quantize_fake(a: torch.Tensor, a_global_sf: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         m, n = a.shape
 
         round_up = lambda x, y: (x + y - 1) // y * y
@@ -762,8 +715,7 @@ def flashinfer_mm_mxfp8(
 
     if block_scale_b.ndim != 1:
         raise ValueError(
-            "mm_mxfp8 expects 1D swizzled weight scales for CUTLASS; "
-            f"got shape={tuple(block_scale_b.shape)}"
+            f"mm_mxfp8 expects 1D swizzled weight scales for CUTLASS; got shape={tuple(block_scale_b.shape)}"
         )
 
     # Output tensor [M, N]
@@ -925,9 +877,7 @@ def flashinfer_quant_nvfp4_8x4_sf_layout(
     return flashinfer_nvfp4_quantize(a, a_global_sf)
 
 
-flashinfer_fp8_blockscale_gemm = _lazy_import_wrapper(
-    "flashinfer.gemm", "fp8_blockscale_gemm_sm90"
-)
+flashinfer_fp8_blockscale_gemm = _lazy_import_wrapper("flashinfer.gemm", "fp8_blockscale_gemm_sm90")
 
 
 @functools.cache
@@ -943,10 +893,7 @@ def has_flashinfer_fp8_blockscale_gemm() -> bool:
 @functools.cache
 def is_flashinfer_fp8_blockscale_gemm_supported() -> bool:
     """Return `True` if FlashInfer block-scale FP8 GEMM is supported."""
-    return (
-        envs.APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER
-        and has_flashinfer_fp8_blockscale_gemm()
-    )
+    return envs.APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER and has_flashinfer_fp8_blockscale_gemm()
 
 
 def should_use_flashinfer_for_blockscale_fp8_gemm(

@@ -87,16 +87,14 @@ class ObservabilityConfig:
     def collect_model_forward_time(self) -> bool:
         """Whether to collect model forward time for the request."""
         return self.collect_detailed_traces is not None and (
-            "model" in self.collect_detailed_traces
-            or "all" in self.collect_detailed_traces
+            "model" in self.collect_detailed_traces or "all" in self.collect_detailed_traces
         )
 
     @cached_property
     def collect_model_execute_time(self) -> bool:
         """Whether to collect model execute time for the request."""
         return self.collect_detailed_traces is not None and (
-            "worker" in self.collect_detailed_traces
-            or "all" in self.collect_detailed_traces
+            "worker" in self.collect_detailed_traces or "all" in self.collect_detailed_traces
         )
 
     def compute_hash(self) -> str:
@@ -153,7 +151,5 @@ class ObservabilityConfig:
     @model_validator(mode="after")
     def _validate_tracing_config(self):
         if self.collect_detailed_traces and not self.otlp_traces_endpoint:
-            raise ValueError(
-                "collect_detailed_traces requires `--otlp-traces-endpoint` to be set."
-            )
+            raise ValueError("collect_detailed_traces requires `--otlp-traces-endpoint` to be set.")
         return self

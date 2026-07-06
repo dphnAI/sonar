@@ -31,9 +31,7 @@ def _dequant_gather_torch(
     return (w.view(n, ng, hidden // ng) * scale_rows.unsqueeze(-1)).view(n, hidden)
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="Triton dequant kernel requires CUDA"
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="Triton dequant kernel requires CUDA")
 @pytest.mark.parametrize("num_bits", [2, 4, 8])
 @pytest.mark.parametrize("group_size", [0, 256])  # 0 -> channel
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])

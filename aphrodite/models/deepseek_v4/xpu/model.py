@@ -98,9 +98,7 @@ class DeepseekV4MLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         if swiglu_limit is not None:
             self.act_fn = SiluAndMulWithClamp(swiglu_limit)
         else:
@@ -160,9 +158,7 @@ def _deepseek_v4_stage_mega_moe_inputs_kernel(
 
     scale = amax / 448.0
     scale_bits = scale.to(tl.uint32, bitcast=True)
-    scale_exp = ((scale_bits >> 23) & 0xFF) + ((scale_bits & 0x7FFFFF) != 0).to(
-        tl.uint32
-    )
+    scale_exp = ((scale_bits >> 23) & 0xFF) + ((scale_bits & 0x7FFFFF) != 0).to(tl.uint32)
     scale_exp = tl.minimum(tl.maximum(scale_exp, 1), 254)
     rounded_scale = (scale_exp << 23).to(tl.float32, bitcast=True)
 
@@ -193,24 +189,18 @@ def _deepseek_v4_stage_mega_moe_inputs_kernel(
             other=0,
         ).to(tl.int64)
         tl.store(
-            topk_idx_out
-            + token_id * topk_idx_stride_m
-            + topk_offsets * topk_idx_stride_k,
+            topk_idx_out + token_id * topk_idx_stride_m + topk_offsets * topk_idx_stride_k,
             ids,
             mask=topk_mask,
         )
 
         weights = tl.load(
-            topk_weights
-            + token_id * topk_weights_stride_m
-            + topk_offsets * topk_weights_stride_k,
+            topk_weights + token_id * topk_weights_stride_m + topk_offsets * topk_weights_stride_k,
             mask=topk_mask,
             other=0.0,
         )
         tl.store(
-            topk_weights_out
-            + token_id * topk_weights_out_stride_m
-            + topk_offsets * topk_weights_out_stride_k,
+            topk_weights_out + token_id * topk_weights_out_stride_m + topk_offsets * topk_weights_out_stride_k,
             weights,
             mask=topk_mask,
         )
@@ -229,16 +219,10 @@ def _stage_deepseek_v4_mega_moe_inputs(
     if num_tokens == 0:
         return
     if hidden_size % 128 != 0:
-        raise ValueError(
-            "DeepSeek V4 MegaMoE input staging requires hidden_size to be "
-            "a multiple of 128."
-        )
+        raise ValueError("DeepSeek V4 MegaMoE input staging requires hidden_size to be a multiple of 128.")
     top_k = topk_ids.shape[1]
     if topk_weights.shape != topk_ids.shape:
-        raise ValueError(
-            "DeepSeek V4 MegaMoE input staging requires topk_weights and "
-            "topk_ids to have the same shape."
-        )
+        raise ValueError("DeepSeek V4 MegaMoE input staging requires topk_weights and topk_ids to have the same shape.")
 
     block_k = 128
     grid = (num_tokens, triton.cdiv(hidden_size, block_k))
@@ -443,11 +427,9 @@ class DeepseekV4MegaMoEExperts(nn.Module):
             (1, 32),
             self.num_local_experts,
         )
-        self._transformed_l1_weights, self._transformed_l2_weights = (
-            deep_gemm.transform_weights_for_mega_moe(
-                (self.w13_weight.data.view(torch.int8).contiguous(), w13_scale),
-                (self.w2_weight.data.view(torch.int8).contiguous(), w2_scale),
-            )
+        self._transformed_l1_weights, self._transformed_l2_weights = deep_gemm.transform_weights_for_mega_moe(
+            (self.w13_weight.data.view(torch.int8).contiguous(), w13_scale),
+            (self.w2_weight.data.view(torch.int8).contiguous(), w2_scale),
         )
         # Drop the original loader-side parameters: the MegaMoE kernels only
         # consume the transformed views above. transform_weights_for_mega_moe
@@ -607,9 +589,7 @@ class DeepseekV4MoE(nn.Module):
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
         self.prefix = prefix
-        self.use_mega_moe = (
-            aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
-        )
+        self.use_mega_moe = aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
         if self.use_mega_moe and not aphrodite_config.parallel_config.enable_expert_parallel:
             raise NotImplementedError(
                 "DeepSeek V4 MegaMoE currently requires expert parallel. "
@@ -627,9 +607,7 @@ class DeepseekV4MoE(nn.Module):
         self.renormalize = config.norm_topk_prob
         self.scoring_func = getattr(config, "scoring_func", "sqrtsoftplus")
         if self.use_mega_moe and self.scoring_func != "sqrtsoftplus":
-            raise NotImplementedError(
-                "DeepSeek V4 MegaMoE currently supports sqrtsoftplus routing only."
-            )
+            raise NotImplementedError("DeepSeek V4 MegaMoE currently supports sqrtsoftplus routing only.")
         if self.use_mega_moe and getattr(config, "expert_dtype", "fp4") != "fp4":
             raise NotImplementedError(
                 "DeepSeek V4 MegaMoE only supports fp4 experts; got expert_dtype="
@@ -744,9 +722,7 @@ class DeepseekV4MoE(nn.Module):
             router_logits_dtype=torch.float32,
         )
 
-    def forward(
-        self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None) -> torch.Tensor:
         if self.gate.tid2eid is not None and input_ids is None:
             raise ValueError("DeepSeek V4 hash MoE routing requires input_ids.")
 
@@ -769,9 +745,7 @@ class DeepseekV4MoE(nn.Module):
             hash_indices_table=self.gate.tid2eid,
             routed_scaling_factor=self.routed_scaling_factor,
         )
-        activation_clamp = (
-            float(self.swiglu_limit) if self.swiglu_limit is not None else None
-        )
+        activation_clamp = float(self.swiglu_limit) if self.swiglu_limit is not None else None
         final_hidden_states = self.experts(
             hidden_states,
             topk_weights,
@@ -785,9 +759,7 @@ class DeepseekV4MoE(nn.Module):
 
         return final_hidden_states.view(org_shape)
 
-    def _forward_fused_moe(
-        self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def _forward_fused_moe(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None) -> torch.Tensor:
         org_shape = hidden_states.shape
         if self.experts.is_internal_router:
             final_hidden_states = self.experts(
@@ -927,15 +899,11 @@ class DeepseekV4DecoderLayer(nn.Module):
         post_mix: torch.Tensor | None = None,
         res_mix: torch.Tensor | None = None,
         residual: torch.Tensor | None = None,
-    ) -> tuple[
-        torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None
-    ]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
         if residual is None:
             # First layer: run standalone hc_pre
             residual = x
-            x, post_mix, res_mix = self.hc_pre(
-                x, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base
-            )
+            x, post_mix, res_mix = self.hc_pre(x, self.hc_attn_fn, self.hc_attn_scale, self.hc_attn_base)
         else:
             residual, post_mix, res_mix, x = self.mhc_fused_post_pre(
                 x,
@@ -982,9 +950,7 @@ class DeepseekV4Model(nn.Module):
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
         self.config = config
-        self.use_mega_moe = (
-            aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
-        )
+        self.use_mega_moe = aphrodite_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
         if self.use_mega_moe and not aphrodite_config.parallel_config.enable_expert_parallel:
             raise NotImplementedError(
                 "DeepSeek V4 MegaMoE currently requires expert parallel. "
@@ -1191,10 +1157,7 @@ class DeepseekV4Model(nn.Module):
                     # checkpoints but the MoE param is uint8. copy_()
                     # would do a numeric conversion (e.g. 2^-7 → 0),
                     # destroying the raw exponent bytes.
-                    if (
-                        "weight_scale" in name
-                        and loaded_weight.dtype == torch.float8_e8m0fnu
-                    ):
+                    if "weight_scale" in name and loaded_weight.dtype == torch.float8_e8m0fnu:
                         loaded_weight = loaded_weight.view(torch.uint8)
                     for mapping in expert_mapping:
                         param_name, weight_name, expert_id, expert_shard_id = mapping
@@ -1207,9 +1170,7 @@ class DeepseekV4Model(nn.Module):
                         # We should ask the weight loader to return success or not
                         # here since otherwise we may skip experts with other
                         # available replicas.
-                        weight_loader = typing.cast(
-                            Callable[..., bool], param.weight_loader
-                        )
+                        weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                         success = weight_loader(
                             param,
                             loaded_weight,
@@ -1235,9 +1196,7 @@ class DeepseekV4Model(nn.Module):
                     if is_pp_missing_parameter(name, self):
                         continue
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
                     loaded_params.add(name)
                     continue
@@ -1316,9 +1275,7 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP):
         if expert_dtype != "fp4":
             self.hf_to_aphrodite_mapper = _make_deepseek_v4_weights_mapper(expert_dtype)
 
-        self.model = self.model_cls(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = self.model_cls(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -1349,9 +1306,7 @@ class DeepseekV4ForCausalLM(nn.Module, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def get_mtp_target_hidden_states(self) -> torch.Tensor | None:

@@ -23,16 +23,13 @@ logger = logging.getLogger(__name__)
 MODEL_NAME = "Qwen/Qwen3-8B"
 
 _PYTHON_TOOL_INSTRUCTION = (
-    "You must use the Python tool to execute code. "
-    "Never simulate execution. You must print the final answer."
+    "You must use the Python tool to execute code. Never simulate execution. You must print the final answer."
 )
 
 
 @pytest.fixture(scope="module")
 def server():
-    assert importlib.util.find_spec("gpt_oss") is not None, (
-        "Harmony tests require gpt_oss package to be installed"
-    )
+    assert importlib.util.find_spec("gpt_oss") is not None, "Harmony tests require gpt_oss package to be installed"
 
     args = [
         "--reasoning-parser",
@@ -117,9 +114,7 @@ async def test_reasoning_and_function_items(client: OpenAI, model_name: str):
     assert response.status == "completed"
 
     output_types = [getattr(o, "type", None) for o in response.output]
-    assert "reasoning" in output_types, (
-        f"Expected reasoning in output, got: {output_types}"
-    )
+    assert "reasoning" in output_types, f"Expected reasoning in output, got: {output_types}"
     assert "message" in output_types, f"Expected message in output, got: {output_types}"
 
     msg = next(o for o in response.output if o.type == "message")
@@ -169,12 +164,8 @@ async def test_function_call_first_turn(client: OpenAI, model_name: str):
     assert response.status == "completed"
 
     output_types = [getattr(o, "type", None) for o in response.output]
-    assert "reasoning" in output_types, (
-        f"Expected reasoning in output, got: {output_types}"
-    )
-    assert has_output_type(response, "function_call"), (
-        f"Expected function_call in output, got: {output_types}"
-    )
+    assert "reasoning" in output_types, f"Expected reasoning in output, got: {output_types}"
+    assert has_output_type(response, "function_call"), f"Expected function_call in output, got: {output_types}"
 
     function_call = next(o for o in response.output if o.type == "function_call")
     assert function_call.name == "get_horoscope"
@@ -201,10 +192,7 @@ async def test_mcp_tool_call(client: OpenAI, model_name: str):
         client_with_timeout,
         model=model_name,
         expected_tool_type="mcp_call",
-        input=(
-            "What is 123 * 456? Use python to calculate the result. "
-            "Print the result with print()."
-        ),
+        input=("What is 123 * 456? Use python to calculate the result. Print the result with print()."),
         tools=[{"type": "code_interpreter", "container": {"type": "auto"}}],
         instructions=_PYTHON_TOOL_INSTRUCTION,
         temperature=0.0,
@@ -222,31 +210,19 @@ async def test_mcp_tool_call(client: OpenAI, model_name: str):
         f"Output types: {output_types}."
     )
 
-    assert "reasoning" in output_types, (
-        f"Expected reasoning in output, got: {output_types}"
-    )
-    assert "mcp_call" in output_types, (
-        f"Expected mcp_call in output, got: {output_types}"
-    )
+    assert "reasoning" in output_types, f"Expected reasoning in output, got: {output_types}"
+    assert "mcp_call" in output_types, f"Expected mcp_call in output, got: {output_types}"
 
     # Every mcp_call item must have well-typed fields
     for item in response.output:
         if getattr(item, "type", None) == "mcp_call":
-            assert type(item.arguments) is str, (
-                f"mcp_call.arguments should be str, got {type(item.arguments)}"
-            )
-            assert type(item.output) is str, (
-                f"mcp_call.output should be str, got {type(item.output)}"
-            )
+            assert type(item.arguments) is str, f"mcp_call.arguments should be str, got {type(item.arguments)}"
+            assert type(item.output) is str, f"mcp_call.output should be str, got {type(item.output)}"
 
     # The model may make 1+ tool-call rounds but must still produce
     # a final message for a trivial calculation like 123 * 456.
-    message_outputs = [
-        o for o in response.output if getattr(o, "type", None) == "message"
-    ]
-    assert message_outputs, (
-        f"Model did not produce a final message. Output types: {output_types}"
-    )
+    message_outputs = [o for o in response.output if getattr(o, "type", None) == "message"]
+    assert message_outputs, f"Model did not produce a final message. Output types: {output_types}"
 
     final_message = message_outputs[-1]
     assert any(s in final_message.content[0].text for s in ("56088", "56,088")), (
@@ -256,12 +232,8 @@ async def test_mcp_tool_call(client: OpenAI, model_name: str):
     # Validate raw input_messages / output_messages
     assert len(response.input_messages) >= 1, "Expected at least 1 input message"
     assert len(response.output_messages) >= 1, "Expected at least 1 output message"
-    assert any(
-        any(s in str(msg) for s in ("56088", "56,088"))
-        for msg in response.output_messages
-    ), (
-        f"Expected 56088 in at least one output_message, "
-        f"got {len(response.output_messages)} messages"
+    assert any(any(s in str(msg) for s in ("56088", "56,088")) for msg in response.output_messages), (
+        f"Expected 56088 in at least one output_message, got {len(response.output_messages)} messages"
     )
 
 

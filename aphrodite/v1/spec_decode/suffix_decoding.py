@@ -37,9 +37,7 @@ class SuffixDecodingProposer:
         num_speculative_tokens: int,
         input_batch: InputBatch,
         sampled_token_ids: list[list[int]],
-        slot_mappings: dict[str, torch.Tensor]
-        | list[dict[str, torch.Tensor]]
-        | None = None,  # unused
+        slot_mappings: dict[str, torch.Tensor] | list[dict[str, torch.Tensor]] | None = None,  # unused
     ) -> list[list[int]]:
         assert num_speculative_tokens == self.num_speculative_tokens
         """
@@ -81,9 +79,7 @@ class SuffixDecodingProposer:
             draft = self.suffix_cache.speculate(
                 req_id,
                 pattern,
-                max_spec_tokens=min(
-                    self.num_speculative_tokens, self.max_model_len - num_tokens - 1
-                ),
+                max_spec_tokens=min(self.num_speculative_tokens, self.max_model_len - num_tokens - 1),
                 max_spec_factor=self.max_spec_factor,
                 min_token_prob=self.min_token_prob,
             )
@@ -91,9 +87,7 @@ class SuffixDecodingProposer:
             draft_token_ids.append(draft.token_ids)
 
         # Stop requests that were not seen in the input batch.
-        for req_id in (
-            self.suffix_cache.active_requests - input_batch.req_id_to_index.keys()
-        ):
+        for req_id in self.suffix_cache.active_requests - input_batch.req_id_to_index.keys():
             self.suffix_cache.stop_request(req_id)
 
         return draft_token_ids

@@ -25,9 +25,7 @@ logger = init_logger(__name__)
 
 class ZentorchInt8ScaledMMLinearKernel(Int8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_cpu():
             return False, "requires CPU."
         if not current_platform.is_zen_cpu():
@@ -69,18 +67,14 @@ class ZentorchInt8ScaledMMLinearKernel(Int8ScaledMMLinearKernel):
         if ws.dim() == 2 and ws.shape[-1] == 1:
             ws = ws.squeeze(-1)
         ws = ws.to(torch.bfloat16).contiguous()
-        assert ws.shape == (n,), (
-            f"[zen_cpu] expected weight scale shape ({n},), got {tuple(ws.shape)}"
-        )
+        assert ws.shape == (n,), f"[zen_cpu] expected weight scale shape ({n},), got {tuple(ws.shape)}"
 
         replace_parameter(
             layer,
             w_s_name,
             torch.nn.Parameter(ws, requires_grad=False),
         )
-        logger.info_once(
-            "[zen_cpu] Using zentorch_dynamic_qlinear for W8A8 (dynamic-symmetric)"
-        )
+        logger.info_once("[zen_cpu] Using zentorch_dynamic_qlinear for W8A8 (dynamic-symmetric)")
 
     def apply_weights(
         self,

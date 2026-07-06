@@ -120,9 +120,7 @@ class CpuGpuBuffer:
     ) -> None:
         # these buffers are mutable runtime state, so allocate them as normal
         with torch.inference_mode(False):
-            self.cpu = torch.zeros(
-                *size, dtype=dtype, device="cpu", pin_memory=pin_memory
-            )
+            self.cpu = torch.zeros(*size, dtype=dtype, device="cpu", pin_memory=pin_memory)
             self.gpu = torch.zeros_like(self.cpu, device=device)
         self.np: np.ndarray
         # To keep type hints simple (avoiding generics and subclasses), we
@@ -209,9 +207,7 @@ class APIServerProcessManager:
         self.processes: list[BaseProcess] = []
         self._address_pipes: list[connection.Connection] = []
 
-        for i, in_addr, out_addr in zip(
-            range(num_servers), input_addresses, output_addresses
-        ):
+        for i, in_addr, out_addr in zip(range(num_servers), input_addresses, output_addresses):
             client_config: dict[str, Any] = {
                 "input_address": in_addr,
                 "output_address": out_addr,
@@ -254,12 +250,8 @@ class APIServerProcessManager:
         n = len(self._address_pipes)
         inputs: list[str | None] = [None] * n
         outputs: list[str | None] = [None] * n
-        pending: dict[connection.Connection, int] = {
-            pipe: i for i, pipe in enumerate(self._address_pipes)
-        }
-        sentinel_to_idx: dict[Any, int] = {
-            proc.sentinel: i for i, proc in enumerate(self.processes)
-        }
+        pending: dict[connection.Connection, int] = {pipe: i for i, pipe in enumerate(self._address_pipes)}
+        sentinel_to_idx: dict[Any, int] = {proc.sentinel: i for i, proc in enumerate(self.processes)}
 
         deadline = time.monotonic() + timeout
         try:
@@ -272,9 +264,7 @@ class APIServerProcessManager:
                         f"API server(s) to report bound ZMQ addresses: "
                         f"{missing}"
                     )
-                waitables: list[Any] = list(pending.keys()) + list(
-                    sentinel_to_idx.keys()
-                )
+                waitables: list[Any] = list(pending.keys()) + list(sentinel_to_idx.keys())
                 ready = connection.wait(waitables, timeout=remaining)
                 # Drain pipes before checking sentinels: a child that sent
                 # its message and then exited can surface both events in
@@ -390,9 +380,7 @@ class RustFrontendProcessManager:
         self._proc = subprocess.Popen(cmd, pass_fds=(fd,))
 
         # Create a process wrapper with a sentinel fd for monitoring
-        self.processes: list[_SubprocessWrapper] = [
-            _SubprocessWrapper(self._proc, "RustFrontend")
-        ]
+        self.processes: list[_SubprocessWrapper] = [_SubprocessWrapper(self._proc, "RustFrontend")]
 
         self._finalizer = weakref.finalize(self, _shutdown_subprocesses, self.processes)
 
@@ -425,9 +413,7 @@ class _SubprocessWrapper:
                 with contextlib.suppress(Exception):
                     send.close()
 
-        threading.Thread(
-            target=monitor_subprocess, daemon=True, name=f"{name}Monitor"
-        ).start()
+        threading.Thread(target=monitor_subprocess, daemon=True, name=f"{name}Monitor").start()
 
     @property
     def sentinel(self):
@@ -455,9 +441,7 @@ class _SubprocessWrapper:
                 self._sentinel_send.close()
 
 
-def _shutdown_subprocesses(
-    procs: list[_SubprocessWrapper], timeout: float | None = None
-) -> None:
+def _shutdown_subprocesses(procs: list[_SubprocessWrapper], timeout: float | None = None) -> None:
     """Shutdown subprocess wrappers (mirrors the shutdown() function)."""
     if timeout is None:
         timeout = 0.0
@@ -481,9 +465,7 @@ def _shutdown_subprocesses(
         if proc.is_alive():
             proc.join(remaining)
 
-    remaining_pids = [
-        proc.pid for proc in procs if proc.is_alive() and proc.pid is not None
-    ]
+    remaining_pids = [proc.pid for proc in procs if proc.is_alive() and proc.pid is not None]
     if remaining_pids:
         logger.warning(
             "[shutdown] Subprocess manager: force killing remaining processes count=%d",
@@ -495,9 +477,7 @@ def _shutdown_subprocesses(
     logger.debug_once("[shutdown] Subprocess manager: complete")
 
 
-def run_api_server_worker_proc(
-    listen_address, sock, args, client_config=None, **uvicorn_kwargs
-) -> None:
+def run_api_server_worker_proc(listen_address, sock, args, client_config=None, **uvicorn_kwargs) -> None:
     """Entrypoint for individual API server worker processes."""
 
     from aphrodite.entrypoints.openai.api_server import run_server_worker
@@ -509,15 +489,12 @@ def run_api_server_worker_proc(
     set_process_title("APIServer", str(server_index))
     decorate_logs()
 
-    uvloop.run(
-        run_server_worker(listen_address, sock, args, client_config, **uvicorn_kwargs)
-    )
+    uvloop.run(run_server_worker(listen_address, sock, args, client_config, **uvicorn_kwargs))
 
 
 def wait_for_completion_or_failure(
     api_server_manager: "APIServerProcessManager | RustFrontendProcessManager",
-    engine_manager: Union["CoreEngineProcManager", "CoreEngineActorManager"]
-    | None = None,
+    engine_manager: Union["CoreEngineProcManager", "CoreEngineActorManager"] | None = None,
     coordinator: "DPCoordinator | None" = None,
 ) -> None:
     """Wait for all processes to complete or detect if any fail.
@@ -568,15 +545,9 @@ def wait_for_completion_or_failure(
 
                 # Check if process exited with error
                 if proc is not None and proc.exitcode != 0:
-                    raise RuntimeError(
-                        f"Process {proc.name} (PID: {proc.pid}) "
-                        f"died with exit code {proc.exitcode}"
-                    )
+                    raise RuntimeError(f"Process {proc.name} (PID: {proc.pid}) died with exit code {proc.exitcode}")
                 if engine_manager and engine_manager.failed_proc_name is not None:
-                    raise RuntimeError(
-                        f"Engine core process {engine_manager.failed_proc_name} "
-                        "died unexpectedly."
-                    )
+                    raise RuntimeError(f"Engine core process {engine_manager.failed_proc_name} died unexpectedly.")
 
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt, shutting down API servers...")
@@ -619,9 +590,7 @@ def shutdown(procs: list[BaseProcess], timeout: float | None = None) -> None:
         if proc.is_alive():
             proc.join(remaining)
 
-    remaining_pids = [
-        proc.pid for proc in procs if proc.is_alive() and proc.pid is not None
-    ]
+    remaining_pids = [proc.pid for proc in procs if proc.is_alive() and proc.pid is not None]
     if remaining_pids:
         logger.warning(
             "[shutdown] Process manager: force killing remaining processes count=%d",
@@ -633,9 +602,7 @@ def shutdown(procs: list[BaseProcess], timeout: float | None = None) -> None:
     logger.debug_once("[shutdown] Process manager: complete")
 
 
-def copy_slice(
-    from_tensor: torch.Tensor, to_tensor: torch.Tensor, length: int
-) -> torch.Tensor:
+def copy_slice(from_tensor: torch.Tensor, to_tensor: torch.Tensor, length: int) -> torch.Tensor:
     """
     Copy the first length elements of a tensor into another tensor in a
     non-blocking manner.
@@ -647,9 +614,7 @@ def copy_slice(
     return to_tensor[:length].copy_(from_tensor[:length], non_blocking=True)
 
 
-def report_usage_stats(
-    aphrodite_config, usage_context: UsageContext = UsageContext.ENGINE_CONTEXT
-) -> None:
+def report_usage_stats(aphrodite_config, usage_context: UsageContext = UsageContext.ENGINE_CONTEXT) -> None:
     """Report usage statistics if enabled."""
 
     if not is_usage_stats_enabled():
@@ -670,24 +635,14 @@ def report_usage_stats(
         kv_connector = aphrodite_config.kv_transfer_config.kv_connector
 
     # Attention backend is None when set to "auto" (resolved at runtime per platform).
-    attention_backend = (
-        attention_config.backend.name if attention_config.backend is not None else None
-    )
+    attention_backend = attention_config.backend.name if attention_config.backend is not None else None
 
     # CompilationMode is an IntEnum; report the name for readability in dashboards.
-    compilation_mode = (
-        compilation_config.mode.name if compilation_config.mode is not None else None
-    )
+    compilation_mode = compilation_config.mode.name if compilation_config.mode is not None else None
 
     # Speculative decoding fields default to None when spec decode is disabled.
-    spec_decode_method = (
-        speculative_config.method if speculative_config is not None else None
-    )
-    num_speculative_tokens = (
-        speculative_config.num_speculative_tokens
-        if speculative_config is not None
-        else None
-    )
+    spec_decode_method = speculative_config.method if speculative_config is not None else None
+    num_speculative_tokens = speculative_config.num_speculative_tokens if speculative_config is not None else None
 
     if model_config.using_transformers_backend():
         backend_cls = model_config._model_info.architecture
@@ -810,9 +765,7 @@ def compute_iteration_details(scheduler_output: SchedulerOutput) -> IterationDet
     num_generation_tokens = 0
     new_req_ids = {new_req.req_id for new_req in scheduler_output.scheduled_new_reqs}
     for req_id, num_tokens in scheduler_output.num_scheduled_tokens.items():
-        if scheduler_output.scheduled_cached_reqs.is_context_phase(req_id) or (
-            req_id in new_req_ids
-        ):
+        if scheduler_output.scheduled_cached_reqs.is_context_phase(req_id) or (req_id in new_req_ids):
             num_context_requests += 1
             num_context_tokens += num_tokens
         else:

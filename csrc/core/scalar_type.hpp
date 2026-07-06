@@ -16,9 +16,9 @@ namespace aphrodite {
 //  in particular it can be used to represent sub-byte data types (something
 //  that torch.dtype currently does not support).
 //
-//  The type definitions on the Python side can be found in: aphrodite/scalar_type.py
-//  these type definitions should be kept up to date with any Python API changes
-//  here.
+//  The type definitions on the Python side can be found in:
+//  aphrodite/scalar_type.py these type definitions should be kept up to date
+//  with any Python API changes here.
 //
 class ScalarType {
  public:

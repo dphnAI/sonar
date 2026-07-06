@@ -154,9 +154,7 @@ def test_coordinator_hybrid_full_plus_swa_all_hit():
     coord = _make_coord(groups, hash_block_size=16)
     hs = _hashes(4)
     cmap = ExternalCachedBlockPool({(g, bytes(h)) for g in (0, 1) for h in hs})
-    _masks, hit = coord.find_longest_cache_hit(
-        hs, max_length=64, cached_block_pool=cmap
-    )
+    _masks, hit = coord.find_longest_cache_hit(hs, max_length=64, cached_block_pool=cmap)
     assert hit == 64
 
 
@@ -170,9 +168,7 @@ def test_coordinator_hybrid_hole_in_full_clips_both():
     exists = {(0, bytes(hs[0])), (0, bytes(hs[2])), (0, bytes(hs[3]))}
     exists |= {(1, bytes(h)) for h in hs}
     cmap = ExternalCachedBlockPool(exists)
-    _masks, hit = coord.find_longest_cache_hit(
-        hs, max_length=64, cached_block_pool=cmap
-    )
+    _masks, hit = coord.find_longest_cache_hit(hs, max_length=64, cached_block_pool=cmap)
     assert hit == 16
 
 
@@ -189,9 +185,7 @@ def test_coordinator_group_block_size_double_hash():
     exists = {(0, bytes(h)) for h in hs}
     exists |= {(1, bytes(bh)) for bh in big_hashes}
     cmap = ExternalCachedBlockPool(exists)
-    _masks, hit = coord.find_longest_cache_hit(
-        hs, max_length=64, cached_block_pool=cmap
-    )
+    _masks, hit = coord.find_longest_cache_hit(hs, max_length=64, cached_block_pool=cmap)
     assert hit == 64
     assert hit % 32 == 0
 
@@ -406,9 +400,7 @@ def test_lookup_with_eagle_pops_last_full_attention_block():
     coord = _make_coord(groups, hash_block_size=16, use_eagle=True)
     hs = _hashes(4)
     cmap = ExternalCachedBlockPool({(0, bytes(h)) for h in hs})
-    _masks, hit = coord.find_longest_cache_hit(
-        hs, max_length=64, cached_block_pool=cmap
-    )
+    _masks, hit = coord.find_longest_cache_hit(hs, max_length=64, cached_block_pool=cmap)
     # 4 blocks present, eagle pops 1 → 3 blocks = 48 tokens.
     assert hit == 48
 
@@ -427,9 +419,7 @@ def test_load_mask_with_eagle_does_not_double_prune_full_attention():
     coord = _make_coord(groups, hash_block_size=16, use_eagle=True)
     hs = _hashes(4)
     cmap = ExternalCachedBlockPool({(0, bytes(h)) for h in hs})
-    _masks, hit = coord.find_longest_cache_hit(
-        hs, max_length=64, cached_block_pool=cmap
-    )
+    _masks, hit = coord.find_longest_cache_hit(hs, max_length=64, cached_block_pool=cmap)
     assert hit == 48  # eagle popped 1 block
 
     masks = coord.load_mask(hs, token_len=hit)
@@ -451,9 +441,7 @@ def test_load_mask_with_eagle_hybrid_full_plus_swa():
     hs = _hashes(4)
     exists = {(g, bytes(h)) for g in (0, 1) for h in hs}
     cmap = ExternalCachedBlockPool(exists)
-    _masks, hit = coord.find_longest_cache_hit(
-        hs, max_length=64, cached_block_pool=cmap
-    )
+    _masks, hit = coord.find_longest_cache_hit(hs, max_length=64, cached_block_pool=cmap)
     # FullAttn dictates the convergence; eagle pops one block off it.
     assert hit == 48
 
@@ -470,9 +458,7 @@ def test_load_mask_without_eagle_unchanged():
     coord = _make_coord(groups, hash_block_size=16, use_eagle=False)
     hs = _hashes(4)
     cmap = ExternalCachedBlockPool({(0, bytes(h)) for h in hs})
-    _masks, hit = coord.find_longest_cache_hit(
-        hs, max_length=64, cached_block_pool=cmap
-    )
+    _masks, hit = coord.find_longest_cache_hit(hs, max_length=64, cached_block_pool=cmap)
     assert hit == 64
     masks = coord.load_mask(hs, token_len=hit)
     assert masks[0] == [True, True, True, True]

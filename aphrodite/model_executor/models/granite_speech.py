@@ -33,7 +33,7 @@ import torch.nn.functional as F
 from torch import nn
 from transformers import BatchFeature, PretrainedConfig
 
-from aphrodite.config import CacheConfig, ModelConfig, SpeechToTextConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, SpeechToTextConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.inputs import MultiModalDataDict, PromptType, TokensPrompt
@@ -133,9 +133,7 @@ class GraniteSpeechMultiModalProcessingInfo(BaseProcessingInfo):
 
 
 ### Input Processing  & Multimodal utils
-class GraniteSpeechMultiModalProcessor(
-    BaseMultiModalProcessor[GraniteSpeechMultiModalProcessingInfo]
-):
+class GraniteSpeechMultiModalProcessor(BaseMultiModalProcessor[GraniteSpeechMultiModalProcessingInfo]):
     def _get_mm_fields_config(
         self,
         hf_inputs: BatchFeature,
@@ -165,9 +163,7 @@ class GraniteSpeechMultiModalProcessor(
             audios = mm_items.get_items("audio", AudioProcessorItems)
             audio = audios.get(item_idx)
             audio_length = audio.shape[-1]
-            num_projector_features = feature_extractor._get_num_audio_features(
-                [audio_length]
-            )[0]
+            num_projector_features = feature_extractor._get_num_audio_features([audio_length])[0]
             return [audio_token_id] * num_projector_features
 
         return [
@@ -203,16 +199,12 @@ class GraniteSpeechMultiModalProcessor(
             # Calculate the number of audio tokens per entry in the batch;
             # This is used to split the batch back out after padding.
             audio_token_index = self.info.get_hf_config().audio_token_index
-            processed_outputs["audio_embed_sizes"] = (
-                processed_outputs["input_ids"] == audio_token_index
-            ).sum(-1)
+            processed_outputs["audio_embed_sizes"] = (processed_outputs["input_ids"] == audio_token_index).sum(-1)
 
         return processed_outputs
 
 
-class GraniteSpeechDummyInputsBuilder(
-    BaseDummyInputsBuilder[GraniteSpeechMultiModalProcessingInfo]
-):
+class GraniteSpeechDummyInputsBuilder(BaseDummyInputsBuilder[GraniteSpeechMultiModalProcessingInfo]):
     def get_dummy_mm_data(
         self,
         seq_len: int,
@@ -252,9 +244,7 @@ class GraniteSpeechEncoderProjector(nn.Module):
         self.window_size = config.window_size
         self.num_queries = config.window_size // config.downsample_rate
 
-        self.query = nn.Parameter(
-            torch.zeros(1, self.num_queries, config.projector_config.hidden_size)
-        )
+        self.query = nn.Parameter(torch.zeros(1, self.num_queries, config.projector_config.hidden_size))
 
         # NOTE - this is implemented generically in transformers,
         # but for now we create the QFormer model directly since
@@ -265,9 +255,7 @@ class GraniteSpeechEncoderProjector(nn.Module):
             cache_config=cache_config,
             prefix=f"{prefix}.qformer",
         )
-        self.linear = nn.Linear(
-            config.projector_config.hidden_size, config.text_config.hidden_size
-        )
+        self.linear = nn.Linear(config.projector_config.hidden_size, config.text_config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, dim = hidden_states.size()
@@ -352,14 +340,10 @@ class GraniteSpeechConformerAttention(nn.Module):
 
         if self.context_size <= 0 or self.context_size > self.max_pos_emb:
             raise ValueError(
-                f"Context size should be > 0 and "
-                f"<= max_pos_emb ({self.max_pos_emb}), "
-                f"got {self.context_size}."
+                f"Context size should be > 0 and <= max_pos_emb ({self.max_pos_emb}), got {self.context_size}."
             )
 
-    def forward(
-        self, hidden_states: torch.Tensor, attention_dists: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_dists: torch.Tensor) -> torch.Tensor:
         hidden_states = self.pre_norm(hidden_states)
         bsz, num_features, _ = hidden_states.shape
 
@@ -367,31 +351,21 @@ class GraniteSpeechConformerAttention(nn.Module):
         remainder = num_features % self.context_size
         if remainder > 0:
             # right padding to reach block size
-            hidden_states = torch.nn.functional.pad(
-                hidden_states, (0, 0, 0, self.context_size - remainder)
-            )
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, self.context_size - remainder))
 
         # NOTE: would be nice to try to use qkvparallellinear
         # here for this block attention implementation if possible
         query_states = self.to_q(hidden_states)
         key_states, value_states = self.to_kv(hidden_states).chunk(2, dim=-1)
 
-        query_states = query_states.reshape(
-            bsz, num_blocks, self.context_size, self.num_heads, -1
-        ).transpose(2, 3)
-        key_states = key_states.reshape(
-            bsz, num_blocks, self.context_size, self.num_heads, -1
-        ).transpose(2, 3)
-        value_states = value_states.reshape(
-            bsz, num_blocks, self.context_size, self.num_heads, -1
-        ).transpose(2, 3)
+        query_states = query_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
+        key_states = key_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
+        value_states = value_states.reshape(bsz, num_blocks, self.context_size, self.num_heads, -1).transpose(2, 3)
 
         # shaw's relative positional embedding
         dist = attention_dists.to(hidden_states.device)
         rel_pos_emb = self.rel_pos_emb(dist)
-        pos_attn = (
-            torch.einsum("bnhid,ijd->bnhij", query_states, rel_pos_emb) * self.scale
-        )
+        pos_attn = torch.einsum("bnhid,ijd->bnhij", query_states, rel_pos_emb) * self.scale
 
         if remainder > 0:
             # masked attention in the extended block
@@ -427,9 +401,7 @@ class GraniteSpeechConformerDepthWiseConv1d(nn.Module):
         pad_offset = (kernel_size + 1) % 2
         self.padding = (pad, pad - pad_offset)
 
-        self.conv = nn.Conv1d(
-            chan_in, chan_out, kernel_size, groups=chan_in, bias=False
-        )
+        self.conv = nn.Conv1d(chan_in, chan_out, kernel_size, groups=chan_in, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = F.pad(hidden_states, self.padding)
@@ -480,13 +452,9 @@ class GraniteSpeechConformerBlock(nn.Module):
         self.ff2 = GraniteSpeechConformerFeedForward(config, prefix=f"{prefix}.ff2")
         self.post_norm = nn.LayerNorm(config.hidden_dim)
 
-    def forward(
-        self, hidden_states: torch.Tensor, attention_dists: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_dists: torch.Tensor) -> torch.Tensor:
         hidden_states = 0.5 * self.ff1(hidden_states) + hidden_states
-        hidden_states = (
-            self.attn(hidden_states, attention_dists=attention_dists) + hidden_states
-        )
+        hidden_states = self.attn(hidden_states, attention_dists=attention_dists) + hidden_states
         hidden_states = self.conv(hidden_states) + hidden_states
         hidden_states = 0.5 * self.ff2(hidden_states) + hidden_states
         hidden_states = self.post_norm(hidden_states)
@@ -508,10 +476,7 @@ class GraniteSpeechCTCEncoder(nn.Module):
         # Precompute clamped relative positional encoding distances
         seq = torch.arange(config.context_size)
         relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-        self.attention_dists = (
-            torch.clamp(relpos_dist, -config.context_size, config.context_size)
-            + config.max_pos_emb
-        )
+        self.attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
 
         self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
         self.layers = nn.ModuleList(
@@ -628,9 +593,7 @@ class GraniteSpeechForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "projector"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     def _build_encoder(
         self,
@@ -663,18 +626,10 @@ class GraniteSpeechForConditionalGeneration(
             input_features_mask = self._build_input_features_mask(audio_embed_sizes)
 
         if not isinstance(input_features, (torch.Tensor, list)):
-            raise ValueError(
-                "Incorrect type of audio input features. "
-                f"Got type: {type(input_features)}"
-            )
+            raise ValueError(f"Incorrect type of audio input features. Got type: {type(input_features)}")
 
-        if input_features_mask is not None and not isinstance(
-            input_features_mask, torch.Tensor
-        ):
-            raise ValueError(
-                "Incorrect type of audio input features mask. "
-                f"Got type: {type(input_features_mask)}"
-            )
+        if input_features_mask is not None and not isinstance(input_features_mask, torch.Tensor):
+            raise ValueError(f"Incorrect type of audio input features mask. Got type: {type(input_features_mask)}")
 
         if isinstance(input_features, torch.Tensor):
             # Granite speech currently only allows one audio token per instance
@@ -685,10 +640,7 @@ class GraniteSpeechForConditionalGeneration(
             if len(input_features.shape) == 4:
                 input_features = input_features.squeeze(1)
             if len(input_features.shape) != 3:
-                raise ValueError(
-                    "Squeezed input features should be 3D but are of shape "
-                    f"{input_features.shape}"
-                )
+                raise ValueError(f"Squeezed input features should be 3D but are of shape {input_features.shape}")
             input_features = input_features.to(self.encoder.input_linear.weight.dtype)
 
         else:
@@ -696,9 +648,7 @@ class GraniteSpeechForConditionalGeneration(
             # differing in their respective numbers of audio features; when
             # passed as a batch, we expect a list of 2D var len input features
             # so unsqueeze them.
-            input_features = [
-                feat.unsqueeze(dim=0) for feat in input_features if feat.ndim == 2
-            ]
+            input_features = [feat.unsqueeze(dim=0) for feat in input_features if feat.ndim == 2]
 
             # stack them into a 3D tensor of size [bsz, most_num_features, 160].
             input_features = self._pad_and_stack_input_features(
@@ -762,10 +712,7 @@ class GraniteSpeechForConditionalGeneration(
         # TODO (Alex) - Validate that it's okay to zero pad like this;
         # in transformers we zero pad prior to calculating the speech features,
         # so the value is not zero and is dependent on the batched features.
-        padded = [
-            torch.nn.functional.pad(feats, (0, 0, 0, pad, 0, 0))
-            for feats, pad in zip(input_features, padding)
-        ]
+        padded = [torch.nn.functional.pad(feats, (0, 0, 0, pad, 0, 0)) for feats, pad in zip(input_features, padding)]
         stacked_features = torch.cat(padded, dim=0).to(input_features[0])
         return stacked_features
 
@@ -831,9 +778,7 @@ class GraniteSpeechForConditionalGeneration(
         if intermediate_tensors is not None:
             inputs_embeds = None
 
-        model_output = self.language_model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        model_output = self.language_model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return model_output
 
     def compute_logits(
@@ -876,9 +821,7 @@ class GraniteSpeechForConditionalGeneration(
             full_lang_name_to = cls.supported_languages.get(to_language, to_language)
             user_prompt = f"{audio_tok}translate the speech to {full_lang_name_to}"  # noqa: E501
         elif task_type == "transcribe":
-            user_prompt = (
-                f"{audio_tok}can you transcribe the speech into a written format?"  # noqa: E501
-            )
+            user_prompt = f"{audio_tok}can you transcribe the speech into a written format?"  # noqa: E501
         else:
             raise ValueError(f"Unsupported task type {task_type}")
 
@@ -923,9 +866,7 @@ class GraniteSpeechForConditionalGeneration(
         return nblocks * effective_window_size
 
     @classmethod
-    def get_speech_to_text_config(
-        cls, model_config: ModelConfig, task_type: str
-    ) -> SpeechToTextConfig:
+    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
         """Get the stt config for this model."""
         # Default settings are reasonable for this model and we don't currently
         # expose this information in the model configs, but this may change in

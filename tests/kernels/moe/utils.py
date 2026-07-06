@@ -4,8 +4,6 @@
 import torch
 
 import aphrodite._custom_ops as ops
-from tests.kernels.quant_utils import per_block_cast_to_int8
-from tests.kernels.quantization.nvfp4_utils import FLOAT4_E2M1_MAX, FLOAT8_E4M3_MAX
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
@@ -35,6 +33,8 @@ from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import f
 from aphrodite.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
 from aphrodite.utils.deep_gemm import per_block_cast_to_fp8
 from aphrodite.utils.math_utils import round_up
+from tests.kernels.quant_utils import per_block_cast_to_int8
+from tests.kernels.quantization.nvfp4_utils import FLOAT4_E2M1_MAX, FLOAT8_E4M3_MAX
 
 
 def shuffle_weight(w: torch.Tensor) -> torch.Tensor:
@@ -68,9 +68,7 @@ def make_dummy_moe_config(
         experts_per_token=experts_per_token,
         hidden_dim=hidden_dim,
         intermediate_size=intermediate_size,
-        num_local_experts=num_local_experts
-        if num_local_experts is not None
-        else num_experts,
+        num_local_experts=num_local_experts if num_local_experts is not None else num_experts,
         num_logical_experts=num_experts,
         moe_parallel_config=FusedMoEParallelConfig.make_no_parallel(),
         activation=MoEActivation.SILU,
@@ -137,9 +135,7 @@ def batched_moe(
     moe_config = make_dummy_moe_config()
 
     fused_experts = FusedMoEKernel(
-        BatchedPrepareAndFinalize(
-            max_num_tokens, num_dispatchers=1, num_local_experts=w1.shape[0], rank=0
-        ),
+        BatchedPrepareAndFinalize(max_num_tokens, num_dispatchers=1, num_local_experts=w1.shape[0], rank=0),
         BatchedTritonExperts(
             max_num_tokens=max_num_tokens,
             num_dispatchers=1,
@@ -189,9 +185,7 @@ def naive_batched_moe(
     moe_config = make_dummy_moe_config()
 
     fused_experts = FusedMoEKernel(
-        BatchedPrepareAndFinalize(
-            max_num_tokens, num_dispatchers=1, num_local_experts=w1.shape[0], rank=0
-        ),
+        BatchedPrepareAndFinalize(max_num_tokens, num_dispatchers=1, num_local_experts=w1.shape[0], rank=0),
         NaiveBatchedExperts(
             max_num_tokens=max_num_tokens,
             num_dispatchers=1,
@@ -213,9 +207,7 @@ def naive_batched_moe(
     )
 
 
-def chunk_scales(
-    scales: torch.Tensor | None, start: int, end: int
-) -> torch.Tensor | None:
+def chunk_scales(scales: torch.Tensor | None, start: int, end: int) -> torch.Tensor | None:
     if scales is not None:
         if scales.numel() == 1:
             return scales
@@ -238,15 +230,11 @@ def make_quantized_test_activations(
     a_scale = None
 
     if quant_dtype is not None:
-        assert quant_dtype == torch.float8_e4m3fn or quant_dtype == torch.int8, (
-            "only fp8/int8 supported"
-        )
+        assert quant_dtype == torch.float8_e4m3fn or quant_dtype == torch.int8, "only fp8/int8 supported"
         a_q = torch.zeros_like(a, dtype=quant_dtype)
         a_scale_l = [None] * E
         for e in range(E):
-            a_q[e], a_scale_l[e] = moe_kernel_quantize_input(
-                a[e], None, quant_dtype, per_act_token_quant, block_shape
-            )
+            a_q[e], a_scale_l[e] = moe_kernel_quantize_input(a[e], None, quant_dtype, per_act_token_quant, block_shape)
         a_scale = torch.stack(a_scale_l)
 
         if not per_act_token_quant and block_shape is None:
@@ -262,11 +250,9 @@ def moe_quantize_weights_2d(
     per_token_quant: bool,
     block_shape: list[int] | None,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-    assert (
-        quant_dtype == torch.float8_e4m3fn
-        or quant_dtype == torch.int8
-        or quant_dtype == "nvfp4"
-    ), "only fp8/int8/nvfp4 supported"
+    assert quant_dtype == torch.float8_e4m3fn or quant_dtype == torch.int8 or quant_dtype == "nvfp4", (
+        "only fp8/int8/nvfp4 supported"
+    )
 
     w_gs = None
 
@@ -282,13 +268,9 @@ def moe_quantize_weights_2d(
             raise RuntimeError(f"Unsupported quant type {quant_dtype}")
     else:
         if quant_dtype == torch.int8:
-            w, w_s = ops.scaled_int8_quant(
-                w, w_s, use_per_token_if_dynamic=per_token_quant
-            )
+            w, w_s = ops.scaled_int8_quant(w, w_s, use_per_token_if_dynamic=per_token_quant)
         elif quant_dtype == torch.float8_e4m3fn:
-            w, w_s = ops.scaled_fp8_quant(
-                w, w_s, use_per_token_if_dynamic=per_token_quant
-            )
+            w, w_s = ops.scaled_fp8_quant(w, w_s, use_per_token_if_dynamic=per_token_quant)
         elif quant_dtype == "nvfp4":
             assert not per_token_quant
             w_amax = torch.abs(w).max().to(torch.float32)
@@ -346,9 +328,7 @@ def make_test_weight(
     w_16 = torch.randn((e, rows, cols), device="cuda", dtype=in_dtype) / 15
 
     if quant_dtype is not None:
-        w, w_s, w_gs = moe_quantize_weights(
-            w_16, None, quant_dtype, per_out_ch_quant, block_shape
-        )
+        w, w_s, w_gs = moe_quantize_weights(w_16, None, quant_dtype, per_out_ch_quant, block_shape)
     else:
         w = w_16
         w_s = None
@@ -384,9 +364,7 @@ def make_test_weights(
     )
 
 
-def per_token_cast_to_fp8(
-    x: torch.Tensor, block_size: int = 128
-) -> tuple[torch.Tensor, torch.Tensor]:
+def per_token_cast_to_fp8(x: torch.Tensor, block_size: int = 128) -> tuple[torch.Tensor, torch.Tensor]:
     assert x.dim() == 2
     m, n = x.shape
     pad_size = (block_size - (n % block_size)) % block_size
@@ -463,9 +441,7 @@ def fused_moe(
     global_num_experts: int = -1,
     expert_map: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    topk_weights, topk_ids, _ = fused_topk(
-        hidden_states, score.float(), topk, renormalize
-    )
+    topk_weights, topk_ids, _ = fused_topk(hidden_states, score.float(), topk, renormalize)
     return fused_experts(
         hidden_states,
         w1,
@@ -557,15 +533,9 @@ class RealMLP(torch.nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.gate_up_proj",
         )
-        self.gate_up_proj.register_parameter(
-            "weight", torch.nn.Parameter(w1, requires_grad=False)
-        )
-        self.gate_up_proj.register_parameter(
-            "weight_scale", torch.nn.Parameter(w1_s, requires_grad=False)
-        )
-        self.gate_up_proj.register_parameter(
-            "input_scale", None
-        )  # torch.nn.Parameter(None, requires_grad=False))
+        self.gate_up_proj.register_parameter("weight", torch.nn.Parameter(w1, requires_grad=False))
+        self.gate_up_proj.register_parameter("weight_scale", torch.nn.Parameter(w1_s, requires_grad=False))
+        self.gate_up_proj.register_parameter("input_scale", None)  # torch.nn.Parameter(None, requires_grad=False))
         self.down_proj = RowParallelLinear(
             intermediate_size,
             hidden_size,
@@ -574,19 +544,11 @@ class RealMLP(torch.nn.Module):
             reduce_results=reduce_results,
             prefix=f"{prefix}.down_proj",
         )
-        self.down_proj.register_parameter(
-            "weight", torch.nn.Parameter(w2, requires_grad=False)
-        )
-        self.down_proj.register_parameter(
-            "weight_scale", torch.nn.Parameter(w2_s, requires_grad=False)
-        )
-        self.down_proj.register_parameter(
-            "input_scale", None
-        )  # torch.nn.Parameter(None, requires_grad=False))
+        self.down_proj.register_parameter("weight", torch.nn.Parameter(w2, requires_grad=False))
+        self.down_proj.register_parameter("weight_scale", torch.nn.Parameter(w2_s, requires_grad=False))
+        self.down_proj.register_parameter("input_scale", None)  # torch.nn.Parameter(None, requires_grad=False))
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -650,9 +612,7 @@ def make_shared_experts(
         quant_dtype=quant_dtype,
     )
 
-    return make_shared_experts_with_weights(
-        N, K, in_dtype, w1, w2, w1_s=w1_s, w2_s=w2_s, quant_dtype=quant_dtype
-    )
+    return make_shared_experts_with_weights(N, K, in_dtype, w1, w2, w1_s=w1_s, w2_s=w2_s, quant_dtype=quant_dtype)
 
 
 def check_accuracy(a, b, atol, rtol, percent):
@@ -672,7 +632,4 @@ def check_accuracy(a, b, atol, rtol, percent):
     count = torch.sum(left > right)
     mismatch_percent = count / a.numel()
     if mismatch_percent > 1 - percent:
-        raise Exception(
-            f"Mismatch percentage is {mismatch_percent:.4f} for rtol {rtol} "
-            f"(threshold: {1 - percent:.4f})"
-        )
+        raise Exception(f"Mismatch percentage is {mismatch_percent:.4f} for rtol {rtol} (threshold: {1 - percent:.4f})")

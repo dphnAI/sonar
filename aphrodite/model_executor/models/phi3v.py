@@ -132,9 +132,7 @@ class Phi3VImagePixelInputs(TensorSchema):
     # Supports either a stacked tensor or a list of (p, 3, h, w) tensors
     pixel_values: Annotated[
         torch.Tensor | list[torch.Tensor],
-        TensorShape(
-            "bn", "p", 3, "h", "w", dynamic_dims={"p"}
-        ),  # 'p' may vary across items
+        TensorShape("bn", "p", 3, "h", "w", dynamic_dims={"p"}),  # 'p' may vary across items
     ]
 
     # Stacked tensor with height and width for each image
@@ -188,9 +186,7 @@ class Phi3HDImageEmbedding(nn.Module):
 
         # global_gn and sub_gn for hd transform, serves as line separator
         self.use_hd_transform = config.embd_layer.get("use_hd_transform", False)
-        self.with_learnable_separator = config.embd_layer.get(
-            "with_learnable_separator", False
-        )
+        self.with_learnable_separator = config.embd_layer.get("with_learnable_separator", False)
         self.hd_transform_order = config.embd_layer.get("hd_transform_order", "glb_sub")
         # with_hd_transform and with_learnable_separator should have same value
         assert self.use_hd_transform and self.with_learnable_separator
@@ -224,9 +220,7 @@ class Phi3HDImageEmbedding(nn.Module):
 
         raise NotImplementedError(type_feature)
 
-    def forward(
-        self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor
-    ) -> torch.FloatTensor:
+    def forward(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor) -> torch.FloatTensor:
         """
         process image and return vision embeddings.
 
@@ -236,9 +230,7 @@ class Phi3HDImageEmbedding(nn.Module):
         num_images, num_crops, c, h, w = pixel_values.shape
         pixel_values = pixel_values.flatten(0, 1)
         img_features = self.get_img_features(pixel_values)
-        img_features = img_features.reshape(
-            num_images, num_crops, -1, self.image_dim_out
-        )
+        img_features = img_features.reshape(num_images, num_crops, -1, self.image_dim_out)
         image_features_proj = self.hd_feature_transform(img_features, image_sizes)
         return image_features_proj
 
@@ -246,9 +238,7 @@ class Phi3HDImageEmbedding(nn.Module):
         """
         image_features: (num_images, num_crops+1, 24*24, 1024)
         """
-        assert self.hd_transform_order == "sub_glb", (
-            f"hd_transform_order `{self.hd_transform_order}` not implemented"
-        )
+        assert self.hd_transform_order == "sub_glb", f"hd_transform_order `{self.hd_transform_order}` not implemented"
         if isinstance(self.img_projection, nn.Sequential):
             target_device = self.img_projection[0].bias.device
             target_dtype = self.img_projection[0].bias.dtype
@@ -258,12 +248,8 @@ class Phi3HDImageEmbedding(nn.Module):
 
         global_image_features = image_features[:, 0]  # (num_images, 24*24, 1024)
         # global feature can be viewed as a special HD case with num_crops 1x1
-        global_image_features_hd = self.reshape_hd_patches_2x2merge(
-            global_image_features, 1, 1
-        )
-        global_image_features_hd_newline = self.add_image_newline(
-            global_image_features_hd
-        )
+        global_image_features_hd = self.reshape_hd_patches_2x2merge(global_image_features, 1, 1)
+        global_image_features_hd_newline = self.add_image_newline(global_image_features_hd)
 
         batch_image_features_proj = []
         # need a for loop to process each image because of different image sizes
@@ -277,26 +263,18 @@ class Phi3HDImageEmbedding(nn.Module):
             # NOTE: real num_crops is padded
             # (num_crops, 24*24, 1024)
             sub_image_features = image_features[i, 1 : 1 + num_crops]
-            sub_image_features_hd = self.reshape_hd_patches_2x2merge(
-                sub_image_features, h_crop, w_crop
-            )
-            sub_image_features_hd_newline = self.add_image_newline(
-                sub_image_features_hd
-            )
+            sub_image_features_hd = self.reshape_hd_patches_2x2merge(sub_image_features, h_crop, w_crop)
+            sub_image_features_hd_newline = self.add_image_newline(sub_image_features_hd)
 
             # [sub features, separator, global features]
             image_embeddings = torch.cat(
                 [
-                    sub_image_features_hd_newline.squeeze(
-                        0
-                    ),  # (h_crop*12*(w_crop*12+1), 4096)
+                    sub_image_features_hd_newline.squeeze(0),  # (h_crop*12*(w_crop*12+1), 4096)
                     self.glb_GN.squeeze(0),
                     global_image_features_hd_newline[i],
                 ]
             )
-            img_proj = self.img_projection(
-                image_embeddings.to(target_device, target_dtype)
-            )
+            img_proj = self.img_projection(image_embeddings.to(target_device, target_dtype))
             batch_image_features_proj.append(img_proj)
 
         return batch_image_features_proj
@@ -316,13 +294,9 @@ class Phi3HDImageEmbedding(nn.Module):
             .reshape(N, H // 2, 2, H // 2, 2, C)  # N, 12, 2, 12, 2, 1024
             .permute(0, 1, 3, 2, 4, 5)  # N, 12, 12, 2, 2, 1024
             .reshape(N, -1, 4 * C)  # N, 144, 4096
-            .reshape(
-                num_images, h_crop, w_crop, H // 2, H // 2, -1
-            )  # n_img, h_crop, w_crop, 12, 12, 4096
+            .reshape(num_images, h_crop, w_crop, H // 2, H // 2, -1)  # n_img, h_crop, w_crop, 12, 12, 4096
             .permute(0, 1, 3, 2, 4, 5)  # n_img, h_crop, 12, w_crop, 12, 4096
-            .reshape(
-                num_images, h_crop * H // 2, w_crop * H // 2, 4 * C
-            )  # n_img, h_crop*12, w_crop*12, 4096
+            .reshape(num_images, h_crop * H // 2, w_crop * H // 2, 4 * C)  # n_img, h_crop*12, w_crop*12, 4096
         )
         return image_features_hd
 
@@ -333,12 +307,10 @@ class Phi3HDImageEmbedding(nn.Module):
         """
         num_images, h, w, hid_dim = image_features_hd.shape
         # add the newline token to the HD image feature patches
-        newline_embeddings = self.sub_GN.expand(
-            num_images, h, -1, -1
-        )  # (n_img, h, 1, hid_dim)
-        image_features_hd_newline = torch.cat(
-            [image_features_hd, newline_embeddings], dim=2
-        ).reshape(num_images, -1, hid_dim)
+        newline_embeddings = self.sub_GN.expand(num_images, h, -1, -1)  # (n_img, h, 1, hid_dim)
+        image_features_hd_newline = torch.cat([image_features_hd, newline_embeddings], dim=2).reshape(
+            num_images, -1, hid_dim
+        )
         return image_features_hd_newline
 
 
@@ -440,9 +412,7 @@ class Phi3VMultiModalProcessor(BaseMultiModalProcessor[Phi3VProcessingInfo]):
         image_tokens: list[str] = hf_processor.img_tokens  # type: ignore
 
         def get_replacement_phi3v(item_idx: int):
-            images = mm_items.get_items(
-                "image", (ImageEmbeddingItems, ImageProcessorItems)
-            )
+            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
 
             if isinstance(images, ImageEmbeddingItems):
                 num_image_tokens = images.get_feature_size(item_idx)
@@ -505,21 +475,11 @@ class Phi3VMultiModalProcessor(BaseMultiModalProcessor[Phi3VProcessingInfo]):
             # perform hf behavior
             # https://huggingface.co/microsoft/Phi-3.5-vision-instruct/blob/64f88b6/processing_phi3_v.py#L407
             pattern = r"<\|image_\d+\|>"
-            prompt_chunks = [
-                tokenizer(chunk).input_ids for chunk in re.split(pattern, text)
-            ]
-            image_tags = [
-                tokenizer(chunk, add_special_tokens=False).input_ids
-                for chunk in re.findall(pattern, text)
-            ]
+            prompt_chunks = [tokenizer(chunk).input_ids for chunk in re.split(pattern, text)]
+            image_tags = [tokenizer(chunk, add_special_tokens=False).input_ids for chunk in re.findall(pattern, text)]
             if len(prompt_chunks) > len(image_tags):
                 image_tags.append([])
-            token_ids = [
-                e
-                for sublist in zip(prompt_chunks, image_tags)
-                for ele in sublist
-                for e in ele
-            ]
+            token_ids = [e for sublist in zip(prompt_chunks, image_tags) for ele in sublist for e in ele]
 
         token_ids, placeholders = super()._apply_prompt_updates(
             token_ids=token_ids,
@@ -527,9 +487,7 @@ class Phi3VMultiModalProcessor(BaseMultiModalProcessor[Phi3VProcessingInfo]):
         )
 
         # Keep the behavior in line with HF processor
-        if len(mm_prompt_updates) and (
-            token_ids[:2] == tokenizer.encode("<s> <|image|>", add_special_tokens=False)
-        ):
+        if len(mm_prompt_updates) and (token_ids[:2] == tokenizer.encode("<s> <|image|>", add_special_tokens=False)):
             token_ids = [token_ids[0], *token_ids[2:]]
             placeholders = {
                 modality: [
@@ -604,13 +562,9 @@ class Phi3VForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant)
                 architectures=["LlamaForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Phi3VImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Phi3VImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_sizes = kwargs.pop("image_sizes", None)
         image_embeds = kwargs.pop("image_embeds", None)
@@ -644,9 +598,7 @@ class Phi3VForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsQuant)
         if image_input["type"] == "image_embeds":
             return image_input["data"]
 
-        image_embeds = self.vision_embed_tokens(
-            image_input["pixel_values"], image_input["image_sizes"]
-        )
+        image_embeds = self.vision_embed_tokens(image_input["pixel_values"], image_input["image_sizes"])
 
         return image_embeds
 

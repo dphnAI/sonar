@@ -48,9 +48,7 @@ class ClassificationChatRequest(
         )
 
 
-ClassificationRequest: TypeAlias = (
-    ClassificationCompletionRequest | ClassificationChatRequest
-)
+ClassificationRequest: TypeAlias = ClassificationCompletionRequest | ClassificationChatRequest
 
 
 class ClassificationData(OpenAIBaseModel):

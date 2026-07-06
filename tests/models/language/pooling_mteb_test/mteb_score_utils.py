@@ -23,10 +23,7 @@ MTEB_RERANK_TASKS = ["NFCorpus"]
 MTEB_RERANK_LANGS = ["eng"]
 MTEB_RERANK_TOL = 2e-3
 
-template_home = (
-    Path(__file__).parent.parent.parent.parent.parent
-    / "examples/pooling/score/template"
-)
+template_home = Path(__file__).parent.parent.parent.parent.parent / "examples/pooling/score/template"
 
 _empty_model_meta = ModelMeta(
     loader=None,
@@ -143,9 +140,7 @@ class HFMtebCrossEncoder(MtebCrossEncoderMixin, HfRunner):
     chat_template: str | None = None
 
     def __init__(self, model_name: str, dtype: str = "auto", **kwargs: Any) -> None:
-        HfRunner.__init__(
-            self, model_name=model_name, is_cross_encoder=True, dtype=dtype, **kwargs
-        )
+        HfRunner.__init__(self, model_name=model_name, is_cross_encoder=True, dtype=dtype, **kwargs)
 
     @torch.no_grad
     def predict(
@@ -266,15 +261,9 @@ def mteb_test_rerank_models(
         if model_info.attn_type is not None:
             assert model_config.attn_type == model_info.attn_type
         if model_info.is_prefix_caching_supported is not None:
-            assert (
-                model_config.is_prefix_caching_supported
-                == model_info.is_prefix_caching_supported
-            )
+            assert model_config.is_prefix_caching_supported == model_info.is_prefix_caching_supported
         if model_info.is_chunked_prefill_supported is not None:
-            assert (
-                model_config.is_chunked_prefill_supported
-                == model_info.is_chunked_prefill_supported
-            )
+            assert model_config.is_chunked_prefill_supported == model_info.is_chunked_prefill_supported
 
         aphrodite_main_score = run_mteb_rerank(
             aphrodite_mteb_encoder(aphrodite_model),
@@ -287,9 +276,7 @@ def mteb_test_rerank_models(
     # Accelerate mteb test by setting
     # SentenceTransformers mteb score to a constant
     if model_info.mteb_score is None:
-        with hf_runner(
-            model_info.name, revision=model_info.revision, dtype=model_info.hf_dtype
-        ) as hf_model:
+        with hf_runner(model_info.name, revision=model_info.revision, dtype=model_info.hf_dtype) as hf_model:
             hf_model.chat_template = chat_template
             st_main_score = run_mteb_rerank(
                 hf_model,

@@ -130,9 +130,7 @@ class HunyuanA13BReasoningParser(ReasoningParser):
 
         return None, model_output
 
-    def _is_strict_increasing_subsequence(
-        self, subsequence: Sequence[int], sequence: Sequence[int]
-    ) -> bool:
+    def _is_strict_increasing_subsequence(self, subsequence: Sequence[int], sequence: Sequence[int]) -> bool:
         if not subsequence:
             return False
 

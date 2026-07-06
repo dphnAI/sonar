@@ -58,20 +58,13 @@ def _assert_cutedsl_dcp_merge_supported(
     # Blackwell/Hopper with index_topk in (512, 1024, 2048) (the selector's radix
     # sizing); the Triton pack itself has no shape/topk constraints.
     if not has_cutedsl():
-        raise RuntimeError(
-            "DCP sparse-indexer merge requires CuteDSL; install it or disable DCP."
-        )
+        raise RuntimeError("DCP sparse-indexer merge requires CuteDSL; install it or disable DCP.")
     if logits.device.type != "cuda":
         raise RuntimeError("DCP sparse-indexer merge requires CUDA tensors.")
     if logits.dtype != torch.float32 or topk_indices.dtype != torch.int32:
-        raise RuntimeError(
-            "DCP sparse-indexer merge requires fp32 logits and int32 indices."
-        )
+        raise RuntimeError("DCP sparse-indexer merge requires fp32 logits and int32 indices.")
     if k not in (512, 1024, 2048):
-        raise RuntimeError(
-            f"DCP sparse-indexer merge requires index_topk in (512, 1024, 2048); "
-            f"got {k}."
-        )
+        raise RuntimeError(f"DCP sparse-indexer merge requires index_topk in (512, 1024, 2048); got {k}.")
 
 
 def _merge_dcp_topk_global(
@@ -122,9 +115,7 @@ def _merge_dcp_topk_global(
         row_starts,
     )
     gathered = get_dcp_group().all_gather(packed, dim=1)
-    stable_topk_from_gathered_candidates_cutedsl(
-        gathered, topk_tokens, out=topk_indices
-    )
+    stable_topk_from_gathered_candidates_cutedsl(gathered, topk_tokens, out=topk_indices)
 
 
 @triton.jit
@@ -327,9 +318,7 @@ def sparse_attn_indexer(
     # assert isinstance(attn_metadata, dict)
     if not isinstance(attn_metadata, dict):
         # Reserve workspace for indexer during profiling run
-        values_spec, scales_spec = _gather_workspace_shapes(
-            total_seq_lens, head_dim, fp8_dtype, use_fp4_cache
-        )
+        values_spec, scales_spec = _gather_workspace_shapes(total_seq_lens, head_dim, fp8_dtype, use_fp4_cache)
         profile_specs = [
             values_spec,
             scales_spec,
@@ -353,9 +342,7 @@ def sparse_attn_indexer(
         # Dummy allocation to simulate for peak logits tensor memory during inference.
         # FP8 elements so elements == bytes
         max_logits_elems = envs.APHRODITE_SPARSE_INDEXER_MAX_LOGITS_MB * 1024 * 1024
-        _ = torch.empty(
-            max_logits_elems, dtype=torch.uint8, device=hidden_states.device
-        )
+        _ = torch.empty(max_logits_elems, dtype=torch.uint8, device=hidden_states.device)
 
         return sparse_attn_indexer_fake(
             hidden_states,
@@ -424,9 +411,7 @@ def sparse_attn_indexer(
         # MXFP4 (head_dim/2 bytes packed + head_dim/MXFP4_BLOCK_SIZE ue8m0
         # scales) based on use_fp4_cache.
         workspace_manager = current_workspace_manager()
-        values_spec, scales_spec = _gather_workspace_shapes(
-            total_seq_lens, head_dim, fp8_dtype, use_fp4_cache
-        )
+        values_spec, scales_spec = _gather_workspace_shapes(total_seq_lens, head_dim, fp8_dtype, use_fp4_cache)
         local_prefill = getattr(prefill_metadata, "dcp_local_prefill", False)
         gather_src_cache = kv_cache
         if local_prefill:
@@ -449,12 +434,10 @@ def sparse_attn_indexer(
                 ),
                 torch.uint8,
             )
-            k_quant_full, k_scale_full, shadow_kv_cache = (
-                workspace_manager.get_simultaneous(
-                    values_spec,
-                    scales_spec,
-                    shadow_spec,
-                )
+            k_quant_full, k_scale_full, shadow_kv_cache = workspace_manager.get_simultaneous(
+                values_spec,
+                scales_spec,
+                shadow_spec,
             )
             ops.indexer_k_quant_and_cache(
                 k[num_decode_tokens:num_tokens],
@@ -485,14 +468,8 @@ def sparse_attn_indexer(
                 )
 
             q_slice = q_quant[chunk.token_start : chunk.token_end]
-            q_scale_slice = (
-                q_scale[chunk.token_start : chunk.token_end]
-                if q_scale is not None
-                else None
-            )
-            topk_indices = topk_indices_buffer[
-                chunk.token_start : chunk.token_end, :topk_tokens
-            ]
+            q_scale_slice = q_scale[chunk.token_start : chunk.token_end] if q_scale is not None else None
+            topk_indices = topk_indices_buffer[chunk.token_start : chunk.token_end, :topk_tokens]
 
             if chunk.local_total_seq_lens == 0:
                 logits = q_slice.new_empty((q_slice.shape[0], 0), dtype=torch.float32)
@@ -598,25 +575,17 @@ def sparse_attn_indexer(
             # packer with pad_byte=0 so padded slots dequantize to 0 and
             # can't produce NaN/Inf in the logits kernel.
             if q_scale is not None:
-                padded_q_quant_decode_tokens = pack_seq_triton(
-                    q_quant[:num_decode_tokens], decode_lens, pad_value=0
-                )
-                padded_q_scale = pack_seq_triton(
-                    q_scale[:num_decode_tokens], decode_lens, pad_value=0
-                )
+                padded_q_quant_decode_tokens = pack_seq_triton(q_quant[:num_decode_tokens], decode_lens, pad_value=0)
+                padded_q_scale = pack_seq_triton(q_scale[:num_decode_tokens], decode_lens, pad_value=0)
             else:
-                padded_q_quant_decode_tokens = pack_seq_triton(
-                    q_quant[:num_decode_tokens], decode_lens
-                )
+                padded_q_quant_decode_tokens = pack_seq_triton(q_quant[:num_decode_tokens], decode_lens)
                 padded_q_scale = None
         else:
             padded_q_quant_decode_tokens = q_quant[:num_decode_tokens].reshape(
                 decode_lens.shape[0], -1, *q_quant.shape[1:]
             )
             if q_scale is not None:
-                padded_q_scale = q_scale[:num_decode_tokens].reshape(
-                    decode_lens.shape[0], -1, *q_scale.shape[1:]
-                )
+                padded_q_scale = q_scale[:num_decode_tokens].reshape(decode_lens.shape[0], -1, *q_scale.shape[1:])
             else:
                 padded_q_scale = None
         # TODO: move and optimize below logic with triton kernels
@@ -628,16 +597,12 @@ def sparse_attn_indexer(
         # otherwise. deep_gemm fp8_fp4_paged_mqa_logits requires 2D context_lens;
         # the downstream topk kernels accept both 1D and 2D.
         padded_q_quant_cast = (
-            padded_q_quant_decode_tokens.view(torch.int8)
-            if use_fp4_cache
-            else padded_q_quant_decode_tokens
+            padded_q_quant_decode_tokens.view(torch.int8) if use_fp4_cache else padded_q_quant_decode_tokens
         )
         if current_platform.is_xpu():
             if padded_q_scale is not None:
                 raise RuntimeError("XPU fp8_paged_mqa_logits does not support FP4 Q")
-            seq_lens_xpu = (
-                seq_lens[:, -1].contiguous() if seq_lens.ndim == 2 else seq_lens
-            )
+            seq_lens_xpu = seq_lens[:, -1].contiguous() if seq_lens.ndim == 2 else seq_lens
             logits = torch.ops.aphrodite.xpu_fp8_paged_mqa_logits(
                 padded_q_quant_cast,
                 kv_cache,
@@ -753,9 +718,7 @@ def sparse_attn_indexer(
                 topk_indices.reshape(batch_size, -1, topk_indices.shape[-1]),
                 decode_lens,
             )
-            topk_indices_buffer[: topk_indices.shape[0], : topk_indices.shape[-1]] = (
-                topk_indices
-            )
+            topk_indices_buffer[: topk_indices.shape[0], : topk_indices.shape[-1]] = topk_indices
 
     return topk_indices_buffer
 
@@ -847,13 +810,11 @@ class SparseAttnIndexer(CustomOp):
         if self.dcp_world_size > 1 and _use_sm89_dsa():
             scheduler_config = get_current_aphrodite_config().scheduler_config
             self.dcp_local_prefill_shadow_rows = (
-                round_up(scheduler_config.max_num_batched_tokens, 64)
-                + 64 * scheduler_config.max_num_seqs
+                round_up(scheduler_config.max_num_batched_tokens, 64) + 64 * scheduler_config.max_num_seqs
             )
         if current_platform.is_cuda() and not has_deep_gemm() and not _use_sm89_dsa():
             raise RuntimeError(
-                "Sparse Attention Indexer CUDA op requires DeepGEMM support in "
-                "the current Aphrodite environment."
+                "Sparse Attention Indexer CUDA op requires DeepGEMM support in the current Aphrodite environment."
             )
 
     def forward_native(
@@ -869,8 +830,7 @@ class SparseAttnIndexer(CustomOp):
             return self.forward_hip(hidden_states, q_quant, k, weights)
         else:
             raise NotImplementedError(
-                "SparseAttnIndexer native forward is only implemented for "
-                "CUDA, ROCm and XPU platforms."
+                "SparseAttnIndexer native forward is only implemented for CUDA, ROCm and XPU platforms."
             )
 
     def forward_cuda(
@@ -926,9 +886,7 @@ class SparseAttnIndexer(CustomOp):
         weights: torch.Tensor,
     ):
         assert not self.use_fp4_cache, "AMD platform doesn't support fp4 cache yet"
-        assert isinstance(q_quant, torch.Tensor), (
-            "AMD sparse_attn_indexer expects a single FP8 q_quant tensor"
-        )
+        assert isinstance(q_quant, torch.Tensor), "AMD sparse_attn_indexer expects a single FP8 q_quant tensor"
         if rocm_aiter_ops.is_enabled():
             return torch.ops.aphrodite.rocm_aiter_sparse_attn_indexer(
                 hidden_states,

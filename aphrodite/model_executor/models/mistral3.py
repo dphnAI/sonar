@@ -77,9 +77,7 @@ class Mistral3PatchMerger(nn.Module):
     Learned merging of spatial_merge_size ** 2 patches
     """
 
-    def __init__(
-        self, vision_hidden_size: int, spatial_merge_size: int, patch_size: int
-    ):
+    def __init__(self, vision_hidden_size: int, spatial_merge_size: int, patch_size: int):
         super().__init__()
 
         self.vision_hidden_size = vision_hidden_size
@@ -91,21 +89,16 @@ class Mistral3PatchMerger(nn.Module):
             bias=False,
         )
 
-    def forward(
-        self, image_features: torch.Tensor, image_sizes: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
         image_sizes = [
-            (image_size[0] // self.patch_size, image_size[1] // self.patch_size)
-            for image_size in image_sizes
+            (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
         ]
 
         tokens_per_image = [h * w for h, w in image_sizes]
         d = image_features.shape[-1]
 
         permuted_tensor = []
-        for image_index, image_tokens in enumerate(
-            image_features.split(tokens_per_image)
-        ):
+        for image_index, image_tokens in enumerate(image_features.split(tokens_per_image)):
             # Reshape image_tokens into a 2D grid
             h, w = image_sizes[image_index]
             image_grid = image_tokens.view(h, w, d).permute(2, 0, 1).unsqueeze(0)
@@ -159,9 +152,7 @@ class Mistral3MultiModalProjector(nn.Module):
             prefix=f"{prefix}.linear_2",
         )
 
-    def forward(
-        self, image_features: torch.Tensor, image_sizes: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
         image_features = self.norm(image_features)
         image_features = self.patch_merger(image_features, image_sizes)
         hidden_states, _ = self.linear_1(image_features)
@@ -254,9 +245,7 @@ class Mistral3MultiModalProcessor(BaseMultiModalProcessor[Mistral3ProcessingInfo
             image_sizes = processed_outputs["image_sizes"]
             assert len(pixel_values) == len(image_sizes)
 
-            processed_outputs["pixel_values"] = [
-                p[:, :h, :w] for p, (h, w) in zip(pixel_values, image_sizes)
-            ]
+            processed_outputs["pixel_values"] = [p[:, :h, :w] for p, (h, w) in zip(pixel_values, image_sizes)]
 
         return processed_outputs
 
@@ -326,9 +315,7 @@ def _get_num_hidden_layers(hf_config: Mistral3Config) -> int:
     # If we have multiple feature layers, initialize up to the deepest one
     elif isinstance(feature_layers, (list, tuple)):
         return max(get_layer_index(idx, num_hidden_layers) for idx in feature_layers)
-    raise TypeError(
-        f"vision_layer_feature type: {type(feature_layers)} is not supported"
-    )
+    raise TypeError(f"vision_layer_feature type: {type(feature_layers)} is not supported")
 
 
 def init_vision_tower_for_mistral3(
@@ -411,10 +398,7 @@ class Mistral3ForConditionalGeneration(
 
         # NOTE: This is a special case for Pixtral-12B in the HF-format
         # https://huggingface.co/mistral-community/pixtral-12b/blob/main/config.json  # noqa
-        if (
-            config.projector_hidden_act is None
-            and config.vision_config.hidden_act == "gelu"
-        ):
+        if config.projector_hidden_act is None and config.vision_config.hidden_act == "gelu":
             config.projector_hidden_act = "gelu"
 
         with self._mark_tower_model(aphrodite_config, "image"):
@@ -442,13 +426,9 @@ class Mistral3ForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Mistral3ImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Mistral3ImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
 
@@ -467,9 +447,7 @@ class Mistral3ForConditionalGeneration(
         if image_input["type"] == "image_embeds":
             return image_input["data"]
 
-        image_sizes = [
-            (img.shape[-2], img.shape[-1]) for img in image_input["pixel_values"]
-        ]
+        image_sizes = [(img.shape[-2], img.shape[-1]) for img in image_input["pixel_values"]]
 
         image_features = self.vision_tower(image_input["pixel_values"])
 
@@ -477,13 +455,10 @@ class Mistral3ForConditionalGeneration(
             return self.multi_modal_projector(image_features, image_sizes)
 
         feature_sizes = [
-            image_feature.shape[0] // self.config.spatial_merge_size**2
-            for image_feature in image_features
+            image_feature.shape[0] // self.config.spatial_merge_size**2 for image_feature in image_features
         ]
 
-        image_embeds = self.multi_modal_projector(
-            torch.cat(image_features), image_sizes
-        )
+        image_embeds = self.multi_modal_projector(torch.cat(image_features), image_sizes)
         if len(feature_sizes) > 1:
             image_embeds = torch.split(image_embeds, feature_sizes)
         else:

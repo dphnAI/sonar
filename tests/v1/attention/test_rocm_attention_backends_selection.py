@@ -12,9 +12,7 @@ from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.attention.selector import AttentionSelectorConfig
 
 # ROCm-specific attention backend selection tests
-pytestmark = pytest.mark.skipif(
-    not current_platform.is_rocm(), reason="ROCm-specific tests"
-)
+pytestmark = pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm-specific tests")
 
 
 @pytest.fixture
@@ -138,11 +136,7 @@ def test_standard_attention_backend_selection(
 
     # The AITER unified attention kernel only supports BF16/FP8 KV caches
     # (its 3D kernel asserts on fp16), so it must be selected with bf16.
-    dtype = (
-        torch.bfloat16
-        if selected_backend == "ROCM_AITER_UNIFIED_ATTN"
-        else torch.float16
-    )
+    dtype = torch.bfloat16 if selected_backend == "ROCM_AITER_UNIFIED_ATTN" else torch.float16
 
     attn_selector_config = AttentionSelectorConfig(
         head_size=128,
@@ -358,6 +352,4 @@ def test_sparse_not_supported(mock_aphrodite_config):
             use_sparse=True,
         )
 
-        RocmPlatform.get_attn_backend_cls(
-            selected_backend=None, attn_selector_config=attn_selector_config
-        )
+        RocmPlatform.get_attn_backend_cls(selected_backend=None, attn_selector_config=attn_selector_config)

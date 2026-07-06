@@ -35,9 +35,7 @@ class TrtLlmMxint4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
     ):
         super().__init__(moe_config, quant_config)
         self.topk = moe_config.experts_per_token
-        self.intermediate_size_per_partition = (
-            moe_config.intermediate_size_per_partition
-        )
+        self.intermediate_size_per_partition = moe_config.intermediate_size_per_partition
         self.local_num_experts = moe_config.num_local_experts
         self.ep_rank = moe_config.ep_rank
         self.routing_method = moe_config.routing_method
@@ -49,11 +47,7 @@ class TrtLlmMxint4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
         )
 
         p = current_platform
-        return (
-            p.is_cuda()
-            and p.is_device_capability_family(100)
-            and is_flashinfer_mxint4_moe_available()
-        )
+        return p.is_cuda() and p.is_device_capability_family(100) and is_flashinfer_mxint4_moe_available()
 
     @staticmethod
     def _supports_no_act_and_mul() -> bool:
@@ -78,8 +72,7 @@ class TrtLlmMxint4ExpertsMonolithic(mk.FusedMoEExpertsMonolithic):
         moe_parallel_config: FusedMoEParallelConfig,
     ) -> bool:
         return (
-            not moe_parallel_config.use_all2all_kernels
-            or moe_parallel_config.use_ag_rs_all2all_kernels
+            not moe_parallel_config.use_all2all_kernels or moe_parallel_config.use_ag_rs_all2all_kernels
         ) and not moe_parallel_config.enable_eplb
 
     @staticmethod

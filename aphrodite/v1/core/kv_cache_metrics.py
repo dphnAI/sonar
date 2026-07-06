@@ -47,9 +47,7 @@ class KVCacheMetricsCollector:
     """Collects KV cache residency metrics with sampling."""
 
     def __init__(self, sample_rate: float = 0.01):
-        assert 0 < sample_rate <= 1.0, (
-            f"sample_rate must be in (0, 1.0], got {sample_rate}"
-        )
+        assert 0 < sample_rate <= 1.0, f"sample_rate must be in (0, 1.0], got {sample_rate}"
         self.sample_rate = sample_rate
 
         self.block_metrics: dict[int, BlockMetricsState] = {}

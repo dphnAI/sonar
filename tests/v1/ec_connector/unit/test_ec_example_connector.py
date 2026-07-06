@@ -148,8 +148,7 @@ class TestCacheExistence:
 
         # Test using has_cache_item API
         producer_result = [
-            producer.has_cache_item(mm_feature.identifier)
-            for mm_feature in mock_request_with_3_mm.mm_features
+            producer.has_cache_item(mm_feature.identifier) for mm_feature in mock_request_with_3_mm.mm_features
         ]
 
         # Assert
@@ -164,17 +163,14 @@ class TestCacheExistence:
 
         # Test using has_cache_item API
         consumer_result = [
-            consumer.has_cache_item(mm_feature.identifier)
-            for mm_feature in mock_request_with_3_mm.mm_features
+            consumer.has_cache_item(mm_feature.identifier) for mm_feature in mock_request_with_3_mm.mm_features
         ]
 
         # Assert
         assert len(consumer_result) == 3
         assert all(consumer_result), f"Expected all True, got {consumer_result}"
 
-    def test_has_cache_item_none_exist(
-        self, mock_aphrodite_config_producer, mock_request_with_3_mm
-    ):
+    def test_has_cache_item_none_exist(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
         """Test has_caches returns False when no caches exist."""
         connector = ECExampleConnector(
             aphrodite_config=mock_aphrodite_config_producer,
@@ -182,18 +178,13 @@ class TestCacheExistence:
         )
 
         # Test without creating any files
-        result = [
-            connector.has_cache_item(mm_feature.identifier)
-            for mm_feature in mock_request_with_3_mm.mm_features
-        ]
+        result = [connector.has_cache_item(mm_feature.identifier) for mm_feature in mock_request_with_3_mm.mm_features]
 
         # Assert
         assert len(result) == 3
         assert not any(result), f"Expected all False, got {result}"
 
-    def test_has_cache_item_partial_exist(
-        self, mock_aphrodite_config_producer, mock_request_with_3_mm
-    ):
+    def test_has_cache_item_partial_exist(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
         """Test has_caches with some caches existing (1 of 3)."""
         connector = ECExampleConnector(
             aphrodite_config=mock_aphrodite_config_producer,
@@ -206,10 +197,7 @@ class TestCacheExistence:
         connector.save_caches(encoder_cache, mm_hash_second)
 
         # Test
-        result = [
-            connector.has_cache_item(mm_feature.identifier)
-            for mm_feature in mock_request_with_3_mm.mm_features
-        ]
+        result = [connector.has_cache_item(mm_feature.identifier) for mm_feature in mock_request_with_3_mm.mm_features]
 
         # Assert
         assert len(result) == 3
@@ -221,9 +209,7 @@ class TestCacheExistence:
 class TestStateManagement:
     """Test connector state management."""
 
-    def test_update_state_after_alloc_3_items(
-        self, mock_aphrodite_config_producer, mock_request_with_3_mm
-    ):
+    def test_update_state_after_alloc_3_items(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
         """Test state update after allocation for 3 MM items."""
         connector = ECExampleConnector(
             aphrodite_config=mock_aphrodite_config_producer,
@@ -247,9 +233,7 @@ class TestStateManagement:
         assert connector._mm_datas_need_loads["img_hash_2"] == 150
         assert connector._mm_datas_need_loads["img_hash_3"] == 200
 
-    def test_build_connector_meta_3_items(
-        self, mock_aphrodite_config_producer, mock_request_with_3_mm
-    ):
+    def test_build_connector_meta_3_items(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
         """Test metadata building for 3 MM items."""
         connector = ECExampleConnector(
             aphrodite_config=mock_aphrodite_config_producer,
@@ -291,9 +275,7 @@ class TestStateManagement:
         assert isinstance(metadata, ECExampleConnectorMetadata)
         assert len(metadata.mm_datas) == 0
 
-    def test_state_cleared_after_metadata_build(
-        self, mock_aphrodite_config_producer, mock_request_with_3_mm
-    ):
+    def test_state_cleared_after_metadata_build(self, mock_aphrodite_config_producer, mock_request_with_3_mm):
         """Test that state is properly cleared after building metadata."""
         connector = ECExampleConnector(
             aphrodite_config=mock_aphrodite_config_producer,
@@ -321,9 +303,7 @@ class TestStateManagement:
 class TestCacheSaving:
     """Test encoder cache saving (producer only)."""
 
-    def test_save_caches_producer_3_items(
-        self, mock_aphrodite_config_producer, mock_request_with_3_mm, temp_storage
-    ):
+    def test_save_caches_producer_3_items(self, mock_aphrodite_config_producer, mock_request_with_3_mm, temp_storage):
         """Test cache saving as producer for 3 different MM items."""
         connector = ECExampleConnector(
             aphrodite_config=mock_aphrodite_config_producer,
@@ -339,10 +319,7 @@ class TestCacheSaving:
             connector.save_caches(encoder_cache, mm_hash)
 
         # Verify all files exist using has_cache_item
-        result = [
-            connector.has_cache_item(mm_feature.identifier)
-            for mm_feature in mock_request_with_3_mm.mm_features
-        ]
+        result = [connector.has_cache_item(mm_feature.identifier) for mm_feature in mock_request_with_3_mm.mm_features]
         assert all(result), f"Not all caches were saved: {result}"
 
         # Verify each file's content
@@ -415,12 +392,10 @@ class TestCacheLoading:
         assert len(encoder_cache) == 3
         for mm_hash in mm_hashes:
             assert mm_hash in encoder_cache, f"{mm_hash} missing in encoder_cache"
-            assert encoder_cache[mm_hash].is_cuda, (
-                f"{mm_hash} cache is in {encoder_cache[mm_hash].device}"
+            assert encoder_cache[mm_hash].is_cuda, f"{mm_hash} cache is in {encoder_cache[mm_hash].device}"
+            assert torch.allclose(encoder_cache[mm_hash].cpu(), saved_caches[mm_hash]), (
+                f"{mm_hash} cache saved and loaded tesnor are not the same"
             )
-            assert torch.allclose(
-                encoder_cache[mm_hash].cpu(), saved_caches[mm_hash]
-            ), f"{mm_hash} cache saved and loaded tesnor are not the same"
 
     def test_start_load_caches_skip_existing(
         self, mock_aphrodite_config_producer, mock_aphrodite_config_consumer, temp_storage

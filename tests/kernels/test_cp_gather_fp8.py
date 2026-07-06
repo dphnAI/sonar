@@ -60,13 +60,9 @@ def _build_test_case(seq_lens, block_size, seed=42):
             block_idx += 1
 
     # The raw paged cache: [num_blocks, block_size, 656] as uint8
-    cache = torch.zeros(
-        total_blocks, block_size, ENTRY_BYTES, dtype=torch.uint8, device="cuda"
-    )
+    cache = torch.zeros(total_blocks, block_size, ENTRY_BYTES, dtype=torch.uint8, device="cuda")
     # Expected kernel output: [total_tokens, 576] as BF16
-    expected = torch.zeros(
-        total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda"
-    )
+    expected = torch.zeros(total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda")
 
     # Fill each token's cache entry and compute expected output
     for r in range(num_reqs):
@@ -81,29 +77,21 @@ def _build_test_case(seq_lens, block_size, seed=42):
                 start = tile * GROUP_SIZE
 
                 # Generate random data and quantize to FP8 e4m3
-                fp8_vals = torch.randn(GROUP_SIZE, device="cuda").to(
-                    torch.float8_e4m3fn
-                )
+                fp8_vals = torch.randn(GROUP_SIZE, device="cuda").to(torch.float8_e4m3fn)
                 # Pack FP8 bytes into cache at bytes [start : start+128]
-                cache[phys, off, start : start + GROUP_SIZE] = fp8_vals.view(
-                    torch.uint8
-                )
+                cache[phys, off, start : start + GROUP_SIZE] = fp8_vals.view(torch.uint8)
 
                 # Random positive scale in [0.1, 2.1]
                 scale = (torch.rand(1, device="cuda") * 2.0 + 0.1).item()
                 scale_t = torch.tensor([scale], dtype=torch.float32, device="cuda")
                 # Pack scale as 4 raw bytes at bytes [512 + tile*4 : ...]
-                cache[phys, off, NOPE_DIM + tile * 4 : NOPE_DIM + (tile + 1) * 4] = (
-                    scale_t.view(torch.uint8)
-                )
+                cache[phys, off, NOPE_DIM + tile * 4 : NOPE_DIM + (tile + 1) * 4] = scale_t.view(torch.uint8)
 
                 # Reference dequant: fp8 -> float32, multiply scale, -> bf16.
                 # This matches the CUDA path: fp8 -> half -> float * scale -> bf16.
                 # (fp8 -> half is exact, half -> float is exact, so fp8 -> float
                 # gives the same result regardless of intermediate type.)
-                expected[out_idx, start : start + GROUP_SIZE] = (
-                    fp8_vals.float() * scale
-                ).bfloat16()
+                expected[out_idx, start : start + GROUP_SIZE] = (fp8_vals.float() * scale).bfloat16()
 
             # --- RoPE section: 64 BF16 values, direct copy (no dequant) ---
             rope = torch.randn(ROPE_DIM, dtype=torch.bfloat16, device="cuda")
@@ -113,9 +101,7 @@ def _build_test_case(seq_lens, block_size, seed=42):
             expected[out_idx, NOPE_DIM:] = rope
 
     seq_lens_t = torch.tensor(seq_lens, dtype=torch.int32, device="cuda")
-    workspace_starts_t = torch.tensor(
-        workspace_starts, dtype=torch.int32, device="cuda"
-    )
+    workspace_starts_t = torch.tensor(workspace_starts, dtype=torch.int32, device="cuda")
 
     return (
         cache,
@@ -157,21 +143,15 @@ def _build_test_case_fast(seq_lens, block_size, seed=42):
             block_table[r, b] = block_idx
             block_idx += 1
 
-    cache = torch.zeros(
-        total_blocks, block_size, ENTRY_BYTES, dtype=torch.uint8, device="cuda"
-    )
+    cache = torch.zeros(total_blocks, block_size, ENTRY_BYTES, dtype=torch.uint8, device="cuda")
 
     # Generate all data vectorized
-    nope_fp8 = torch.randn(total_tokens, NOPE_DIM, device="cuda").to(
-        torch.float8_e4m3fn
-    )
+    nope_fp8 = torch.randn(total_tokens, NOPE_DIM, device="cuda").to(torch.float8_e4m3fn)
     scales = (torch.rand(total_tokens, NUM_TILES, device="cuda") * 2.0 + 0.1).float()
     rope = torch.randn(total_tokens, ROPE_DIM, dtype=torch.bfloat16, device="cuda")
 
     # Compute expected output vectorized (same dequant logic as kernel)
-    expected = torch.zeros(
-        total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda"
-    )
+    expected = torch.zeros(total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda")
     for tile in range(NUM_TILES):
         start = tile * GROUP_SIZE
         expected[:, start : start + GROUP_SIZE] = (
@@ -180,9 +160,7 @@ def _build_test_case_fast(seq_lens, block_size, seed=42):
     expected[:, NOPE_DIM:] = rope
 
     # Build per-token cache entries as [total_tokens, 656] uint8
-    token_data = torch.zeros(
-        total_tokens, ENTRY_BYTES, dtype=torch.uint8, device="cuda"
-    )
+    token_data = torch.zeros(total_tokens, ENTRY_BYTES, dtype=torch.uint8, device="cuda")
     token_data[:, :NOPE_DIM] = nope_fp8.view(torch.uint8)
     token_data[:, NOPE_DIM : NOPE_DIM + 16] = scales.view(torch.uint8)
     token_data[:, NOPE_DIM + 16 :] = rope.view(torch.uint8)
@@ -198,9 +176,7 @@ def _build_test_case_fast(seq_lens, block_size, seed=42):
         block_start += nb
 
     seq_lens_t = torch.tensor(seq_lens, dtype=torch.int32, device="cuda")
-    workspace_starts_t = torch.tensor(
-        workspace_starts, dtype=torch.int32, device="cuda"
-    )
+    workspace_starts_t = torch.tensor(workspace_starts, dtype=torch.int32, device="cuda")
 
     return (
         cache,
@@ -239,19 +215,13 @@ def test_cp_gather_and_upconvert_fp8_kv_cache(seq_lens, block_size):
         expected,
     ) = _build_test_case(seq_lens, block_size)
 
-    dst = torch.zeros(
-        total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda"
-    )
+    dst = torch.zeros(total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda")
 
-    ops.cp_gather_and_upconvert_fp8_kv_cache(
-        cache, dst, block_table, seq_lens_t, workspace_starts_t, num_reqs
-    )
+    ops.cp_gather_and_upconvert_fp8_kv_cache(cache, dst, block_table, seq_lens_t, workspace_starts_t, num_reqs)
 
     # NoPE: fp8 dequant has rounding error, so we allow small tolerance.
     # The fp8 -> float -> bf16 path can differ by up to ~1 ULP of bf16.
-    torch.testing.assert_close(
-        dst[:, :NOPE_DIM], expected[:, :NOPE_DIM], atol=1e-3, rtol=1e-2
-    )
+    torch.testing.assert_close(dst[:, :NOPE_DIM], expected[:, :NOPE_DIM], atol=1e-3, rtol=1e-2)
 
     # RoPE: pure bf16 copy, must be bit-exact
     assert torch.equal(dst[:, NOPE_DIM:], expected[:, NOPE_DIM:])
@@ -272,16 +242,12 @@ def test_cp_gather_fp8_shuffled_blocks():
     # 4 physical blocks, but only blocks 3 and 1 are used (in that order).
     # Tokens 0-3 -> physical block 3, tokens 4-7 -> physical block 1.
     num_phys_blocks = 4
-    cache = torch.zeros(
-        num_phys_blocks, block_size, ENTRY_BYTES, dtype=torch.uint8, device="cuda"
-    )
+    cache = torch.zeros(num_phys_blocks, block_size, ENTRY_BYTES, dtype=torch.uint8, device="cuda")
     block_table = torch.tensor([[3, 1]], dtype=torch.int32, device="cuda")
     workspace_starts = torch.tensor([0], dtype=torch.int32, device="cuda")
     seq_lens_t = torch.tensor(seq_lens, dtype=torch.int32, device="cuda")
 
-    expected = torch.zeros(
-        total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda"
-    )
+    expected = torch.zeros(total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda")
 
     # Fill cache at the shuffled physical locations
     for t in range(total_tokens):
@@ -297,29 +263,19 @@ def test_cp_gather_fp8_shuffled_blocks():
             # Use a fixed scale to keep this test simple
             scale = 1.5
             scale_t = torch.tensor([scale], dtype=torch.float32, device="cuda")
-            cache[phys, off, NOPE_DIM + tile * 4 : NOPE_DIM + (tile + 1) * 4] = (
-                scale_t.view(torch.uint8)
-            )
+            cache[phys, off, NOPE_DIM + tile * 4 : NOPE_DIM + (tile + 1) * 4] = scale_t.view(torch.uint8)
 
-            expected[t, start : start + GROUP_SIZE] = (
-                fp8_vals.float() * scale
-            ).bfloat16()
+            expected[t, start : start + GROUP_SIZE] = (fp8_vals.float() * scale).bfloat16()
 
         rope = torch.randn(ROPE_DIM, dtype=torch.bfloat16, device="cuda")
         cache[phys, off, NOPE_DIM + 16 :] = rope.view(torch.uint8)
         expected[t, NOPE_DIM:] = rope
 
-    dst = torch.zeros(
-        total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda"
-    )
+    dst = torch.zeros(total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda")
 
-    ops.cp_gather_and_upconvert_fp8_kv_cache(
-        cache, dst, block_table, seq_lens_t, workspace_starts, len(seq_lens)
-    )
+    ops.cp_gather_and_upconvert_fp8_kv_cache(cache, dst, block_table, seq_lens_t, workspace_starts, len(seq_lens))
 
-    torch.testing.assert_close(
-        dst[:, :NOPE_DIM], expected[:, :NOPE_DIM], atol=1e-3, rtol=1e-2
-    )
+    torch.testing.assert_close(dst[:, :NOPE_DIM], expected[:, :NOPE_DIM], atol=1e-3, rtol=1e-2)
     assert torch.equal(dst[:, NOPE_DIM:], expected[:, NOPE_DIM:])
 
 
@@ -349,15 +305,9 @@ def test_cp_gather_fp8_large_seqlens(seq_lens, block_size):
         expected,
     ) = _build_test_case_fast(seq_lens, block_size)
 
-    dst = torch.zeros(
-        total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda"
-    )
+    dst = torch.zeros(total_tokens, NOPE_DIM + ROPE_DIM, dtype=torch.bfloat16, device="cuda")
 
-    ops.cp_gather_and_upconvert_fp8_kv_cache(
-        cache, dst, block_table, seq_lens_t, workspace_starts_t, num_reqs
-    )
+    ops.cp_gather_and_upconvert_fp8_kv_cache(cache, dst, block_table, seq_lens_t, workspace_starts_t, num_reqs)
 
-    torch.testing.assert_close(
-        dst[:, :NOPE_DIM], expected[:, :NOPE_DIM], atol=1e-3, rtol=1e-2
-    )
+    torch.testing.assert_close(dst[:, :NOPE_DIM], expected[:, :NOPE_DIM], atol=1e-3, rtol=1e-2)
     assert torch.equal(dst[:, NOPE_DIM:], expected[:, NOPE_DIM:])

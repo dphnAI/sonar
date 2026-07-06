@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Whisper model implementation for MLX.
 
 Encoder-decoder architecture for speech recognition, supporting both
@@ -92,9 +93,7 @@ class ResidualAttentionBlock(nn.Module):
         self.attn = MultiHeadAttention(n_state, n_head)
         self.attn_ln = nn.LayerNorm(n_state)
 
-        self.cross_attn = (
-            MultiHeadAttention(n_state, n_head) if cross_attention else None
-        )
+        self.cross_attn = MultiHeadAttention(n_state, n_head) if cross_attention else None
         self.cross_attn_ln = nn.LayerNorm(n_state) if cross_attention else None
 
         n_mlp = n_state * 4
@@ -115,9 +114,8 @@ class ResidualAttentionBlock(nn.Module):
 
         cross_qk = None
         if self.cross_attn is not None:
-            y, cross_kv, cross_qk = self.cross_attn(
-                self.cross_attn_ln(x), xa, kv_cache=cross_kv
-            )
+            assert self.cross_attn_ln is not None
+            y, cross_kv, cross_qk = self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=cross_kv)
             x = x + y
 
         x = x + self.mlp2(nn.gelu(self.mlp1(self.mlp_ln(x))))
@@ -196,14 +194,9 @@ class TextDecoder(nn.Module):
         super().__init__()
         self.token_embedding = nn.Embedding(n_vocab, n_state)
         self.positional_embedding = mx.zeros((n_ctx, n_state))
-        self.blocks = [
-            ResidualAttentionBlock(n_state, n_head, cross_attention=True)
-            for _ in range(n_layer)
-        ]
+        self.blocks = [ResidualAttentionBlock(n_state, n_head, cross_attention=True) for _ in range(n_layer)]
         self.ln = nn.LayerNorm(n_state)
-        self._mask = nn.MultiHeadAttention.create_additive_causal_mask(n_ctx).astype(
-            dtype
-        )
+        self._mask = nn.MultiHeadAttention.create_additive_causal_mask(n_ctx).astype(dtype)
 
     def __call__(
         self,
@@ -212,20 +205,13 @@ class TextDecoder(nn.Module):
         kv_cache: list[Any] | None = None,
     ) -> tuple[mx.array, list[Any], list[Any]]:
         offset = kv_cache[0][0][0].shape[1] if kv_cache else 0
-        x = (
-            self.token_embedding(x)
-            + self.positional_embedding[offset : offset + x.shape[-1]]
-        )
+        x = self.token_embedding(x) + self.positional_embedding[offset : offset + x.shape[-1]]
 
-        kv_cache_out: list[Any] = (
-            kv_cache if kv_cache is not None else [None] * len(self.blocks)
-        )
+        kv_cache_out: list[Any] = kv_cache if kv_cache is not None else [None] * len(self.blocks)
         cross_qk: list[Any] = [None] * len(self.blocks)
 
         for i, block in enumerate(self.blocks):
-            x, kv_cache_out[i], cross_qk[i] = block(
-                x, xa, mask=self._mask, kv_cache=kv_cache_out[i]
-            )
+            x, kv_cache_out[i], cross_qk[i] = block(x, xa, mask=self._mask, kv_cache=kv_cache_out[i])
 
         x = self.ln(x)
         return self.token_embedding.as_linear(x), kv_cache_out, cross_qk
@@ -379,9 +365,8 @@ class WhisperModel(nn.Module):
                     continue
 
                 # Transpose Conv1d weights: HF (out, in, kernel) -> MLX (out, kernel, in)
-                if "conv1.weight" in k or "conv2.weight" in k:
-                    if v.ndim == 3:
-                        v = v.transpose(0, 2, 1)
+                if ("conv1.weight" in k or "conv2.weight" in k) and v.ndim == 3:
+                    v = v.transpose(0, 2, 1)
 
             if v.dtype != self.dtype and v.dtype != mx.uint32:
                 v = v.astype(self.dtype)

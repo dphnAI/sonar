@@ -211,12 +211,8 @@ class TestMultipleInvokes:
             parser,
             [
                 "<minimax:tool_call>",
-                '<invoke name="search_web">'
-                '<parameter name="query">OpenAI</parameter>'
-                "</invoke>",
-                '<invoke name="search_web">'
-                '<parameter name="query">Gemini</parameter>'
-                "</invoke>",
+                '<invoke name="search_web"><parameter name="query">OpenAI</parameter></invoke>',
+                '<invoke name="search_web"><parameter name="query">Gemini</parameter></invoke>',
                 "</minimax:tool_call>",
             ],
         )
@@ -249,12 +245,8 @@ class TestMultipleInvokes:
             parser,
             [
                 "<minimax:tool_call>",
-                '<invoke name="get_weather">'
-                '<parameter name="city">NYC</parameter>'
-                "</invoke>",
-                '<invoke name="get_stock">'
-                '<parameter name="ticker">AAPL</parameter>'
-                "</invoke>",
+                '<invoke name="get_weather"><parameter name="city">NYC</parameter></invoke>',
+                '<invoke name="get_stock"><parameter name="ticker">AAPL</parameter></invoke>',
                 "</minimax:tool_call>",
             ],
         )
@@ -276,9 +268,7 @@ class TestDeltaMessageFormat:
         results = _feed(
             parser,
             [
-                '<minimax:tool_call><invoke name="fn">'
-                '<parameter name="k">v</parameter>'
-                "</invoke></minimax:tool_call>",
+                '<minimax:tool_call><invoke name="fn"><parameter name="k">v</parameter></invoke></minimax:tool_call>',
             ],
         )
         tc_deltas = [tc for r in results for tc in (r.tool_calls or [])]

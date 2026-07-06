@@ -36,11 +36,7 @@ _fi_workspace: torch.Tensor | None = None
 def _get_workspace_buffer(return_lse: bool) -> torch.Tensor:
     global _fi_workspace
 
-    buffer_size = (
-        FLASHINFER_MLA_LSE_WORKSPACE_BUFFER_SIZE
-        if return_lse
-        else FLASHINFER_MLA_WORKSPACE_BUFFER_SIZE
-    )
+    buffer_size = FLASHINFER_MLA_LSE_WORKSPACE_BUFFER_SIZE if return_lse else FLASHINFER_MLA_WORKSPACE_BUFFER_SIZE
     if _fi_workspace is None or _fi_workspace.numel() < buffer_size:
         _fi_workspace = torch.zeros(buffer_size, dtype=torch.uint8, device="cuda")
     return _fi_workspace
@@ -110,10 +106,7 @@ class FlashInferMLABackend(MLACommonBackend):
             hf_text_config = aphrodite_config.model_config.hf_text_config
             qk_nope_head_dim = getattr(hf_text_config, "qk_nope_head_dim", 1)
             if qk_nope_head_dim not in [64, 128, 192]:
-                return (
-                    "FlashInfer MLA kernel requires qk_nope_head_dim "
-                    f"in [64, 128, 192], but got {qk_nope_head_dim}"
-                )
+                return f"FlashInfer MLA kernel requires qk_nope_head_dim in [64, 128, 192], but got {qk_nope_head_dim}"
         return None
 
     @classmethod
@@ -163,16 +156,12 @@ class FlashInferMLAImpl(MLACommonImpl[MLACommonMetadata]):
         unsupported_features = [alibi_slopes, sliding_window, logits_soft_cap]
         if any(unsupported_features):
             raise NotImplementedError(
-                "FlashInferMLAImpl does not support one of the following: "
-                "alibi_slopes, sliding_window, logits_soft_cap"
+                "FlashInferMLAImpl does not support one of the following: alibi_slopes, sliding_window, logits_soft_cap"
             )
 
         if attn_type != AttentionType.DECODER:
             raise NotImplementedError(
-                "Encoder self-attention and "
-                "encoder/decoder cross-attention "
-                "are not implemented for "
-                "FlashInferMLAImpl"
+                "Encoder self-attention and encoder/decoder cross-attention are not implemented for FlashInferMLAImpl"
             )
 
         self.bmm1_scale: float | None = None

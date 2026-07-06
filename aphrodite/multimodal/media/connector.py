@@ -34,9 +34,7 @@ logger = init_logger(__name__)
 
 _M = TypeVar("_M")
 
-global_thread_pool = ThreadPoolExecutor(
-    max_workers=envs.APHRODITE_MEDIA_LOADING_THREAD_COUNT
-)
+global_thread_pool = ThreadPoolExecutor(max_workers=envs.APHRODITE_MEDIA_LOADING_THREAD_COUNT)
 atexit.register(global_thread_pool.shutdown)
 
 MEDIA_CONNECTOR_REGISTRY = ExtensionManager()
@@ -99,9 +97,7 @@ class MediaConnector:
         """
         super().__init__()
 
-        self.media_io_kwargs: dict[str, dict[str, Any]] = (
-            media_io_kwargs if media_io_kwargs else {}
-        )
+        self.media_io_kwargs: dict[str, dict[str, Any]] = media_io_kwargs if media_io_kwargs else {}
         self.connection = connection
 
         if allowed_local_media_path:
@@ -109,13 +105,11 @@ class MediaConnector:
 
             if not allowed_local_media_path_.exists():
                 raise ValueError(
-                    "Invalid `--allowed-local-media-path`: The path "
-                    f"{allowed_local_media_path_} does not exist."
+                    f"Invalid `--allowed-local-media-path`: The path {allowed_local_media_path_} does not exist."
                 )
             if not allowed_local_media_path_.is_dir():
                 raise ValueError(
-                    "Invalid `--allowed-local-media-path`: The path "
-                    f"{allowed_local_media_path_} must be a directory."
+                    f"Invalid `--allowed-local-media-path`: The path {allowed_local_media_path_} must be a directory."
                 )
         else:
             allowed_local_media_path_ = None
@@ -137,9 +131,7 @@ class MediaConnector:
                 with tempfile.NamedTemporaryFile(dir=media_cache, delete=True):
                     pass
                 self._media_cache_dir = media_cache
-                self._media_cache_max_bytes = (
-                    envs.APHRODITE_MEDIA_CACHE_MAX_SIZE_MB * 1024 * 1024
-                )
+                self._media_cache_max_bytes = envs.APHRODITE_MEDIA_CACHE_MAX_SIZE_MB * 1024 * 1024
                 self._media_cache_ttl_secs = envs.APHRODITE_MEDIA_CACHE_TTL_HOURS * 3600
                 logger.info(
                     "Media cache enabled at %s (max %d MB, TTL %s hours)",
@@ -181,9 +173,7 @@ class MediaConnector:
         # Atomic write via temp file + rename
         tmp_path = None
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb", dir=self._media_cache_dir, delete=False
-            ) as tmp_file:
+            with tempfile.NamedTemporaryFile(mode="wb", dir=self._media_cache_dir, delete=False) as tmp_file:
                 tmp_file.write(data)
                 tmp_path = tmp_file.name
             os.rename(tmp_path, str(cache_path))
@@ -257,9 +247,7 @@ class MediaConnector:
     ) -> _M:  # type: ignore[type-var]
         allowed_local_media_path = self.allowed_local_media_path
         if allowed_local_media_path is None:
-            raise RuntimeError(
-                "Cannot load local files without `--allowed-local-media-path`."
-            )
+            raise RuntimeError("Cannot load local files without `--allowed-local-media-path`.")
 
         url_spec_path = url_spec.path or ""
         url_spec_netloc = url_spec.netloc or ""
@@ -273,10 +261,7 @@ class MediaConnector:
         return media_io.load_file(filepath)
 
     def _assert_url_in_allowed_media_domains(self, url_spec: Url) -> None:
-        if (
-            self.allowed_media_domains
-            and url_spec.hostname not in self.allowed_media_domains
-        ):
+        if self.allowed_media_domains and url_spec.hostname not in self.allowed_media_domains:
             raise ValueError(
                 f"The URL must be from one of the allowed domains: "
                 f"{self.allowed_media_domains}. Input URL domain: "
@@ -328,9 +313,7 @@ class MediaConnector:
         loop = asyncio.get_running_loop()
 
         if url[:5].lower() == "data:":
-            future = loop.run_in_executor(
-                global_thread_pool, self._load_data_url, url, media_io
-            )
+            future = loop.run_in_executor(global_thread_pool, self._load_data_url, url, media_io)
             return await future
 
         url_spec = parse_url(url)
@@ -338,13 +321,9 @@ class MediaConnector:
         if url_spec.scheme and url_spec.scheme.startswith("http"):
             self._assert_url_in_allowed_media_domains(url_spec)
 
-            cached = await loop.run_in_executor(
-                global_thread_pool, self._get_cached_bytes, url
-            )
+            cached = await loop.run_in_executor(global_thread_pool, self._get_cached_bytes, url)
             if cached is not None:
-                future = loop.run_in_executor(
-                    global_thread_pool, media_io.load_bytes, cached
-                )
+                future = loop.run_in_executor(global_thread_pool, media_io.load_bytes, cached)
                 return await future
 
             connection = self.connection
@@ -354,16 +333,12 @@ class MediaConnector:
                 allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
             )
 
-            await loop.run_in_executor(
-                global_thread_pool, self._put_cached_bytes, url, data
-            )
+            await loop.run_in_executor(global_thread_pool, self._put_cached_bytes, url, data)
             future = loop.run_in_executor(global_thread_pool, media_io.load_bytes, data)
             return await future
 
         if url_spec.scheme == "file":
-            future = loop.run_in_executor(
-                global_thread_pool, self._load_file_url, url_spec, media_io
-            )
+            future = loop.run_in_executor(global_thread_pool, self._load_file_url, url_spec, media_io)
             return await future
         msg = "The URL must be either a HTTP, data or file URL."
         raise ValueError(msg)
@@ -409,9 +384,7 @@ class MediaConnector:
 
         By default, the image is converted into RGB format.
         """
-        image_io = ImageMediaIO(
-            image_mode=image_mode, **self.media_io_kwargs.get("image", {})
-        )
+        image_io = ImageMediaIO(image_mode=image_mode, **self.media_io_kwargs.get("image", {}))
 
         try:
             return self.load_from_url(
@@ -434,9 +407,7 @@ class MediaConnector:
 
         By default, the image is converted into RGB format.
         """
-        image_io = ImageMediaIO(
-            image_mode=image_mode, **self.media_io_kwargs.get("image", {})
-        )
+        image_io = ImageMediaIO(image_mode=image_mode, **self.media_io_kwargs.get("image", {}))
 
         try:
             return await self.load_from_url_async(
@@ -458,9 +429,7 @@ class MediaConnector:
         """
         Load video from an HTTP or base64 data URL.
         """
-        image_io = ImageMediaIO(
-            image_mode=image_mode, **self.media_io_kwargs.get("image", {})
-        )
+        image_io = ImageMediaIO(image_mode=image_mode, **self.media_io_kwargs.get("image", {}))
         video_io_kwargs = dict(self.media_io_kwargs.get("video", {}))
         if "video_backend" not in video_io_kwargs and (
             video_backend := get_video_loader_backend_for_processor(video_processor)
@@ -486,9 +455,7 @@ class MediaConnector:
 
         By default, the image is converted into RGB format.
         """
-        image_io = ImageMediaIO(
-            image_mode=image_mode, **self.media_io_kwargs.get("image", {})
-        )
+        image_io = ImageMediaIO(image_mode=image_mode, **self.media_io_kwargs.get("image", {}))
         video_io_kwargs = dict(self.media_io_kwargs.get("video", {}))
         if "video_backend" not in video_io_kwargs and (
             video_backend := get_video_loader_backend_for_processor(video_processor)

@@ -48,8 +48,7 @@ class ZentorchWNA16LinearKernel(CPUWNA16LinearKernel):
         if not has_zentorch_op(["zentorch_woq_repack_weight", "zentorch_woq_linear"]):
             return (
                 False,
-                "torch.ops.zentorch.{zentorch_woq_repack_weight, "
-                "zentorch_woq_linear} are not registered.",
+                "torch.ops.zentorch.{zentorch_woq_repack_weight, zentorch_woq_linear} are not registered.",
             )
 
         if c.has_g_idx:
@@ -62,10 +61,9 @@ class ZentorchWNA16LinearKernel(CPUWNA16LinearKernel):
         Constraints (any failure -> ``cpu_gemm_wna16`` path via ``super()``
         with ``layer`` untouched).
         """
-        if (
-            self.w_gidx_name is not None
-            and getattr(layer, self.w_gidx_name, None) is not None
-        ) or (getattr(self.config, "has_g_idx", False)):
+        if (self.w_gidx_name is not None and getattr(layer, self.w_gidx_name, None) is not None) or (
+            getattr(self.config, "has_g_idx", False)
+        ):
             return False
 
         weight_packed = getattr(layer, self.w_q_name, None)
@@ -144,9 +142,7 @@ class ZentorchWNA16LinearKernel(CPUWNA16LinearKernel):
             packed_dim=weight_q.packed_dim,
         )
 
-        zp_param = (
-            getattr(layer, self.w_zp_name, None) if self.w_zp_name is not None else None
-        )
+        zp_param = getattr(layer, self.w_zp_name, None) if self.w_zp_name is not None else None
         needs_unsigned_offset = self.config.weight_type == scalar_types.uint4
 
         if needs_unsigned_offset:
@@ -185,8 +181,7 @@ class ZentorchWNA16LinearKernel(CPUWNA16LinearKernel):
         layer._zentorch_kind = "compressed_tensors_w4a16_gptq"
         layer._zentorch_processed_weights = True
         logger.info_once(
-            "[zen_cpu] Using zentorch_woq_linear for W4A16 GPTQ "
-            "(weight_type=%s, has_zp=%s)",
+            "[zen_cpu] Using zentorch_woq_linear for W4A16 GPTQ (weight_type=%s, has_zp=%s)",
             self.config.weight_type,
             zp_tc is not None,
         )

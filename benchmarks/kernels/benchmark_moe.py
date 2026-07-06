@@ -11,6 +11,8 @@ from typing import Any, TypedDict
 
 import ray
 import torch
+from ray.experimental.tqdm_ray import tqdm
+
 from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     _get_config_dtype_str,
@@ -19,8 +21,6 @@ from aphrodite.model_executor.layers.fused_moe.fused_moe import *
 from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
     fused_topk,
 )
-from ray.experimental.tqdm_ray import tqdm
-
 from aphrodite.platforms import current_platform
 from aphrodite.transformers_utils.config import get_config
 from aphrodite.triton_utils import triton

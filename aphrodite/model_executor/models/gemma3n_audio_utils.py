@@ -44,9 +44,7 @@ def adjust_audio_features_to_expected_length(
     if audio_seq_len < expected_tokens:
         # Pad to expected length with padding embeddings
         extra_padding_tokens = expected_tokens - audio_seq_len
-        extra_padding_features = audio_padding_embs.expand(
-            audio_batch_size, extra_padding_tokens, audio_embed_dim
-        )
+        extra_padding_features = audio_padding_embs.expand(audio_batch_size, extra_padding_tokens, audio_embed_dim)
         audio_features = torch.cat((audio_features, extra_padding_features), dim=1)
     elif audio_seq_len > expected_tokens:
         # Truncate to expected length (audio encoder produced more tokens

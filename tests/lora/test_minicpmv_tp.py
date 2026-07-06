@@ -57,9 +57,7 @@ def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int) -> list[str]:
     return generated_texts
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 def test_minicpmv_lora(minicpmv_lora_files):
     llm = aphrodite.LLM(
         MODEL_PATH,
@@ -80,9 +78,7 @@ def test_minicpmv_lora(minicpmv_lora_files):
         assert EXPECTED_OUTPUT[i].startswith(output2[i])
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @multi_gpu_test(num_gpus=4)
 def test_minicpmv_tp4_wo_fully_sharded_loras(minicpmv_lora_files):
     llm = aphrodite.LLM(
@@ -100,9 +96,7 @@ def test_minicpmv_tp4_wo_fully_sharded_loras(minicpmv_lora_files):
         assert EXPECTED_OUTPUT[i].startswith(output_tp[i])
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @multi_gpu_test(num_gpus=4)
 def test_minicpmv_tp4_fully_sharded_loras(minicpmv_lora_files):
     llm = aphrodite.LLM(

@@ -119,8 +119,7 @@ class KimiK25ProcessingInfo(BaseProcessingInfo):
         config_token_id = hf_config.media_placeholder_token_id
         resolved_token_id = tokenizer.convert_tokens_to_ids("<|media_pad|>")
         is_valid_resolved = isinstance(resolved_token_id, int) and (
-            tokenizer.unk_token_id is None
-            or resolved_token_id != tokenizer.unk_token_id
+            tokenizer.unk_token_id is None or resolved_token_id != tokenizer.unk_token_id
         )
         if is_valid_resolved and resolved_token_id != config_token_id:
             logger.warning_once(
@@ -172,12 +171,8 @@ class KimiK25DummyInputsBuilder(BaseDummyInputsBuilder[KimiK25ProcessingInfo]):
             num_images=self.info.image_processor.num_frames_per_chunk,
         )
 
-        video_chunk_dummy_item = VisionChunkVideo(
-            type="video_chunk", video_chunk=dummy_videos
-        )
-        video_chunk_num_tokens = self.info.media_tokens_calculator(
-            video_chunk_dummy_item
-        )
+        video_chunk_dummy_item = VisionChunkVideo(type="video_chunk", video_chunk=dummy_videos)
+        video_chunk_num_tokens = self.info.media_tokens_calculator(video_chunk_dummy_item)
 
         image_dummy_item = VisionChunkImage(
             type="image",
@@ -232,9 +227,7 @@ class KimiK25MultiModalProcessor(BaseMultiModalProcessor[KimiK25ProcessingInfo])
         grid_sizes = grid_thws.prod(-1)
 
         return dict(
-            pixel_values=MultiModalFieldConfig.flat_from_sizes(
-                "vision_chunk", grid_sizes
-            ),
+            pixel_values=MultiModalFieldConfig.flat_from_sizes("vision_chunk", grid_sizes),
             grid_thws=MultiModalFieldConfig.batched("vision_chunk", keep_on_cpu=True),
         )
 
@@ -327,9 +320,7 @@ class KimiK25ForConditionalGeneration(
         quant_config = aphrodite_config.quant_config
 
         # Check for MoonViT config compatibility
-        self.use_data_parallel = (
-            model_config.multimodal_config.mm_encoder_tp_mode == "data"
-        )
+        self.use_data_parallel = model_config.multimodal_config.mm_encoder_tp_mode == "data"
         self.hidden_size = config.text_config.hidden_size
         self.device = current_platform.current_device()
         # Build vision tower directly with KimiK25VisionConfig
@@ -342,9 +333,7 @@ class KimiK25ForConditionalGeneration(
             if self._maybe_ignore_quant_config(quant_config) is not None:
                 self.vision_tower = self.vision_tower.to(device=self.device)
             else:
-                self.vision_tower = self.vision_tower.to(
-                    device=self.device, dtype=model_config.dtype
-                )
+                self.vision_tower = self.vision_tower.to(device=self.device, dtype=model_config.dtype)
 
             self.mm_projector = KimiK25MultiModalProjector(
                 config=config.vision_config,
@@ -352,9 +341,7 @@ class KimiK25ForConditionalGeneration(
                 quant_config=self._maybe_ignore_quant_config(quant_config),
                 prefix=maybe_prefix(prefix, "mm_projector"),
             )
-            self.mm_projector = self.mm_projector.to(
-                device=self.device, dtype=model_config.dtype
-            )
+            self.mm_projector = self.mm_projector.to(device=self.device, dtype=model_config.dtype)
 
         self.quant_config = quant_config
         with self._mark_language_model(aphrodite_config):
@@ -364,9 +351,7 @@ class KimiK25ForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "language_model"),
                 architectures=["DeepseekV2ForCausalLM"],
             )
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
         self.media_placeholder: int = self.config.media_placeholder_token_id
 
     def _maybe_ignore_quant_config(self, quant_config: QuantizationConfig):
@@ -374,9 +359,7 @@ class KimiK25ForConditionalGeneration(
             return None
         return quant_config
 
-    def _parse_and_validate_media_input(
-        self, **kwargs: object
-    ) -> KimiK25MediaPixelInputs | None:
+    def _parse_and_validate_media_input(self, **kwargs: object) -> KimiK25MediaPixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         grid_thws = kwargs.pop("grid_thws", None)
         if pixel_values is None:
@@ -386,21 +369,15 @@ class KimiK25ForConditionalGeneration(
             pixel_values = torch.cat(pixel_values, dim=0)
 
         if len(pixel_values.shape) == 5 or len(pixel_values.shape) == 3:
-            pixel_values = pixel_values.reshape(
-                pixel_values.shape[0] * pixel_values.shape[1], *pixel_values.shape[2:]
-            )
+            pixel_values = pixel_values.reshape(pixel_values.shape[0] * pixel_values.shape[1], *pixel_values.shape[2:])
 
         # The batch dimension of pixel_values has been flattened into shape[0]
         target_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(target_dtype)
-        assert isinstance(grid_thws, torch.Tensor), (
-            f"expect grid_thws to be a tensor, got {type(grid_thws)}"
-        )
+        assert isinstance(grid_thws, torch.Tensor), f"expect grid_thws to be a tensor, got {type(grid_thws)}"
         # In some cases (e.g. with merger), grid_thws has an extra middle dimension
         grid_thws = grid_thws.reshape(-1, grid_thws.shape[-1])
-        assert grid_thws.ndim == 2 and grid_thws.size(1) == 3, (
-            f"unexpected shape for grid_thws: {grid_thws.shape}"
-        )
+        assert grid_thws.ndim == 2 and grid_thws.size(1) == 3, f"unexpected shape for grid_thws: {grid_thws.shape}"
 
         return KimiK25MediaPixelInputs(
             type="pixel_values",
@@ -408,9 +385,7 @@ class KimiK25ForConditionalGeneration(
             grid_thws=grid_thws,
         )
 
-    def _process_media_input(
-        self, media_input: KimiK25MediaPixelInputs
-    ) -> list[torch.Tensor]:
+    def _process_media_input(self, media_input: KimiK25MediaPixelInputs) -> list[torch.Tensor]:
         # NOTE(moyan): This forward will automatically batch the forward pass internally
         media_features = vision_tower_forward(
             self.vision_tower,

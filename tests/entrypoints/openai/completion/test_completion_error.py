@@ -158,9 +158,7 @@ async def test_openai_completion_keeps_mm_cache_for_engine_execution():
     mock_engine.renderer = _build_renderer(mock_engine.model_config)
 
     serving_completion = _build_serving_completion(mock_engine)
-    serving_completion.online_renderer.preprocess_completion = AsyncMock(
-        return_value=[{"prompt_token_ids": [1, 2, 3]}]
-    )
+    serving_completion.online_renderer.preprocess_completion = AsyncMock(return_value=[{"prompt_token_ids": [1, 2, 3]}])
 
     request = CompletionRequest(
         model=MODEL_NAME,
@@ -170,12 +168,7 @@ async def test_openai_completion_keeps_mm_cache_for_engine_execution():
     result = await serving_completion.render_completion_request(request)
 
     assert isinstance(result, list)
-    assert (
-        serving_completion.online_renderer.preprocess_completion.call_args.kwargs[
-            "skip_mm_cache"
-        ]
-        is False
-    )
+    assert serving_completion.online_renderer.preprocess_completion.call_args.kwargs["skip_mm_cache"] is False
 
 
 def _build_serving_render(engine: AsyncLLM) -> ServingRender:
@@ -200,9 +193,7 @@ def _build_serving_render(engine: AsyncLLM) -> ServingRender:
             [{"prompt_token_ids": [1, 2, 3]}],
         )
 
-    serving_render.online_renderer.preprocess_chat = AsyncMock(
-        side_effect=_fake_preprocess_chat
-    )
+    serving_render.online_renderer.preprocess_chat = AsyncMock(side_effect=_fake_preprocess_chat)
     return serving_render
 
 
@@ -216,9 +207,7 @@ async def test_renderer_only_completion_request_skips_mm_cache():
 
     serving_render = _build_serving_render(mock_engine)
 
-    serving_render.online_renderer.preprocess_completion = AsyncMock(
-        return_value=[{"prompt_token_ids": [1, 2, 3]}]
-    )
+    serving_render.online_renderer.preprocess_completion = AsyncMock(return_value=[{"prompt_token_ids": [1, 2, 3]}])
 
     request = CompletionRequest(
         model=MODEL_NAME,
@@ -228,12 +217,7 @@ async def test_renderer_only_completion_request_skips_mm_cache():
     result = await serving_render.render_completion_request(request)
 
     assert isinstance(result, list)
-    assert (
-        serving_render.online_renderer.preprocess_completion.call_args.kwargs[
-            "skip_mm_cache"
-        ]
-        is True
-    )
+    assert serving_render.online_renderer.preprocess_completion.call_args.kwargs["skip_mm_cache"] is True
 
 
 @pytest.mark.asyncio
@@ -311,9 +295,7 @@ async def test_completion_error_stream():
         chunks.append(chunk)
 
     assert len(chunks) >= 2
-    assert any("Internal server error" in chunk for chunk in chunks), (
-        f"Expected error message in chunks: {chunks}"
-    )
+    assert any("Internal server error" in chunk for chunk in chunks), f"Expected error message in chunks: {chunks}"
     assert chunks[-1] == "data: [DONE]\n\n"
 
 

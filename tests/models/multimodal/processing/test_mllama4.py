@@ -32,24 +32,14 @@ def test_profiling(model_id: str, max_model_len: int):
     hf_config = ctx.get_hf_config(Llama4Config)
     image_size = hf_config.vision_config.image_size
     patch_size = hf_config.vision_config.patch_size
-    downsample_ratio = int(
-        round(1.0 / (hf_config.vision_config.pixel_shuffle_ratio**2))
-    )
+    downsample_ratio = int(round(1.0 / (hf_config.vision_config.pixel_shuffle_ratio**2)))
     tokens_per_patch = ((image_size // patch_size) ** 2) // downsample_ratio
 
     mm_data = mm_inputs["mm_kwargs"].get_data()
     chunks_per_image = prod(mm_data["patches_per_image"])
     total_num_patches = chunks_per_image * tokens_per_patch
-    num_tiles = (
-        mm_data["aspect_ratios"][0][0] * mm_data["aspect_ratios"][0][1]
-    )  # x-y separator tokens
-    total_tokens = (
-        total_num_patches.item() + num_tiles.item() + 3
-    )  # image start, image, image end
+    num_tiles = mm_data["aspect_ratios"][0][0] * mm_data["aspect_ratios"][0][1]  # x-y separator tokens
+    total_tokens = total_num_patches.item() + num_tiles.item() + 3  # image start, image, image end
 
-    assert total_num_patches == sum(
-        item.get_num_embeds() for item in mm_inputs["mm_placeholders"]["image"]
-    )
-    assert total_tokens == sum(
-        placeholder.length for placeholder in mm_inputs["mm_placeholders"]["image"]
-    )
+    assert total_num_patches == sum(item.get_num_embeds() for item in mm_inputs["mm_placeholders"]["image"])
+    assert total_tokens == sum(placeholder.length for placeholder in mm_inputs["mm_placeholders"]["image"])

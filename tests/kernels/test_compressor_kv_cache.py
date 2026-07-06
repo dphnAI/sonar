@@ -74,38 +74,26 @@ def test_deepseek_v4_attention_quant_cache_roundtrip(num_tokens: int, block_size
     device = "cuda"
 
     # Random compressed_kv (simulates compressor output)
-    compressed_kv = torch.randn(
-        num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device
-    )
+    compressed_kv = torch.randn(num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device)
 
     # ── Quant + insert ──────────────────────────────────────────────────
-    k_cache = torch.zeros(
-        num_blocks, block_size, HEAD_BYTES, dtype=torch.uint8, device=device
-    )
+    k_cache = torch.zeros(num_blocks, block_size, HEAD_BYTES, dtype=torch.uint8, device=device)
     k_cache_2d = k_cache.view(num_blocks, -1)
 
     # Sequential slot mapping: token i → slot i
     slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device)
 
-    quantize_and_insert_k_cache(
-        compressed_kv, k_cache_2d, slot_mapping, block_size=block_size
-    )
+    quantize_and_insert_k_cache(compressed_kv, k_cache_2d, slot_mapping, block_size=block_size)
 
     # ── Gather + dequant ────────────────────────────────────────────────
     num_reqs = 1
     max_blocks_per_seq = num_blocks
-    out = torch.zeros(
-        num_reqs, num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device
-    )
+    out = torch.zeros(num_reqs, num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device)
     seq_lens = torch.tensor([num_tokens], dtype=torch.int32, device=device)
     # block_table: request 0 uses physical blocks 0, 1, ...
-    block_table = torch.arange(
-        max_blocks_per_seq, dtype=torch.int32, device=device
-    ).unsqueeze(0)
+    block_table = torch.arange(max_blocks_per_seq, dtype=torch.int32, device=device).unsqueeze(0)
 
-    dequantize_and_gather_k_cache(
-        out, k_cache, seq_lens, None, block_table, block_size, offset=0
-    )
+    dequantize_and_gather_k_cache(out, k_cache, seq_lens, None, block_table, block_size, offset=0)
 
     recovered = out[0, :num_tokens]
 
@@ -118,21 +106,16 @@ def test_deepseek_v4_attention_quant_cache_roundtrip(num_tokens: int, block_size
     # half-ULP at the largest representable value.  At y ≈ 448 (max),
     # ULP = 2^(8-3) = 32, so error ≤ 16 * scale.
     for t in range(num_tokens):
-        _, scales = _ue8m0_reference(
-            compressed_kv[t, :NOPE_DIM].float(), QUANT_BLOCK, FP8_MAX
-        )
+        _, scales = _ue8m0_reference(compressed_kv[t, :NOPE_DIM].float(), QUANT_BLOCK, FP8_MAX)
         max_allowed = 16.0 * scales.max().item()
         token_diff = nope_diff[t].max().item()
         assert token_diff <= max_allowed, (
-            f"Token {t} nope diff {token_diff} exceeds max_allowed "
-            f"{max_allowed} (scale={scales.max().item()})"
+            f"Token {t} nope diff {token_diff} exceeds max_allowed {max_allowed} (scale={scales.max().item()})"
         )
 
     # ── RoPE portion (last 64): stored as bf16, should be exact ─────
     rope_diff = (recovered[:, NOPE_DIM:] - compressed_kv[:, NOPE_DIM:]).abs()
-    assert rope_diff.max().item() == 0.0, (
-        f"RoPE portion should be exact but got max diff {rope_diff.max().item()}"
-    )
+    assert rope_diff.max().item() == 0.0, f"RoPE portion should be exact but got max diff {rope_diff.max().item()}"
 
 
 # ── Test B: Fused dequant+gather K cache ────────────────────────────────────
@@ -205,16 +188,12 @@ def test_dequantize_and_gather_k_cache(
     max_blocks_per_seq = math.ceil(max(seq_lens_host) / block_size)
     num_blocks = sum(math.ceil(seq_len / block_size) for seq_len in seq_lens_host)
 
-    compressed_kv = torch.randn(
-        num_tokens, head_dim, dtype=torch.bfloat16, device=device
-    )
+    compressed_kv = torch.randn(num_tokens, head_dim, dtype=torch.bfloat16, device=device)
 
     # Randomize physical pages so the test covers block-table translation.
     # Keep padded block-table entries invalid to catch accidental reads.
     physical_blocks = torch.randperm(num_blocks, device=device)
-    block_table = torch.full(
-        (num_reqs, max_blocks_per_seq), int(-1e6), dtype=torch.int32, device=device
-    )
+    block_table = torch.full((num_reqs, max_blocks_per_seq), int(-1e6), dtype=torch.int32, device=device)
     start = 0
     for req_id, seq_len in enumerate(seq_lens_host):
         num_req_blocks = math.ceil(seq_len / block_size)
@@ -233,9 +212,7 @@ def test_dequantize_and_gather_k_cache(
         start += seq_len
 
     # Insert compressed K into the paged cache layout used by the gather op.
-    k_cache = torch.empty(
-        num_blocks, block_size, head_bytes, dtype=torch.uint8, device=device
-    )
+    k_cache = torch.empty(num_blocks, block_size, head_bytes, dtype=torch.uint8, device=device)
     k_cache_2d = k_cache.view(num_blocks, -1)
     quantize_and_insert_k_cache(compressed_kv, k_cache_2d, slot_mapping, block_size)
 
@@ -244,25 +221,17 @@ def test_dequantize_and_gather_k_cache(
     actual_out = torch.empty_like(ref_out)
     seq_lens = torch.tensor(seq_lens_host, dtype=torch.int32, device=device)
     gather_lens = (
-        torch.tensor(gather_lens_host, dtype=torch.int32, device=device)
-        if gather_lens_host is not None
-        else None
+        torch.tensor(gather_lens_host, dtype=torch.int32, device=device) if gather_lens_host is not None else None
     )
 
     # Compare production gather against a PyTorch reference for valid output rows.
-    _dequantize_and_gather_k_cache_reference(
-        ref_out, k_cache, seq_lens, gather_lens, block_table, block_size, offset
-    )
-    dequantize_and_gather_k_cache(
-        actual_out, k_cache, seq_lens, gather_lens, block_table, block_size, offset
-    )
+    _dequantize_and_gather_k_cache_reference(ref_out, k_cache, seq_lens, gather_lens, block_table, block_size, offset)
+    dequantize_and_gather_k_cache(actual_out, k_cache, seq_lens, gather_lens, block_table, block_size, offset)
     torch.accelerator.synchronize()
 
     # only check non-padded content
     for req_id, seq_len in enumerate(seq_lens_host):
-        gather_len = (
-            gather_lens_host[req_id] if gather_lens_host is not None else seq_len
-        )
+        gather_len = gather_lens_host[req_id] if gather_lens_host is not None else seq_len
         actual = actual_out[req_id, offset : offset + gather_len]
         expected = ref_out[req_id, offset : offset + gather_len]
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
@@ -289,31 +258,23 @@ def test_indexer_quant_cache_roundtrip(num_tokens: int, block_size: int):
     k = torch.randn(num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device)
 
     # ── Quant + insert ──────────────────────────────────────────────────
-    kv_cache = torch.zeros(
-        num_blocks, block_size, CACHE_STRIDE, dtype=torch.uint8, device=device
-    )
+    kv_cache = torch.zeros(num_blocks, block_size, CACHE_STRIDE, dtype=torch.uint8, device=device)
     slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device)
 
     ops.indexer_k_quant_and_cache(k, kv_cache, slot_mapping, QUANT_BLOCK_SIZE, "ue8m0")
 
     # ── Gather ──────────────────────────────────────────────────────────
     max_blocks_per_seq = num_blocks
-    block_table = torch.arange(
-        max_blocks_per_seq, dtype=torch.int32, device=device
-    ).unsqueeze(0)
+    block_table = torch.arange(max_blocks_per_seq, dtype=torch.int32, device=device).unsqueeze(0)
     cu_seq_lens = torch.tensor([0, num_tokens], dtype=torch.int32, device=device)
 
     # dst_k: [total_seq_len, head_dim] as uint8 (raw FP8 bytes)
     dst_k = torch.zeros(num_tokens, HEAD_DIM, dtype=torch.uint8, device=device)
     # dst_scale: [total_seq_len, head_dim/quant_block*4] as uint8 (raw float32 bytes)
     num_scale_bytes = HEAD_DIM * 4 // QUANT_BLOCK_SIZE  # 4
-    dst_scale = torch.zeros(
-        num_tokens, num_scale_bytes, dtype=torch.uint8, device=device
-    )
+    dst_scale = torch.zeros(num_tokens, num_scale_bytes, dtype=torch.uint8, device=device)
 
-    ops.cp_gather_indexer_k_quant_cache(
-        kv_cache, dst_k, dst_scale, block_table, cu_seq_lens
-    )
+    ops.cp_gather_indexer_k_quant_cache(kv_cache, dst_k, dst_scale, block_table, cu_seq_lens)
 
     # ── Manual dequant ──────────────────────────────────────────────────
     k_fp8 = dst_k.view(torch.float8_e4m3fn).float()  # [num_tokens, 128]
@@ -333,8 +294,7 @@ def test_indexer_quant_cache_roundtrip(num_tokens: int, block_size: int):
         max_allowed = 16.0 * ue8m0_scale
         token_diff = diff[t].max().item()
         assert token_diff <= max_allowed, (
-            f"Token {t} diff {token_diff} exceeds max_allowed "
-            f"{max_allowed} (scale={ue8m0_scale})"
+            f"Token {t} diff {token_diff} exceeds max_allowed {max_allowed} (scale={ue8m0_scale})"
         )
 
 
@@ -352,19 +312,13 @@ def test_indexer_gather_accepts_upper_bound_output():
     device = "cuda"
 
     k = torch.randn(valid_tokens, head_dim, dtype=torch.bfloat16, device=device)
-    kv_cache = torch.zeros(
-        num_blocks, block_size, cache_stride, dtype=torch.uint8, device=device
-    )
+    kv_cache = torch.zeros(num_blocks, block_size, cache_stride, dtype=torch.uint8, device=device)
     slot_mapping = torch.arange(valid_tokens, dtype=torch.int64, device=device)
     ops.indexer_k_quant_and_cache(k, kv_cache, slot_mapping, quant_block_size, "ue8m0")
 
-    block_table = torch.arange(num_blocks, dtype=torch.int32, device=device).unsqueeze(
-        0
-    )
+    block_table = torch.arange(num_blocks, dtype=torch.int32, device=device).unsqueeze(0)
     cu_seq_lens = torch.tensor([0, valid_tokens], dtype=torch.int32, device=device)
-    dst_k = torch.full(
-        (upper_bound_tokens, head_dim), sentinel, dtype=torch.uint8, device=device
-    )
+    dst_k = torch.full((upper_bound_tokens, head_dim), sentinel, dtype=torch.uint8, device=device)
     num_scale_bytes = head_dim * 4 // quant_block_size
     dst_scale = torch.full(
         (upper_bound_tokens, num_scale_bytes),
@@ -373,14 +327,10 @@ def test_indexer_gather_accepts_upper_bound_output():
         device=device,
     )
 
-    ops.cp_gather_indexer_k_quant_cache(
-        kv_cache, dst_k, dst_scale, block_table, cu_seq_lens
-    )
+    ops.cp_gather_indexer_k_quant_cache(kv_cache, dst_k, dst_scale, block_table, cu_seq_lens)
     torch.accelerator.synchronize()
 
-    k_recovered = dst_k[:valid_tokens].view(torch.float8_e4m3fn).float() * dst_scale[
-        :valid_tokens
-    ].view(torch.float32)
+    k_recovered = dst_k[:valid_tokens].view(torch.float8_e4m3fn).float() * dst_scale[:valid_tokens].view(torch.float32)
     diff = (k_recovered - k.float()).abs()
     max_allowed = (16.0 * dst_scale[:valid_tokens].view(torch.float32).max()).item()
     assert diff.max().item() <= max_allowed
@@ -403,32 +353,22 @@ def test_deepseek_v4_quant_magnitude_range():
     device = "cuda"
 
     # Create inputs with varying magnitudes: small, medium, large
-    compressed_kv = torch.zeros(
-        num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device
-    )
+    compressed_kv = torch.zeros(num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device)
     compressed_kv[0] = 0.001  # very small
     compressed_kv[1] = 1.0  # unit scale
     compressed_kv[2] = 100.0  # large
     compressed_kv[3] = torch.randn(HEAD_DIM, dtype=torch.bfloat16, device=device)
 
-    k_cache = torch.zeros(
-        num_blocks, block_size, HEAD_BYTES, dtype=torch.uint8, device=device
-    )
+    k_cache = torch.zeros(num_blocks, block_size, HEAD_BYTES, dtype=torch.uint8, device=device)
     slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device)
 
-    quantize_and_insert_k_cache(
-        compressed_kv, k_cache.view(num_blocks, -1), slot_mapping, block_size
-    )
+    quantize_and_insert_k_cache(compressed_kv, k_cache.view(num_blocks, -1), slot_mapping, block_size)
 
     out = torch.zeros(1, num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device)
     seq_lens = torch.tensor([num_tokens], dtype=torch.int32, device=device)
-    block_table = torch.arange(num_blocks, dtype=torch.int32, device=device).unsqueeze(
-        0
-    )
+    block_table = torch.arange(num_blocks, dtype=torch.int32, device=device).unsqueeze(0)
 
-    dequantize_and_gather_k_cache(
-        out, k_cache, seq_lens, None, block_table, block_size, offset=0
-    )
+    dequantize_and_gather_k_cache(out, k_cache, seq_lens, None, block_table, block_size, offset=0)
 
     recovered = out[0, :num_tokens]
 
@@ -445,8 +385,7 @@ def test_deepseek_v4_quant_magnitude_range():
         if magnitude > 0.01:
             rel_err = abs_diff / magnitude
             assert rel_err < 0.15, (
-                f"Token {t}: rel_err={rel_err:.4f}, abs_diff={abs_diff:.6f}, "
-                f"magnitude={magnitude:.4f}"
+                f"Token {t}: rel_err={rel_err:.4f}, abs_diff={abs_diff:.6f}, magnitude={magnitude:.4f}"
             )
 
 
@@ -531,9 +470,7 @@ def _reference_kv_compress_norm_rope(
     if use_fp4:
         return quantize_to_mxfp4(result)
     else:
-        pairs = [
-            _ue8m0_reference(result[t], head_dim, fp8_max) for t in range(len(result))
-        ]
+        pairs = [_ue8m0_reference(result[t], head_dim, fp8_max) for t in range(len(result))]
         quants, scales = zip(*pairs)
         return torch.stack(quants), torch.cat(scales)
 
@@ -647,9 +584,7 @@ def test_fused_kv_insert_indexer(num_tokens: int, kv_block_size: int, use_fp4: b
             val_off = pos * TOKEN_STRIDE
             fp4_actual = kv_cache[blk, val_off : val_off + TOKEN_STRIDE]
             assert torch.equal(k_quant[i], fp4_actual), (
-                f"token {i}: packed nibbles differ, "
-                f"{(k_quant[i] != fp4_actual).sum()} "
-                f"/ {TOKEN_STRIDE}"
+                f"token {i}: packed nibbles differ, {(k_quant[i] != fp4_actual).sum()} / {TOKEN_STRIDE}"
             )
 
             scale_off = kv_block_size * TOKEN_STRIDE + pos * SCALE_DIM
@@ -663,14 +598,12 @@ def test_fused_kv_insert_indexer(num_tokens: int, kv_block_size: int, use_fp4: b
         for i in range(num_tokens):
             blk, pos = i // kv_block_size, i % kv_block_size
             val_off = pos * TOKEN_STRIDE
-            assert torch.equal(
-                k_quant[i], kv_cache[blk, val_off : val_off + TOKEN_STRIDE]
-            ), f"token {i}: FP8 bytes differ"
+            assert torch.equal(k_quant[i], kv_cache[blk, val_off : val_off + TOKEN_STRIDE]), (
+                f"token {i}: FP8 bytes differ"
+            )
 
             scale_off = kv_block_size * TOKEN_STRIDE + pos * SCALE_DIM
-            actual_scale = kv_cache[blk, scale_off : scale_off + SCALE_DIM].view(
-                torch.float32
-            )
+            actual_scale = kv_cache[blk, scale_off : scale_off + SCALE_DIM].view(torch.float32)
             assert torch.equal(actual_scale, scale[i : i + 1]), (
                 f"token {i}: scale {actual_scale.item()} != {scale[i].item()}"
             )
@@ -706,9 +639,7 @@ def test_cutedsl_full_cache_store(compress_ratio: int, store_fp8: bool):
 
     num_pages = (compress_ratio * num_tokens - 1) // BLOCK_SIZE + 2
     # The production CompressorStateCache is fp32.
-    state_cache = torch.randn(
-        num_pages, BLOCK_SIZE, 2 * coff * HEAD_DIM, dtype=torch.float32, device=device
-    )
+    state_cache = torch.randn(num_pages, BLOCK_SIZE, 2 * coff * HEAD_DIM, dtype=torch.float32, device=device)
     block_table = torch.arange(num_pages, dtype=torch.int32, device=device).unsqueeze(0)
     token_to_req = torch.zeros(num_tokens, dtype=torch.int32, device=device)
     slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device)
@@ -720,18 +651,12 @@ def test_cutedsl_full_cache_store(compress_ratio: int, store_fp8: bool):
         device=device,
     )
     rms_weight = torch.randn(HEAD_DIM, dtype=torch.bfloat16, device=device)
-    cos_sin_cache = torch.randn(
-        compress_ratio * num_tokens, ROPE_DIM, dtype=torch.float32, device=device
-    )
+    cos_sin_cache = torch.randn(compress_ratio * num_tokens, ROPE_DIM, dtype=torch.float32, device=device)
 
     dtype = torch.float8_e4m3fn if store_fp8 else torch.bfloat16
     kv_n_blocks = (num_tokens + KV_BLOCK_SIZE - 1) // KV_BLOCK_SIZE + 1
-    k_cache = torch.zeros(
-        kv_n_blocks, KV_BLOCK_SIZE, HEAD_DIM, dtype=dtype, device=device
-    )
-    fp8_scale = torch.tensor(
-        [0.5 if store_fp8 else 1.0], dtype=torch.float32, device=device
-    )
+    k_cache = torch.zeros(kv_n_blocks, KV_BLOCK_SIZE, HEAD_DIM, dtype=dtype, device=device)
+    fp8_scale = torch.tensor([0.5 if store_fp8 else 1.0], dtype=torch.float32, device=device)
 
     if compress_ratio == 4:
         fused_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
@@ -762,9 +687,7 @@ def test_cutedsl_full_cache_store(compress_ratio: int, store_fp8: bool):
             fp8_scale=fp8_scale,
         )
     else:
-        compressed_kv = torch.empty(
-            (num_tokens, HEAD_DIM), dtype=torch.float32, device=device
-        )
+        compressed_kv = torch.empty((num_tokens, HEAD_DIM), dtype=torch.float32, device=device)
         split_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
             state_cache,
             token_to_req,
@@ -806,13 +729,9 @@ def test_cutedsl_full_cache_store(compress_ratio: int, store_fp8: bool):
         return_full_cache=True,
     )  # [num_tokens, HEAD_DIM] bf16
 
-    actual = torch.stack(
-        [k_cache[i // KV_BLOCK_SIZE, i % KV_BLOCK_SIZE] for i in range(num_tokens)]
-    )
+    actual = torch.stack([k_cache[i // KV_BLOCK_SIZE, i % KV_BLOCK_SIZE] for i in range(num_tokens)])
     if store_fp8:
-        ref_fp8 = torch.clamp(ref.float() / fp8_scale, -FP8_MAX, FP8_MAX).to(
-            torch.float8_e4m3fn
-        )
+        ref_fp8 = torch.clamp(ref.float() / fp8_scale, -FP8_MAX, FP8_MAX).to(torch.float8_e4m3fn)
         torch.testing.assert_close(actual.float(), ref_fp8.float(), rtol=0.0, atol=0.3)
     else:
         torch.testing.assert_close(actual.float(), ref.float(), rtol=3e-2, atol=3e-2)

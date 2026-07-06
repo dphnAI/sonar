@@ -73,6 +73,4 @@ class TeleFLMForCausalLM(LlamaForCausalLM):
             self.mup_scale_factor = self.config.mup_scale_factor
             self.output_mult = self.config.output_mult / self.mup_scale_factor
             logit_scale = self.output_mult
-            self.logits_processor = LogitsProcessor(
-                self.config.vocab_size, scale=logit_scale
-            )
+            self.logits_processor = LogitsProcessor(self.config.vocab_size, scale=logit_scale)

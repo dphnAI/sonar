@@ -203,42 +203,30 @@ class MiniMaxM3SparseMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3SparseMet
         seq_lens = common_attn_metadata.seq_lens
         block_table = common_attn_metadata.block_table_tensor
 
-        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-            split_decodes_and_prefills(
-                common_attn_metadata,
-                decode_threshold=self.reorder_batch_threshold,
-                require_uniform=True,
-            )
+        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
+            common_attn_metadata,
+            decode_threshold=self.reorder_batch_threshold,
+            require_uniform=True,
         )
         assert num_decodes + num_prefills == num_reqs
         assert num_decode_tokens + num_prefill_tokens == num_tokens
 
         # Decode-first batch: context lengths into the stable cudagraph buffer.
         context_lens = self.context_len_buffer[:num_reqs]
-        context_lens.copy_(
-            common_attn_metadata.compute_num_computed_tokens(), non_blocking=True
-        )
+        context_lens.copy_(common_attn_metadata.compute_num_computed_tokens(), non_blocking=True)
 
         prefill_metadata: MiniMaxM3SparsePrefillMetadata | None = None
         if num_prefills > 0:
             seq_lens_cpu = common_attn_metadata.seq_lens_cpu_upper_bound
             assert seq_lens_cpu is not None
             prefill_seq_lens_cpu = seq_lens_cpu[num_decodes:]
-            prefill_total_kv_blocks = (
-                ((prefill_seq_lens_cpu + SPARSE_BLOCK_SIZE - 1) // SPARSE_BLOCK_SIZE)
-                .sum()
-                .item()
-            )
+            prefill_total_kv_blocks = ((prefill_seq_lens_cpu + SPARSE_BLOCK_SIZE - 1) // SPARSE_BLOCK_SIZE).sum().item()
             prefill_kv_lens = seq_lens[num_decodes:]
-            prefill_cu_seqlens_k = torch.empty(
-                num_prefills + 1, dtype=torch.int32, device=seq_lens.device
-            )
+            prefill_cu_seqlens_k = torch.empty(num_prefills + 1, dtype=torch.int32, device=seq_lens.device)
             prefill_cu_seqlens_k[0] = 0
             torch.cumsum(prefill_kv_lens, dim=0, out=prefill_cu_seqlens_k[1:])
             prefill_metadata = MiniMaxM3SparsePrefillMetadata(
-                cu_seqlens_q=(query_start_loc[num_decodes:] - num_decode_tokens).to(
-                    torch.int32
-                ),
+                cu_seqlens_q=(query_start_loc[num_decodes:] - num_decode_tokens).to(torch.int32),
                 cu_seqlens_k=prefill_cu_seqlens_k,
                 seq_lens=prefill_kv_lens,
                 context_lens=context_lens[num_decodes:],
@@ -254,9 +242,7 @@ class MiniMaxM3SparseMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3SparseMet
             query_lens_cpu = qsl_cpu[1 : num_decodes + 1] - qsl_cpu[:num_decodes]
             decode_query_len = int(query_lens_cpu[0].item())
             assert decode_query_len > 0
-            assert torch.all(
-                (query_lens_cpu == decode_query_len) | (query_lens_cpu == 0)
-            )
+            assert torch.all((query_lens_cpu == decode_query_len) | (query_lens_cpu == 0))
             assert num_decode_tokens == num_decodes * decode_query_len
             decode_metadata = MiniMaxM3SparseDecodeMetadata(
                 seq_lens=seq_lens[:num_decodes],
@@ -306,11 +292,7 @@ class MiniMaxM3SparseImpl(AttentionImplBase[MiniMaxM3SparseMetadata]):
         self.kv_cache_dtype = kv_cache_dtype
         self.use_fp8_kv = is_quantized_kv_cache(kv_cache_dtype)
         if "e5m2" in kv_cache_dtype:
-            self.kv_cache_fp8_dtype = (
-                torch.float8_e5m2fnuz
-                if current_platform.is_fp8_fnuz()
-                else torch.float8_e5m2
-            )
+            self.kv_cache_fp8_dtype = torch.float8_e5m2fnuz if current_platform.is_fp8_fnuz() else torch.float8_e5m2
         else:
             self.kv_cache_fp8_dtype = current_platform.fp8_dtype()
         # Sparse selection parameters (block_size == page size == SPARSE_BLOCK_SIZE).
@@ -357,9 +339,7 @@ class MiniMaxM3SparseTritonImpl(MiniMaxM3SparseImpl):
         hd = self.head_size
         q = query[:num_tokens].view(-1, self.num_heads, hd)
         out = output[:num_tokens].view(-1, self.num_heads, hd)
-        kv_cache = (
-            kv_cache.view(self.kv_cache_fp8_dtype) if self.use_fp8_kv else kv_cache
-        )
+        kv_cache = kv_cache.view(self.kv_cache_fp8_dtype) if self.use_fp8_kv else kv_cache
 
         # Decode [:nd]: split-K over the selected blocks (request-major chunks).
         if main_md.num_decodes > 0:

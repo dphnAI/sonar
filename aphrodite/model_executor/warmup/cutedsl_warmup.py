@@ -47,10 +47,7 @@ def _iter_cutedsl_warmup_compile_units() -> Iterable[CuTeDSLCompileUnit]:
             continue
         for unit in compile_units:
             if not isinstance(unit, CuTeDSLCompileUnit):
-                raise TypeError(
-                    "get_cutedsl_warmup_compile_units must return "
-                    "CuTeDSLCompileUnit objects"
-                )
+                raise TypeError("get_cutedsl_warmup_compile_units must return CuTeDSLCompileUnit objects")
             yield unit
 
 

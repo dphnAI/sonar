@@ -108,9 +108,7 @@ def worker_fn():
 
     for pg in [dist.group.WORLD, stateless_pg]:
         writer_rank = 2
-        broadcaster = MessageQueue.create_from_process_group(
-            pg, 40 * 1024, 2, writer_rank
-        )
+        broadcaster = MessageQueue.create_from_process_group(pg, 40 * 1024, 2, writer_rank)
         if rank == writer_rank:
             seed = random.randint(0, 1000)
             dist.broadcast_object_list([seed], writer_rank)
@@ -157,9 +155,7 @@ def test_shm_broadcast():
 def worker_fn_test_shutdown_busy():
     rank = dist.get_rank()
     writer_rank = 2
-    message_queue = MessageQueue.create_from_process_group(
-        dist.group.WORLD, 40 * 1024, 2, writer_rank
-    )
+    message_queue = MessageQueue.create_from_process_group(dist.group.WORLD, 40 * 1024, 2, writer_rank)
 
     if not message_queue._is_writer:
         # Put into busy mode
@@ -171,9 +167,7 @@ def worker_fn_test_shutdown_busy():
             shutdown_event.wait()
             mq.shutdown()
 
-        threading.Thread(
-            target=shutdown_thread, args=(message_queue, shutdown_event)
-        ).start()
+        threading.Thread(target=shutdown_thread, args=(message_queue, shutdown_event)).start()
 
         with pytest.raises(TimeoutError):
             message_queue.dequeue(timeout=0.01)
@@ -198,9 +192,7 @@ def test_message_queue_shutdown_busy(caplog_aphrodite):
 def worker_fn_test_shutdown_idle():
     rank = dist.get_rank()
     writer_rank = 2
-    message_queue = MessageQueue.create_from_process_group(
-        dist.group.WORLD, 40 * 1024, 2, writer_rank
-    )
+    message_queue = MessageQueue.create_from_process_group(dist.group.WORLD, 40 * 1024, 2, writer_rank)
 
     if not message_queue._is_writer:
         # Put into idle mode
@@ -212,9 +204,7 @@ def worker_fn_test_shutdown_idle():
             shutdown_event.wait()
             mq.shutdown()
 
-        threading.Thread(
-            target=shutdown_thread, args=(message_queue, shutdown_event)
-        ).start()
+        threading.Thread(target=shutdown_thread, args=(message_queue, shutdown_event)).start()
 
         with pytest.raises(TimeoutError):
             message_queue.dequeue(timeout=0.01)
@@ -238,9 +228,7 @@ def test_message_queue_shutdown_idle():
 def worker_fn_test_idle_to_busy():
     rank = dist.get_rank()
     writer_rank = 2
-    message_queue = MessageQueue.create_from_process_group(
-        dist.group.WORLD, 40 * 1024, 2, writer_rank
-    )
+    message_queue = MessageQueue.create_from_process_group(dist.group.WORLD, 40 * 1024, 2, writer_rank)
 
     message1 = "hello world"
     message2 = np.random.randint(1, 100, 100)
@@ -294,9 +282,7 @@ def test_message_queue_idle_wake():
 def worker_fn_test_busy_to_idle():
     rank = dist.get_rank()
     writer_rank = 2
-    message_queue = MessageQueue.create_from_process_group(
-        dist.group.WORLD, 40 * 1024, 2, writer_rank
-    )
+    message_queue = MessageQueue.create_from_process_group(dist.group.WORLD, 40 * 1024, 2, writer_rank)
 
     message1 = 12345
     message2 = list(range(3))
@@ -374,8 +360,7 @@ def test_warning_logs(caplog_aphrodite):
         with pytest.raises(TimeoutError):
             reader.dequeue(timeout=0.01, indefinite=False)
         assert any(
-            "No available shared memory broadcast block found in 0 seconds"
-            in record.message
+            "No available shared memory broadcast block found in 0 seconds" in record.message
             for record in caplog_aphrodite.records
         )
         caplog_aphrodite.clear()
@@ -384,8 +369,7 @@ def test_warning_logs(caplog_aphrodite):
         with pytest.raises(TimeoutError):
             reader.dequeue(timeout=0.01, indefinite=True)
         assert all(
-            "No available shared memory broadcast block found in 0 seconds"
-            not in record.message
+            "No available shared memory broadcast block found in 0 seconds" not in record.message
             for record in caplog_aphrodite.records
         )
 

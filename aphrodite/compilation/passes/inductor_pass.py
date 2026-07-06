@@ -90,10 +90,7 @@ class InductorPass(CustomGraphPass):  # type: ignore[misc]
                 inspect.getsource() calls.
         """
         # Resolve instances to their class for a hashable cache key.
-        cache_key = tuple(
-            src if isinstance(src, (str, type, types.FunctionType)) else src.__class__
-            for src in srcs
-        )
+        cache_key = tuple(src if isinstance(src, (str, type, types.FunctionType)) else src.__class__ for src in srcs)
         return _hash_source_cached(*cache_key)
 
     @staticmethod
@@ -117,9 +114,7 @@ class CallableInductorPass(InductorPass):
     implementation of the UUID.
     """
 
-    def __init__(
-        self, callable: Callable[[fx.Graph], None], uuid: Any | None = None
-    ) -> None:
+    def __init__(self, callable: Callable[[fx.Graph], None], uuid: Any | None = None) -> None:
         self.callable = callable
         self._uuid = self.hash_source(callable) if uuid is None else uuid
 

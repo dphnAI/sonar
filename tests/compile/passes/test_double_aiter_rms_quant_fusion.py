@@ -21,17 +21,17 @@ import pytest
 import torch
 
 import aphrodite.config
-from tests.compile.backend import TestBackend
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
 )
+from tests.compile.backend import TestBackend
 
 EPS = 1e-5
 HIDDEN_SIZE = 256
@@ -45,9 +45,7 @@ class _NoViewDoubleQuantModel(torch.nn.Module):
         super().__init__()
         self.weight = torch.nn.Parameter(torch.ones(HIDDEN_SIZE, dtype=torch.bfloat16))
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # avoid graph input being a direct arg to a matched pattern node
         x = torch.relu(x)
         rms = torch.ops.aphrodite_ir.rms_norm(x, self.weight, EPS)
@@ -67,9 +65,7 @@ class _ViewDoubleQuantModel(torch.nn.Module):
         super().__init__()
         self.weight = torch.nn.Parameter(torch.ones(HIDDEN_SIZE, dtype=torch.bfloat16))
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         x = torch.relu(x)
         rms = torch.ops.aphrodite_ir.rms_norm(x, self.weight, EPS)
         view = rms.view(-1, rms.shape[-1])
@@ -83,9 +79,7 @@ class _ViewDoubleQuantModel(torch.nn.Module):
     [_NoViewDoubleQuantModel, _ViewDoubleQuantModel],
     ids=["no_view", "with_view"],
 )
-@pytest.mark.skip(
-    reason="Skipping for now because pytorch compiler removes one the two quant ops"
-)
+@pytest.mark.skip(reason="Skipping for now because pytorch compiler removes one the two quant ops")
 def test_double_aiter_rms_fp8_group_quant_fusion(
     model_cls: type[torch.nn.Module],
     monkeypatch: pytest.MonkeyPatch,

@@ -56,9 +56,7 @@ def test_remote_tp_rank_p8_d4_maps_to_first_prefill_rank_per_pair():
         (0, 4, 6),
     ],
 )
-def test_remote_tp_rank_invalid_non_multiple_tp_raises(
-    local_tp_rank: int, local_tp_size: int, remote_tp_size: int
-):
+def test_remote_tp_rank_invalid_non_multiple_tp_raises(local_tp_rank: int, local_tp_size: int, remote_tp_size: int):
     with pytest.raises(ValueError, match="multiple"):
         get_moriio_remote_tp_rank(local_tp_rank, local_tp_size, remote_tp_size)
 
@@ -292,9 +290,7 @@ def test_read_completion_sends_structured_release_with_consumer_tp_size():
     worker.world_size = 8
     worker.moriio_wrapper = FakeWrapper()
     worker._recving_transfers = {"req": [DoneStatus()]}
-    worker._recving_transfers_callback_addr = {
-        "req": ("127.0.0.1", "7000", "tx-release")
-    }
+    worker._recving_transfers_callback_addr = {"req": ("127.0.0.1", "7000", "tx-release")}
 
     assert worker._pop_done_transfers() == {"tx-release"}
     assert worker.moriio_wrapper.sent == [

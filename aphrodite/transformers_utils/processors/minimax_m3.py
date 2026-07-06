@@ -99,10 +99,7 @@ def _smart_resize_by_long_side(
     w_bar = max(factor, round_by_factor(scaled_width, factor))
 
     if max_total_pixels is not None and h_bar * w_bar > max_total_pixels:
-        raise ValueError(
-            f"image area {h_bar * w_bar} exceeds max_total_pixels "
-            f"{max_total_pixels} after resizing"
-        )
+        raise ValueError(f"image area {h_bar * w_bar} exceeds max_total_pixels {max_total_pixels} after resizing")
     return h_bar, w_bar
 
 
@@ -124,8 +121,7 @@ def smart_resize(
     """
     if max(height, width) / min(height, width) > MAX_RATIO:
         raise ValueError(
-            f"absolute aspect ratio must be smaller than {MAX_RATIO}, "
-            f"got {max(height, width) / min(height, width)}"
+            f"absolute aspect ratio must be smaller than {MAX_RATIO}, got {max(height, width) / min(height, width)}"
         )
     if max_long_side_pixel is not None:
         return _smart_resize_by_long_side(
@@ -184,9 +180,7 @@ class MiniMaxM3VLImageProcessor(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def preprocess(
-        self, images, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]
-    ) -> BatchFeature:
+    def preprocess(self, images, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -209,9 +203,7 @@ class MiniMaxM3VLImageProcessor(BaseImageProcessorFast):
         return_tensors: "str | TensorType | None",
         **kwargs,
     ) -> BatchFeature:
-        grouped_images, grouped_images_index = group_images_by_shape(
-            images, disable_grouping=disable_grouping
-        )
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         factor = patch_size * merge_size
         for shape, stacked_images in grouped_images.items():
@@ -235,9 +227,7 @@ class MiniMaxM3VLImageProcessor(BaseImageProcessorFast):
 
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        grouped_images, grouped_images_index = group_images_by_shape(
-            resized_images, disable_grouping=disable_grouping
-        )
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_grids = {}
 
@@ -292,9 +282,7 @@ class MiniMaxM3VLImageProcessor(BaseImageProcessorFast):
             processed_images_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
 
-        processed_images = reorder_images(
-            processed_images_grouped, grouped_images_index
-        )
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_grids = reorder_images(processed_grids, grouped_images_index)
 
         pixel_values = torch.cat(processed_images, dim=0)
@@ -310,9 +298,7 @@ class MiniMaxM3VLImageProcessor(BaseImageProcessorFast):
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         max_pixels = images_kwargs.get("max_pixels", self.max_pixels)
-        max_long_side_pixel = images_kwargs.get(
-            "max_long_side_pixel", self.max_long_side_pixel
-        )
+        max_long_side_pixel = images_kwargs.get("max_long_side_pixel", self.max_long_side_pixel)
 
         resized_height, resized_width = smart_resize(
             height,
@@ -415,17 +401,14 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
                 )
                 if (
                     max_long_side_pixel is not None
-                    and resized_height * resized_width * num_frames
-                    > self.max_total_pixels
+                    and resized_height * resized_width * num_frames > self.max_total_pixels
                 ):
                     raise ValueError(
                         f"video area {resized_height * resized_width * num_frames} "
                         f"(width * height * frames) exceeds max_total_pixels "
                         f"{self.max_total_pixels} after resizing"
                     )
-                stacked_videos = stacked_videos.view(
-                    batch_size * num_frames, channels, height, width
-                )
+                stacked_videos = stacked_videos.view(batch_size * num_frames, channels, height, width)
                 stacked_videos = self.resize(
                     stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
@@ -485,9 +468,7 @@ class MiniMaxM3VLVideoProcessor(BaseVideoProcessor):
             processed_videos_grouped[shape] = flatten_patches
             processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
 
-        processed_videos = reorder_videos(
-            processed_videos_grouped, grouped_videos_index
-        )
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids, dtype=torch.long)
@@ -523,36 +504,24 @@ class MiniMaxVLProcessor(ProcessorMixin):
         # register() API now stores classes as {"pil": cls} dicts in
         # _extra_content, but get_possibly_dynamic_module() still calls
         # .__name__ on the raw value, crashing with AttributeError on dicts.
-        tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path, **kwargs
-        )
-        image_processor = MiniMaxM3VLImageProcessor.from_pretrained(
-            pretrained_model_name_or_path, **kwargs
-        )
-        video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(
-            pretrained_model_name_or_path, **kwargs
-        )
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        image_processor = MiniMaxM3VLImageProcessor.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls(
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
         )
 
-    def __init__(
-        self, image_processor=None, tokenizer=None, video_processor=None, **kwargs
-    ):
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, **kwargs):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKEN)
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.VIDEO_TOKEN)
         super().__init__(image_processor, tokenizer, video_processor)
         # Video expansion also uses image start/end tokens. Separate video
         # start/end tokens exist in the tokenizer, but the original MiniMax
         # serving path did not use them; keep that behavior for compatibility.
-        self.vision_start_token_id = tokenizer.convert_tokens_to_ids(
-            self.VISION_START_TOKEN
-        )
-        self.vision_end_token_id = tokenizer.convert_tokens_to_ids(
-            self.VISION_END_TOKEN
-        )
+        self.vision_start_token_id = tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN)
+        self.vision_end_token_id = tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN)
 
     def _prune_video_tokens(
         self,
@@ -680,9 +649,7 @@ class MiniMaxVLProcessor(ProcessorMixin):
                     num_tokens = image_grid_thw[index].prod() // merge_length
                     text[i] = text[i].replace(
                         self.IMAGE_TOKEN,
-                        self.VISION_START_TOKEN
-                        + placeholder * num_tokens
-                        + self.VISION_END_TOKEN,
+                        self.VISION_START_TOKEN + placeholder * num_tokens + self.VISION_END_TOKEN,
                         1,
                     )
                     index += 1
@@ -701,15 +668,11 @@ class MiniMaxVLProcessor(ProcessorMixin):
 
                     video_placeholder = ""
                     for frame_idx in range(grid_t):
-                        if (
-                            metadata.fps is not None
-                            and metadata.frames_indices is not None
-                        ):
+                        if metadata.fps is not None and metadata.frames_indices is not None:
                             ts = (
                                 metadata.frames_indices[
                                     min(
-                                        frame_idx
-                                        * self.video_processor.temporal_patch_size,
+                                        frame_idx * self.video_processor.temporal_patch_size,
                                         len(metadata.frames_indices) - 1,
                                     )
                                 ]
@@ -717,9 +680,7 @@ class MiniMaxVLProcessor(ProcessorMixin):
                             )
                             video_placeholder += f"]<]{ts:.1f} seconds[>["
                         video_placeholder += (
-                            self.VISION_START_TOKEN
-                            + placeholder * frame_seqlen
-                            + self.VISION_END_TOKEN
+                            self.VISION_START_TOKEN + placeholder * frame_seqlen + self.VISION_END_TOKEN
                         )
 
                     text[i] = text[i].replace(self.VIDEO_TOKEN, video_placeholder, 1)

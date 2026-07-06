@@ -46,17 +46,14 @@ class RunBatchSubcommand(CLISubcommand):
 
         asyncio.run(run_batch_main(args))
 
-    def subparser_init(
-        self, subparsers: argparse._SubParsersAction
-    ) -> FlexibleArgumentParser:
+    def subparser_init(self, subparsers: argparse._SubParsersAction) -> FlexibleArgumentParser:
         from aphrodite.entrypoints.openai.run_batch import make_arg_parser
 
         run_batch_parser = subparsers.add_parser(
             self.name,
             help="Run batch prompts and write results to file.",
             description=(
-                "Run batch prompts using Aphrodite's OpenAI-compatible API.\n"
-                "Supports local or HTTP input/output files."
+                "Run batch prompts using Aphrodite's OpenAI-compatible API.\nSupports local or HTTP input/output files."
             ),
             usage="aphrodite run-batch -i INPUT.jsonl -o OUTPUT.jsonl --model <model>",
         )

@@ -73,13 +73,9 @@ def _swizzle_mxfp4(quant_tensor, scale, num_warps=8):
         else:
             scale_layout = StridedLayout
     else:
-        value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(
-            mx_axis=1
-        )
-        scale_layout, scale_layout_opts = (
-            layout.make_default_matmul_mxfp4_w_scale_layout(
-                mx_axis=1, num_warps=num_warps
-            )
+        value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
+        scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(
+            mx_axis=1, num_warps=num_warps
         )
     if current_platform.is_cuda():
         if current_platform.is_device_capability(90):
@@ -96,54 +92,38 @@ def _swizzle_mxfp4(quant_tensor, scale, num_warps=8):
     # transpose the tensor so that the quantization axis is on dim1
     quant_tensor = quant_tensor.transpose(-2, -1)
     scale = scale.transpose(-2, -1)
-    quant_tensor = convert_layout(
-        wrap_torch_tensor(quant_tensor, dtype=FP4), value_layout, **value_layout_opts
-    )
+    quant_tensor = convert_layout(wrap_torch_tensor(quant_tensor, dtype=FP4), value_layout, **value_layout_opts)
     scale = convert_layout(wrap_torch_tensor(scale), scale_layout, **scale_layout_opts)
     return quant_tensor, InFlexData(), scale
 
 
-def _dequant_mxfp4(
-    x: torch.Tensor, scale: torch.Tensor, float_dtype: torch.dtype
-) -> torch.Tensor:
+def _dequant_mxfp4(x: torch.Tensor, scale: torch.Tensor, float_dtype: torch.dtype) -> torch.Tensor:
     try:
         from quark.torch.kernel import mx
     except ImportError as err:
         raise ImportError(
-            "The package `amd-quark` is required to use "
-            "MX-FP4 models. Please install it with `pip install "
-            "amd-quark`."
+            "The package `amd-quark` is required to use MX-FP4 models. Please install it with `pip install amd-quark`."
         ) from err
 
     return mx.dq_mxfp4(x, scale, float_dtype)
 
 
-def _dequant_mxfp4_fake(
-    x: torch.Tensor, scale: torch.Tensor, float_dtype: torch.dtype
-) -> torch.Tensor:
-    return torch.empty(
-        (*x.shape[:-1], x.shape[-1] * 2), dtype=float_dtype, device=x.device
-    )
+def _dequant_mxfp4_fake(x: torch.Tensor, scale: torch.Tensor, float_dtype: torch.dtype) -> torch.Tensor:
+    return torch.empty((*x.shape[:-1], x.shape[-1] * 2), dtype=float_dtype, device=x.device)
 
 
-def _quant_dequant_mxfp4(
-    x: torch.Tensor, scale_calculation_mode: str = "even"
-) -> torch.Tensor:
+def _quant_dequant_mxfp4(x: torch.Tensor, scale_calculation_mode: str = "even") -> torch.Tensor:
     try:
         from quark.torch.kernel import mx
     except ImportError as err:
         raise ImportError(
-            "The package `amd-quark` is required to use "
-            "MX-FP4 models. Please install it with `pip install "
-            "amd-quark`."
+            "The package `amd-quark` is required to use MX-FP4 models. Please install it with `pip install amd-quark`."
         ) from err
 
     return mx.qdq_mxfp4(x, scale_calculation_mode)
 
 
-def _quant_dequant_mxfp4_fake(
-    x: torch.Tensor, scale_calculation_mode: str = "even"
-) -> torch.Tensor:
+def _quant_dequant_mxfp4_fake(x: torch.Tensor, scale_calculation_mode: str = "even") -> torch.Tensor:
     return torch.empty_like(x)
 
 

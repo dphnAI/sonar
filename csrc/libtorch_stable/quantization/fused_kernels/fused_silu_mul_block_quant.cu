@@ -98,8 +98,8 @@ __global__ void silu_and_mul_per_block_quant_kernel(
   float group_scale = shared_max[0];
 
   // Step 4: Quantize and write output
-  token_output[tid] =
-      aphrodite::ScaledQuant<scalar_out_t, false>::quant_fn(result, group_scale);
+  token_output[tid] = aphrodite::ScaledQuant<scalar_out_t, false>::quant_fn(
+      result, group_scale);
 }
 
 }  // namespace aphrodite

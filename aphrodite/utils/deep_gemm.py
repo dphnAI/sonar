@@ -38,10 +38,7 @@ def should_auto_disable_deep_gemm(model_type: str | None) -> bool:
     """
     if model_type is None:
         return False
-    if not (
-        current_platform.is_device_capability_family(100)
-        or current_platform.is_device_capability_family(120)
-    ):
+    if not (current_platform.is_device_capability_family(100) or current_platform.is_device_capability_family(120)):
         return False
     return model_type in _DEEPGEMM_BLACKWELL_EXCLUDED_MODEL_TYPES
 
@@ -64,21 +61,14 @@ class DeepGemmQuantScaleFMT(Enum):
         if cached is not None:
             return
 
-        use_e8m0 = (
-            envs.APHRODITE_USE_DEEP_GEMM_E8M0
-            and is_deep_gemm_supported()
-            and (_fp8_gemm_nt_impl is not None)
-        )
+        use_e8m0 = envs.APHRODITE_USE_DEEP_GEMM_E8M0 and is_deep_gemm_supported() and (_fp8_gemm_nt_impl is not None)
         if not use_e8m0:
             cls._oracle_cache = cls.FLOAT32  # type: ignore
             return
 
         cls._oracle_cache = (  # type: ignore
             cls.UE8M0
-            if (
-                current_platform.is_device_capability_family(100)
-                or current_platform.is_device_capability_family(120)
-            )
+            if (current_platform.is_device_capability_family(100) or current_platform.is_device_capability_family(120))
             else cls.FLOAT32_CEIL_UE8M0
         )
 
@@ -105,9 +95,7 @@ def is_deep_gemm_e8m0_used() -> bool:
     "E8M0 scale on a Hopper or Blackwell-class GPU.
     """
     if not is_deep_gemm_supported():
-        logger.debug_once(
-            "DeepGEMM E8M0 disabled: DeepGEMM not supported on this system."
-        )
+        logger.debug_once("DeepGEMM E8M0 disabled: DeepGEMM not supported on this system.")
         return False
 
     _lazy_init()
@@ -145,15 +133,11 @@ _get_paged_mqa_logits_metadata_impl: Callable[..., Any] | None = None
 _tf32_hc_prenorm_gemm_impl: Callable[..., Any] | None = None
 _get_mn_major_tma_aligned_tensor_impl: Callable[..., Any] | None = None
 _get_mk_alignment_for_contiguous_layout_impl: Callable[..., Any] | None = None
-_get_theoretical_mk_alignment_for_contiguous_layout_impl: Callable[..., Any] | None = (
-    None
-)
+_get_theoretical_mk_alignment_for_contiguous_layout_impl: Callable[..., Any] | None = None
 _transform_sf_into_required_layout_impl: Callable[..., Any] | None = None
 _pack_ue8m0_to_int_impl: Callable[..., Any] | None = None
 _get_mn_major_tma_aligned_packed_ue8m0_tensor_impl: Callable[..., Any] | None = None
-_get_k_grouped_mn_major_tma_aligned_packed_ue8m0_tensor_impl: (
-    Callable[..., Any] | None
-) = None
+_get_k_grouped_mn_major_tma_aligned_packed_ue8m0_tensor_impl: Callable[..., Any] | None = None
 
 
 @functools.cache
@@ -172,10 +156,7 @@ def _import_deep_gemm():
         logger.debug_once("Imported deep_gemm module from site-packages")
         return module
     except ImportError:
-        logger.info_once(
-            "deep_gemm not found in site-packages, "
-            "trying vendored aphrodite.third_party.deep_gemm"
-        )
+        logger.info_once("deep_gemm not found in site-packages, trying vendored aphrodite.third_party.deep_gemm")
 
     # 2. Fall back to the vendored copy bundled in the Aphrodite wheel.
     try:
@@ -249,9 +230,7 @@ def _lazy_init() -> None:
     # Set up deep_gemm cache path
     DEEP_GEMM_JIT_CACHE_ENV_NAME = "DG_JIT_CACHE_DIR"
     if not os.environ.get(DEEP_GEMM_JIT_CACHE_ENV_NAME, None):
-        os.environ[DEEP_GEMM_JIT_CACHE_ENV_NAME] = os.path.join(
-            envs.APHRODITE_CACHE_ROOT, "deep_gemm"
-        )
+        os.environ[DEEP_GEMM_JIT_CACHE_ENV_NAME] = os.path.join(envs.APHRODITE_CACHE_ROOT, "deep_gemm")
 
     _dg = _import_deep_gemm()
     if _dg is None:
@@ -270,22 +249,14 @@ def _lazy_init() -> None:
     # handle both the FP8 and FP4 Q/K paths via a tuple-typed `q`.
     _fp8_fp4_mqa_logits_impl = getattr(_dg, "fp8_fp4_mqa_logits", None)
     _fp8_fp4_paged_mqa_logits_impl = getattr(_dg, "fp8_fp4_paged_mqa_logits", None)
-    _get_paged_mqa_logits_metadata_impl = getattr(
-        _dg, "get_paged_mqa_logits_metadata", None
-    )
+    _get_paged_mqa_logits_metadata_impl = getattr(_dg, "get_paged_mqa_logits_metadata", None)
     _tf32_hc_prenorm_gemm_impl = getattr(_dg, "tf32_hc_prenorm_gemm", None)
-    _get_mn_major_tma_aligned_tensor_impl = getattr(
-        _dg, "get_mn_major_tma_aligned_tensor", None
-    )
-    _get_mk_alignment_for_contiguous_layout_impl = getattr(
-        _dg, "get_mk_alignment_for_contiguous_layout", None
-    )
+    _get_mn_major_tma_aligned_tensor_impl = getattr(_dg, "get_mn_major_tma_aligned_tensor", None)
+    _get_mk_alignment_for_contiguous_layout_impl = getattr(_dg, "get_mk_alignment_for_contiguous_layout", None)
     _get_theoretical_mk_alignment_for_contiguous_layout_impl = getattr(
         _dg, "get_theoretical_mk_alignment_for_contiguous_layout", None
     )
-    _transform_sf_into_required_layout_impl = getattr(
-        _dg, "transform_sf_into_required_layout", None
-    )
+    _transform_sf_into_required_layout_impl = getattr(_dg, "transform_sf_into_required_layout", None)
     _pack_ue8m0_to_int_impl = getattr(_dg, "pack_ue8m0_to_int", None)
     _get_mn_major_tma_aligned_packed_ue8m0_tensor_impl = getattr(
         _dg, "get_mn_major_tma_aligned_packed_ue8m0_tensor", None
@@ -342,9 +313,7 @@ def get_theoretical_mk_alignment_for_contiguous_layout(
     if num_groups <= 0:
         raise ValueError(f"num_groups must be positive, got {num_groups}")
     try:
-        return _get_theoretical_mk_alignment_for_contiguous_layout_impl(
-            expected_m, num_groups
-        )
+        return _get_theoretical_mk_alignment_for_contiguous_layout_impl(expected_m, num_groups)
     except TypeError:
         per_group_m = None if expected_m is None else cdiv(expected_m, num_groups)
         return _get_theoretical_mk_alignment_for_contiguous_layout_impl(per_group_m)
@@ -429,9 +398,7 @@ def get_k_grouped_mn_major_tma_aligned_packed_ue8m0_tensor(
     _lazy_init()
     if _get_k_grouped_mn_major_tma_aligned_packed_ue8m0_tensor_impl is None:
         return _missing()
-    return _get_k_grouped_mn_major_tma_aligned_packed_ue8m0_tensor_impl(
-        sf, ks_tensor, ks, gran_k
-    )
+    return _get_k_grouped_mn_major_tma_aligned_packed_ue8m0_tensor_impl(sf, ks_tensor, ks, gran_k)
 
 
 def cublaslt_gemm_nt(*args, **kwargs):
@@ -464,36 +431,28 @@ def m_grouped_fp8_gemm_nt_contiguous(*args, **kwargs):
     _lazy_init()
     if _grouped_impl is None:
         return _missing(*args, **kwargs)
-    return _grouped_impl(
-        *args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs
-    )
+    return _grouped_impl(*args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs)
 
 
 def m_grouped_fp8_fp4_gemm_nt_contiguous(*args, **kwargs):
     _lazy_init()
     if _grouped_fp4_impl is None:
         return _missing(*args, **kwargs)
-    return _grouped_fp4_impl(
-        *args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs
-    )
+    return _grouped_fp4_impl(*args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs)
 
 
 def fp8_m_grouped_gemm_nt_masked(*args, **kwargs):
     _lazy_init()
     if _grouped_masked_impl is None:
         return _missing(*args, **kwargs)
-    return _grouped_masked_impl(
-        *args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs
-    )
+    return _grouped_masked_impl(*args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs)
 
 
 def transform_sf_into_required_layout(*args, **kwargs):
     _lazy_init()
     if _transform_sf_into_required_layout_impl is None:
         return _missing(*args, **kwargs)
-    return _transform_sf_into_required_layout_impl(
-        *args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs
-    )
+    return _transform_sf_into_required_layout_impl(*args, disable_ue8m0_cast=not is_deep_gemm_e8m0_used(), **kwargs)
 
 
 def fp8_fp4_mqa_logits(
@@ -541,9 +500,7 @@ def fp8_fp4_mqa_logits(
     )
 
 
-def get_paged_mqa_logits_metadata(
-    context_lens: torch.Tensor, block_size: int, num_sms: int
-) -> torch.Tensor:
+def get_paged_mqa_logits_metadata(context_lens: torch.Tensor, block_size: int, num_sms: int) -> torch.Tensor:
     """Build scheduling metadata for paged MQA logits.
 
     Args:
@@ -666,9 +623,7 @@ def per_block_cast_to_fp8(
     assert x.dim() == 2
     m, n = x.shape
     block_m, block_n = block_size
-    x_padded = torch.zeros(
-        (_align(m, block_m), _align(n, block_n)), dtype=x.dtype, device=x.device
-    )
+    x_padded = torch.zeros((_align(m, block_m), _align(n, block_n)), dtype=x.dtype, device=x.device)
     x_padded[:m, :n] = x
     x_view = x_padded.view(-1, block_m, x_padded.size(1) // block_n, block_n)
     x_amax = x_view.abs().float().amax(dim=(1, 3), keepdim=True).clamp(1e-4)
@@ -676,9 +631,7 @@ def per_block_cast_to_fp8(
     sf = x_amax / fp8_max
     sf = _ceil_to_ue8m0(sf) if use_ue8m0 else sf
     x_scaled = (x_view * (1.0 / sf)).to(fp8_dtype)
-    return x_scaled.view_as(x_padded)[:m, :n].contiguous(), sf.view(
-        x_view.size(0), x_view.size(2)
-    )
+    return x_scaled.view_as(x_padded)[:m, :n].contiguous(), sf.view(x_view.size(0), x_view.size(2))
 
 
 def calc_diff(x: torch.Tensor, y: torch.Tensor):

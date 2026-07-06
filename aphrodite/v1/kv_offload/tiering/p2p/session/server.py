@@ -230,9 +230,7 @@ class ServerRole:
         """Handle an AbortFetchMsg from the peer."""
         # Abort for an unknown id may be a benign race/duplicate or a
         # real protocol violation; we don't track completed ids, so warn.
-        if kv_request_id not in self._outbound and not self._has_inflight_for(
-            kv_request_id
-        ):
+        if kv_request_id not in self._outbound and not self._has_inflight_for(kv_request_id):
             logger.warning(
                 "P2PSession %s: abort_fetch for unknown kv_request_id=%s "
                 "(no outbound or inflight state); benign race or stale",
@@ -313,9 +311,7 @@ class ServerRole:
                     req.pending_job_ids.discard(job_id)
             if req is not None and req.demand_received:
                 req.remaining -= xfer.block_count
-                assert req.remaining >= 0, (
-                    f"remaining went negative for kv_request_id={xfer.kv_request_id}"
-                )
+                assert req.remaining >= 0, f"remaining went negative for kv_request_id={xfer.kv_request_id}"
                 if req.remaining == 0:
                     self._finalize_outbound(xfer.kv_request_id, success=True)
                 elif req.finishing and not self._has_inflight_for(xfer.kv_request_id):
@@ -358,11 +354,7 @@ class ServerRole:
 
         # Cancel other inflight for the same failed kv_request_ids
         if failed_kv_request_ids:
-            ids_to_cancel = [
-                tid
-                for tid, xfer in self._inflight.items()
-                if xfer.kv_request_id in failed_kv_request_ids
-            ]
+            ids_to_cancel = [tid for tid, xfer in self._inflight.items() if xfer.kv_request_id in failed_kv_request_ids]
             for tid in ids_to_cancel:
                 self._inflight_pop(tid)
             self._transport.cancel(ids_to_cancel)
@@ -408,9 +400,7 @@ class ServerRole:
     def _inflight_add(self, tid: int, xfer: _InflightXfer) -> None:
         """Insert an inflight transfer and bump the per-request count."""
         self._inflight[tid] = xfer
-        self._inflight_per_req[xfer.kv_request_id] = (
-            self._inflight_per_req.get(xfer.kv_request_id, 0) + 1
-        )
+        self._inflight_per_req[xfer.kv_request_id] = self._inflight_per_req.get(xfer.kv_request_id, 0) + 1
 
     def _inflight_pop(self, tid: int) -> _InflightXfer | None:
         """Pop an inflight transfer and decrement the per-request count.
@@ -455,9 +445,7 @@ class ServerRole:
             success = req.remaining == 0
         for job_id in req.pending_job_ids:
             self._store_jobs.pop(job_id, None)
-            self._pending_store_results.append(
-                StoreResult(job_id=job_id, success=success)
-            )
+            self._pending_store_results.append(StoreResult(job_id=job_id, success=success))
         self._send(
             {
                 TYPE_KEY: TransferDoneMsg.TYPE,
@@ -476,27 +464,19 @@ class ServerRole:
         ``mode="immediate"`` and acks anyway.
         """
         self._outbound.pop(kv_request_id, None)
-        ids = [
-            tid
-            for tid, xfer in self._inflight.items()
-            if xfer.kv_request_id == kv_request_id
-        ]
+        ids = [tid for tid, xfer in self._inflight.items() if xfer.kv_request_id == kv_request_id]
         if not ids:
             self._finalize_abort(kv_request_id)
             return
 
         started_at = self._pending_aborts.get(kv_request_id)
-        expired = (
-            started_at is not None
-            and time.monotonic() - started_at >= _CANCEL_DRAIN_TIMEOUT_S
-        )
+        expired = started_at is not None and time.monotonic() - started_at >= _CANCEL_DRAIN_TIMEOUT_S
         if expired:
             for tid in ids:
                 self._inflight_pop(tid)
             self._transport.cancel(ids, mode="immediate")
             logger.warning(
-                "P2PSession %s: cancel drain timed out for kv_request_id=%s,"
-                " force-canceled %d transfers",
+                "P2PSession %s: cancel drain timed out for kv_request_id=%s, force-canceled %d transfers",
                 self._peer_id,
                 kv_request_id,
                 len(ids),
@@ -531,20 +511,16 @@ class ServerRole:
 
     def _submit_transfer(self, kv_request_id: str, result: _MatchResult) -> None:
         logger.debug(
-            "P2PSession %s: NIXL write_blocks CALL kv_request_id=%s "
-            "local_idxs=%d remote_idxs=%d",
+            "P2PSession %s: NIXL write_blocks CALL kv_request_id=%s local_idxs=%d remote_idxs=%d",
             self._peer_id,
             kv_request_id,
             len(result.local_idxs),
             len(result.remote_idxs),
         )
-        transfer_id = self._transport.write_blocks(
-            self._peer_id, result.local_idxs, result.remote_idxs
-        )
+        transfer_id = self._transport.write_blocks(self._peer_id, result.local_idxs, result.remote_idxs)
         if transfer_id is not None:
             logger.debug(
-                "P2PSession %s: NIXL write_blocks SUBMITTED kv_request_id=%s "
-                "transfer_id=%d blocks=%d",
+                "P2PSession %s: NIXL write_blocks SUBMITTED kv_request_id=%s transfer_id=%d blocks=%d",
                 self._peer_id,
                 kv_request_id,
                 transfer_id,

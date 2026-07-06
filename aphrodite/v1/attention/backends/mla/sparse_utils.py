@@ -70,9 +70,7 @@ def _convert_req_index_to_global_index_kernel(
     # DCP_INTERLEAVE == 1 it reduces to plain round-robin (tok % / // DCP_SIZE).
     owning_rank = (tok // DCP_INTERLEAVE) % DCP_SIZE
     is_remote = owning_rank != DCP_RANK
-    local_idx = (
-        tok // (DCP_SIZE * DCP_INTERLEAVE)
-    ) * DCP_INTERLEAVE + tok % DCP_INTERLEAVE
+    local_idx = (tok // (DCP_SIZE * DCP_INTERLEAVE)) * DCP_INTERLEAVE + tok % DCP_INTERLEAVE
 
     # Compute block id and in-block offset
     block_id = local_idx // BLOCK_SIZE
@@ -94,9 +92,7 @@ def _convert_req_index_to_global_index_kernel(
 
     # Override with prefill output if prefill is enabled
     if HAS_PREFILL:
-        workspace_start = tl.load(
-            workspace_starts_ptr + prefill_req_id, mask=is_prefill, other=0
-        )
+        workspace_start = tl.load(workspace_starts_ptr + prefill_req_id, mask=is_prefill, other=0)
         prefill_out = workspace_start + tok
         out_val = tl.where(is_prefill, prefill_out, out_val)
     out_val = tl.where(is_invalid_tok, -1, out_val)
@@ -185,9 +181,7 @@ def triton_convert_req_index_to_global_index(
     # Allocate valid count buffer if needed (must be zero-initialized for atomics)
     valid_counts: torch.Tensor | None = None
     if return_valid_counts:
-        valid_counts = torch.zeros(
-            num_tokens, dtype=torch.int32, device=token_indices.device
-        )
+        valid_counts = torch.zeros(num_tokens, dtype=torch.int32, device=token_indices.device)
 
     # Strides in elements
     bt_stride0, bt_stride1 = block_table_c.stride()
@@ -267,8 +261,7 @@ def triton_filter_and_convert_dcp_index(
     # AphroditeConfig: block_size % cp_kv_cache_interleave_size == 0); assert the
     # local invariant so local_idx // BLOCK_SIZE never straddles a group.
     assert BLOCK_SIZE % cp_kv_cache_interleave_size == 0, (
-        f"BLOCK_SIZE ({BLOCK_SIZE}) must be divisible by "
-        f"cp_kv_cache_interleave_size ({cp_kv_cache_interleave_size})."
+        f"BLOCK_SIZE ({BLOCK_SIZE}) must be divisible by cp_kv_cache_interleave_size ({cp_kv_cache_interleave_size})."
     )
     assert req_id.dtype == torch.int32
     assert block_table.dtype == torch.int32
@@ -305,9 +298,7 @@ def triton_filter_and_convert_dcp_index(
 
     valid_counts: torch.Tensor | None = None
     if count_valid:
-        valid_counts = torch.zeros(
-            num_tokens, dtype=torch.int32, device=token_indices.device
-        )
+        valid_counts = torch.zeros(num_tokens, dtype=torch.int32, device=token_indices.device)
 
     bt_stride0, bt_stride1 = block_table_c.stride()
     ti_stride0, ti_stride1 = token_indices_c.stride()

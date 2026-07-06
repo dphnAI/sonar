@@ -10,7 +10,7 @@ from typing import Any
 import torch
 
 import aphrodite.envs as envs
-from aphrodite.config import CUDAGraphMode, ParallelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CUDAGraphMode, ParallelConfig
 from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backend import AttentionMetadata
@@ -58,12 +58,8 @@ class BatchDescriptor:
     """
 
 
-def _compute_sp_num_tokens(
-    num_tokens_across_dp_cpu: torch.Tensor, sequence_parallel_size: int
-) -> list[int]:
-    sp_tokens = (
-        num_tokens_across_dp_cpu + sequence_parallel_size - 1
-    ) // sequence_parallel_size
+def _compute_sp_num_tokens(num_tokens_across_dp_cpu: torch.Tensor, sequence_parallel_size: int) -> list[int]:
+    sp_tokens = (num_tokens_across_dp_cpu + sequence_parallel_size - 1) // sequence_parallel_size
 
     sp_tokens = sp_tokens.repeat_interleave(sequence_parallel_size)
     return sp_tokens.tolist()
@@ -90,9 +86,7 @@ class DPMetadata:
 
         # If num_tokens_across_dp is None, it will be computed by all_reduce
         # Otherwise, num_tokens_across_dp[dp_rank] should be equal to batchsize
-        assert num_tokens_across_dp_cpu[dp_rank] == batchsize, (
-            f"{num_tokens_across_dp_cpu[dp_rank]} {batchsize}"
-        )
+        assert num_tokens_across_dp_cpu[dp_rank] == batchsize, f"{num_tokens_across_dp_cpu[dp_rank]} {batchsize}"
         return DPMetadata(num_tokens_across_dp_cpu)
 
     @contextmanager
@@ -101,9 +95,7 @@ class DPMetadata:
         Context manager for setting self.local_sizes. Same as self.chunked_sizes
         but without any chunking.
         """
-        self.local_sizes = _compute_sp_num_tokens(
-            self.num_tokens_across_dp_cpu, sequence_parallel_size
-        )
+        self.local_sizes = _compute_sp_num_tokens(self.num_tokens_across_dp_cpu, sequence_parallel_size)
         try:
             yield self.local_sizes
         finally:
@@ -118,9 +110,7 @@ class DPMetadata:
     # DP and TP rank.
     # When sp_size==1, this is just the cumulative num tokens across DP.
     def cu_tokens_across_sp(self, sp_size: int) -> torch.Tensor:
-        num_tokens_across_sp_cpu = (
-            self.num_tokens_across_dp_cpu - 1 + sp_size
-        ) // sp_size
+        num_tokens_across_sp_cpu = (self.num_tokens_across_dp_cpu - 1 + sp_size) // sp_size
         num_tokens_across_sp_cpu = num_tokens_across_sp_cpu.repeat_interleave(sp_size)
         return torch.cumsum(num_tokens_across_sp_cpu, dim=0)
 
@@ -196,8 +186,7 @@ _forward_context: ForwardContext | None = None
 def get_forward_context() -> ForwardContext:
     """Get the current forward context."""
     assert _forward_context is not None, (
-        "Forward context is not set. "
-        "Please use `set_forward_context` to set the forward context."
+        "Forward context is not set. Please use `set_forward_context` to set the forward context."
     )
     return _forward_context
 
@@ -293,9 +282,7 @@ def set_forward_context(
                 allow_microbatching=False,
             )
             assert num_tokens_across_dp is not None
-        dp_metadata = DPMetadata.make(
-            aphrodite_config.parallel_config, num_tokens or 0, num_tokens_across_dp
-        )
+        dp_metadata = DPMetadata.make(aphrodite_config.parallel_config, num_tokens or 0, num_tokens_across_dp)
 
     # Convenience: if cudagraph is used and num_tokens is given, we can just
     # create a batch descriptor here if not given (there's no harm since if it
@@ -356,9 +343,6 @@ def set_forward_context(
                 forward_stats.sort(key=lambda x: x[1], reverse=True)
                 if forward_stats:
                     logger.info(
-                        (
-                            "Batchsize forward time stats "
-                            "(batchsize, count, median_time(ms)): %s"
-                        ),
+                        ("Batchsize forward time stats (batchsize, count, median_time(ms)): %s"),
                         forward_stats,
                     )

@@ -38,9 +38,7 @@ def get_sliding_window_manager(sliding_window_spec, block_pool, enable_caching=T
     )
 
 
-def get_chunked_local_attention_manager(
-    chunked_local_attention_spec, block_pool, enable_caching=True
-):
+def get_chunked_local_attention_manager(chunked_local_attention_spec, block_pool, enable_caching=True):
     return ChunkedLocalAttentionManager(
         chunked_local_attention_spec,
         block_pool=block_pool,
@@ -61,24 +59,16 @@ def test_chunked_local_attention_possible_cached_prefix():
         attention_chunk_size=4,
     )
 
-    block_pool = BlockPool(
-        num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size
-    )
-    manager = get_chunked_local_attention_manager(
-        chunked_local_attention_spec, block_pool
-    )
+    block_pool = BlockPool(num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size)
+    manager = get_chunked_local_attention_manager(chunked_local_attention_spec, block_pool)
 
     def run_one_case(block_is_cached, tail_token, expect_length):
-        block_hash_list = [
-            BlockHash(str(i).encode()) for i in range(len(block_is_cached))
-        ]
+        block_hash_list = [BlockHash(str(i).encode()) for i in range(len(block_is_cached))]
 
         block_pool.cached_block_hash_to_block._cache.clear()
 
         # Mock the block pool with the cached blocks
-        for i, (block_hash, is_cached) in enumerate(
-            zip(block_hash_list, block_is_cached)
-        ):
+        for i, (block_hash, is_cached) in enumerate(zip(block_hash_list, block_is_cached)):
             if is_cached:
                 block_pool.cached_block_hash_to_block.insert(
                     make_block_hash_with_group_id(block_hash, 0),
@@ -96,10 +86,7 @@ def test_chunked_local_attention_possible_cached_prefix():
         )[0]
         assert len(computed_blocks) == expect_length
 
-        assert all(
-            block == block_pool.null_block
-            for block in computed_blocks[: (expect_length - 1) // 2]
-        )
+        assert all(block == block_pool.null_block for block in computed_blocks[: (expect_length - 1) // 2])
 
     run_one_case([True], 0, 1)
     run_one_case([True], 1, 1)
@@ -134,22 +121,16 @@ def test_sliding_window_possible_cached_prefix():
         sliding_window=4,
     )
 
-    block_pool = BlockPool(
-        num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size
-    )
+    block_pool = BlockPool(num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size)
     manager = get_sliding_window_manager(sliding_window_spec, block_pool)
 
     def run_one_case(block_is_cached, expect_length):
-        block_hash_list = [
-            BlockHash(str(i).encode()) for i in range(len(block_is_cached))
-        ]
+        block_hash_list = [BlockHash(str(i).encode()) for i in range(len(block_is_cached))]
 
         block_pool.cached_block_hash_to_block._cache.clear()
 
         # Mock the block pool with the cached blocks
-        for i, (block_hash, is_cached) in enumerate(
-            zip(block_hash_list, block_is_cached)
-        ):
+        for i, (block_hash, is_cached) in enumerate(zip(block_hash_list, block_is_cached)):
             if is_cached:
                 block_pool.cached_block_hash_to_block.insert(
                     make_block_hash_with_group_id(block_hash, 0),
@@ -167,10 +148,7 @@ def test_sliding_window_possible_cached_prefix():
         )[0]
         assert len(computed_blocks) == expect_length
 
-        assert all(
-            block == block_pool.null_block
-            for block in computed_blocks[: expect_length - 2]
-        )
+        assert all(block == block_pool.null_block for block in computed_blocks[: expect_length - 2])
         for i in range(2):
             if i < expect_length:
                 block_index = expect_length - i - 1
@@ -183,12 +161,8 @@ def test_sliding_window_possible_cached_prefix():
     run_one_case([True, True, False], 2)
     run_one_case([True, True, True], 3)
     run_one_case([True, True, True, False], 3)
-    run_one_case(
-        [True, True, False, True, False, False, True, True, False, True, True, True], 12
-    )
-    run_one_case(
-        [True, True, False, True, False, False, True, True, False, False, False], 8
-    )
+    run_one_case([True, True, False, True, False, False, True, True, False, True, True, True], 12)
+    run_one_case([True, True, False, True, False, False, True, True, False, False, False], 8)
     run_one_case(
         [True, True, False, True, False, False, True, True, False, False, False, True],
         8,
@@ -211,10 +185,7 @@ def test_chunked_local_attention_remove_skipped_blocks():
     null_block_id = block_pool.null_block.block_id
 
     def id_to_block_table(ids) -> list[KVCacheBlock]:
-        return [
-            KVCacheBlock(id_) if id_ != null_block_id else block_pool.null_block
-            for id_ in ids
-        ]
+        return [KVCacheBlock(id_) if id_ != null_block_id else block_pool.null_block for id_ in ids]
 
     def assert_block_id(block_table: list[KVCacheBlock], ids: list[int]):
         for block, id_ in zip(block_table, ids):
@@ -272,10 +243,7 @@ def test_sliding_window_remove_skipped_blocks():
     null_block_id = block_pool.null_block.block_id
 
     def id_to_block_table(ids) -> list[KVCacheBlock]:
-        return [
-            KVCacheBlock(id_) if id_ != null_block_id else block_pool.null_block
-            for id_ in ids
-        ]
+        return [KVCacheBlock(id_) if id_ != null_block_id else block_pool.null_block for id_ in ids]
 
     def assert_block_id(block_table: list[KVCacheBlock], ids: list[int]):
         for block, id_ in zip(block_table, ids):
@@ -352,10 +320,7 @@ def test_rswa_remove_skipped_blocks_gap_range():
 
     null_block_id = block_pool.null_block.block_id
     original_block_ids = list(range(1000, 1010))
-    block_table = [
-        KVCacheBlock(id_) if id_ != null_block_id else block_pool.null_block
-        for id_ in original_block_ids
-    ]
+    block_table = [KVCacheBlock(id_) if id_ != null_block_id else block_pool.null_block for id_ in original_block_ids]
     manager.req_to_blocks["test"] = block_table
 
     prefix_len = 16
@@ -387,27 +352,13 @@ def test_get_num_blocks_to_allocate():
         sliding_window=4,  # Placeholder value, not related to test result
     )
 
-    block_pool = BlockPool(
-        num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size
-    )
+    block_pool = BlockPool(num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size)
     manager = get_sliding_window_manager(sliding_window_spec, block_pool)
     cached_blocks_1 = [KVCacheBlock(i + 1) for i in range(10)]
-    cached_blocks_2 = [block_pool.null_block for _ in range(5)] + [
-        KVCacheBlock(i + 1) for i in range(5)
-    ]
+    cached_blocks_2 = [block_pool.null_block for _ in range(5)] + [KVCacheBlock(i + 1) for i in range(5)]
 
-    assert (
-        manager.get_num_blocks_to_allocate(
-            "1", 20 * block_size, cached_blocks_1, 0, 20 * block_size
-        )
-        == 20
-    )
-    assert (
-        manager.get_num_blocks_to_allocate(
-            "2", 20 * block_size, cached_blocks_2, 0, 20 * block_size
-        )
-        == 15
-    )
+    assert manager.get_num_blocks_to_allocate("1", 20 * block_size, cached_blocks_1, 0, 20 * block_size) == 20
+    assert manager.get_num_blocks_to_allocate("2", 20 * block_size, cached_blocks_2, 0, 20 * block_size) == 15
 
 
 def test_evictable_cached_blocks_not_double_allocated():
@@ -421,9 +372,7 @@ def test_evictable_cached_blocks_not_double_allocated():
         sliding_window=sliding_window_length,
     )
 
-    block_pool = BlockPool(
-        num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size
-    )
+    block_pool = BlockPool(num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size)
     manager = get_sliding_window_manager(sliding_window_spec, block_pool)
 
     request_id = "req"
@@ -446,9 +395,7 @@ def test_evictable_cached_blocks_not_double_allocated():
         num_local_computed_tokens=block_size,
         num_external_computed_tokens=0,
     )
-    new_blocks = manager.allocate_new_blocks(
-        request_id, num_tokens=4, num_tokens_main_model=4
-    )
+    new_blocks = manager.allocate_new_blocks(request_id, num_tokens=4, num_tokens_main_model=4)
     assert len(new_blocks) == 1
     assert len(manager.req_to_blocks[request_id]) == 2
 
@@ -463,27 +410,13 @@ def test_chunked_local_attention_get_num_blocks_to_allocate():
         attention_chunk_size=4,  # Placeholder value, not related to test result
     )
 
-    block_pool = BlockPool(
-        num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size
-    )
+    block_pool = BlockPool(num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size)
     manager = get_chunked_local_attention_manager(attention_spec, block_pool)
     cached_blocks_1 = [KVCacheBlock(i + 1) for i in range(10)]
-    cached_blocks_2 = [block_pool.null_block for _ in range(5)] + [
-        KVCacheBlock(i + 1) for i in range(5)
-    ]
+    cached_blocks_2 = [block_pool.null_block for _ in range(5)] + [KVCacheBlock(i + 1) for i in range(5)]
 
-    assert (
-        manager.get_num_blocks_to_allocate(
-            "1", 20 * block_size, cached_blocks_1, 0, 20 * block_size
-        )
-        == 20
-    )
-    assert (
-        manager.get_num_blocks_to_allocate(
-            "2", 20 * block_size, cached_blocks_2, 0, 20 * block_size
-        )
-        == 15
-    )
+    assert manager.get_num_blocks_to_allocate("1", 20 * block_size, cached_blocks_1, 0, 20 * block_size) == 20
+    assert manager.get_num_blocks_to_allocate("2", 20 * block_size, cached_blocks_2, 0, 20 * block_size) == 15
 
 
 def test_predictor_matches_allocator_blocks_calculation_with_admission_cap():
@@ -502,9 +435,7 @@ def test_predictor_matches_allocator_blocks_calculation_with_admission_cap():
         dtype=torch.float32,
         sliding_window=sliding_window,
     )
-    block_pool = BlockPool(
-        num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size
-    )
+    block_pool = BlockPool(num_gpu_blocks=100, enable_caching=True, hash_block_size=block_size)
     manager = SlidingWindowManager(
         spec,
         block_pool=block_pool,
@@ -526,11 +457,8 @@ def test_predictor_matches_allocator_blocks_calculation_with_admission_cap():
             total_computed_tokens=total_computed,
             num_tokens_main_model=num_tokens,
         )
-        new_blocks = manager.allocate_new_blocks(
-            request_id, num_tokens=num_tokens, num_tokens_main_model=num_tokens
-        )
+        new_blocks = manager.allocate_new_blocks(request_id, num_tokens=num_tokens, num_tokens_main_model=num_tokens)
         assert predicted == len(new_blocks), (
-            f"num_tokens={num_tokens}: predictor returned {predicted} "
-            f"but allocator pulled {len(new_blocks)}"
+            f"num_tokens={num_tokens}: predictor returned {predicted} but allocator pulled {len(new_blocks)}"
         )
         total_computed = num_tokens

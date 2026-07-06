@@ -38,9 +38,7 @@ def _gemma_rmsnorm_kernel(
     row = tl.program_id(0)
     cols = tl.arange(0, BLOCK_N)
     mask = cols < n_cols
-    x = tl.load(x_ptr + row * stride_row + cols * stride_col, mask=mask, other=0.0).to(
-        tl.float32
-    )
+    x = tl.load(x_ptr + row * stride_row + cols * stride_col, mask=mask, other=0.0).to(tl.float32)
     var = tl.sum(x * x, axis=0) / n_cols
     rstd = 1.0 / tl.sqrt(var + eps)
     w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
@@ -70,12 +68,8 @@ def _gemma_fused_add_rmsnorm_kernel(
     row = tl.program_id(0)
     cols = tl.arange(0, BLOCK_N)
     mask = cols < n_cols
-    x = tl.load(
-        x_ptr + row * stride_xrow + cols * stride_xcol, mask=mask, other=0.0
-    ).to(tl.float32)
-    r = tl.load(
-        res_ptr + row * stride_rrow + cols * stride_rcol, mask=mask, other=0.0
-    ).to(tl.float32)
+    x = tl.load(x_ptr + row * stride_xrow + cols * stride_xcol, mask=mask, other=0.0).to(tl.float32)
+    r = tl.load(res_ptr + row * stride_rrow + cols * stride_rcol, mask=mask, other=0.0).to(tl.float32)
     s = x + r
     # residual_out is the pre-norm sum (consumed by the next layer's add).
     tl.store(

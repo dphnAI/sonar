@@ -104,9 +104,7 @@ def _convert_awq_to_standard_format(
     pack_factor = 32 // size_bits
     mask = (1 << size_bits) - 1
     device = getattr(layer, w_q_name).device
-    reverse_order = torch.tensor(
-        _REVERSE_AWQ_PACK_ORDER, dtype=torch.long, device=device
-    )
+    reverse_order = torch.tensor(_REVERSE_AWQ_PACK_ORDER, dtype=torch.long, device=device)
     shifts = torch.arange(0, 32, size_bits, dtype=torch.int32, device=device)
 
     # --- Convert qweight: (K, N // pack) packed_dim=1 → (K // pack, N) packed_dim=0
@@ -121,9 +119,7 @@ def _convert_awq_to_standard_format(
 
     # Repack along input dim (dim 0)
     unpacked = unpacked.reshape(K // pack_factor, pack_factor, N)
-    new_qw = (unpacked.to(torch.int32) << shifts[None, :, None]).sum(
-        dim=1, dtype=torch.int32
-    )
+    new_qw = (unpacked.to(torch.int32) << shifts[None, :, None]).sum(dim=1, dtype=torch.int32)
 
     def _noop_loader(*args, **kwargs):
         pass
@@ -152,9 +148,7 @@ def _convert_awq_to_standard_format(
     # Transpose and repack along dim 0 (output dim)
     unpacked_zp = unpacked_zp.T  # (N, G)
     unpacked_zp = unpacked_zp.reshape(N // pack_factor, pack_factor, G)
-    new_qz = (unpacked_zp.to(torch.int32) << shifts[None, :, None]).sum(
-        dim=1, dtype=torch.int32
-    )
+    new_qz = (unpacked_zp.to(torch.int32) << shifts[None, :, None]).sum(dim=1, dtype=torch.int32)
 
     new_zp_param = PackedAphroditeParameter(
         data=new_qz.contiguous(),
@@ -239,9 +233,7 @@ class AutoAWQConfig(QuantizationConfig):
         group_size = cls.get_from_keys(config, ["q_group_size", "group_size"])
         zero_point = cls.get_from_keys(config, ["zero_point"])
         lm_head_quantized = cls.get_from_keys_or(config, ["lm_head"], default=False)
-        modules_to_not_convert = cls.get_from_keys_or(
-            config, ["modules_to_not_convert"], None
-        )
+        modules_to_not_convert = cls.get_from_keys_or(config, ["modules_to_not_convert"], None)
         # Ensure full_config uses "awq" as quant_method for MoE fallback compatibility.
         # MoeWNA16Config only accepts "gptq" or "awq", so we normalize here.
         full_config = config.copy()
@@ -256,9 +248,7 @@ class AutoAWQConfig(QuantizationConfig):
         )
 
     @classmethod
-    def override_quantization_method(
-        cls, hf_quant_cfg, user_quant, hf_config=None
-    ) -> "QuantizationMethods | None":
+    def override_quantization_method(cls, hf_quant_cfg, user_quant, hf_config=None) -> "QuantizationMethods | None":
         """Override to use AutoAWQ for compatible AWQ models."""
         # Don't override on CPU - let cpu_awq handle it
         if current_platform.is_cpu():
@@ -284,9 +274,7 @@ class AutoAWQConfig(QuantizationConfig):
     def get_quant_method(
         self, layer: torch.nn.Module, prefix: str
     ) -> Union["LinearMethodBase", "QuantizeMethodBase"] | None:
-        if isinstance(layer, LinearBase) or (
-            isinstance(layer, ParallelLMHead) and self.lm_head_quantized
-        ):
+        if isinstance(layer, LinearBase) or (isinstance(layer, ParallelLMHead) and self.lm_head_quantized):
             if is_layer_skipped(
                 prefix,
                 self.modules_to_not_convert,
@@ -309,19 +297,14 @@ class AutoAWQConfig(QuantizationConfig):
             use_marlin = (
                 not envs.APHRODITE_BATCH_INVARIANT
                 and current_platform.is_cuda()
-                and check_marlin_supported(
-                    self.quant_type, self.group_size, self.zero_point
-                )
+                and check_marlin_supported(self.quant_type, self.group_size, self.zero_point)
             )
 
             if use_marlin:
                 # tile-misaligned shapes are fixed by padding at weight prep
-                if not check_marlin_supports_layer(
-                    layer, self.group_size, allow_tile_padding=True
-                ):
+                if not check_marlin_supports_layer(layer, self.group_size, allow_tile_padding=True):
                     logger.warning_once(
-                        "Layer '%s' is not supported by AutoAWQMarlin. "
-                        "Falling back to unoptimized AWQ kernels.",
+                        "Layer '%s' is not supported by AutoAWQMarlin. Falling back to unoptimized AWQ kernels.",
                         prefix,
                     )
                     return AutoAWQLinearMethod(self)
@@ -339,20 +322,15 @@ class AutoAWQConfig(QuantizationConfig):
             ):
                 return UnquantizedFusedMoEMethod(layer.moe_config)
 
-            if not check_moe_marlin_supports_layer(
-                layer, self.group_size, allow_tile_padding=True
-            ):
+            if not check_moe_marlin_supports_layer(layer, self.group_size, allow_tile_padding=True):
                 logger.warning_once(
-                    f"Layer '{prefix}' is not supported by AutoAWQMoEMarlin. "
-                    "Falling back to Moe WNA16 kernels."
+                    f"Layer '{prefix}' is not supported by AutoAWQMoEMarlin. Falling back to Moe WNA16 kernels."
                 )
                 from aphrodite.model_executor.layers.quantization.moe_wna16 import (
                     MoeWNA16Config,
                 )
 
-                return MoeWNA16Config.from_config(self.full_config).get_quant_method(
-                    layer, prefix
-                )
+                return MoeWNA16Config.from_config(self.full_config).get_quant_method(layer, prefix)
 
             return AutoAWQMoEMethod(self, layer.moe_config)
 
@@ -379,15 +357,11 @@ class AutoAWQConfig(QuantizationConfig):
         if num_bits not in cls.TYPE_MAP:
             return False
 
-        return check_marlin_supported(
-            quant_type=cls.TYPE_MAP[num_bits], group_size=group_size, has_zp=zero_point
-        )
+        return check_marlin_supported(quant_type=cls.TYPE_MAP[num_bits], group_size=group_size, has_zp=zero_point)
 
     def apply_aphrodite_mapper(self, hf_to_aphrodite_mapper: "WeightsMapper"):
         if self.modules_to_not_convert:
-            self.modules_to_not_convert = hf_to_aphrodite_mapper.apply_list(
-                self.modules_to_not_convert
-            )
+            self.modules_to_not_convert = hf_to_aphrodite_mapper.apply_list(self.modules_to_not_convert)
 
     def maybe_update_config(
         self,
@@ -404,8 +378,7 @@ class AutoAWQConfig(QuantizationConfig):
         quant_layers: set[str] = {
             param_name.rsplit(".", 1)[0]
             for param_name, info in metadata.items()
-            if (dtype := info.get("dtype", None))
-            and _SAFETENSORS_TO_TORCH_DTYPE[dtype] not in unquant_dtypes
+            if (dtype := info.get("dtype", None)) and _SAFETENSORS_TO_TORCH_DTYPE[dtype] not in unquant_dtypes
         }
         self.modules_to_not_convert = list(layers - quant_layers)
 
@@ -529,9 +502,7 @@ class AutoAWQMarlinLinearMethod(LinearMethodBase):
         # along the output dimension. Convert to the standard format
         # (GPTQ-like: standard bit order, qweight packed along input dim)
         # before handing off to the kernel.
-        _convert_awq_to_standard_format(
-            layer, "qweight", "qzeros", self.quant_config.quant_type.size_bits
-        )
+        _convert_awq_to_standard_format(layer, "qweight", "qzeros", self.quant_config.quant_type.size_bits)
         self.kernel.process_weights_after_loading(layer)
 
     def apply(
@@ -578,9 +549,7 @@ class AutoAWQMoEMethod(FusedMoEMethodBase):
             }
         )
 
-        intermediate_size_full = extra_weight_attrs.pop(
-            "intermediate_size_full", intermediate_size_per_partition
-        )
+        intermediate_size_full = extra_weight_attrs.pop("intermediate_size_full", intermediate_size_per_partition)
         self.is_k_full = intermediate_size_per_partition == intermediate_size_full
 
         w13_qweight = Parameter(
@@ -705,22 +674,14 @@ class AutoAWQMoEMethod(FusedMoEMethodBase):
 
         replace_parameter(layer, "w13_scales", w13_scale)
         replace_parameter(layer, "w2_scales", w2_scale)
-        _replace_or_register_parameter(
-            layer, "w13_g_idx_sort_indices", w13_g_idx_sort_indices
-        )
-        _replace_or_register_parameter(
-            layer, "w2_g_idx_sort_indices", w2_g_idx_sort_indices
-        )
+        _replace_or_register_parameter(layer, "w13_g_idx_sort_indices", w13_g_idx_sort_indices)
+        _replace_or_register_parameter(layer, "w2_g_idx_sort_indices", w2_g_idx_sort_indices)
         _replace_or_register_parameter(layer, "w13_g_idx", w13_g_idx)
         _replace_or_register_parameter(layer, "w2_g_idx", w2_g_idx)
         _replace_or_register_parameter(layer, "w13_qzeros", w13_qzeros)
         _replace_or_register_parameter(layer, "w2_qzeros", w2_qzeros)
-        _replace_or_register_parameter(
-            layer, "w13_input_global_scale", w13_input_global_scale
-        )
-        _replace_or_register_parameter(
-            layer, "w2_input_global_scale", w2_input_global_scale
-        )
+        _replace_or_register_parameter(layer, "w13_input_global_scale", w13_input_global_scale)
+        _replace_or_register_parameter(layer, "w2_input_global_scale", w2_input_global_scale)
         _replace_or_register_parameter(layer, "w13_bias", w13_bias)
         _replace_or_register_parameter(layer, "w2_bias", w2_bias)
 
@@ -748,12 +709,8 @@ class AutoAWQMoEMethod(FusedMoEMethodBase):
             w2_scale=layer.w2_scales,
             group_size=self.quant_config.group_size,
             num_bits=self.quant_config.weight_bits,
-            w1_zp=getattr(layer, "w13_qzeros", None)
-            if self.quant_config.zero_point
-            else None,
-            w2_zp=getattr(layer, "w2_qzeros", None)
-            if self.quant_config.zero_point
-            else None,
+            w1_zp=getattr(layer, "w13_qzeros", None) if self.quant_config.zero_point else None,
+            w2_zp=getattr(layer, "w2_qzeros", None) if self.quant_config.zero_point else None,
             w1_bias=getattr(layer, "w13_bias", None),
             w2_bias=getattr(layer, "w2_bias", None),
             a1_gscale=getattr(layer, "w13_input_global_scale", None),
@@ -960,8 +917,7 @@ class AutoAWQXPULinearMethod(BaseAWQLinearMethod):
             )
         except ImportError as e:
             raise ImportError(
-                "XPU AWQ requires aphrodite-xpu-kernels. "
-                "Please install it with: pip install aphrodite-xpu-kernels"
+                "XPU AWQ requires aphrodite-xpu-kernels. Please install it with: pip install aphrodite-xpu-kernels"
             ) from e
 
         layer.xpu_output_size = layer.qweight.size(1) * self.quant_config.pack_factor

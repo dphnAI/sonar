@@ -8,7 +8,6 @@ import pytest
 import torch
 
 import aphrodite._custom_ops as ops
-from tests.kernels.utils import fp8_ulp_distance, opcheck
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
@@ -18,6 +17,7 @@ from aphrodite.model_executor.layers.quantization.utils.int8_utils import (
 )
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.utils import fp8_ulp_distance, opcheck
 
 DTYPES = [torch.bfloat16, torch.float]
 QUANT_DTYPES = [torch.int8, current_platform.fp8_dtype()]
@@ -34,9 +34,7 @@ SCALE_UBS = [True, False]
 GROUP_SIZES = [None, [1, 64], [1, 128]]
 TMA_ALIGNMENTS = [0, 4]
 SEEDS = [0]
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-]
+CUDA_DEVICES = [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
 
 EPS = 1e-6
 
@@ -76,19 +74,13 @@ def ref_dynamic_per_token_or_block_quant(
     # Quant
     if group_size is not None:
         if quant_dtype == current_platform.fp8_dtype():
-            torch_out, scales = per_token_group_quant_fp8(
-                torch_out, group_size=group_size[1], use_ue8m0=False
-            )
+            torch_out, scales = per_token_group_quant_fp8(torch_out, group_size=group_size[1], use_ue8m0=False)
         else:
             assert quant_dtype == torch.int8
-            torch_out, scales = per_token_group_quant_int8(
-                torch_out, group_size=group_size[1]
-            )
+            torch_out, scales = per_token_group_quant_int8(torch_out, group_size=group_size[1])
     else:
         if quant_dtype == current_platform.fp8_dtype():
-            torch_out, scales = ops.scaled_fp8_quant(
-                torch_out, scale_ub=scale_ub, use_per_token_if_dynamic=True
-            )
+            torch_out, scales = ops.scaled_fp8_quant(torch_out, scale_ub=scale_ub, use_per_token_if_dynamic=True)
         else:
             assert quant_dtype == torch.int8
             torch_out, scales, _ = ops.scaled_int8_quant(torch_out)
@@ -104,9 +96,7 @@ def ref_impl(
     scale_ub: torch.Tensor | None,
     group_size: list[int] | None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
-    return ref_dynamic_per_token_or_block_quant(
-        rms_norm_layer, x, quant_dtype, residual, scale_ub, group_size
-    )
+    return ref_dynamic_per_token_or_block_quant(rms_norm_layer, x, quant_dtype, residual, scale_ub, group_size)
 
 
 def ops_dynamic_per_token_or_block_quant(
@@ -134,9 +124,7 @@ def ops_dynamic_per_token_or_block_quant(
         )
         scales = scales.contiguous()
     else:
-        out, scales = ops.rms_norm_dynamic_per_token_quant(
-            x, weight, EPS, quant_dtype, scale_ub, residual
-        )
+        out, scales = ops.rms_norm_dynamic_per_token_quant(x, weight, EPS, quant_dtype, scale_ub, residual)
     return out, scales, residual
 
 
@@ -149,9 +137,7 @@ def ops_impl(
     group_size: list[int] | None,
     tma_alignment: int,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
-    return ops_dynamic_per_token_or_block_quant(
-        weight, x, quant_dtype, residual, scale_ub, group_size, tma_alignment
-    )
+    return ops_dynamic_per_token_or_block_quant(weight, x, quant_dtype, residual, scale_ub, group_size, tma_alignment)
 
 
 @pytest.mark.parametrize("num_tokens, hidden_size", NUM_TOKENS_HIDDEN_SIZES)
@@ -193,17 +179,11 @@ def test_rms_norm(
         # blockwise baseline doesn't support scale_ub
         pytest.skip("scale_ub not supported for blockwise/group quantization")
 
-    if (
-        group_size is None or quant_dtype != current_platform.fp8_dtype()
-    ) and tma_alignment != 0:
+    if (group_size is None or quant_dtype != current_platform.fp8_dtype()) and tma_alignment != 0:
         # TMA alignment is only supported for groupwise fp8 kernels
         pytest.skip("tma alignment not supported for per-token or int8 quantization")
 
-    if (
-        group_size is not None
-        and tma_alignment != 0
-        and hidden_size // group_size[1] % tma_alignment == 0
-    ):
+    if group_size is not None and tma_alignment != 0 and hidden_size // group_size[1] % tma_alignment == 0:
         # Skip tests where TMA alignment doesn't create extra padding to save time
         pytest.skip("Skip TMA alignment cases where no extra padding is added")
 
@@ -230,20 +210,14 @@ def test_rms_norm(
     assert x.is_contiguous() != x_is_strided
 
     # Residual must still be contiguous
-    residual = (
-        torch.randn(num_tokens, hidden_size, dtype=dtype) * scale
-        if add_residual
-        else None
-    )
+    residual = torch.randn(num_tokens, hidden_size, dtype=dtype) * scale if add_residual else None
     if has_scale_ub:
         rms_x, _ = ref_rms_norm(layer, x, residual)
         scale_ub = torch.mean(rms_x).to(dtype=torch.float32, device="cuda")
     else:
         scale_ub = None
 
-    ref_out, ref_scales, ref_residual = ref_impl(
-        layer, x, quant_dtype, residual, scale_ub, group_size
-    )
+    ref_out, ref_scales, ref_residual = ref_impl(layer, x, quant_dtype, residual, scale_ub, group_size)
     ops_out, ops_scales, ops_residual = ops_impl(
         layer.weight, x, quant_dtype, residual, scale_ub, group_size, tma_alignment
     )
@@ -254,18 +228,12 @@ def test_rms_norm(
     # Per-block bf16 scales: allow a small relative tolerance for a few groups
     # whose abs-max flips by one ULP between the fused and reference paths. The
     # per-token and fp32 paths stay strict.
-    relax_block_rocm = (
-        group_size is not None
-        and dtype == torch.bfloat16
-        and current_platform.is_rocm()
-    )
+    relax_block_rocm = group_size is not None and dtype == torch.bfloat16 and current_platform.is_rocm()
 
     def scales_close(rtol: float, atol: float) -> bool:
         if torch.allclose(ref_scales, ops_scales, rtol=rtol, atol=atol):
             return True
-        return relax_block_rocm and torch.allclose(
-            ref_scales, ops_scales, rtol=1e-2, atol=atol
-        )
+        return relax_block_rocm and torch.allclose(ref_scales, ops_scales, rtol=1e-2, atol=atol)
 
     if quant_dtype == torch.int8:
         assert scales_close(rtol=1e-5, atol=1e-6)
@@ -304,9 +272,7 @@ def test_rms_norm(
 
     output = torch.empty(x.shape, dtype=quant_dtype, device=x.device)
     if group_size is None:
-        scales = torch.empty(
-            (x.numel() // x.shape[-1], 1), device=x.device, dtype=torch.float32
-        )
+        scales = torch.empty((x.numel() // x.shape[-1], 1), device=x.device, dtype=torch.float32)
         opcheck(
             torch.ops._C.rms_norm_dynamic_per_token_quant,
             (output, x, layer.weight, scales, 1e-5, scale_ub, residual),

@@ -122,19 +122,13 @@ def grouped_topk(
         # scores for expert selection but original scores for routing weights
         original_scores = scores
         scores = scores + e_score_correction_bias.unsqueeze(0)
-        group_scores = (
-            scores.view(num_token, num_expert_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
-        )
+        group_scores = scores.view(num_token, num_expert_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
     else:
-        group_scores = (
-            scores.view(num_token, num_expert_group, -1).max(dim=-1).values
-        )  # [n, n_group]
+        group_scores = scores.view(num_token, num_expert_group, -1).max(dim=-1).values  # [n, n_group]
 
     # For batch invariance, use sorted=True to ensure deterministic expert selection
     use_sorted = envs.APHRODITE_BATCH_INVARIANT
-    group_idx = torch.topk(group_scores, k=topk_group, dim=-1, sorted=use_sorted)[
-        1
-    ]  # [n, top_k_group]
+    group_idx = torch.topk(group_scores, k=topk_group, dim=-1, sorted=use_sorted)[1]  # [n, top_k_group]
     group_mask = torch.zeros_like(group_scores)  # [n, n_group]
     group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
     score_mask = (
@@ -149,9 +143,7 @@ def grouped_topk(
         # Use original unbiased scores for the routing weights
         topk_weights = original_scores.gather(1, topk_ids)
     else:
-        topk_weights, topk_ids = torch.topk(
-            tmp_scores, k=topk, dim=-1, sorted=use_sorted
-        )
+        topk_weights, topk_ids = torch.topk(tmp_scores, k=topk, dim=-1, sorted=use_sorted)
 
     if renormalize:
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
@@ -212,9 +204,7 @@ class GroupedTopk(CustomOp):
         gating_output: torch.Tensor,
         e_score_correction_bias: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.forward_native(
-            hidden_states, gating_output, e_score_correction_bias
-        )
+        return self.forward_native(hidden_states, gating_output, e_score_correction_bias)
 
     def forward_hip(
         self,
@@ -238,9 +228,7 @@ class GroupedTopk(CustomOp):
                 self.num_fused_shared_experts,
             )
         else:
-            return self.forward_native(
-                hidden_states, gating_output, e_score_correction_bias
-            )
+            return self.forward_native(hidden_states, gating_output, e_score_correction_bias)
 
 
 class GroupedTopKRouter(BaseRouter):

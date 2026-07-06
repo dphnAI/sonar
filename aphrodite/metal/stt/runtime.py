@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """STT runtime adapter contract used by the Aphrodite runner.
 
 The Aphrodite runner delegates STT execution to model-owned runtime adapters under
@@ -16,13 +17,7 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 
-STTAudioInput: TypeAlias = (
-    mx.array
-    | torch.Tensor
-    | NDArray[np.generic]
-    | Sequence[float]
-    | Sequence[Sequence[float]]
-)
+STTAudioInput: TypeAlias = mx.array | torch.Tensor | NDArray[np.generic] | Sequence[float] | Sequence[Sequence[float]]
 
 
 class STTRuntimeAdapter(ABC):

@@ -55,9 +55,7 @@ pytestmark = pytest.mark.skipif(
 def make_cos_sin(max_pos: int, rot_dim: int, device) -> torch.Tensor:
     """cos||sin cache: row[pos] = [cos(theta)(rot/2), sin(theta)(rot/2)]."""
     half = rot_dim // 2
-    inv_freq = 1.0 / (
-        10000.0 ** (torch.arange(0, half, dtype=torch.float32, device=device) / half)
-    )
+    inv_freq = 1.0 / (10000.0 ** (torch.arange(0, half, dtype=torch.float32, device=device) / half))
     t = torch.arange(max_pos, dtype=torch.float32, device=device)
     freqs = torch.einsum("i,j->ij", t, inv_freq)
     return torch.cat([freqs.cos(), freqs.sin()], dim=-1)
@@ -77,9 +75,7 @@ def layer_norm(x: torch.Tensor, w: torch.Tensor, b: torch.Tensor) -> torch.Tenso
     return (xf - mean) * torch.rsqrt(var + EPS) * w.float() + b.float()
 
 
-def rope(
-    x: torch.Tensor, pos: torch.Tensor, cos_sin: torch.Tensor, interleave: bool
-) -> torch.Tensor:
+def rope(x: torch.Tensor, pos: torch.Tensor, cos_sin: torch.Tensor, interleave: bool) -> torch.Tensor:
     """Apply RoPE to the first ``rot_dim`` elements of x's last dim.
 
     x: [..., head_dim] fp32. ``cos_sin`` is [max_pos, rot_dim]. ``interleave``
@@ -132,9 +128,7 @@ def assert_bf16(got: torch.Tensor, ref_fp32: torch.Tensor, msg: str):
     # reduction/FMA order differs from torch, so a few elements land on the
     # opposite side of a round-to-nearest tie. Use the same tolerance the
     # sibling deepseek_v4 fused-kernel test uses for this bf16 norm+rope class.
-    torch.testing.assert_close(
-        got.float(), ref_fp32.float(), rtol=1e-2, atol=1e-2, msg=lambda m: f"{msg}: {m}"
-    )
+    torch.testing.assert_close(got.float(), ref_fp32.float(), rtol=1e-2, atol=1e-2, msg=lambda m: f"{msg}: {m}")
 
 
 def assert_fp8(got: torch.Tensor, ref: torch.Tensor, msg: str):
@@ -373,15 +367,9 @@ def test_fused_q(num_tokens: int, index_interleave: bool):
     max_pos = 8192
     pos = torch.arange(num_tokens, device=dev, dtype=torch.int64) % max_pos
 
-    q_pe = torch.randn(
-        num_tokens, NUM_HEADS, ROPE_DIM, device=dev, dtype=torch.bfloat16
-    )
-    ql_nope = torch.randn(
-        num_tokens, NUM_HEADS, KV_LORA, device=dev, dtype=torch.bfloat16
-    )
-    index_q = torch.randn(
-        num_tokens, INDEX_HEADS, INDEX_HEAD_DIM, device=dev, dtype=torch.bfloat16
-    )
+    q_pe = torch.randn(num_tokens, NUM_HEADS, ROPE_DIM, device=dev, dtype=torch.bfloat16)
+    ql_nope = torch.randn(num_tokens, NUM_HEADS, KV_LORA, device=dev, dtype=torch.bfloat16)
+    index_q = torch.randn(num_tokens, INDEX_HEADS, INDEX_HEAD_DIM, device=dev, dtype=torch.bfloat16)
     index_w = torch.randn(num_tokens, INDEX_HEADS, device=dev, dtype=torch.float32)
     q_scale = torch.tensor([0.37], device=dev, dtype=torch.float32)
     softmax_scale = INDEX_HEAD_DIM**-0.5
@@ -436,12 +424,8 @@ def test_fused_q_no_indexer(num_tokens: int):
     dev = "cuda"
     max_pos = 8192
     pos = torch.arange(num_tokens, device=dev, dtype=torch.int64)
-    q_pe = torch.randn(
-        num_tokens, NUM_HEADS, ROPE_DIM, device=dev, dtype=torch.bfloat16
-    )
-    ql_nope = torch.randn(
-        num_tokens, NUM_HEADS, KV_LORA, device=dev, dtype=torch.bfloat16
-    )
+    q_pe = torch.randn(num_tokens, NUM_HEADS, ROPE_DIM, device=dev, dtype=torch.bfloat16)
+    ql_nope = torch.randn(num_tokens, NUM_HEADS, KV_LORA, device=dev, dtype=torch.bfloat16)
     q_scale = torch.tensor([0.5], device=dev, dtype=torch.float32)
     q_cos_sin = make_cos_sin(max_pos, ROPE_DIM, dev)
 
@@ -480,20 +464,14 @@ def test_fused_q_bf16_query(num_tokens: int, has_indexer: bool):
     max_pos = 8192
     pos = torch.arange(num_tokens, device=dev, dtype=torch.int64) % max_pos
 
-    q_pe = torch.randn(
-        num_tokens, NUM_HEADS, ROPE_DIM, device=dev, dtype=torch.bfloat16
-    )
-    ql_nope = torch.randn(
-        num_tokens, NUM_HEADS, KV_LORA, device=dev, dtype=torch.bfloat16
-    )
+    q_pe = torch.randn(num_tokens, NUM_HEADS, ROPE_DIM, device=dev, dtype=torch.bfloat16)
+    ql_nope = torch.randn(num_tokens, NUM_HEADS, KV_LORA, device=dev, dtype=torch.bfloat16)
     q_scale = torch.tensor([0.37], device=dev, dtype=torch.float32)
     q_cos_sin = make_cos_sin(max_pos, ROPE_DIM, dev)
 
     index_q = index_w = idx_cos_sin = None
     if has_indexer:
-        index_q = torch.randn(
-            num_tokens, INDEX_HEADS, INDEX_HEAD_DIM, device=dev, dtype=torch.bfloat16
-        )
+        index_q = torch.randn(num_tokens, INDEX_HEADS, INDEX_HEAD_DIM, device=dev, dtype=torch.bfloat16)
         index_w = torch.randn(num_tokens, INDEX_HEADS, device=dev, dtype=torch.float32)
         idx_cos_sin = make_cos_sin(max_pos, ROPE_DIM, dev)
 

@@ -63,22 +63,12 @@ def _fused_inv_rope_fp8_quant_per_head(
     # Padding rows in the TMA-aligned scale buffer: fill with zero and skip quant.
     if pid_token >= num_tokens:
         if TMA_ALIGNED_SCALES:
-            scale_addr = (
-                scale_ptr
-                + g * scale_stride_group
-                + pid_token
-                + head_in_group * scale_stride_k
-            )
+            scale_addr = scale_ptr + g * scale_stride_group + pid_token + head_in_group * scale_stride_k
             tl.store(scale_addr, tl.zeros((), dtype=tl.int32))
         else:
             block_offsets = tl.arange(0, CHUNKS_PER_HEAD)
             qb_indices = qb_start + block_offsets
-            scale_addrs = (
-                scale_ptr
-                + g * scale_stride_group
-                + pid_token
-                + qb_indices * scale_stride_k
-            )
+            scale_addrs = scale_ptr + g * scale_stride_group + pid_token + qb_indices * scale_stride_k
             tl.store(scale_addrs, tl.zeros((CHUNKS_PER_HEAD,), dtype=tl.float32))
         return
 
@@ -94,9 +84,7 @@ def _fused_inv_rope_fp8_quant_per_head(
     is_rope = offsets >= rope_abs_start
     rope_local = offsets - rope_abs_start
 
-    x_partner = tl.load(input_base + (offsets ^ 1), mask=is_rope, other=0.0).to(
-        tl.float32
-    )
+    x_partner = tl.load(input_base + (offsets ^ 1), mask=is_rope, other=0.0).to(tl.float32)
     cs_idx = tl.maximum(rope_local >> 1, 0)
     cos_v = tl.load(cache_base + cs_idx, mask=is_rope, other=1.0)
     sin_v = tl.load(cache_base + HALF_ROPE + cs_idx, mask=is_rope, other=0.0)
@@ -120,12 +108,7 @@ def _fused_inv_rope_fp8_quant_per_head(
     )
     x_quant = tl.clamp(x / scales_exp, -fp8_max, fp8_max).to(tl.float8e4nv)
 
-    fp8_base = (
-        fp8_ptr
-        + g * fp8_stride_group
-        + pid_token * fp8_stride_token
-        + qb_start * QUANT_GROUP_SIZE
-    )
+    fp8_base = fp8_ptr + g * fp8_stride_group + pid_token * fp8_stride_token + qb_start * QUANT_GROUP_SIZE
     tl.store(fp8_base + offsets, x_quant)
 
     block_offsets = tl.arange(0, CHUNKS_PER_HEAD)
@@ -134,17 +117,10 @@ def _fused_inv_rope_fp8_quant_per_head(
         scale_bits = scales.to(tl.int32, bitcast=True)
         ue8m0_bytes = (scale_bits >> 23) & 0xFF
         packed_val = tl.sum(ue8m0_bytes << (block_offsets * 8))
-        scale_addr = (
-            scale_ptr
-            + g * scale_stride_group
-            + pid_token
-            + head_in_group * scale_stride_k
-        )
+        scale_addr = scale_ptr + g * scale_stride_group + pid_token + head_in_group * scale_stride_k
         tl.store(scale_addr, packed_val)
     else:
-        scale_addrs = (
-            scale_ptr + g * scale_stride_group + pid_token + qb_indices * scale_stride_k
-        )
+        scale_addrs = scale_ptr + g * scale_stride_group + pid_token + qb_indices * scale_stride_k
         tl.store(scale_addrs, scales)
 
 

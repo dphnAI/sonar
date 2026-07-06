@@ -53,12 +53,7 @@ def _quantize_pad_fp8_kernel(
     s = offs_m // num_heads
     h = offs_m % num_heads
 
-    x_ptrs = (
-        x_ptr
-        + s[:, None] * stride_xs
-        + h[:, None] * stride_xh
-        + offs_n[None, :] * stride_xd
-    )
+    x_ptrs = x_ptr + s[:, None] * stride_xs + h[:, None] * stride_xh + offs_n[None, :] * stride_xd
     x = tl.load(x_ptrs, mask=mask_in, other=0.0).to(tl.float32)
     if SKIP_SCALE:
         x_q = x
@@ -67,12 +62,7 @@ def _quantize_pad_fp8_kernel(
         x_q = x / scale
     x_q = tl.clamp(x_q, fp8_min, fp8_max).to(y_ptr.dtype.element_ty)
 
-    y_ptrs = (
-        y_ptr
-        + s[:, None] * stride_ys
-        + h[:, None] * stride_yh
-        + offs_n[None, :] * stride_yd
-    )
+    y_ptrs = y_ptr + s[:, None] * stride_ys + h[:, None] * stride_yh + offs_n[None, :] * stride_yd
     tl.store(y_ptrs, x_q, mask=mask_out)
 
 

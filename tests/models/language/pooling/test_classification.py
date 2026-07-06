@@ -31,9 +31,7 @@ def test_models(
     with aphrodite_runner(model, max_model_len=512, dtype=dtype) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.classify(example_prompts)
 
-    with hf_runner(
-        model, dtype=dtype, auto_cls=AutoModelForSequenceClassification
-    ) as hf_model:
+    with hf_runner(model, dtype=dtype, auto_cls=AutoModelForSequenceClassification) as hf_model:
         hf_outputs = hf_model.classify(example_prompts)
 
     # check logits difference

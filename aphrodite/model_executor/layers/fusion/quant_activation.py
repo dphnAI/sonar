@@ -65,7 +65,6 @@ def as_quantized_activation(
     if not isinstance(x, QuantizedActivation):
         return None
     assert x.quant_key == expected_key, (
-        f"QuantizedActivation key {x.quant_key} != consumer kernel "
-        f"input_quant_key {expected_key}"
+        f"QuantizedActivation key {x.quant_key} != consumer kernel input_quant_key {expected_key}"
     )
     return x

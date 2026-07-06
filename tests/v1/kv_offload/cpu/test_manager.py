@@ -23,9 +23,7 @@ from aphrodite.v1.kv_offload.cpu.manager import CPUOffloadingManager
 from aphrodite.v1.kv_offload.cpu.policies.arc import ARCCachePolicy
 
 
-def make_req_context(
-    req_id: str = "", kv_transfer_params: dict | None = None
-) -> ReqContext:
+def make_req_context(req_id: str = "", kv_transfer_params: dict | None = None) -> ReqContext:
     """Create a ReqContext as production code would, from a request's params."""
     return ReqContext(req_id=req_id, kv_transfer_params=kv_transfer_params)
 
@@ -69,23 +67,15 @@ def verify_store_output(
     expected_prepare_store_output: ExpectedPrepareStoreOutput,
 ):
     assert prepare_store_output is not None
-    assert prepare_store_output.keys_to_store == to_keys(
-        expected_prepare_store_output.keys_to_store
-    )
-    assert prepare_store_output.evicted_keys == to_keys(
-        expected_prepare_store_output.evicted_keys
-    )
+    assert prepare_store_output.keys_to_store == to_keys(expected_prepare_store_output.keys_to_store)
+    assert prepare_store_output.evicted_keys == to_keys(expected_prepare_store_output.evicted_keys)
     store_spec = prepare_store_output.store_spec
     assert isinstance(store_spec, CPULoadStoreSpec)
-    expected_array = np.array(
-        expected_prepare_store_output.store_block_ids, dtype=np.int64
-    )
+    expected_array = np.array(expected_prepare_store_output.store_block_ids, dtype=np.int64)
     assert np.array_equal(expected_array, store_spec.block_ids)
 
 
-def verify_load_output(
-    prepare_load_output: LoadStoreSpec, expected_prepare_load_output: list[int]
-):
+def verify_load_output(prepare_load_output: LoadStoreSpec, expected_prepare_load_output: list[int]):
     assert isinstance(prepare_load_output, CPULoadStoreSpec)
     expected_array = np.array(expected_prepare_load_output, dtype=np.int64)
     assert np.array_equal(expected_array, prepare_load_output.block_ids)
@@ -193,9 +183,7 @@ def test_cpu_manager_reports_cache_usage_gauge():
     def check_usage_stats(manager: CPUOffloadingManager, value: float):
         stats = manager.get_stats()
         assert stats is not None
-        assert stats.reduce()[
-            CPUOffloadingMetrics.CPU_CACHE_USAGE_PERC
-        ] == pytest.approx(value)
+        assert stats.reduce()[CPUOffloadingMetrics.CPU_CACHE_USAGE_PERC] == pytest.approx(value)
 
     # Zero-capacity manager always reports 0.0
     manager = make_cpu_manager(num_blocks=0)
@@ -259,9 +247,7 @@ def test_cpu_manager():
     assert cpu_manager.lookup(to_key(3), _EMPTY_REQ_CTX) is LookupResult.MISS
 
     # prepare store [2, 3, 4, 5] -> evicts [1]
-    prepare_store_output = cpu_manager.prepare_store(
-        to_keys([2, 3, 4, 5]), _EMPTY_REQ_CTX
-    )
+    prepare_store_output = cpu_manager.prepare_store(to_keys([2, 3, 4, 5]), _EMPTY_REQ_CTX)
     verify_store_output(
         prepare_store_output,
         ExpectedPrepareStoreOutput(
@@ -350,10 +336,7 @@ def test_prepare_load_preserves_key_order():
     store_output = manager.prepare_store([key_a, key_b, key_c], _EMPTY_REQ_CTX)
     assert store_output is not None
     assert isinstance(store_output.store_spec, CPULoadStoreSpec)
-    key_to_block_id = {
-        k: int(bid)
-        for k, bid in zip(store_output.keys_to_store, store_output.store_spec.block_ids)
-    }
+    key_to_block_id = {k: int(bid) for k, bid in zip(store_output.keys_to_store, store_output.store_spec.block_ids)}
     manager.complete_store([key_a, key_b, key_c], _EMPTY_REQ_CTX)
 
     # Forward order: [a, b, c]
@@ -400,9 +383,7 @@ class TestARCPolicy:
         cpu_manager, arc_policy = self._make_manager()
 
         # prepare store [1, 2]
-        prepare_store_output = cpu_manager.prepare_store(
-            to_keys([1, 2]), _EMPTY_REQ_CTX
-        )
+        prepare_store_output = cpu_manager.prepare_store(to_keys([1, 2]), _EMPTY_REQ_CTX)
         verify_store_output(
             prepare_store_output,
             ExpectedPrepareStoreOutput(
@@ -462,9 +443,7 @@ class TestARCPolicy:
         cpu_manager, _ = self._make_manager()
 
         # prepare and complete store [1, 2, 3, 4]
-        prepare_store_output = cpu_manager.prepare_store(
-            to_keys([1, 2, 3, 4]), _EMPTY_REQ_CTX
-        )
+        prepare_store_output = cpu_manager.prepare_store(to_keys([1, 2, 3, 4]), _EMPTY_REQ_CTX)
         verify_store_output(
             prepare_store_output,
             ExpectedPrepareStoreOutput(
@@ -488,9 +467,7 @@ class TestARCPolicy:
 
         # now prepare store [5, 6, 7] should succeed
         # ARC will evict blocks one at a time from T1 as needed
-        prepare_store_output = cpu_manager.prepare_store(
-            to_keys([5, 6, 7]), _EMPTY_REQ_CTX
-        )
+        prepare_store_output = cpu_manager.prepare_store(to_keys([5, 6, 7]), _EMPTY_REQ_CTX)
         assert prepare_store_output is not None
         # Should successfully evict enough blocks to make room (at least 1)
         assert len(prepare_store_output.evicted_keys) >= 1
@@ -651,9 +628,7 @@ class TestARCPolicy:
         cpu_manager.complete_store(to_keys([1, 2]), _EMPTY_REQ_CTX)
 
         # store [3, 4, 5] -> evicts [1]
-        prepare_store_output = cpu_manager.prepare_store(
-            to_keys([3, 4, 5]), _EMPTY_REQ_CTX
-        )
+        prepare_store_output = cpu_manager.prepare_store(to_keys([3, 4, 5]), _EMPTY_REQ_CTX)
         assert prepare_store_output is not None
         assert len(prepare_store_output.evicted_keys) == 1
         cpu_manager.complete_store(to_keys([3, 4, 5]), _EMPTY_REQ_CTX)
@@ -805,9 +780,7 @@ def test_evictable_cache_block_count():
     manager._policy.evict = spy_evict  # type: ignore[method-assign]
     # cache state [10', 11', 12', x] <- cannot evict anything
     assert manager.prepare_store(to_keys([14, 15]), _EMPTY_REQ_CTX) is None
-    assert not evict_called, (
-        "_num_evictable_cache_blocks==0 should short-circuit before evict()"
-    )
+    assert not evict_called, "_num_evictable_cache_blocks==0 should short-circuit before evict()"
 
     # After releasing the loads, eviction becomes possible again.
     manager.complete_load(to_keys([10, 11, 12]), _EMPTY_REQ_CTX)

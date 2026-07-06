@@ -80,20 +80,14 @@ def init_aiter_topK_meta_data(
         dtype=torch.int32,
         device="cuda",
     )
-    ns_topk_ids, s_topk_ids = total_topk_ids.split(
-        [top_k, n_shared_experts + is_EP], dim=1
-    )
+    ns_topk_ids, s_topk_ids = total_topk_ids.split([top_k, n_shared_experts + is_EP], dim=1)
     shared_expert_ids = [n_routed_experts + i for i in range(n_shared_experts + is_EP)]
     if is_EP:
-        s_topk_ids_list = [
-            [fake_expertid] * (n_shared_experts + is_EP)
-        ] * max_num_tokens
+        s_topk_ids_list = [[fake_expertid] * (n_shared_experts + is_EP)] * max_num_tokens
         for i in range(tp_rank, max_num_tokens, tp_size):
             s_topk_ids_list[i] = shared_expert_ids
     else:
-        s_topk_ids_list = [
-            list(range(n_routed_experts, fake_expertid))
-        ] * max_num_tokens
+        s_topk_ids_list = [list(range(n_routed_experts, fake_expertid))] * max_num_tokens
     s_topk_ids[:] = torch.tensor(s_topk_ids_list, dtype=torch.int32, device="cuda")
 
     total_topk_weights = torch.empty(
@@ -101,9 +95,7 @@ def init_aiter_topK_meta_data(
         dtype=torch.float32,
         device="cuda",
     )
-    ns_topk_weights, s_topk_weights = total_topk_weights.split(
-        [top_k, n_shared_experts + is_EP], dim=1
-    )
+    ns_topk_weights, s_topk_weights = total_topk_weights.split([top_k, n_shared_experts + is_EP], dim=1)
     s_topk_weights.fill_(shared_experts_score)
     assert aiter_topK_meta_data is None, "AITER topK meta data is already initialized"
     aiter_topK_meta_data = (total_topk_weights, total_topk_ids)
@@ -137,8 +129,7 @@ def inject_shared_expert_weights(
     token = topk_weights.shape[0]
 
     assert total_topk_weights.shape[0] >= token, (
-        f"AITER topK meta data supports {total_topk_weights.shape[0]} "
-        f"tokens, but got {token} tokens."
+        f"AITER topK meta data supports {total_topk_weights.shape[0]} tokens, but got {token} tokens."
     )
 
     total_topk_weights_slice = total_topk_weights[:token]
@@ -151,9 +142,7 @@ def inject_shared_expert_weights(
         topk_ids = total_topk_ids_slice
 
     if shared_expert_weights is not None:
-        topk_weights[:, topk : topk + num_fused_shared_experts] = shared_expert_weights[
-            :token
-        ]
+        topk_weights[:, topk : topk + num_fused_shared_experts] = shared_expert_weights[:token]
 
     return topk_weights, topk_ids
 
@@ -172,10 +161,7 @@ def rocm_aiter_grouped_topk(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     token = hidden_states.shape[0]
     device = hidden_states.device
-    if (
-        rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        and num_fused_shared_experts > 0
-    ):
+    if rocm_aiter_ops.is_fusion_moe_shared_experts_enabled() and num_fused_shared_experts > 0:
         assert aiter_topK_meta_data is not None, (
             "AITER topK meta data is not initialized. "
             "Please ensure that init_aiter_topK_meta_data "
@@ -189,12 +175,8 @@ def rocm_aiter_grouped_topk(
         )
         total_topk_weights = total_topk_weights[:token]
         total_topk_ids = total_topk_ids[:token]
-        topk_weights, _ = total_topk_weights.split(
-            [topk, total_topk_weights.shape[1] - topk], dim=1
-        )
-        topk_ids, _ = total_topk_ids.split(
-            [topk, total_topk_ids.shape[1] - topk], dim=1
-        )
+        topk_weights, _ = total_topk_weights.split([topk, total_topk_weights.shape[1] - topk], dim=1)
+        topk_ids, _ = total_topk_ids.split([topk, total_topk_ids.shape[1] - topk], dim=1)
     else:
         topk_ids = torch.empty((token, topk), dtype=torch.int32, device=device)
         topk_weights = torch.empty((token, topk), dtype=torch.float32, device=device)
@@ -223,10 +205,7 @@ def rocm_aiter_grouped_topk(
             routed_scaling_factor=routed_scaling_factor,
         )
 
-    if (
-        rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        and num_fused_shared_experts > 0
-    ):
+    if rocm_aiter_ops.is_fusion_moe_shared_experts_enabled() and num_fused_shared_experts > 0:
         return total_topk_weights, total_topk_ids
     return topk_weights, topk_ids
 
@@ -272,23 +251,13 @@ def rocm_aiter_fused_experts(
     expert_mask = expert_map if expert_map is not None else None
 
     # w8a8 per-channel quantization
-    if (
-        quant_config.per_act_token_quant
-        and apply_router_weight_on_input
-        and quant_config.use_fp8_w8a8
-    ):
+    if quant_config.per_act_token_quant and apply_router_weight_on_input and quant_config.use_fp8_w8a8:
         # AITER tkw1 kernel for FP8 models with `apply_router_weight_on_input`
         # This applies topk_weights on the GEMM output of the first FC layer
         #  rather than the second FC.
-        assert topk_weights.dim() == 2, (
-            "`topk_weights` should be in shape (num_tokens, topk)"
-        )
-        assert topk_weights.shape[-1] == 1, (
-            "Only support topk=1 when `apply_router_weight_on_input` is True"
-        )
-        assert num_local_tokens is None, (
-            "AITER tkw1 kernel does not support `num_local_tokens`"
-        )
+        assert topk_weights.dim() == 2, "`topk_weights` should be in shape (num_tokens, topk)"
+        assert topk_weights.shape[-1] == 1, "Only support topk=1 when `apply_router_weight_on_input` is True"
+        assert num_local_tokens is None, "AITER tkw1 kernel does not support `num_local_tokens`"
 
         return rocm_aiter_ops.asm_moe_tkw1(
             hidden_states,
@@ -327,13 +296,9 @@ def rocm_aiter_fused_experts(
             quant_method = QuantMethod.PER_TENSOR.value
 
         if apply_router_weight_on_input:
-            assert topk_weights.dim() == 2, (
-                "`topk_weights` should be in shape (num_tokens, topk)"
-            )
+            assert topk_weights.dim() == 2, "`topk_weights` should be in shape (num_tokens, topk)"
             _, topk = topk_weights.shape
-            assert topk == 1, (
-                "Only support topk=1 when `apply_router_weight_on_input` is True"
-            )
+            assert topk == 1, "Only support topk=1 when `apply_router_weight_on_input` is True"
 
         # Compute padding on-the-fly for CK MXFP4 kernels
         hidden_pad = 0
@@ -342,10 +307,7 @@ def rocm_aiter_fused_experts(
         assert moe_config.intermediate_size_per_partition_unpadded is not None
         hidden_pad = hidden_states.shape[1] - moe_config.hidden_dim_unpadded
         intermediate_pad = (
-            (
-                moe_config.intermediate_size_per_partition
-                - moe_config.intermediate_size_per_partition_unpadded
-            )
+            (moe_config.intermediate_size_per_partition - moe_config.intermediate_size_per_partition_unpadded)
             if moe_config.intermediate_pad is None
             else moe_config.intermediate_pad
         )
@@ -357,9 +319,7 @@ def rocm_aiter_fused_experts(
         # TODO: Revisit this once we bump AITER to 0.1.15 with padding fixes
         # for CK/FlyDSL MoE GEMM e.g. https://github.com/ROCm/aiter/pull/3401
         hidden_pad = hidden_pad // 128 * 128
-        intermediate_pad = (
-            intermediate_pad // 64 * 64 * (2 if moe_config.tp_size == 1 else 1)
-        )
+        intermediate_pad = intermediate_pad // 64 * 64 * (2 if moe_config.tp_size == 1 else 1)
 
         # https://github.com/ROCm/aiter/pull/3123 specialized the AITER stage1 GEMMs
         # for interleaved vs separated gate and up weights.
@@ -373,11 +333,7 @@ def rocm_aiter_fused_experts(
         if quant_config.use_mxfp4_w4a16:
             gate_mode = GateMode.INTERLEAVE.value
         elif activation_interleave is not None:
-            gate_mode = (
-                GateMode.INTERLEAVE.value
-                if activation_interleave
-                else GateMode.SEPARATED.value
-            )
+            gate_mode = GateMode.INTERLEAVE.value if activation_interleave else GateMode.SEPARATED.value
 
         return rocm_aiter_ops.fused_moe(
             hidden_states,
@@ -419,9 +375,7 @@ class AiterExperts(mk.FusedMoEExpertsModular):
         return mk.FusedMoEActivationFormat.Standard
 
     @staticmethod
-    def is_supported_config(
-        cls, moe_config, weight_key, activation_key, activation_format
-    ):
+    def is_supported_config(cls, moe_config, weight_key, activation_key, activation_format):
         is_supported, reason = super().is_supported_config(
             cls, moe_config, weight_key, activation_key, activation_format
         )
@@ -477,8 +431,7 @@ class AiterExperts(mk.FusedMoEExpertsModular):
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
         return not (
-            moe_parallel_config.use_fi_nvl_two_sided_kernels
-            or moe_parallel_config.use_fi_nvl_one_sided_kernels
+            moe_parallel_config.use_fi_nvl_two_sided_kernels or moe_parallel_config.use_fi_nvl_one_sided_kernels
         )
 
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:

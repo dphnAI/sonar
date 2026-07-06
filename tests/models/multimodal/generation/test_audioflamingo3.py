@@ -22,8 +22,8 @@ import os
 
 import pytest
 
-from tests.models.registry import HF_EXAMPLE_MODELS
 from aphrodite import LLM, SamplingParams
+from tests.models.registry import HF_EXAMPLE_MODELS
 
 MODEL_NAME = "nvidia/audio-flamingo-3-hf"
 SINGLE_CONVERSATION = [
@@ -32,8 +32,7 @@ SINGLE_CONVERSATION = [
         "content": [
             {
                 "type": "text",
-                "text": "What is surprising about the relationship between "
-                "the barking and the music?",
+                "text": "What is surprising about the relationship between the barking and the music?",
             },
             {
                 "type": "audio_url",
@@ -77,9 +76,7 @@ BATCHED_CONVERSATIONS = [
 
 
 def get_fixture_path(filename):
-    return os.path.join(
-        os.path.dirname(__file__), "../../fixtures/audioflamingo3", filename
-    )
+    return os.path.join(os.path.dirname(__file__), "../../fixtures/audioflamingo3", filename)
 
 
 def assert_output_matches(output, expected_text, expected_token_ids):
@@ -166,6 +163,4 @@ def test_single_and_batched_generation_match(llm):
     )[0]
 
     assert single_output.outputs[0].text == batched_output.outputs[0].text
-    assert list(single_output.outputs[0].token_ids) == list(
-        batched_output.outputs[0].token_ids
-    )
+    assert list(single_output.outputs[0].token_ids) == list(batched_output.outputs[0].token_ids)

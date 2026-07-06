@@ -169,9 +169,7 @@ class Plamo3AttentionMixer(nn.Module):
             rope_parameters = config.rope_parameters
             # Local attention. Override the values in config.json.
             if is_sliding:
-                rope_parameters = dict(
-                    rope_type="default", rope_theta=config.rope_local_theta
-                )
+                rope_parameters = dict(rope_type="default", rope_theta=config.rope_local_theta)
         max_position = config.max_position_embeddings
         if hasattr(aphrodite_config.model_config, "max_model_len") and isinstance(
             aphrodite_config.model_config.max_model_len, int
@@ -184,13 +182,9 @@ class Plamo3AttentionMixer(nn.Module):
             rope_parameters=rope_parameters,
         )
         self.q_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        set_weight_attrs(
-            self.q_norm.weight, {"weight_loader": rms_norm_weight_loader(offset=1.0)}
-        )
+        set_weight_attrs(self.q_norm.weight, {"weight_loader": rms_norm_weight_loader(offset=1.0)})
         self.k_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        set_weight_attrs(
-            self.k_norm.weight, {"weight_loader": rms_norm_weight_loader(offset=1.0)}
-        )
+        set_weight_attrs(self.k_norm.weight, {"weight_loader": rms_norm_weight_loader(offset=1.0)})
         self.attn = Attention(
             self.num_heads,
             self.head_dim,
@@ -225,9 +219,7 @@ class Plamo3AttentionMixer(nn.Module):
 
 
 class Plamo3DecoderLayer(nn.Module):
-    def __init__(
-        self, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs: Any
-    ) -> None:
+    def __init__(self, aphrodite_config: AphroditeConfig, prefix: str = "", **kwargs: Any) -> None:
         super().__init__()
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config
@@ -237,9 +229,7 @@ class Plamo3DecoderLayer(nn.Module):
             prefix=f"{prefix}.mixer",
         )
 
-        self.mlp = DenseMLP(
-            config=config, quant_config=quant_config, prefix=f"{prefix}.mlp"
-        )
+        self.mlp = DenseMLP(config=config, quant_config=quant_config, prefix=f"{prefix}.mlp")
         self.pre_mixer_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         set_weight_attrs(
             self.pre_mixer_norm.weight,
@@ -274,9 +264,7 @@ class Plamo3DecoderLayer(nn.Module):
         else:
             hidden_states, residual = self.pre_mixer_norm(hidden_states, residual)
 
-        hidden_states = self.mixer(
-            positions=positions, hidden_states=hidden_states, residual=residual
-        )
+        hidden_states = self.mixer(positions=positions, hidden_states=hidden_states, residual=residual)
         hidden_states = self.post_mixer_norm(hidden_states)
         # Fully Connected
         hidden_states, residual = self.pre_mlp_norm(hidden_states, residual)
@@ -358,13 +346,9 @@ class Plamo3Model(nn.Module):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
-        hidden_states, residual = self.layers(
-            positions=positions, hidden_states=hidden_states, residual=residual
-        )
+        hidden_states, residual = self.layers(positions=positions, hidden_states=hidden_states, residual=residual)
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -382,9 +366,7 @@ class Plamo3ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         self.model_config = aphrodite_config.model_config
         self.scheduler_config = aphrodite_config.scheduler_config
 
-        self.model = Plamo3Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Plamo3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         self.vocab_size = self.config.vocab_size
         self.unpadded_vocab_size = self.config.vocab_size
@@ -400,12 +382,8 @@ class Plamo3ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         if self.config.tie_word_embeddings:
             self.lm_head = self.lm_head.tie_weights(self.model.embed_tokens)
 
-        self.logits_processor = LogitsProcessor(
-            self.unpadded_vocab_size, self.config.vocab_size
-        )
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.logits_processor = LogitsProcessor(self.unpadded_vocab_size, self.config.vocab_size)
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -417,9 +395,7 @@ class Plamo3ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

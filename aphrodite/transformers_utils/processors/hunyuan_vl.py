@@ -30,14 +30,10 @@ class HunYuanVLProcessor(ProcessorMixin):
         self.image_token_id = 120120  # self.tokenizer.image_token_id
         self.image_token = self.tokenizer.convert_ids_to_tokens(self.image_token_id)
         self.im_start_token_id = 120118  # self.tokenizer.im_start_id
-        self.im_start_token = self.tokenizer.convert_ids_to_tokens(
-            self.im_start_token_id
-        )
+        self.im_start_token = self.tokenizer.convert_ids_to_tokens(self.im_start_token_id)
         self.im_end_token_id = 120119  # self.tokenizer.im_end_id
         self.im_end_token = self.tokenizer.convert_ids_to_tokens(self.im_end_token_id)
-        self.placeholder_token = self.tokenizer.convert_ids_to_tokens(
-            self.tokenizer.vocab_size - 1
-        )
+        self.placeholder_token = self.tokenizer.convert_ids_to_tokens(self.tokenizer.vocab_size - 1)
         self.pad_id = 120002  # self.tokenizer.pad_token_id
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -45,10 +41,7 @@ class HunYuanVLProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: TextInput
-        | PreTokenizedInput
-        | list[TextInput]
-        | list[PreTokenizedInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         **kwargs,
     ) -> BatchFeature:
@@ -71,13 +64,9 @@ class HunYuanVLProcessor(ProcessorMixin):
                     patch_h = grid_h // self.image_processor.merge_size
                     patch_w = grid_w // self.image_processor.merge_size
                     num_image_tokens = patch_h * (patch_w + 1) + 2
-                    image_tokens_cumsum.append(
-                        image_tokens_cumsum[-1] + num_image_tokens
-                    )
+                    image_tokens_cumsum.append(image_tokens_cumsum[-1] + num_image_tokens)
                     # text[i] = text[i].replace(self.image_token, self.im_start_token + self.placeholder_token * num_image_tokens + self.im_end_token, 1) # noqa: E501
-                    text[i] = text[i].replace(
-                        self.image_token, self.placeholder_token * num_image_tokens, 1
-                    )
+                    text[i] = text[i].replace(self.image_token, self.placeholder_token * num_image_tokens, 1)
                     index += 1
                 text[i] = text[i].replace(self.placeholder_token, self.image_token)
                 # text[i] = self.tokenizer.bos_token + text[i]
@@ -92,9 +81,7 @@ class HunYuanVLProcessor(ProcessorMixin):
         position_ids_t = torch.arange(len(input_ids[0]))
 
         if images is not None:
-            image_token_pos_indices = torch.where(input_ids[0] == self.image_token_id)[
-                0
-            ]
+            image_token_pos_indices = torch.where(input_ids[0] == self.image_token_id)[0]
             for i in range(len(image_grid_thw)):
                 grid_h, grid_w = image_grid_thw[i][-2:]
                 patch_h = grid_h // self.image_processor.merge_size
@@ -107,14 +94,10 @@ class HunYuanVLProcessor(ProcessorMixin):
                 patch_h_list = []
                 for h in range(patch_h):
                     patch_h_list += [h] * (patch_w + 1)
-                position_ids_h[start_pos : start_pos + replace_num] = torch.tensor(
-                    patch_h_list, dtype=torch.int64
-                )
+                position_ids_h[start_pos : start_pos + replace_num] = torch.tensor(patch_h_list, dtype=torch.int64)
                 position_ids_t[start_pos : start_pos + replace_num] = 0
 
-        position_ids = torch.stack(
-            [position_ids, position_ids_w, position_ids_h, position_ids_t]
-        ).unsqueeze(0)
+        position_ids = torch.stack([position_ids, position_ids_w, position_ids_h, position_ids_t]).unsqueeze(0)
         text_inputs["position_ids"] = position_ids
 
         attention_mask = input_ids.ne(self.pad_id)
@@ -193,17 +176,13 @@ def split_image_into_patch_blocks(
     """  # noqa: E501
     batch_size, channels, height, width = pixel_values.shape
     assert channels == 3, "Pixel values must have 3 channels in dim=1"
-    assert height % patch_size == 0 and width % patch_size == 0, (
-        "H and W must be divisible by patch_size"
-    )
+    assert height % patch_size == 0 and width % patch_size == 0, "H and W must be divisible by patch_size"
 
     patch_height_num = height // patch_size
     patch_width_num = width // patch_size
 
     # Reshape to [B, 3, ph, ps, pw, ps]
-    img = pixel_values.reshape(
-        batch_size, 3, patch_height_num, patch_size, patch_width_num, patch_size
-    )
+    img = pixel_values.reshape(batch_size, 3, patch_height_num, patch_size, patch_width_num, patch_size)
 
     # Further split each psxps patch into (ps//aps)x(ps//aps) small regions
     img = img.reshape(

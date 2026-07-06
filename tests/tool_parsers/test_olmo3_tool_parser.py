@@ -5,13 +5,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from aphrodite.entrypoints.openai.engine.protocol import FunctionCall
+from aphrodite.tokenizers import TokenizerLike
+from aphrodite.tool_parsers import ToolParser, ToolParserManager
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,
 )
-from aphrodite.entrypoints.openai.engine.protocol import FunctionCall
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers import ToolParser, ToolParserManager
 
 # https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/text_prompt_format.md#model-response-format-1
 SIMPLE_FUNCTION_OUTPUT = "get_weather(city='San Francisco', metric='celsius')"
@@ -59,9 +59,7 @@ EMPTY_LIST_FUNCTION_CALL = FunctionCall(
     name="do_something_cool",
     arguments='{"steps": []}',
 )
-ESCAPED_STRING_FUNCTION_OUTPUT = (
-    r"get_weather(city='Martha\'s Vineyard', metric='\"cool units\"')"
-)
+ESCAPED_STRING_FUNCTION_OUTPUT = r"get_weather(city='Martha\'s Vineyard', metric='\"cool units\"')"
 ESCAPED_STRING_FUNCTION_CALL = FunctionCall(
     name="get_weather",
     arguments='{"city": "Martha\'s Vineyard", "metric": "\\"cool units\\""}',
@@ -70,14 +68,10 @@ ESCAPED_STRING_FUNCTION_CALL = FunctionCall(
 
 @pytest.mark.parametrize("streaming", [True, False])
 def test_no_tool_call(streaming: bool, default_tokenizer: TokenizerLike):
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(
-        default_tokenizer
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(default_tokenizer)
     model_output = "How can I help you today?"
 
-    content, tool_calls = run_tool_extraction(
-        tool_parser, model_output, streaming=streaming
-    )
+    content, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=streaming)
 
     assert content == model_output
     assert len(tool_calls) == 0
@@ -190,13 +184,9 @@ def test_tool_call(
     expected_tool_calls: list[FunctionCall],
     default_tokenizer: TokenizerLike,
 ):
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(
-        default_tokenizer
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(default_tokenizer)
 
-    content, tool_calls = run_tool_extraction(
-        tool_parser, model_output, streaming=streaming
-    )
+    content, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=streaming)
 
     assert content is None
     assert len(tool_calls) == len(expected_tool_calls)
@@ -206,9 +196,7 @@ def test_tool_call(
 
 
 def test_streaming_tool_call_with_large_steps(default_tokenizer: TokenizerLike):
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(
-        default_tokenizer
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(default_tokenizer)
     model_output_deltas = [
         "<function_calls>get_weather(city='San",
         " Francisco', metric='celsius')\n"
@@ -216,9 +204,7 @@ def test_streaming_tool_call_with_large_steps(default_tokenizer: TokenizerLike):
         f"{EMPTY_LIST_FUNCTION_OUTPUT}</function_calls>",
     ]
 
-    reconstructor = run_tool_extraction_streaming(
-        tool_parser, model_output_deltas, assert_one_tool_per_delta=False
-    )
+    reconstructor = run_tool_extraction_streaming(tool_parser, model_output_deltas, assert_one_tool_per_delta=False)
 
     assert reconstructor.other_content == ""
     assert len(reconstructor.tool_calls) == 3
@@ -230,9 +216,7 @@ def test_streaming_tool_call_with_large_steps(default_tokenizer: TokenizerLike):
 @pytest.mark.parametrize("streaming", [False])
 def test_regex_timeout_handling(streaming: bool, default_tokenizer: TokenizerLike):
     """test regex timeout is handled gracefully"""
-    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(
-        default_tokenizer
-    )
+    tool_parser: ToolParser = ToolParserManager.get_tool_parser("olmo3")(default_tokenizer)
 
     fake_problematic_input = "hello world[A(A=" + "\t)A(A=,\t" * 2
 
@@ -241,9 +225,7 @@ def test_regex_timeout_handling(streaming: bool, default_tokenizer: TokenizerLik
     mock_regex.match.side_effect = TimeoutError("Regex timeout")
 
     with patch.object(tool_parser, "TOOL_CALL_REGEX", mock_regex):
-        content, tool_calls = run_tool_extraction(
-            tool_parser, fake_problematic_input, streaming=streaming
-        )
+        content, tool_calls = run_tool_extraction(tool_parser, fake_problematic_input, streaming=streaming)
 
         # should treat as regular text when regex times out
         assert content == fake_problematic_input

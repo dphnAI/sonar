@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # Per-request RoPE helper for packed / unified forward passes.
 
 from __future__ import annotations
@@ -78,6 +79,9 @@ def apply_packed_rope(
                 k_parts.append(rope_fn(k_seg, offset=off))
         else:
             # mlx_vlm M-RoPE API: rotary_emb(x, position_ids) → (cos, sin)
+            # rope_fn is None here, so the guard above guarantees rotary_emb
+            # is not None.
+            assert rotary_emb is not None
             k_seg = keys[:, :, start:end, :]
             q_rot, k_rot = _apply_mrope_segment(rotary_emb, q_seg, k_seg, off)
             q_parts.append(q_rot)

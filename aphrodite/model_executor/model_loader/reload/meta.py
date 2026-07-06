@@ -66,9 +66,7 @@ def _is_non_persistent_parameter_alias_buffer(
         return False
 
     buffer_storage_ptr = _tensor_storage_ptr(buffer)
-    return (
-        buffer_storage_ptr is not None and buffer_storage_ptr in parameter_storage_ptrs
-    )
+    return buffer_storage_ptr is not None and buffer_storage_ptr in parameter_storage_ptrs
 
 
 def _tensor_storage_ptr(tensor: torch.Tensor) -> int | None:
@@ -105,9 +103,7 @@ def capture_layer_to_meta(layer: torch.nn.Module) -> LayerTensors:
             name: sanitize_layer_refs(to_meta_tensor(buffer), layer)
             for name, buffer in buffers.items()
             if name not in SKIP_TENSORS
-            and not _is_non_persistent_parameter_alias_buffer(
-                layer, name, buffer, parameter_storage_ptrs
-            )
+            and not _is_non_persistent_parameter_alias_buffer(layer, name, buffer, parameter_storage_ptrs)
         },
     )
 
@@ -169,9 +165,7 @@ class CopyCounter(TorchDispatchMode):
         return func(*args, **kwargs)
 
 
-def get_numel_loaded(
-    weight_loader: Callable, args: inspect.BoundArguments
-) -> tuple[int, object]:
+def get_numel_loaded(weight_loader: Callable, args: inspect.BoundArguments) -> tuple[int, object]:
     """
     Determine how many elements would be loaded by a weight loader call.
 

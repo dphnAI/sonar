@@ -52,8 +52,7 @@ def fence_before_tma_store(*, loc=None, ip=None):
     llvm.inline_asm(
         T.i32(),
         [],
-        "mov.u32 $0, 0;\n\t"
-        "fence.proxy.async::generic.release.sync_restrict::shared::cta.cluster;",
+        "mov.u32 $0, 0;\n\tfence.proxy.async::generic.release.sync_restrict::shared::cta.cluster;",
         "=r",
         has_side_effects=True,
         is_align_stack=False,
@@ -63,9 +62,7 @@ def fence_before_tma_store(*, loc=None, ip=None):
 
 
 @dsl_user_op
-def mma_bf16(
-    a: cute.TensorSSA, b: cute.TensorSSA, c: cute.TensorSSA, *, loc=None, ip=None
-):
+def mma_bf16(a: cute.TensorSSA, b: cute.TensorSSA, c: cute.TensorSSA, *, loc=None, ip=None):
     if a.element_type == BFloat16:
         a = cute.recast_tensor(a, Uint32)
     if b.element_type == BFloat16:

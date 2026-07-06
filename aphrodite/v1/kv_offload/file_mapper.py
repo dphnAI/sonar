@@ -114,10 +114,7 @@ class FileMapper:
         hash_hex = get_offload_block_hash(key).hex()
         group_idx = get_offload_group_idx(key)
         subfolder1, subfolder2 = hash_hex[:3], hash_hex[3:5]
-        return (
-            f"{self.base_path}_r{self.rank}"
-            f"/{subfolder1}/{subfolder2}_g{group_idx}/{hash_hex}.bin"
-        )
+        return f"{self.base_path}_r{self.rank}/{subfolder1}/{subfolder2}_g{group_idx}/{hash_hex}.bin"
 
     def get_run_config(self) -> dict:
         return dict(self.fields)
@@ -132,8 +129,6 @@ class FileMapper:
         safe_model_name replaces '/' with '_' so HuggingFace IDs don't nest.
         """
         canonical = json.dumps(fields, sort_keys=True, separators=(",", ":"))
-        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[
-            :_BASE_PATH_HASH_LEN
-        ]
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:_BASE_PATH_HASH_LEN]
         safe_model_name = fields["model_name"].replace("/", "_")
         return f"{root_dir}/{safe_model_name}_{digest}"

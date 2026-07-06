@@ -23,9 +23,7 @@ class SimpleLinear(nn.Module):
 
     def __init__(self, in_features: int, out_features: int, dtype: torch.dtype):
         super().__init__()
-        self.weight = nn.Parameter(
-            torch.randn(out_features, in_features, device="cuda", dtype=dtype) / 10
-        )
+        self.weight = nn.Parameter(torch.randn(out_features, in_features, device="cuda", dtype=dtype) / 10)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return nn.functional.linear(x, self.weight)
@@ -36,12 +34,8 @@ class SimpleSharedExperts(nn.Module):
 
     def __init__(self, hidden_size: int, intermediate_size: int, dtype: torch.dtype):
         super().__init__()
-        self.up = nn.Linear(
-            hidden_size, intermediate_size * 2, bias=False, device="cuda", dtype=dtype
-        )
-        self.down = nn.Linear(
-            intermediate_size, hidden_size, bias=False, device="cuda", dtype=dtype
-        )
+        self.up = nn.Linear(hidden_size, intermediate_size * 2, bias=False, device="cuda", dtype=dtype)
+        self.down = nn.Linear(intermediate_size, hidden_size, bias=False, device="cuda", dtype=dtype)
         with torch.no_grad():
             self.up.weight.div_(10)
             self.down.weight.div_(10)
@@ -116,9 +110,7 @@ def setup_cuda():
 @pytest.mark.parametrize("num_tokens", [1, 32])
 @pytest.mark.parametrize("hidden_size,latent_size", [(256, 128), (128, 64)])
 @pytest.mark.parametrize("dtype", [torch.bfloat16])
-@pytest.mark.parametrize(
-    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 @pytest.mark.skipif(
     is_torch_equal_or_newer("2.10.0"),
     reason="Test fails with PyTorch 2.10.0 see: https://github.com/vllm-project/vllm/issues/33995",
@@ -200,12 +192,8 @@ def test_routed_input_transform_inside_vs_outside(
             moe_without_transform.w13_weight.copy_(moe_with_transform.w13_weight)
             moe_without_transform.w2_weight.copy_(moe_with_transform.w2_weight)
 
-        moe_with_transform.quant_method.process_weights_after_loading(
-            moe_with_transform
-        )
-        moe_without_transform.quant_method.process_weights_after_loading(
-            moe_without_transform
-        )
+        moe_with_transform.quant_method.process_weights_after_loading(moe_with_transform)
+        moe_without_transform.quant_method.process_weights_after_loading(moe_without_transform)
 
         hidden_states = torch.randn(num_tokens, hidden_size, device="cuda", dtype=dtype)
         router_logits = torch.randn(num_tokens, num_experts, device="cuda", dtype=dtype)

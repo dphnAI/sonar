@@ -114,9 +114,7 @@ def kernel_unified_attention_diffkv(
         cur_batch_in_all_start_index,
         cur_batch_query_len,
         seq_len,
-    ) = resolve_seq_and_query_len(
-        query_start_len_ptr, seq_lens_ptr, q_block_global_idx, num_seqs, BLOCK_Q
-    )
+    ) = resolve_seq_and_query_len(query_start_len_ptr, seq_lens_ptr, q_block_global_idx, num_seqs, BLOCK_Q)
 
     if q_block_local_idx * BLOCK_Q >= cur_batch_query_len:
         return
@@ -137,9 +135,7 @@ def kernel_unified_attention_diffkv(
     query_offset_0 = cur_batch_in_all_start_index + query_pos
     query_offset_1 = kv_head_idx * num_queries_per_kv + offs_m % num_queries_per_kv
     query_offset = (
-        query_offset_0[:, None] * query_stride_0
-        + query_offset_1[:, None] * query_stride_1
-        + offs_d_qk[None, :]
+        query_offset_0[:, None] * query_stride_0 + query_offset_1[:, None] * query_stride_1 + offs_d_qk[None, :]
     )
 
     dim_mask_qk = tl.where(offs_d_qk < HEAD_SIZE_QK, 1, 0).to(tl.int1)
@@ -156,9 +152,7 @@ def kernel_unified_attention_diffkv(
 
     block_table_offset = seq_idx * block_table_stride
 
-    M = init_softmax_M(
-        sink_ptr, query_offset_1, query_mask_1, segm_idx, BLOCK_M, USE_SINKS, IS_3D
-    )
+    M = init_softmax_M(sink_ptr, query_offset_1, query_mask_1, segm_idx, BLOCK_M, USE_SINKS, IS_3D)
     L = tl.full([BLOCK_M], 1.0, dtype=tl.float32)
     # acc : (BLOCK_M, HEAD_SIZE_V_PADDED)
     acc = tl.zeros([BLOCK_M, HEAD_SIZE_V_PADDED], dtype=tl.float32)
@@ -166,9 +160,7 @@ def kernel_unified_attention_diffkv(
     context_len = seq_len - cur_batch_query_len
 
     if USE_ALIBI_SLOPES:
-        alibi_slope = tl.load(
-            alibi_slopes_ptr + query_offset_1, mask=query_mask_1, other=0.0
-        )
+        alibi_slope = tl.load(alibi_slopes_ptr + query_offset_1, mask=query_mask_1, other=0.0)
 
     loop_lo, loop_hi, max_seq_prefix_len = compute_tile_loop_bounds(
         context_len,
@@ -190,9 +182,7 @@ def kernel_unified_attention_diffkv(
         seq_offset = j * TILE_SIZE + offs_t
         tile_mask = seq_offset < max_seq_prefix_len
 
-        physical_block_idx = tl.load(
-            block_tables_ptr + block_table_offset + seq_offset // BLOCK_SIZE
-        ).to(tl.int64)
+        physical_block_idx = tl.load(block_tables_ptr + block_table_offset + seq_offset // BLOCK_SIZE).to(tl.int64)
 
         v_offset = (
             physical_block_idx[:, None] * stride_v_cache_0
@@ -240,14 +230,10 @@ def kernel_unified_attention_diffkv(
         if USE_SOFTCAP:
             S = apply_softcap(S, softcap)
 
-        S = tl.where(
-            query_mask_1[:, None] & query_mask_0[:, None] & seq_mask, S, float("-inf")
-        )
+        S = tl.where(query_mask_1[:, None] & query_mask_0[:, None] & seq_mask, S, float("-inf"))
 
         if USE_ALIBI_SLOPES:
-            S = apply_alibi_to_score(
-                S, alibi_slope, seq_offset, context_len, query_pos, USE_ALIBI_SQRT
-            )
+            S = apply_alibi_to_score(S, alibi_slope, seq_offset, context_len, query_pos, USE_ALIBI_SQRT)
 
         M, L, P, alpha = softmax_step(S, M, L)
         acc = acc * alpha[:, None]
@@ -265,8 +251,7 @@ def kernel_unified_attention_diffkv(
     if IS_3D:
         # Store per-segment partials; finalized by reduce_segments_diffkv.
         segm_output_offset = (
-            query_offset_0[:, None].to(tl.int64)
-            * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_V_PADDED)
+            query_offset_0[:, None].to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_V_PADDED)
             + query_offset_1[:, None] * (NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_V_PADDED)
             + segm_idx * HEAD_SIZE_V_PADDED
             + tl.arange(0, HEAD_SIZE_V_PADDED)[None, :]
@@ -292,9 +277,7 @@ def kernel_unified_attention_diffkv(
     else:
         acc = acc / L[:, None]
         output_offset = (
-            query_offset_0[:, None] * output_stride_0
-            + query_offset_1[:, None] * output_stride_1
-            + offs_d_v[None, :]
+            query_offset_0[:, None] * output_stride_0 + query_offset_1[:, None] * output_stride_1 + offs_d_v[None, :]
         )
         tl.store(
             output_ptr + output_offset,
@@ -330,19 +313,13 @@ def kernel_reduce_segments_diffkv(
     query_token_idx = tl.program_id(0)
     query_head_idx = tl.program_id(1)
 
-    seq_idx = find_seq_idx(
-        query_start_len_ptr, query_token_idx, num_seqs, BLOCK_Q, False
-    )
+    seq_idx = find_seq_idx(query_start_len_ptr, query_token_idx, num_seqs, BLOCK_Q, False)
     seq_len = tl.load(seq_lens_ptr + seq_idx)
 
     tiles_per_segment = cdiv_fn(seq_len, NUM_SEGMENTS_PER_SEQ * TILE_SIZE)
     act_num_segments = cdiv_fn(seq_len, tiles_per_segment * TILE_SIZE)
-    segm_mask = tl.arange(0, NUM_SEGMENTS_PER_SEQ) < tl.full(
-        [NUM_SEGMENTS_PER_SEQ], act_num_segments, dtype=tl.int32
-    )
-    dim_mask = tl.where(tl.arange(0, HEAD_SIZE_V_PADDED) < HEAD_SIZE_V, 1, 0).to(
-        tl.int1
-    )
+    segm_mask = tl.arange(0, NUM_SEGMENTS_PER_SEQ) < tl.full([NUM_SEGMENTS_PER_SEQ], act_num_segments, dtype=tl.int32)
+    dim_mask = tl.where(tl.arange(0, HEAD_SIZE_V_PADDED) < HEAD_SIZE_V, 1, 0).to(tl.int1)
 
     segm_offset = (
         query_token_idx.to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ)
@@ -357,8 +334,7 @@ def kernel_reduce_segments_diffkv(
     overall_expsum = tl.sum(segm_expsum)
 
     segm_output_offset = (
-        query_token_idx.to(tl.int64)
-        * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_V_PADDED)
+        query_token_idx.to(tl.int64) * (num_query_heads * NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_V_PADDED)
         + query_head_idx * (NUM_SEGMENTS_PER_SEQ * HEAD_SIZE_V_PADDED)
         + tl.arange(0, NUM_SEGMENTS_PER_SEQ)[:, None] * HEAD_SIZE_V_PADDED
         + tl.arange(0, HEAD_SIZE_V_PADDED)[None, :]
@@ -373,9 +349,7 @@ def kernel_reduce_segments_diffkv(
     acc = tl.where(overall_expsum == 0.0, 0.0, acc_sum / overall_expsum)
 
     output_offset = (
-        query_token_idx * output_stride_0
-        + query_head_idx * output_stride_1
-        + tl.arange(0, HEAD_SIZE_V_PADDED)
+        query_token_idx * output_stride_0 + query_head_idx * output_stride_1 + tl.arange(0, HEAD_SIZE_V_PADDED)
     )
     tl.store(output_ptr + output_offset, acc, mask=dim_mask)
 
@@ -419,9 +393,7 @@ def unified_attention_diffkv(
     head_size_qk = q.shape[2]
     head_size_v = v.shape[3]
 
-    BLOCK_M = (
-        16 if num_queries_per_kv <= 16 else triton.next_power_of_2(num_queries_per_kv)
-    )
+    BLOCK_M = 16 if num_queries_per_kv <= 16 else triton.next_power_of_2(num_queries_per_kv)
     BLOCK_Q = BLOCK_M // num_queries_per_kv
 
     total_num_q_blocks = q.shape[0] // BLOCK_Q + num_seqs

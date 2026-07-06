@@ -44,12 +44,8 @@ def kv_cache_scatter_kernel(
     else:
         # MHA format: source [num_layers, 2, num_tokens_in_block, hidden_size]
         # MHA format: target [2, total_token_in_kvcache, hidden_size]
-        source_offset_k = (
-            layer_idx * num_tokens_in_block * 2 + token_pos
-        ) * hidden_size
-        source_offset_v = (
-            layer_idx * num_tokens_in_block * 2 + num_tokens_in_block + token_pos
-        ) * hidden_size
+        source_offset_k = (layer_idx * num_tokens_in_block * 2 + token_pos) * hidden_size
+        source_offset_v = (layer_idx * num_tokens_in_block * 2 + num_tokens_in_block + token_pos) * hidden_size
 
         target_offset_k = token_idx * hidden_size
         target_offset_v = (total_token_in_kvcache + token_idx) * hidden_size
@@ -104,9 +100,7 @@ def kv_cache_gather_kernel(
         # MHA format: source [2, total_token_in_kvcache, hidden_size]
         # MHA format: dst [num_layers, 2, num_tokens_in_block, hidden_size]
         dst_offset_k = (layer_idx * num_tokens_in_block * 2 + token_pos) * hidden_size
-        dst_offset_v = (
-            layer_idx * num_tokens_in_block * 2 + num_tokens_in_block + token_pos
-        ) * hidden_size
+        dst_offset_v = (layer_idx * num_tokens_in_block * 2 + num_tokens_in_block + token_pos) * hidden_size
 
         kvcache_offset_k = token_idx * hidden_size
         kvcache_offset_v = (total_token_in_kvcache + token_idx) * hidden_size
@@ -145,21 +139,15 @@ def scatter_kv_caches(
 
     if is_mla:
         # MLA: src_tensor is [num_layers, num_tokens_in_block, hidden_size]
-        assert len(src_tensor.shape) == 3, (
-            f"MLA src_tensor should be 3D, got {src_tensor.shape}"
-        )
+        assert len(src_tensor.shape) == 3, f"MLA src_tensor should be 3D, got {src_tensor.shape}"
         hidden_size = src_tensor.shape[2]
     else:
         # MHA: src_tensor is [num_layers, 2, num_tokens_in_block, hidden_size]
-        assert len(src_tensor.shape) == 4, (
-            f"MHA src_tensor should be 4D, got {src_tensor.shape}"
-        )
+        assert len(src_tensor.shape) == 4, f"MHA src_tensor should be 4D, got {src_tensor.shape}"
         hidden_size = src_tensor.shape[3]
 
     device = src_tensor.device
-    token_indices_tensor = torch.tensor(
-        token_indices, dtype=torch.int32, device="cpu"
-    ).to(device, non_blocking=True)
+    token_indices_tensor = torch.tensor(token_indices, dtype=torch.int32, device="cpu").to(device, non_blocking=True)
 
     grid = (num_layers, num_tokens_in_block)
     BLOCK_SIZE = 128
@@ -200,36 +188,24 @@ def gather_kv_caches(
 
     if is_mla:
         # MLA: dst_tensor is [num_layers, num_tokens_in_block, hidden_size]
-        assert len(dst_tensor.shape) == 3, (
-            f"MLA dst_tensor should be 3D, got {dst_tensor.shape}"
-        )
-        assert dst_tensor.shape[0] == num_layers, (
-            f"Layer count mismatch: {dst_tensor.shape[0]} vs {num_layers}"
-        )
+        assert len(dst_tensor.shape) == 3, f"MLA dst_tensor should be 3D, got {dst_tensor.shape}"
+        assert dst_tensor.shape[0] == num_layers, f"Layer count mismatch: {dst_tensor.shape[0]} vs {num_layers}"
         assert dst_tensor.shape[1] == num_tokens_in_block, (
             f"Token count mismatch: {dst_tensor.shape[1]} vs {num_tokens_in_block}"
         )
         hidden_size = dst_tensor.shape[2]
     else:
         # MHA: dst_tensor is [num_layers, 2, num_tokens_in_block, hidden_size]
-        assert len(dst_tensor.shape) == 4, (
-            f"MHA dst_tensor should be 4D, got {dst_tensor.shape}"
-        )
-        assert dst_tensor.shape[0] == num_layers, (
-            f"Layer count mismatch: {dst_tensor.shape[0]} vs {num_layers}"
-        )
-        assert dst_tensor.shape[1] == 2, (
-            f"MHA should have 2 (K,V) components, got {dst_tensor.shape[1]}"
-        )
+        assert len(dst_tensor.shape) == 4, f"MHA dst_tensor should be 4D, got {dst_tensor.shape}"
+        assert dst_tensor.shape[0] == num_layers, f"Layer count mismatch: {dst_tensor.shape[0]} vs {num_layers}"
+        assert dst_tensor.shape[1] == 2, f"MHA should have 2 (K,V) components, got {dst_tensor.shape[1]}"
         assert dst_tensor.shape[2] == num_tokens_in_block, (
             f"Token count mismatch: {dst_tensor.shape[2]} vs {num_tokens_in_block}"
         )
         hidden_size = dst_tensor.shape[3]
 
     device = dst_tensor.device
-    token_indices_tensor = torch.tensor(
-        token_indices, dtype=torch.int32, device="cpu"
-    ).to(device, non_blocking=True)
+    token_indices_tensor = torch.tensor(token_indices, dtype=torch.int32, device="cpu").to(device, non_blocking=True)
 
     grid = (num_layers, num_tokens_in_block)
     BLOCK_SIZE = 128
@@ -250,15 +226,11 @@ def gather_kv_caches(
 class CopyBufferAllocator:
     """Memory pool for tensor buffers to avoid frequent allocation/deallocation."""
 
-    def __init__(
-        self, device: torch.device, dtype: torch.dtype, shape: list, max_count: int
-    ):
+    def __init__(self, device: torch.device, dtype: torch.dtype, shape: list, max_count: int):
         self._shape = shape
         self._max_count = max_count
         self._device = device
-        self._free_buffers = [
-            torch.empty(shape, dtype=dtype, device=device) for _ in range(max_count)
-        ]
+        self._free_buffers = [torch.empty(shape, dtype=dtype, device=device) for _ in range(max_count)]
         self._inuse_count = 0
 
     def alloc_buffer(self, count: int) -> list[torch.Tensor] | None:

@@ -85,16 +85,12 @@ class FlashInferNVLinkOneSidedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeMo
     ) -> mk.PrepareResultType:
         if apply_router_weight_on_input:
             topk = topk_ids.size(1)
-            assert topk == 1, (
-                "apply_router_weight_on_input is only implemented for topk=1"
-            )
+            assert topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
             a1.mul_(topk_weights.to(a1.dtype))
 
         global_num_tokens_cpu = get_local_sizes()
         self.runtime_max_tokens_per_rank = (
-            max(global_num_tokens_cpu)
-            if global_num_tokens_cpu is not None
-            else a1.shape[0]
+            max(global_num_tokens_cpu) if global_num_tokens_cpu is not None else a1.shape[0]
         )
 
         if defer_input_quant:
@@ -157,9 +153,7 @@ class FlashInferNVLinkOneSidedPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeMo
 
         ep_size = self.all2all_manager.world_size
         hidden_size = fused_expert_output.shape[-1]
-        fused_expert_output = fused_expert_output.view(
-            ep_size, self.runtime_max_tokens_per_rank, hidden_size
-        )
+        fused_expert_output = fused_expert_output.view(ep_size, self.runtime_max_tokens_per_rank, hidden_size)
 
         combined_output = self.all2all_manager.moe_alltoall.combine(  # type: ignore[attr-defined]
             payload=fused_expert_output,

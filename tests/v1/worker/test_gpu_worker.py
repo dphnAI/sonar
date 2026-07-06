@@ -56,9 +56,7 @@ def test_reserve_mm_ipc_gpu_memory_raw_frame_budget_only(
         "APHRODITE_VIDEO_LOADER_BACKEND",
         "opencv",
     )
-    worker = _worker_with_mm_config(
-        _mm_config(mm_ipc_gpu_memory_gb=0.25, video_backend=video_backend)
-    )
+    worker = _worker_with_mm_config(_mm_config(mm_ipc_gpu_memory_gb=0.25, video_backend=video_backend))
 
     assert worker._reserve_mm_ipc_gpu_memory(GiB_bytes) == int(0.75 * GiB_bytes)
 
@@ -95,9 +93,7 @@ def test_reserve_mm_ipc_gpu_memory_uses_env_video_backend(
     worker = _worker_with_mm_config(_mm_config())
     available_bytes = 4 * GiB_bytes
 
-    assert worker._reserve_mm_ipc_gpu_memory(available_bytes) == (
-        available_bytes - _pynvvideocodec_decoder_budget()
-    )
+    assert worker._reserve_mm_ipc_gpu_memory(available_bytes) == (available_bytes - _pynvvideocodec_decoder_budget())
 
 
 def test_reserve_mm_ipc_gpu_memory_scales_pynvvideocodec_budget_by_api_servers(

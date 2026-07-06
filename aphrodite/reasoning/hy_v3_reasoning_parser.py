@@ -37,11 +37,7 @@ class HYV3ReasoningParser(BaseThinkingReasoningParser):
         # Otherwise, If both are empty, assign "no_think".
 
         chat_kwargs = kwargs.get("chat_template_kwargs", {}) or {}
-        reasoning_effort = (
-            chat_kwargs.get("reasoning_effort")
-            or kwargs.get("reasoning_effort")
-            or "no_think"
-        )
+        reasoning_effort = chat_kwargs.get("reasoning_effort") or kwargs.get("reasoning_effort") or "no_think"
 
         logger.debug("reasoning_effort for choosing parser: %s", reasoning_effort)
 
@@ -67,13 +63,9 @@ class HYV3ReasoningParser(BaseThinkingReasoningParser):
 
         return super().is_reasoning_end(input_ids)
 
-    def is_reasoning_end_streaming(
-        self, input_ids: Sequence[int], delta_ids: Iterable[int]
-    ) -> bool:
+    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
         if self._identity_parser is not None:
-            return self._identity_parser.is_reasoning_end_streaming(
-                input_ids, delta_ids
-            )
+            return self._identity_parser.is_reasoning_end_streaming(input_ids, delta_ids)
 
         return super().is_reasoning_end_streaming(input_ids, delta_ids)
 

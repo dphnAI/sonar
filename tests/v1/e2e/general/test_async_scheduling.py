@@ -7,15 +7,15 @@ from typing import Any
 import pytest
 import torch._dynamo.config as dynamo_config
 
-from tests.utils import (
-    large_gpu_mark,
-    single_gpu_only,
-)
 from aphrodite import SamplingParams
 from aphrodite.logprobs import Logprob
 from aphrodite.platforms import current_platform
 from aphrodite.sampling_params import StructuredOutputsParams
 from aphrodite.v1.metrics.reader import Metric
+from tests.utils import (
+    large_gpu_mark,
+    single_gpu_only,
+)
 
 from ....conftest import AphroditeRunner
 from ....models.utils import check_outputs_equal
@@ -26,11 +26,7 @@ MTP_MODEL = "meta-llama/Llama-3.2-1B-Instruct"
 # Need to enforce eager for MRV2 while we sort out cudagraph issues.
 ENFORCE_EAGER = os.getenv("ENFORCE_EAGER", "0") == "1"
 
-first_prompt = (
-    "The following numbers of the sequence "
-    + ", ".join(str(i) for i in range(10))
-    + " are:"
-)
+first_prompt = "The following numbers of the sequence " + ", ".join(str(i) for i in range(10)) + " are:"
 example_prompts = [first_prompt, "In one word, the capital of France is "] + [
     f"Tell me about the number {i}: " for i in range(32)
 ]
@@ -97,9 +93,7 @@ def test_without_spec_decoding(
             for cfg in test_configs
             if not cfg[4]  # skip chunk_prefill=True
         ]
-        test_sampling_params = [
-            p for p in test_sampling_params if p.get("structured_outputs") is not None
-        ]
+        test_sampling_params = [p for p in test_sampling_params if p.get("structured_outputs") is not None]
 
     run_tests(monkeypatch, MODEL, test_configs, test_sampling_params)
 
@@ -237,9 +231,7 @@ def run_tests(
             outputs.append(test_results)
 
     baseline_config, baseline_tests, _ = outputs[0]
-    _, _, baseline_acceptances = next(
-        (o for o in outputs if o[2] is not None), (None, None, None)
-    )
+    _, _, baseline_acceptances = next((o for o in outputs if o[2] is not None), (None, None, None))
 
     print(f"BASELINE: config=[{baseline_config}], accept_rates={baseline_acceptances}")
 
@@ -274,23 +266,15 @@ def run_tests(
 
             if reason is None:
                 try:
-                    if (
-                        base_acceptance_rate is not None
-                        and test_acceptance_rate is not None
-                    ):
+                    if base_acceptance_rate is not None and test_acceptance_rate is not None:
                         if "spec_mml=None" in test_config:
                             # Preemption causes more variance in acceptance rates
-                            if (
-                                current_platform.is_rocm()
-                                and "preemption=True" in test_config
-                            ):
+                            if current_platform.is_rocm() and "preemption=True" in test_config:
                                 tolerance = 0.10
                             else:
                                 tolerance = 0.05
-                            assert (
-                                test_acceptance_rate > base_acceptance_rate
-                                or test_acceptance_rate
-                                == pytest.approx(base_acceptance_rate, rel=tolerance)
+                            assert test_acceptance_rate > base_acceptance_rate or test_acceptance_rate == pytest.approx(
+                                base_acceptance_rate, rel=tolerance
                             )
                         else:
                             # Currently the reported acceptance rate is expected to be
@@ -386,17 +370,13 @@ def run_test(
                 print(f"ACCEPTANCE RATE {acceptance_rate}")
 
             if test_preemption:
-                preemptions = _get_count(
-                    metrics_before, metrics_after, "aphrodite:num_preemptions"
-                )
+                preemptions = _get_count(metrics_before, metrics_after, "aphrodite:num_preemptions")
                 assert preemptions > 0, "preemption test had no preemptions"
 
     if len(results) > 1:
         # First check that the different parameter configs
         # actually result in different output.
-        for (other_test_outs, other_test_logprobs), params in zip(
-            results[1:], sampling_param_tests[1:]
-        ):
+        for (other_test_outs, other_test_logprobs), params in zip(results[1:], sampling_param_tests[1:]):
             with pytest.raises(AssertionError):
                 check_outputs_equal(
                     outputs_0_lst=results[0][0],
@@ -414,8 +394,7 @@ def _all_logprobs_match(req_a, req_b) -> bool:
         req_a == req_b
         or len(req_a) == len(req_b)
         and all(
-            len(seq_a) == len(seq_b)
-            and all(_logprobs_match(a, b) for a, b in zip(seq_a, seq_b))
+            len(seq_a) == len(seq_b) and all(_logprobs_match(a, b) for a, b in zip(seq_a, seq_b))
             for seq_a, seq_b in zip(req_a, req_b)
         )
     )

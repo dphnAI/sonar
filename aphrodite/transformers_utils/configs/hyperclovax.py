@@ -227,11 +227,7 @@ class HyperCLOVAXConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        self.head_dim = (
-            head_dim
-            if head_dim is not None
-            else self.hidden_size // self.num_attention_heads
-        )
+        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         # Derive rope_parameters for Aphrodite's get_rope() from rope_theta /
         # rope_scaling, unless the caller already provided rope_parameters.
         if rope_parameters is None:
@@ -252,18 +248,10 @@ class HyperCLOVAXConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
 
         # mup
-        self.embedding_multiplier = (
-            embedding_multiplier if embedding_multiplier is not None else 1.0
-        )
+        self.embedding_multiplier = embedding_multiplier if embedding_multiplier is not None else 1.0
         self.logits_scaling = logits_scaling if logits_scaling is not None else 1.0
-        self.attention_multiplier = (
-            attention_multiplier
-            if attention_multiplier is not None
-            else self.head_dim**-0.5
-        )
-        self.residual_multiplier = (
-            residual_multiplier if residual_multiplier is not None else 1.0
-        )
+        self.attention_multiplier = attention_multiplier if attention_multiplier is not None else self.head_dim**-0.5
+        self.residual_multiplier = residual_multiplier if residual_multiplier is not None else 1.0
 
         # post-norm (Peri-LN)
         self.use_post_norm = use_post_norm

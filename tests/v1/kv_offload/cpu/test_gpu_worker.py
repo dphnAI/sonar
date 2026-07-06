@@ -117,9 +117,7 @@ def test_transfer(
     # expand cpu blocks to gpu-page granularity for uniform comparison:
     # each cpu block maps to block_size_factor consecutive sub-blocks
     cpu_blocks_expanded = [
-        cpu_block * block_size_factor + j
-        for cpu_block in cpu_blocks
-        for j in range(block_size_factor)
+        cpu_block * block_size_factor + j for cpu_block in cpu_blocks for j in range(block_size_factor)
     ]
 
     # maybe skip some GPU blocks to test reading/writing from the middle of a CPU block
@@ -131,18 +129,14 @@ def test_transfer(
     # set transfer direction
     if gpu_to_cpu:
         handler = worker._store_handler
-        src_spec = GPULoadStoreSpec(
-            gpu_blocks, group_sizes=(len(gpu_blocks),), block_indices=(blocks_to_skip,)
-        )
+        src_spec = GPULoadStoreSpec(gpu_blocks, group_sizes=(len(gpu_blocks),), block_indices=(blocks_to_skip,))
         dst_spec = CPULoadStoreSpec(cpu_blocks)
         dst_to_src = dict(zip(cpu_blocks_expanded, gpu_blocks))
         num_dst_sub_blocks = num_gpu_blocks
     else:
         handler = worker._load_handler
         src_spec = CPULoadStoreSpec(cpu_blocks)
-        dst_spec = GPULoadStoreSpec(
-            gpu_blocks, group_sizes=(len(gpu_blocks),), block_indices=(blocks_to_skip,)
-        )
+        dst_spec = GPULoadStoreSpec(gpu_blocks, group_sizes=(len(gpu_blocks),), block_indices=(blocks_to_skip,))
         dst_to_src = dict(zip(gpu_blocks, cpu_blocks_expanded))
         num_dst_sub_blocks = num_gpu_blocks
 
@@ -172,8 +166,7 @@ def test_transfer(
             assert finished[0].job_id == 1
             assert finished[0].success
             assert finished[0].transfer_size == (
-                len(gpu_blocks)
-                * sum([x.page_size_bytes for x in handler.kv_cache_groups_data_refs[0]])
+                len(gpu_blocks) * sum([x.page_size_bytes for x in handler.kv_cache_groups_data_refs[0]])
             )
             assert finished[0].transfer_time > 0
             assert finished[0].transfer_time < (time.time() - start_time)
@@ -269,9 +262,7 @@ def test_transfer_multi_group(
         for g in range(num_groups)
     ]
 
-    canonical_kv_caches = CanonicalKVCaches(
-        tensors=kv_cache_tensors, group_data_refs=kv_cache_groups_data_refs
-    )
+    canonical_kv_caches = CanonicalKVCaches(tensors=kv_cache_tensors, group_data_refs=kv_cache_groups_data_refs)
 
     worker = CPUOffloadingWorker(
         kv_caches=canonical_kv_caches,
@@ -301,23 +292,15 @@ def test_transfer_multi_group(
 
     # expand cpu blocks to gpu-page granularity
     cpu_blocks_expanded_per_group = [
-        [
-            cpu_block * block_size_factor + j
-            for cpu_block in cpu_blocks
-            for j in range(block_size_factor)
-        ]
+        [cpu_block * block_size_factor + j for cpu_block in cpu_blocks for j in range(block_size_factor)]
         for cpu_blocks in cpu_blocks_per_group
     ]
 
     # skip sub-blocks from group 2 to test unaligned transfers.
     sub_blocks_to_skip = block_size_factor - 1  # e.g. 2 when block_size_factor=3
     if sub_blocks_to_skip > 0:
-        gpu_blocks_per_group[2] = gpu_blocks_per_group[2][
-            sub_blocks_to_skip:-sub_blocks_to_skip
-        ]
-        cpu_blocks_expanded_per_group[2] = cpu_blocks_expanded_per_group[2][
-            sub_blocks_to_skip:-sub_blocks_to_skip
-        ]
+        gpu_blocks_per_group[2] = gpu_blocks_per_group[2][sub_blocks_to_skip:-sub_blocks_to_skip]
+        cpu_blocks_expanded_per_group[2] = cpu_blocks_expanded_per_group[2][sub_blocks_to_skip:-sub_blocks_to_skip]
 
     # build flat gpu_blocks list and group_sizes in GPU blocks
     gpu_blocks: list[int] = []
@@ -336,30 +319,22 @@ def test_transfer_multi_group(
 
     if gpu_to_cpu:
         handler = worker._store_handler
-        src_spec = GPULoadStoreSpec(
-            gpu_blocks, group_sizes=group_sizes, block_indices=block_indices
-        )
+        src_spec = GPULoadStoreSpec(gpu_blocks, group_sizes=group_sizes, block_indices=block_indices)
         dst_spec = CPULoadStoreSpec(cpu_blocks)
         # per-group mapping: cpu sub-block -> gpu sub-block
         dst_to_src_per_group = [
             dict(zip(expanded, gpu_blks))
-            for expanded, gpu_blks in zip(
-                cpu_blocks_expanded_per_group, gpu_blocks_per_group
-            )
+            for expanded, gpu_blks in zip(cpu_blocks_expanded_per_group, gpu_blocks_per_group)
         ]
         num_dst_sub_blocks = num_cpu_blocks * block_size_factor
     else:
         handler = worker._load_handler
         src_spec = CPULoadStoreSpec(cpu_blocks)
-        dst_spec = GPULoadStoreSpec(
-            gpu_blocks, group_sizes=group_sizes, block_indices=block_indices
-        )
+        dst_spec = GPULoadStoreSpec(gpu_blocks, group_sizes=group_sizes, block_indices=block_indices)
         # per-group mapping: gpu sub-block -> cpu sub-block
         dst_to_src_per_group = [
             dict(zip(gpu_blks, expanded))
-            for gpu_blks, expanded in zip(
-                gpu_blocks_per_group, cpu_blocks_expanded_per_group
-            )
+            for gpu_blks, expanded in zip(gpu_blocks_per_group, cpu_blocks_expanded_per_group)
         ]
         num_dst_sub_blocks = num_gpu_blocks
 
@@ -386,9 +361,7 @@ def test_transfer_multi_group(
             assert finished[0].success
             expected_bytes = sum(
                 group_size * sum([x.page_size_bytes for x in data_refs])
-                for group_size, data_refs in zip(
-                    group_sizes, handler.kv_cache_groups_data_refs
-                )
+                for group_size, data_refs in zip(group_sizes, handler.kv_cache_groups_data_refs)
             )
             assert finished[0].transfer_size == expected_bytes
             break
@@ -414,8 +387,6 @@ def test_transfer_multi_group(
                     expected = src_view[src_sub_block]
                 else:
                     expected = orig_dst_view[dst_sub_block]
-                torch.testing.assert_close(
-                    dst_view[dst_sub_block].cpu(), expected.cpu()
-                )
+                torch.testing.assert_close(dst_view[dst_sub_block].cpu(), expected.cpu())
 
     worker.shutdown()

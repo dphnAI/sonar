@@ -59,15 +59,9 @@ def tensor_cache(fn: Callable[..., torch.Tensor]) -> Callable[..., torch.Tensor]
                 len(args) == len(last_args)
                 and len(kwargs) == len(last_kwargs)
                 and all(a is b for a, b in zip(args, last_args))
-                and all(
-                    k in last_kwargs and v is last_kwargs[k] for k, v in kwargs.items()
-                )
+                and all(k in last_kwargs and v is last_kwargs[k] for k, v in kwargs.items())
             ):
-                cache_entries = (
-                    cache_entries[:i]
-                    + cache_entries[i + 1 :]
-                    + [(args, kwargs, last_result)]
-                )
+                cache_entries = cache_entries[:i] + cache_entries[i + 1 :] + [(args, kwargs, last_result)]
                 return last_result
 
         result = fn(*args, **kwargs)
@@ -87,13 +81,8 @@ def input_guard(fn: Callable[..., torch.Tensor]) -> Callable[..., torch.Tensor]:
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        contiguous_args = (
-            i if not isinstance(i, torch.Tensor) else i.contiguous() for i in args
-        )
-        contiguous_kwargs = {
-            k: (v if not isinstance(v, torch.Tensor) else v.contiguous())
-            for k, v in kwargs.items()
-        }
+        contiguous_args = (i if not isinstance(i, torch.Tensor) else i.contiguous() for i in args)
+        contiguous_kwargs = {k: (v if not isinstance(v, torch.Tensor) else v.contiguous()) for k, v in kwargs.items()}
 
         tensor = None
         for arg in args:
@@ -149,8 +138,7 @@ is_intel = device_platform == "intel"
 is_nvidia = device_platform == "nvidia"
 is_intel_alchemist = is_intel and "Intel(R) Arc(TM) A" in torch.xpu.get_device_name(0)
 is_nvidia_hopper = is_nvidia and (
-    "NVIDIA H" in torch.cuda.get_device_name(0)
-    or torch.cuda.get_device_capability()[0] >= 9
+    "NVIDIA H" in torch.cuda.get_device_name(0) or torch.cuda.get_device_capability()[0] >= 9
 )
 use_cuda_graph = is_nvidia and os.environ.get("FLA_USE_CUDA_GRAPH", "0") == "1"
 is_gather_supported = hasattr(triton.language, "gather")
@@ -167,9 +155,7 @@ is_tma_supported = (
 def get_all_max_shared_mem():
     try:
         return [
-            triton.runtime.driver.active.utils.get_device_properties(i)[
-                "max_shared_mem"
-            ]
+            triton.runtime.driver.active.utils.get_device_properties(i)["max_shared_mem"]
             for i in range(device_torch_lib.device_count())
         ]
     except BaseException:

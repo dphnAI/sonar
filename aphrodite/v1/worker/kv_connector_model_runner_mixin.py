@@ -53,9 +53,7 @@ class KVConnectorModelRunnerMixin:
         defer_finalize: bool = False,
     ) -> AbstractContextManager[KVConnectorOutput | None]:
         return (
-            KVConnectorModelRunnerMixin._get_kv_connector_output(
-                scheduler_output, defer_finalize=defer_finalize
-            )
+            KVConnectorModelRunnerMixin._get_kv_connector_output(scheduler_output, defer_finalize=defer_finalize)
             if has_kv_transfer_group()
             else nullcontext()
         )
@@ -99,8 +97,8 @@ class KVConnectorModelRunnerMixin:
             if wait_for_save and not defer_finalize:
                 kv_connector.wait_for_save()
 
-            output.finished_sending, output.finished_recving = (
-                kv_connector.get_finished(scheduler_output.finished_req_ids)
+            output.finished_sending, output.finished_recving = kv_connector.get_finished(
+                scheduler_output.finished_req_ids
             )
             output.invalid_block_ids = kv_connector.get_block_ids_with_load_errors()
 
@@ -188,9 +186,7 @@ class KVConnectorModelRunnerMixin:
         kv_cache_spec = attn_group.kv_cache_spec
         assert isinstance(kv_cache_spec, AttentionSpec)
 
-        tensor_sizes = set(
-            kv_cache_tensor.size for kv_cache_tensor in kv_cache_config.kv_cache_tensors
-        )
+        tensor_sizes = set(kv_cache_tensor.size for kv_cache_tensor in kv_cache_config.kv_cache_tensors)
         assert len(tensor_sizes) == 1
         tensor_size = tensor_sizes.pop()
 
@@ -218,9 +214,7 @@ class KVConnectorModelRunnerMixin:
         kv_cache_shape = (num_layers,) + kv_cache_shape
 
         try:
-            kv_cache_stride_order = attn_backend.get_kv_cache_stride_order(
-                include_num_layers_dimension=True
-            )
+            kv_cache_stride_order = attn_backend.get_kv_cache_stride_order(include_num_layers_dimension=True)
             assert len(kv_cache_stride_order) == len(kv_cache_shape)
         except (AttributeError, NotImplementedError):
             kv_cache_stride_order = tuple(range(len(kv_cache_shape)))
@@ -231,15 +225,11 @@ class KVConnectorModelRunnerMixin:
 
         # allocate one contiguous buffer for all layers
         cross_layers_kv_cache = (
-            torch.zeros(total_size, dtype=torch.int8, device=device)
-            .view(kv_cache_spec.dtype)
-            .view(kv_cache_shape)
+            torch.zeros(total_size, dtype=torch.int8, device=device).view(kv_cache_spec.dtype).view(kv_cache_shape)
         )
 
         # Maintain original KV shape view.
-        inv_order = [
-            kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))
-        ]
+        inv_order = [kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))]
         permuted_kv_cache = cross_layers_kv_cache.permute(*inv_order)
 
         kv_caches = {}

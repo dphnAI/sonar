@@ -3,7 +3,6 @@
 
 import pytest
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
@@ -11,6 +10,7 @@ from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 
 # Using mistral tokenizer as a generic mock since the actual model is not on HF
 from aphrodite.tokenizers.registry import get_tokenizer
+from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "gemma4"
 
@@ -87,17 +87,13 @@ EMPTY = {
     "is_reasoning_end": True,
 }
 NEW_LINE_NONSTREAMING = {
-    "output": (
-        "Before\n<|channel>This is a reasoning section<channel|>\nThis is the rest"
-    ),
+    "output": ("Before\n<|channel>This is a reasoning section<channel|>\nThis is the rest"),
     "reasoning": "This is a reasoning section",
     "content": "Before\n\nThis is the rest",
     "is_reasoning_end": True,
 }
 NEW_LINE_STREAMING = {
-    "output": (
-        "Before\n<|channel>This is a reasoning section<channel|>\nThis is the rest"
-    ),
+    "output": ("Before\n<|channel>This is a reasoning section<channel|>\nThis is the rest"),
     "reasoning": "This is a reasoning section",
     "content": "Before\n\nThis is the rest",
     "is_reasoning_end": True,
@@ -146,9 +142,7 @@ TEST_CASES = [
     pytest.param(False, REASONING_WITH_CHANNEL, id="reasoning"),
     pytest.param(True, REASONING_WITH_CHANNEL, id="reasoning_streaming"),
     pytest.param(False, COMPLETE_REASONING_WITH_CHANNEL, id="complete_reasoning"),
-    pytest.param(
-        True, COMPLETE_REASONING_WITH_CHANNEL, id="complete_reasoning_streaming"
-    ),
+    pytest.param(True, COMPLETE_REASONING_WITH_CHANNEL, id="complete_reasoning_streaming"),
     pytest.param(False, MULTIPLE_LINES_WITH_CHANNEL, id="multiple_lines"),
     pytest.param(True, MULTIPLE_LINES_WITH_CHANNEL, id="multiple_lines_streaming"),
     pytest.param(False, CHANNEL_NO_END, id="no_end"),
@@ -161,9 +155,7 @@ TEST_CASES = [
     pytest.param(False, THOUGHT_PREFIX_ONLY, id="thought_prefix_only"),
     pytest.param(True, THOUGHT_PREFIX_ONLY, id="thought_prefix_only_streaming"),
     pytest.param(False, THOUGHT_PREFIX_MULTILINE, id="thought_prefix_multiline"),
-    pytest.param(
-        True, THOUGHT_PREFIX_MULTILINE, id="thought_prefix_multiline_streaming"
-    ),
+    pytest.param(True, THOUGHT_PREFIX_MULTILINE, id="thought_prefix_multiline_streaming"),
     pytest.param(False, THOUGHT_PREFIX_DIVERGE, id="thought_prefix_diverge"),
     pytest.param(True, THOUGHT_PREFIX_DIVERGE, id="thought_prefix_diverge_streaming"),
     pytest.param(False, TOOL_CALL_STARTED, id="tool_call_started"),
@@ -229,17 +221,13 @@ def test_gemma4_reasoning(
     output = param_dict["output"]
     output_tokens = gemma4_encode_output(generic_tokenizer, output)
 
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        generic_tokenizer
-    )
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(generic_tokenizer)
 
     # We use the generic run_reasoning_extraction from utils
     # Use decode per token to get standard spaces instead of
     # SentencePiece space characters
     output_token_strings = [generic_tokenizer.decode([t]) for t in output_tokens]
-    reasoning, content = run_reasoning_extraction(
-        parser, output_token_strings, streaming=streaming
-    )
+    reasoning, content = run_reasoning_extraction(parser, output_token_strings, streaming=streaming)
 
     assert reasoning == param_dict["reasoning"]
     assert content == param_dict["content"]
@@ -250,9 +238,7 @@ def test_gemma4_reasoning(
 
 
 def test_gemma4_adjust_request(generic_tokenizer):
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        generic_tokenizer
-    )
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(generic_tokenizer)
 
     request = ChatCompletionRequest(messages=[], model="test-model")
     assert request.skip_special_tokens is True
@@ -263,13 +249,8 @@ def test_gemma4_adjust_request(generic_tokenizer):
 
 
 def test_gemma4_previous_turn_reasoning_is_reasoning_end(generic_tokenizer):
-    output = (
-        "<|channel>thought\n1st thought<channel|>1st content<turn|>\n"
-        "<|turn>user\nThanks<|turn>model\n"
-    )
+    output = "<|channel>thought\n1st thought<channel|>1st content<turn|>\n<|turn>user\nThanks<|turn>model\n"
     output_tokens = gemma4_encode_output(generic_tokenizer, output)
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        generic_tokenizer
-    )
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(generic_tokenizer)
     is_reasoning_end = parser.is_reasoning_end(output_tokens)
     assert not is_reasoning_end

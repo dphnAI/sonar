@@ -25,33 +25,17 @@ class _MLAPrefillBackendEnumMeta(EnumMeta):
         except KeyError:
             members = cls.__members__.keys()
             valid_backends = ", ".join(members)
-            raise ValueError(
-                f"Unknown MLA prefill backend: '{name}'. "
-                f"Valid options are: {valid_backends}"
-            ) from None
+            raise ValueError(f"Unknown MLA prefill backend: '{name}'. Valid options are: {valid_backends}") from None
 
 
 class MLAPrefillBackendEnum(Enum, metaclass=_MLAPrefillBackendEnumMeta):
     """Enumeration of all supported MLA prefill backends."""
 
-    FLASH_ATTN = (
-        "aphrodite.v1.attention.backends.mla.prefill.flash_attn.FlashAttnPrefillBackend"
-    )
-    FLASHINFER = (
-        "aphrodite.v1.attention.backends.mla.prefill.flashinfer.FlashInferPrefillBackend"
-    )
-    TRTLLM_RAGGED = (
-        "aphrodite.v1.attention.backends.mla.prefill.trtllm_ragged."
-        "TrtllmRaggedPrefillBackend"
-    )
-    TOKENSPEED_MLA = (
-        "aphrodite.v1.attention.backends.mla.prefill.tokenspeed_mla."
-        "TokenspeedMLAPrefillBackend"
-    )
-    ROCM_AITER_FA = (
-        "aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn."
-        "AiterFlashAttnPrefillBackend"
-    )
+    FLASH_ATTN = "aphrodite.v1.attention.backends.mla.prefill.flash_attn.FlashAttnPrefillBackend"
+    FLASHINFER = "aphrodite.v1.attention.backends.mla.prefill.flashinfer.FlashInferPrefillBackend"
+    TRTLLM_RAGGED = "aphrodite.v1.attention.backends.mla.prefill.trtllm_ragged.TrtllmRaggedPrefillBackend"
+    TOKENSPEED_MLA = "aphrodite.v1.attention.backends.mla.prefill.tokenspeed_mla.TokenspeedMLAPrefillBackend"
+    ROCM_AITER_FA = "aphrodite.v1.attention.backends.mla.prefill.aiter_flash_attn.AiterFlashAttnPrefillBackend"
     # Placeholder for third-party/custom backends - must be registered before use
     # set to None to avoid alias with other backend, whose value is an empty string
     CUSTOM = None

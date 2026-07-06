@@ -25,7 +25,7 @@ import torch
 from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import (
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
@@ -204,9 +204,7 @@ class Gemma4MTPAttention(nn.Module):
         else:
             rope_parameters = dict(config.rope_parameters.copy())
             if self.is_sliding:
-                rope_parameters["rope_theta"] = getattr(
-                    config, "rope_local_base_freq", 10000.0
-                )
+                rope_parameters["rope_theta"] = getattr(config, "rope_local_base_freq", 10000.0)
 
         self.rotary_emb = get_rope(
             self.head_dim,
@@ -272,17 +270,11 @@ class Gemma4MTPDecoderLayer(nn.Module):
         layer_idx = extract_layer_index(prefix)
         layer_type = config.layer_types[layer_idx]
         is_full_attention = layer_type == "full_attention"
-        head_dim = (
-            getattr(config, "global_head_dim", config.head_dim)
-            if is_full_attention
-            else config.head_dim
-        )
+        head_dim = getattr(config, "global_head_dim", config.head_dim) if is_full_attention else config.head_dim
 
         use_k_eq_v = is_full_attention and getattr(config, "attention_k_eq_v", False)
         if use_k_eq_v:
-            num_kv_heads = getattr(
-                config, "num_global_key_value_heads", config.num_key_value_heads
-            )
+            num_kv_heads = getattr(config, "num_global_key_value_heads", config.num_key_value_heads)
         else:
             num_kv_heads = config.num_key_value_heads
 
@@ -309,15 +301,9 @@ class Gemma4MTPDecoderLayer(nn.Module):
         )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.pre_feedforward_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_feedforward_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.register_buffer("layer_scalar", torch.ones(1))
 
@@ -360,9 +346,7 @@ class Gemma4MultiTokenPredictor(nn.Module):
         self.config = text_config
 
         self.hidden_size = text_config.hidden_size
-        self.backbone_hidden_size = getattr(
-            config, "backbone_hidden_size", self.hidden_size
-        )
+        self.backbone_hidden_size = getattr(config, "backbone_hidden_size", self.hidden_size)
         self.vocab_size = text_config.vocab_size
         self.num_mtp_layers = text_config.num_hidden_layers
 
@@ -508,8 +492,7 @@ class Gemma4MTP(nn.Module):
                 centroid_intermediate_top_k=top_k,
             )
             logger.info(
-                "Gemma4 MTP: centroids masking enabled "
-                "(num_centroids=%d, top_k=%d, active_tokens=%d/%d).",
+                "Gemma4 MTP: centroids masking enabled (num_centroids=%d, top_k=%d, active_tokens=%d/%d).",
                 num_centroids,
                 top_k,
                 top_k * (text_config.vocab_size // num_centroids),

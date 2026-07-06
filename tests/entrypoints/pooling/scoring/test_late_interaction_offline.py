@@ -59,9 +59,7 @@ def llm():
 
 @pytest.fixture(scope="module")
 def hf_model():
-    return ColBERTScoringHfRunner(
-        model_name=MODEL_NAME, linear_weights_key=LINEAR_WEIGHTS_KEY
-    )
+    return ColBERTScoringHfRunner(model_name=MODEL_NAME, linear_weights_key=LINEAR_WEIGHTS_KEY)
 
 
 @pytest.mark.skip_global_cleanup
@@ -69,9 +67,7 @@ def test_1_to_1(llm, hf_model):
     text_pair = [TEXTS_1[0], TEXTS_2[0]]
 
     hf_outputs = hf_model.predict([text_pair]).tolist()
-    aphrodite_outputs = [
-        output.outputs.score for output in llm.score(text_pair[0], text_pair[1])
-    ]
+    aphrodite_outputs = [output.outputs.score for output in llm.score(text_pair[0], text_pair[1])]
 
     assert len(aphrodite_outputs) == 1
     assert len(hf_outputs) == 1

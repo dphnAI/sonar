@@ -80,11 +80,7 @@ def ref_dynamic_per_tensor_fp8_quant(
     x_max = as_float32_tensor(x.abs().max())
     ref_scale = x_max / fp8_max
     ref_iscale = one / ref_scale
-    ref_out = (
-        (as_float32_tensor(x) * ref_iscale)
-        .clamp(fp8_traits_min, fp8_traits_max)
-        .to(FP8_DTYPE)
-    )
+    ref_out = (as_float32_tensor(x) * ref_iscale).clamp(fp8_traits_min, fp8_traits_max).to(FP8_DTYPE)
     return ref_out, ref_scale.view(1)
 
 
@@ -154,14 +150,10 @@ def native_w8a8_block_matmul(
     return C
 
 
-def native_per_token_group_quant_fp8(
-    x, group_size, eps=1e-10, dtype=torch.float8_e4m3fn
-):
+def native_per_token_group_quant_fp8(x, group_size, eps=1e-10, dtype=torch.float8_e4m3fn):
     """Function to perform per-token-group quantization on an input tensor
     `x` using native torch."""
-    assert x.shape[-1] % group_size == 0, (
-        "the last dimension of `x` must be divisible by `group_size`"
-    )
+    assert x.shape[-1] % group_size == 0, "the last dimension of `x` must be divisible by `group_size`"
     assert x.is_contiguous(), "`x` is not contiguous"
 
     finfo = torch.finfo(dtype)
@@ -187,9 +179,7 @@ def native_per_token_group_quant_int8(x, group_size, eps=1e-10, dtype=torch.int8
     It converts the tensor values into int8 values and returns the
     quantized tensor along with the scaling factor used for quantization.
     """
-    assert x.shape[-1] % group_size == 0, (
-        "the last dimension of `x` must be divisible by `group_size`"
-    )
+    assert x.shape[-1] % group_size == 0, "the last dimension of `x` must be divisible by `group_size`"
     assert x.is_contiguous(), "`x` is not contiguous"
 
     iinfo = torch.iinfo(dtype)
@@ -200,9 +190,7 @@ def native_per_token_group_quant_int8(x, group_size, eps=1e-10, dtype=torch.int8
     # Use float32 for scale calculation for stability
     amax = x_.abs().max(dim=-1, keepdim=True)[0].clamp(min=eps).to(torch.float32)
     x_s = amax / int8_max
-    x_q = (
-        (x_.to(torch.float32) / x_s).round().clamp(min=int8_min, max=int8_max).to(dtype)
-    )  # Round before clamping
+    x_q = (x_.to(torch.float32) / x_s).round().clamp(min=int8_min, max=int8_max).to(dtype)  # Round before clamping
     x_q = x_q.reshape(x.shape)
     x_s = x_s.reshape(x.shape[:-1] + (x.shape[-1] // group_size,))
 
@@ -219,9 +207,7 @@ def per_block_cast_to_int8(
     block_m, block_n = block_shape
     assert x.dim() == 2
     m, n = x.shape
-    x_padded = torch.zeros(
-        (round_up(m, block_m), round_up(n, block_n)), dtype=x.dtype, device=x.device
-    )
+    x_padded = torch.zeros((round_up(m, block_m), round_up(n, block_n)), dtype=x.dtype, device=x.device)
     x_padded[:m, :n] = x
     x_view = x_padded.view(-1, block_m, x_padded.size(1) // block_n, block_n)
     x_amax = x_view.abs().float().amax(dim=(1, 3), keepdim=True).clamp(1e-4)
@@ -259,9 +245,7 @@ def batched_dequant(
         assert t.shape[0] == scale.shape[0]
         out = torch.empty_like(t, dtype=out_dtype)
         for e in range(t.shape[0]):
-            out[e] = dequant(
-                t[e], scale[e], block_shape, per_act_token_quant, out_dtype
-            )
+            out[e] = dequant(t[e], scale[e], block_shape, per_act_token_quant, out_dtype)
         return out
 
     return t.to(out_dtype)
@@ -285,17 +269,13 @@ def native_batched_masked_quant_matmul(
         num_tokens = num_expert_tokens_cpu[e]
         if A.dtype.itemsize == 1 and block_shape is not None:
             assert A_scale is not None and B_scale is not None
-            tmp = native_w8a8_block_matmul(
-                A[e], B[e], A_scale[e], B_scale[e], block_shape, C.dtype
-            )
+            tmp = native_w8a8_block_matmul(A[e], B[e], A_scale[e], B_scale[e], block_shape, C.dtype)
             C[e, :num_tokens, :] = tmp[:num_tokens, :]
         elif A.dtype.itemsize == 1 and block_shape is None:
             assert A_scale is not None and B_scale is not None
             A_dq = dequant(A[e], A_scale[e], block_shape, per_act_token_quant)
             B_dq = dequant(B[e], B_scale[e], block_shape, per_act_token_quant)
-            C[e, :num_tokens, :] = (A_dq[:num_tokens] @ B_dq.transpose(0, 1)).to(
-                C.dtype
-            )
+            C[e, :num_tokens, :] = (A_dq[:num_tokens] @ B_dq.transpose(0, 1)).to(C.dtype)
         else:
             assert A_scale is None
             assert B_scale is None

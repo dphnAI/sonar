@@ -29,9 +29,7 @@ def test_postprocess_scores_and_releases_query_cache():
     query_emb = torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float32)
     doc_emb = torch.tensor([[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]], dtype=torch.float32)
 
-    query_params = _make_pooling_params(
-        build_late_interaction_query_params(query_key=query_key, query_uses=1)
-    )
+    query_params = _make_pooling_params(build_late_interaction_query_params(query_key=query_key, query_uses=1))
     query_output = runner.postprocess_pooler_output(
         raw_pooler_output=[query_emb],
         pooling_params=[query_params],
@@ -42,9 +40,7 @@ def test_postprocess_scores_and_releases_query_cache():
     assert query_output[0] is not None
     assert query_output[0].shape == torch.Size([])
 
-    doc_params = _make_pooling_params(
-        build_late_interaction_doc_params(query_key=query_key)
-    )
+    doc_params = _make_pooling_params(build_late_interaction_doc_params(query_key=query_key))
     doc_output = runner.postprocess_pooler_output(
         raw_pooler_output=[doc_emb],
         pooling_params=[doc_params],
@@ -71,9 +67,7 @@ def test_postprocess_scores_docs_in_batch():
     doc_emb_1 = torch.tensor([[1.0, 0.0], [0.5, 0.5]], dtype=torch.float32)
     doc_emb_2 = torch.tensor([[0.0, 1.0], [0.3, 0.7], [1.0, 0.0]], dtype=torch.float32)
 
-    query_params = _make_pooling_params(
-        build_late_interaction_query_params(query_key=query_key, query_uses=2)
-    )
+    query_params = _make_pooling_params(build_late_interaction_query_params(query_key=query_key, query_uses=2))
     runner.postprocess_pooler_output(
         raw_pooler_output=[query_emb],
         pooling_params=[query_params],
@@ -81,9 +75,7 @@ def test_postprocess_scores_docs_in_batch():
         finished_mask=[True],
     )
 
-    doc_params = _make_pooling_params(
-        build_late_interaction_doc_params(query_key=query_key)
-    )
+    doc_params = _make_pooling_params(build_late_interaction_doc_params(query_key=query_key))
     doc_output = runner.postprocess_pooler_output(
         raw_pooler_output=[doc_emb_1, doc_emb_2],
         pooling_params=[doc_params, doc_params],
@@ -111,9 +103,7 @@ def test_finished_request_releases_unscored_doc_use():
     query_emb = torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float32)
     doc_emb = torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float32)
 
-    query_params = _make_pooling_params(
-        build_late_interaction_query_params(query_key=query_key, query_uses=1)
-    )
+    query_params = _make_pooling_params(build_late_interaction_query_params(query_key=query_key, query_uses=1))
     runner.postprocess_pooler_output(
         raw_pooler_output=[query_emb],
         pooling_params=[query_params],
@@ -121,9 +111,7 @@ def test_finished_request_releases_unscored_doc_use():
         finished_mask=[True],
     )
 
-    doc_params = _make_pooling_params(
-        build_late_interaction_doc_params(query_key=query_key)
-    )
+    doc_params = _make_pooling_params(build_late_interaction_doc_params(query_key=query_key))
     runner.register_request("doc-req", doc_params)
     runner.on_requests_finished({"doc-req"})
 

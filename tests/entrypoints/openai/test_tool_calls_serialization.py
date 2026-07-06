@@ -128,10 +128,7 @@ def test_messages_without_tool_calls_unaffected():
 @pytest.mark.parametrize("num_tool_calls", [1, 3])
 def test_multiple_tool_calls_materialised(num_tool_calls: int):
     """Multiple tool calls in a single message are all preserved."""
-    tool_calls = [
-        _make_tool_call(f"call_{i}", f"func_{i}", f'{{"arg": {i}}}')
-        for i in range(num_tool_calls)
-    ]
+    tool_calls = [_make_tool_call(f"call_{i}", f"func_{i}", f'{{"arg": {i}}}') for i in range(num_tool_calls)]
     messages = [
         {"role": "user", "content": "Do things"},
         {"role": "assistant", "content": None, "tool_calls": iter(tool_calls)},

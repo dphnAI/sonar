@@ -48,14 +48,10 @@ def do_sample(
         PROMPT_TEMPLATE.format(
             context="Which poll resource provided the most number of candidate information?"  # noqa: E501
         ),
-        PROMPT_TEMPLATE.format(
-            context="Return the poll resource associated with the most candidates."
-        ),
+        PROMPT_TEMPLATE.format(context="Return the poll resource associated with the most candidates."),
     ]
 
-    sampling_params = aphrodite.SamplingParams(
-        temperature=0, max_tokens=64, stop=["<|im_end|>"]
-    )
+    sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=64, stop=["<|im_end|>"])
     if tensorizer_config_dict is not None:
         outputs = llm.generate(
             prompts,
@@ -73,9 +69,7 @@ def do_sample(
         outputs = llm.generate(
             prompts,
             sampling_params,
-            lora_request=LoRARequest(str(lora_id), lora_id, lora_path)
-            if lora_id
-            else None,
+            lora_request=LoRARequest(str(lora_id), lora_id, lora_path) if lora_id else None,
         )
     lora_request = LoRARequest(str(lora_id), lora_id, lora_path) if lora_id else None
     generated_texts: list[str] = []
@@ -94,9 +88,7 @@ def do_sample(
     return generated_texts
 
 
-def generate_and_test(
-    llm, llama32_lora_files, tensorizer_config_dict: dict | None = None
-):
+def generate_and_test(llm, llama32_lora_files, tensorizer_config_dict: dict | None = None):
     print("lora adapter created")
     print("lora 1")
     assert (
@@ -140,9 +132,7 @@ def test_llama_lora(llama32_lora_files, cudagraph_specialize_lora: bool):
     generate_and_test(llm, llama32_lora_files)
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 @multi_gpu_test(num_gpus=4)
 def test_llama_lora_tp4(llama32_lora_files):
     llm = aphrodite.LLM(
@@ -239,8 +229,5 @@ def test_tp2_serialize_and_deserialize_lora(
     print("lora adapter created")
     print("lora 1")
     assert (
-        do_sample(
-            loaded_llm, llama32_lora_files, tensorizer_config_dict=tc_as_dict, lora_id=1
-        )
-        == EXPECTED_LORA_OUTPUT
+        do_sample(loaded_llm, llama32_lora_files, tensorizer_config_dict=tc_as_dict, lora_id=1) == EXPECTED_LORA_OUTPUT
     )

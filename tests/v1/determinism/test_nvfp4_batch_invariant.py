@@ -19,18 +19,14 @@ pytestmark = pytest.mark.skipif(
     reason="NVFP4 tests require torch.float8_e4m3fn support.",
 )
 
-NVFP4_TEST_MODEL = os.getenv(
-    "APHRODITE_TEST_NVFP4_MODEL", "nm-testing/TinyLlama-1.1B-Chat-v1.0-NVFP4"
-)
+NVFP4_TEST_MODEL = os.getenv("APHRODITE_TEST_NVFP4_MODEL", "nm-testing/TinyLlama-1.1B-Chat-v1.0-NVFP4")
 
 
 def _make_llm(max_num_seqs: int, backend: str) -> LLM:
     return LLM(
         model=NVFP4_TEST_MODEL,
         max_num_seqs=max_num_seqs,
-        gpu_memory_utilization=float(
-            os.getenv("APHRODITE_NVFP4_TEST_GPU_MEMORY_UTILIZATION", "0.05")
-        ),
+        gpu_memory_utilization=float(os.getenv("APHRODITE_NVFP4_TEST_GPU_MEMORY_UTILIZATION", "0.05")),
         max_model_len=int(os.getenv("APHRODITE_NVFP4_TEST_MAX_MODEL_LEN", "2048")),
         dtype="auto",
         tensor_parallel_size=int(os.getenv("APHRODITE_NVFP4_TEST_TP_SIZE", "1")),

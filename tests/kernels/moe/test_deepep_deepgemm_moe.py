@@ -311,9 +311,7 @@ def deepep_deepgemm_moe_impl(
         quant_config=quant_config,
     )
 
-    with with_dp_metadata(
-        M=test_tensors.rank_tokens.size(0), world_size=pgi.world_size
-    ):
+    with with_dp_metadata(M=test_tensors.rank_tokens.size(0), world_size=pgi.world_size):
         out = mk.apply(
             hidden_states=test_tensors.rank_tokens,
             w1=w1,
@@ -485,9 +483,7 @@ def test_ht_deepep_deepgemm_moe(
         use_fp8_dispatch=None,
     )
 
-    w1, w2, w1_scale, w2_scale = make_block_quant_fp8_weights(
-        num_experts, n, k, block_size
-    )
+    w1, w2, w1_scale, w2_scale = make_block_quant_fp8_weights(num_experts, n, k, block_size)
 
     parallel_launch(
         world_size,
@@ -557,9 +553,7 @@ def test_ll_deepep_deepgemm_moe(
         use_fp8_dispatch=use_fp8_dispatch,
     )
 
-    w1, w2, w1_scale, w2_scale = make_block_quant_fp8_weights(
-        num_experts, n, k, block_size
-    )
+    w1, w2, w1_scale, w2_scale = make_block_quant_fp8_weights(num_experts, n, k, block_size)
 
     parallel_launch(
         world_size,

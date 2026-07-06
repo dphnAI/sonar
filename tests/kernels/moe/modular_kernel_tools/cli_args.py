@@ -46,18 +46,13 @@ def make_config_arg_parser(description: str):
         "--pf-type",
         type=to_pf_class_type,
         required=True,
-        help=(
-            "Choose a PrepareFinalize Type : "
-            f"{[x.__name__ for x in MK_ALL_PREPARE_FINALIZE_TYPES]}"
-        ),
+        help=(f"Choose a PrepareFinalize Type : {[x.__name__ for x in MK_ALL_PREPARE_FINALIZE_TYPES]}"),
     )
     parser.add_argument(
         "--experts-type",
         type=to_experts_class_type,
         required=True,
-        help=(
-            f"Choose a FusedExpert type : {[x.__name__ for x in MK_FUSED_EXPERT_TYPES]}"
-        ),
+        help=(f"Choose a FusedExpert type : {[x.__name__ for x in MK_FUSED_EXPERT_TYPES]}"),
     )
     parser.add_argument(
         "-m",
@@ -78,15 +73,11 @@ def make_config_arg_parser(description: str):
         default=1024,
         help="N dimension of the first fused-moe matmul",
     )
-    parser.add_argument(
-        "--num-experts", type=int, default=32, help="Global num experts"
-    )
+    parser.add_argument("--num-experts", type=int, default=32, help="Global num experts")
     parser.add_argument("--topk", nargs="+", type=int, default=[4, 1], help="num topk")
 
     # Quant args
-    parser.add_argument(
-        "--quant-dtype", type=to_quant_torch_dtype, help="Quant datatype"
-    )
+    parser.add_argument("--quant-dtype", type=to_quant_torch_dtype, help="Quant datatype")
     parser.add_argument(
         "--per-token-quantized-activations",
         action="store_true",
@@ -97,9 +88,7 @@ def make_config_arg_parser(description: str):
         action="store_true",
         help="The weights must be per-channel quantized.",
     )
-    parser.add_argument(
-        "--block-shape", nargs="+", type=int, help="Quantization block shape"
-    )
+    parser.add_argument("--block-shape", nargs="+", type=int, help="Quantization block shape")
 
     # Torch trace profile generation args
     parser.add_argument(
@@ -116,9 +105,7 @@ def _validate_args(args: argparse.Namespace):
     if args.quant_dtype is not None:
         assert args.quant_dtype == torch.float8_e4m3fn
         if args.block_shape is not None:
-            assert len(args.block_shape) == 2, (
-                f"block shape must have 2 elements. got {args.block_shape}"
-            )
+            assert len(args.block_shape) == 2, f"block shape must have 2 elements. got {args.block_shape}"
 
     if args.experts_type in MK_SINGLE_GPU_PREPARE_FINALIZE_TYPES:
         assert args.world_size == 1, "Single GPU objects need world size set to 1"
@@ -126,9 +113,7 @@ def _validate_args(args: argparse.Namespace):
     if args.torch_trace_dir_path is not None:
         from pathlib import Path
 
-        assert Path(args.torch_trace_dir_path).is_dir(), (
-            f"Please create {args.torch_trace_dir_path}"
-        )
+        assert Path(args.torch_trace_dir_path).is_dir(), f"Please create {args.torch_trace_dir_path}"
 
 
 def make_config(args: argparse.Namespace) -> Config:

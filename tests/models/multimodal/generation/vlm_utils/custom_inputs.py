@@ -58,9 +58,7 @@ def multi_image_multi_aspect_ratio_inputs(formatter: Callable[[str], str]):
     ]
 
 
-def multi_video_multi_aspect_ratio_inputs(
-    formatter: Callable[[str], str], num_frames: int = 16
-):
+def multi_video_multi_aspect_ratio_inputs(formatter: Callable[[str], str], num_frames: int = 16):
     """Builds inputs for multi-video (varied sizes/aspect ratio) testing.
 
     Args:
@@ -127,9 +125,7 @@ def windows_attention_image_qwen2_5_vl():
 
     question = "Describe the image."
     img_prompt = "<|vision_start|><|image_pad|><|vision_end|>"
-    prompt = (
-        f"<|im_start|>User\n{img_prompt}{question}<|im_end|>\n<|im_start|>assistant\n"
-    )
+    prompt = f"<|im_start|>User\n{img_prompt}{question}<|im_end|>\n<|im_start|>assistant\n"
 
     wrapped_sf = ImageSizeWrapper(type=SizeType.SIZE_FACTOR, data=[0.5])
     return build_single_image_inputs([image], [prompt], wrapped_sf)
@@ -143,9 +139,7 @@ def video_with_metadata_glm4_1v():
     formatted_prompt = f"[gMASK]<|user|>\n{video_prompt}{question}<|assistant|>\n"
 
     scales = [0.1, 0.2, 0.25]
-    video_input = [
-        [(rescale_video_size(video_array, scale), metadata)] for scale in scales
-    ]
+    video_input = [[(rescale_video_size(video_array, scale), metadata)] for scale in scales]
     prompts = [formatted_prompt] * len(video_input)
 
     return [

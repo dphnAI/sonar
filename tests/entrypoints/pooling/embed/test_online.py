@@ -12,9 +12,6 @@ import requests
 import torch
 import torch.nn.functional as F
 
-from tests.models.language.pooling.embed_utils import run_embedding_correctness_test
-from tests.models.utils import check_embeddings_close
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingResponse
 from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
 from aphrodite.entrypoints.pooling.utils import (
@@ -25,9 +22,14 @@ from aphrodite.entrypoints.pooling.utils import (
 from aphrodite.platforms import current_platform
 from aphrodite.tokenizers import get_tokenizer
 from aphrodite.utils.serial_utils import EMBED_DTYPES, ENDIANNESS, binary2tensor
+from tests.models.language.pooling.embed_utils import run_embedding_correctness_test
+from tests.models.utils import check_embeddings_close
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
-DUMMY_CHAT_TEMPLATE = """{% for message in messages %}{{message['role'] + ': ' + message['content'] + '\\n'}}{% endfor %}"""  # noqa: E501
+DUMMY_CHAT_TEMPLATE = (
+    """{% for message in messages %}{{message['role'] + ': ' + message['content'] + '\\n'}}{% endfor %}"""  # noqa: E501
+)
 DTYPE = "bfloat16"
 input_text = "The best thing about Aphrodite is that it supports many different models"
 input_tokens = [
@@ -61,9 +63,7 @@ if current_platform.is_rocm():
 # On ROCm, floating-point reductions in attention and GEMM kernels are
 # non-associative and sensitive to batch geometry. Force LLM instances
 # into an identical, deterministic execution mode:
-ROCM_DETERMINISM_ARGS: list[str] = (
-    ["--max-num-seqs", "1"] if current_platform.is_rocm() else []
-)
+ROCM_DETERMINISM_ARGS: list[str] = ["--max-num-seqs", "1"] if current_platform.is_rocm() else []
 
 
 @pytest.fixture(scope="module")
@@ -99,9 +99,7 @@ def hf_model(hf_runner):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_basic(
-    server: RemoteOpenAIServer, client: openai.AsyncOpenAI, model_name: str
-):
+async def test_basic(server: RemoteOpenAIServer, client: openai.AsyncOpenAI, model_name: str):
     # test /v1/models
     response = requests.get(server.url_for("/v1/models"))
     model = response.json()["data"][0]["id"]
@@ -122,18 +120,14 @@ async def test_basic(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_completion_request(
-    client: openai.AsyncOpenAI, model_name: str, hf_model
-):
+async def test_completion_request(client: openai.AsyncOpenAI, model_name: str, hf_model):
     # test input: str
     embedding_response = await client.embeddings.create(
         model=model_name,
         input=input_text,
         encoding_format="float",
     )
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
@@ -151,9 +145,7 @@ async def test_completion_request(
         input=input_tokens,
         encoding_format="float",
     )
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
@@ -168,9 +160,7 @@ async def test_completion_request(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_completion_request_batched(
-    client: openai.AsyncOpenAI, model_name: str, hf_model
-):
+async def test_completion_request_batched(client: openai.AsyncOpenAI, model_name: str, hf_model):
     N = 10
     input_texts = [input_text] * N
 
@@ -180,9 +170,7 @@ async def test_completion_request_batched(
         input=input_texts,
         encoding_format="float",
     )
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == N
@@ -200,9 +188,7 @@ async def test_completion_request_batched(
         input=[input_tokens] * N,
         encoding_format="float",
     )
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == N
@@ -226,9 +212,7 @@ async def test_truncate_prompt_tokens(client: openai.AsyncOpenAI, model_name: st
     embedding_response = await client.embeddings.create(
         model=model_name, input=input_texts, extra_body={"truncate_prompt_tokens": 10}
     )
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
@@ -263,9 +247,7 @@ async def test_truncate_prompt_tokens(client: openai.AsyncOpenAI, model_name: st
     embedding_response = await client.embeddings.create(
         model=model_name, input=input_tokens, extra_body={"truncate_prompt_tokens": 10}
     )
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
@@ -294,9 +276,7 @@ async def test_truncate_prompt_tokens(client: openai.AsyncOpenAI, model_name: st
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_chat_request(
-    server: RemoteOpenAIServer, client: openai.AsyncOpenAI, model_name: str
-):
+async def test_chat_request(server: RemoteOpenAIServer, client: openai.AsyncOpenAI, model_name: str):
     messages = [
         {
             "role": "user",
@@ -339,9 +319,7 @@ async def test_chat_request(
         # To be consistent with chat
         extra_body={"add_special_tokens": False},
     )
-    completion_embeddings = EmbeddingResponse.model_validate(
-        completion_response.model_dump(mode="json")
-    )
+    completion_embeddings = EmbeddingResponse.model_validate(completion_response.model_dump(mode="json"))
 
     assert chat_embeddings.id is not None
     assert completion_embeddings.id is not None
@@ -420,9 +398,7 @@ async def test_chat_request(
 
 
 @pytest.mark.asyncio
-async def test_invocations_completion_request(
-    server: RemoteOpenAIServer, client: openai.AsyncOpenAI
-):
+async def test_invocations_completion_request(server: RemoteOpenAIServer, client: openai.AsyncOpenAI):
     request_args = {
         "model": MODEL_NAME,
         "input": input_text,
@@ -431,18 +407,14 @@ async def test_invocations_completion_request(
 
     completion_response = await client.embeddings.create(**request_args)
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     completion_output = completion_response.model_dump()
     invocation_output = invocation_response.json()
 
     assert completion_output.keys() == invocation_output.keys()
-    for completion_data, invocation_data in zip(
-        completion_output["data"], invocation_output["data"]
-    ):
+    for completion_data, invocation_data in zip(completion_output["data"], invocation_output["data"]):
         assert completion_data.keys() == invocation_data.keys()
         check_embeddings_close(
             embeddings_0_lst=[completion_data["embedding"]],
@@ -478,18 +450,14 @@ async def test_invocations_chat_request(server: RemoteOpenAIServer):
     chat_response = requests.post(server.url_for("v1/embeddings"), json=request_args)
     chat_response.raise_for_status()
 
-    invocation_response = requests.post(
-        server.url_for("invocations"), json=request_args
-    )
+    invocation_response = requests.post(server.url_for("invocations"), json=request_args)
     invocation_response.raise_for_status()
 
     chat_output = chat_response.json()
     invocation_output = invocation_response.json()
 
     assert chat_output.keys() == invocation_output.keys()
-    for chat_data, invocation_data in zip(
-        chat_output["data"], invocation_output["data"]
-    ):
+    for chat_data, invocation_data in zip(chat_output["data"], invocation_output["data"]):
         assert chat_data.keys() == invocation_data.keys()
         check_embeddings_close(
             embeddings_0_lst=[chat_data["embedding"]],
@@ -507,27 +475,19 @@ async def test_base64_embedding(hf_model, client: openai.AsyncOpenAI, model_name
         "The best thing about Aphrodite is that it supports many different models",
     ]
 
-    responses_float = await client.embeddings.create(
-        input=input_texts, model=model_name, encoding_format="float"
-    )
+    responses_float = await client.embeddings.create(input=input_texts, model=model_name, encoding_format="float")
     float_data = [d.embedding for d in responses_float.data]
     run_embedding_correctness_test(hf_model, input_texts, float_data)
 
-    responses_base64 = await client.embeddings.create(
-        input=input_texts, model=model_name, encoding_format="base64"
-    )
+    responses_base64 = await client.embeddings.create(input=input_texts, model=model_name, encoding_format="base64")
     base64_data = []
     for data in responses_base64.data:
-        base64_data.append(
-            np.frombuffer(base64.b64decode(data.embedding), dtype="float32").tolist()
-        )
+        base64_data.append(np.frombuffer(base64.b64decode(data.embedding), dtype="float32").tolist())
 
     run_embedding_correctness_test(hf_model, input_texts, base64_data)
 
     # Default response is float32 decoded from base64 by OpenAI Client
-    responses_default = await client.embeddings.create(
-        input=input_texts, model=model_name
-    )
+    responses_default = await client.embeddings.create(input=input_texts, model=model_name)
     default_data = [d.embedding for d in responses_default.data]
     run_embedding_correctness_test(hf_model, input_texts, default_data)
 
@@ -538,9 +498,7 @@ async def test_base64_embed_dtype_and_endianness(
     server: RemoteOpenAIServer, client: openai.AsyncOpenAI, model_name: str
 ):
     input_texts = [input_text] * 3
-    responses_float = await client.embeddings.create(
-        input=input_texts, model=model_name, encoding_format="float"
-    )
+    responses_float = await client.embeddings.create(input=input_texts, model=model_name, encoding_format="float")
     float_data = [d.embedding for d in responses_float.data]
 
     for embed_dtype in EMBED_DTYPES:
@@ -577,9 +535,7 @@ async def test_bytes_embed_dtype_and_endianness(
     server: RemoteOpenAIServer, client: openai.AsyncOpenAI, model_name: str
 ):
     input_texts = [input_text] * 3
-    responses_float = await client.embeddings.create(
-        input=input_texts, model=model_name, encoding_format="float"
-    )
+    responses_float = await client.embeddings.create(input=input_texts, model=model_name, encoding_format="float")
     float_data = [d.embedding for d in responses_float.data]
 
     for embed_dtype in EMBED_DTYPES:
@@ -620,9 +576,7 @@ async def test_bytes_only_embed_dtype_and_endianness(
         "The best thing about Aphrodite is that it supports many different models",
     ] * 2
 
-    responses_float = await client.embeddings.create(
-        input=input_texts, model=model_name, encoding_format="float"
-    )
+    responses_float = await client.embeddings.create(input=input_texts, model=model_name, encoding_format="float")
     float_data = [d.embedding for d in responses_float.data]
     embedding_size = len(float_data[0])
 
@@ -663,9 +617,7 @@ async def test_bytes_only_embed_dtype_and_endianness(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("param_name", ["encoding_format", "embed_dtype", "endianness"])
-async def test_params_not_supported(
-    server: RemoteOpenAIServer, model_name: str, param_name: str
-):
+async def test_params_not_supported(server: RemoteOpenAIServer, model_name: str, param_name: str):
     responses_base64 = requests.post(
         server.url_for("/v1/embeddings"),
         json={
@@ -702,9 +654,7 @@ async def test_use_activation(server: RemoteOpenAIServer, model_name: str):
     wo_normal = await get_outputs(use_activation=False)
 
     assert torch.allclose(default, w_normal, atol=1e-2), "Default should use normal."
-    assert not torch.allclose(w_normal, wo_normal, atol=1e-2), (
-        "wo_normal should not use normal."
-    )
+    assert not torch.allclose(w_normal, wo_normal, atol=1e-2), "wo_normal should not use normal."
     assert torch.allclose(w_normal, F.normalize(wo_normal, p=2, dim=-1), atol=1e-2), (
         "w_normal should be close to normal(wo_normal)."
     )
@@ -732,12 +682,8 @@ async def test_pooling_embed(server: RemoteOpenAIServer, model_name: str):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-@pytest.mark.parametrize(
-    "task", ["classify", "token_classify", "token_embed", "plugin"]
-)
-async def test_pooling_not_supported(
-    server: RemoteOpenAIServer, model_name: str, task: str
-):
+@pytest.mark.parametrize("task", ["classify", "token_classify", "token_embed", "plugin"])
+async def test_pooling_not_supported(server: RemoteOpenAIServer, model_name: str, task: str):
     response = requests.post(
         server.url_for("pooling"),
         json={

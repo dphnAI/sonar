@@ -67,9 +67,7 @@ class TestNarrowExpertDataForPadding:
     def test_no_narrowing_when_shapes_match(self):
         expert_data = torch.zeros(1024, 1024)
         loaded_weight = torch.randn(1024, 1024)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=0
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=0)
         assert result.shape == loaded_weight.shape
         assert result.data_ptr() == expert_data.data_ptr()
 
@@ -77,18 +75,14 @@ class TestNarrowExpertDataForPadding:
         # w2: (hidden_size, intermediate_size) - hidden_size padded at dim 0
         expert_data = torch.zeros(3072, 1024)
         loaded_weight = torch.randn(2688, 1024)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=0
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=0)
         assert result.shape == (2688, 1024)
 
     def test_narrow_w13_hidden_dim(self):
         # w1/w3: (intermediate_size, hidden_size) - hidden_size padded at dim 1
         expert_data = torch.zeros(2048, 3072)
         loaded_weight = torch.randn(2048, 2688)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=1
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=1)
         assert result.shape == (2048, 2688)
 
     def test_narrow_transposed_w2(self):
@@ -96,36 +90,28 @@ class TestNarrowExpertDataForPadding:
         expert_data = torch.zeros(1024, 3072)
         loaded_weight = torch.randn(1024, 2688)
         hidden_dim = RoutedExperts._get_hidden_dim(shard_dim=0, ndim=2)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=hidden_dim
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=hidden_dim)
         assert result.shape == (1024, 2688)
 
     def test_narrow_3d_full_load(self):
         # 3D tensor for full_load path: w2 (num_experts, hidden_size, intermediate)
         expert_data = torch.zeros(8, 3072, 1024)
         loaded_weight = torch.randn(8, 2688, 1024)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=1
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=1)
         assert result.shape == (8, 2688, 1024)
 
     def test_narrow_1d_scale(self):
         # 1D scale tensor: per-channel w2 scale (hidden_size,)
         expert_data = torch.zeros(3072)
         loaded_weight = torch.randn(2688)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=0
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=0)
         assert result.shape == (2688,)
 
     def test_scalar_weight_no_op(self):
         # 0-dim tensor should be a no-op
         expert_data = torch.zeros(3072)
         loaded_weight = torch.tensor(1.0)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=0
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=0)
         # ndim == 0, so no narrowing
         assert result.shape == (3072,)
 
@@ -133,9 +119,7 @@ class TestNarrowExpertDataForPadding:
         # Guard: don't narrow if loaded_weight is larger than expert_data
         expert_data = torch.zeros(2688, 1024)
         loaded_weight = torch.randn(3072, 1024)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=0
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=0)
         assert result.shape == (2688, 1024)
         assert result.data_ptr() == expert_data.data_ptr()
 
@@ -143,9 +127,7 @@ class TestNarrowExpertDataForPadding:
         # Negative hidden_dim should be a safe no-op (0 <= check)
         expert_data = torch.zeros(3072, 1024)
         loaded_weight = torch.randn(2688, 1024)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=-1
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=-1)
         # -1 fails the 0 <= check, so no narrowing
         assert result.shape == (3072, 1024)
         assert result.data_ptr() == expert_data.data_ptr()
@@ -155,9 +137,7 @@ class TestNarrowExpertDataForPadding:
         # even when other dimensions also differ
         expert_data = torch.zeros(3072, 2048)
         loaded_weight = torch.randn(2688, 1024)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=0
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=0)
         # Only dim 0 (hidden) should be narrowed; dim 1 stays at 2048
         assert result.shape == (2688, 2048)
 
@@ -165,9 +145,7 @@ class TestNarrowExpertDataForPadding:
         # Verify narrowing returns a view (writes go to original tensor)
         expert_data = torch.zeros(3072, 1024)
         loaded_weight = torch.randn(2688, 1024)
-        result = RoutedExperts._narrow_expert_data_for_padding(
-            expert_data, loaded_weight, hidden_dim=0
-        )
+        result = RoutedExperts._narrow_expert_data_for_padding(expert_data, loaded_weight, hidden_dim=0)
         result.copy_(loaded_weight)
         # The first 2688 rows of expert_data should now have loaded_weight
         assert torch.equal(expert_data[:2688, :], loaded_weight)

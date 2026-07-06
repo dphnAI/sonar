@@ -39,9 +39,7 @@ def translation(request: Request) -> OpenAIServingTranslation:
 )
 @with_cancellation
 @load_aware_call
-async def create_translations(
-    request: Annotated[TranslationRequest, Form()], raw_request: Request
-):
+async def create_translations(request: Annotated[TranslationRequest, Form()], raw_request: Request):
     handler = translation(raw_request)
     if handler is None:
         raise NotImplementedError("The model does not support Translations API")
@@ -51,9 +49,7 @@ async def create_translations(
     generator = await handler.create_translation(audio_data, request, raw_request)
 
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(
-            content=generator.model_dump(), status_code=generator.error.code
-        )
+        return JSONResponse(content=generator.model_dump(), status_code=generator.error.code)
 
     elif isinstance(generator, TranslationResponseVariant):
         return JSONResponse(content=generator.model_dump())

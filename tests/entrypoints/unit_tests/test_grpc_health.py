@@ -6,9 +6,7 @@ import pytest
 
 grpc = pytest.importorskip("grpc")
 health_pb2 = pytest.importorskip("grpc_health.v1.health_pb2")
-AphroditeHealthServicer = pytest.importorskip(
-    "smg_grpc_servicer.aphrodite.health_servicer"
-).AphroditeHealthServicer
+AphroditeHealthServicer = pytest.importorskip("smg_grpc_servicer.aphrodite.health_servicer").AphroditeHealthServicer
 
 SERVING = health_pb2.HealthCheckResponse.SERVING
 NOT_SERVING = health_pb2.HealthCheckResponse.NOT_SERVING
@@ -59,9 +57,7 @@ async def test_check_serving_aphrodite_service(servicer, request_msg, context, a
 
 
 @pytest.mark.asyncio
-async def test_check_not_serving_engine_errored(
-    servicer, request_msg, context, async_llm
-):
+async def test_check_not_serving_engine_errored(servicer, request_msg, context, async_llm):
     async_llm.check_health = AsyncMock(side_effect=Exception("engine dead"))
     request_msg.service = ""
     response = await servicer.Check(request_msg, context)
@@ -69,9 +65,7 @@ async def test_check_not_serving_engine_errored(
 
 
 @pytest.mark.asyncio
-async def test_check_not_serving_shutting_down(
-    servicer, request_msg, context, async_llm
-):
+async def test_check_not_serving_shutting_down(servicer, request_msg, context, async_llm):
     servicer.set_not_serving()
     request_msg.service = ""
     response = await servicer.Check(request_msg, context)
@@ -98,9 +92,7 @@ async def test_check_unknown_service_grpc_code(servicer, request_msg, context):
 
 @pytest.mark.asyncio
 @patch("smg_grpc_servicer.aphrodite.health_servicer.logger")
-async def test_check_logs_exception_on_error(
-    mock_logger, servicer, request_msg, context, async_llm
-):
+async def test_check_logs_exception_on_error(mock_logger, servicer, request_msg, context, async_llm):
     async_llm.check_health = AsyncMock(side_effect=Exception("engine exploded"))
     request_msg.service = ""
     await servicer.Check(request_msg, context)

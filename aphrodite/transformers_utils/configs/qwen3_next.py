@@ -249,8 +249,7 @@ class Qwen3NextConfig(PretrainedConfig):
         self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
-                "linear_attention" if bool((i + 1) % 4) else "full_attention"
-                for i in range(self.num_hidden_layers)
+                "linear_attention" if bool((i + 1) % 4) else "full_attention" for i in range(self.num_hidden_layers)
             ]
         self.validate_layer_type()
 

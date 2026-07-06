@@ -107,9 +107,7 @@ def _make_store_recving_thread(
 ) -> mooncake_store_worker.KVCacheStoreRecvingThread:
     from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheGroupSpec
 
-    token_database = ChunkedTokenDatabase(
-        KeyMetadata("test-model", 0, 0, 0, 0), block_size=16
-    )
+    token_database = ChunkedTokenDatabase(KeyMetadata("test-model", 0, 0, 0, 0), block_size=16)
     token_database.set_kv_caches_base_addr([0x1000])
     token_database.set_block_len([256])
     spec = FullAttentionSpec(block_size=16, num_kv_heads=8, head_size=64, dtype=None)
@@ -168,9 +166,7 @@ _DISK_OFFLOAD_BUDGET_FOR_THREE_KEYS = 4 * _DISK_OFFLOAD_SINGLE_KEY_BYTES
 _DISK_OFFLOAD_BUDGET_FOR_SPLIT = math.ceil(
     2 * _DISK_OFFLOAD_SINGLE_KEY_BYTES / _DISK_OFFLOAD_USABLE_BUDGET_RATIO
 )  # Allows two 256-byte chunks but not the third.
-_DISK_OFFLOAD_BUDGET_TOO_SMALL = (
-    _DISK_OFFLOAD_SINGLE_KEY_BYTES - 1
-)  # Smaller than a single 256-byte chunk.
+_DISK_OFFLOAD_BUDGET_TOO_SMALL = _DISK_OFFLOAD_SINGLE_KEY_BYTES - 1  # Smaller than a single 256-byte chunk.
 
 
 class _FakeKVTransferConfig:
@@ -227,9 +223,7 @@ def _make_kv_cache_config(*, block_size: int = 16) -> object:
         KVCacheGroupSpec,
     )
 
-    spec = FullAttentionSpec(
-        block_size=block_size, num_kv_heads=8, head_size=64, dtype=None
-    )
+    spec = FullAttentionSpec(block_size=block_size, num_kv_heads=8, head_size=64, dtype=None)
     return KVCacheConfig(
         num_blocks=10,
         kv_cache_tensors=[],
@@ -282,9 +276,7 @@ def test_pool_key_to_string_without_prefix_is_unchanged():
     """Default (empty) cache_prefix keeps keys byte-identical to the
     historical unprefixed format so existing deployments keep their hits."""
     key = PoolKey(KeyMetadata("test-model", 0, 0, 0, 0), "deadbeef")
-    assert (
-        key.to_string() == "test-model@tp_rank:0@pcp0@dcp0@pp_rank:0@group:0@deadbeef"
-    )
+    assert key.to_string() == "test-model@tp_rank:0@pcp0@dcp0@pp_rank:0@group:0@deadbeef"
 
 
 def test_pool_key_cache_prefix_namespaces_and_disambiguates():
@@ -296,9 +288,7 @@ def test_pool_key_cache_prefix_namespaces_and_disambiguates():
     key_a = PoolKey(md_a, "deadbeef")
     key_b = PoolKey(md_b, "deadbeef")
 
-    assert key_a.to_string() == (
-        "depA@test-model@tp_rank:0@pcp0@dcp0@pp_rank:0@group:0@deadbeef"
-    )
+    assert key_a.to_string() == ("depA@test-model@tp_rank:0@pcp0@dcp0@pp_rank:0@group:0@deadbeef")
     assert key_a.to_string() != key_b.to_string()
     assert hash(key_a) != hash(key_b)
 
@@ -316,23 +306,13 @@ def test_get_requester_local_hostname_prefers_override(monkeypatch):
 
 
 def test_get_configured_preferred_segment_returns_explicit_override():
-    assert (
-        rdma_utils.get_configured_preferred_segment(
-            {"preferred_segment": "10.0.0.7:50053"}
-        )
-        == "10.0.0.7:50053"
-    )
+    assert rdma_utils.get_configured_preferred_segment({"preferred_segment": "10.0.0.7:50053"}) == "10.0.0.7:50053"
 
 
 def test_get_configured_preferred_segment_prefers_explicit_over_env(monkeypatch):
     monkeypatch.setenv("MOONCAKE_PREFERRED_SEGMENT", "10.0.0.8:50053")
 
-    assert (
-        rdma_utils.get_configured_preferred_segment(
-            {"preferred_segment": "10.0.0.7:50053"}
-        )
-        == "10.0.0.7:50053"
-    )
+    assert rdma_utils.get_configured_preferred_segment({"preferred_segment": "10.0.0.7:50053"}) == "10.0.0.7:50053"
 
 
 def test_get_configured_preferred_segment_returns_env_override(monkeypatch):
@@ -605,9 +585,7 @@ def test_store_sending_thread_delta_start_rank_saves_second_local_chunk():
 def test_store_sending_thread_delta_saves_only_new_masked_chunks():
     store = MagicMock()
     store.batch_is_exist.side_effect = lambda keys: [0] * len(keys)
-    store.batch_put_from_multi_buffers.side_effect = (
-        lambda keys, addrs, sizes, replicate_config: [256] * len(keys)
-    )
+    store.batch_put_from_multi_buffers.side_effect = lambda keys, addrs, sizes, replicate_config: [256] * len(keys)
     coord = SimpleNamespace(
         lcm_block_size=16,
         store_mask=lambda token_len, start_token, num_prompt_tokens=None: (
@@ -1164,9 +1142,7 @@ def test_requester_worker_init_builds_replicate_config_for_preferred_segment(
 
 
 @pytest.mark.parametrize("dcp_size", [1, 4])
-def test_worker_put_striding_covers_every_rank_get_namespace(
-    tmp_path, monkeypatch, dcp_size
-):
+def test_worker_put_striding_covers_every_rank_get_namespace(tmp_path, monkeypatch, dcp_size):
     """Every key a rank GETs must have been PUT by some rank.
 
     When num_kv_head < tp_size, ranks holding the same KV heads stripe
@@ -1197,9 +1173,7 @@ def test_worker_put_striding_covers_every_rank_get_namespace(
     put_keys: set[str] = set()
     get_keys_per_rank: dict[int, set[str]] = {}
     for tp_rank in range(tp_size):
-        _patch_worker_runtime(
-            monkeypatch, tp_rank=tp_rank, tp_size=tp_size, dcp_size=dcp_size
-        )
+        _patch_worker_runtime(monkeypatch, tp_rank=tp_rank, tp_size=tp_size, dcp_size=dcp_size)
         w = worker.MooncakeStoreWorker(
             _make_aphrodite_config(rank=tp_rank, decode_context_parallel_size=dcp_size),
             _make_kv_cache_config(),
@@ -1274,9 +1248,7 @@ def test_store_sending_thread_skips_when_token_len_below_lcm():
     )
     db.set_kv_caches_base_addr([0x1000])
     db.set_block_len([1024])
-    thread = _make_store_sending_thread(
-        store, coord=coord, token_databases=[db], block_size=64
-    )
+    thread = _make_store_sending_thread(store, coord=coord, token_databases=[db], block_size=64)
 
     thread.add_stored_request("r0")
     thread._handle_request(
@@ -1312,13 +1284,9 @@ def test_store_sending_thread_only_stores_swa_blocks_in_window():
 
     store = MagicMock()
     store.batch_is_exist.side_effect = lambda keys: [0] * len(keys)
-    store.batch_put_from_multi_buffers.side_effect = (
-        lambda keys, addrs, sizes, replicate_config: [256] * len(keys)
-    )
+    store.batch_put_from_multi_buffers.side_effect = lambda keys, addrs, sizes, replicate_config: [256] * len(keys)
 
-    full_spec = FullAttentionSpec(
-        block_size=32, num_kv_heads=8, head_size=64, dtype=None
-    )
+    full_spec = FullAttentionSpec(block_size=32, num_kv_heads=8, head_size=64, dtype=None)
     swa_spec = SlidingWindowSpec(
         block_size=8,
         num_kv_heads=8,
@@ -1387,13 +1355,9 @@ def test_store_sending_thread_delta_saves_only_new_swa_boundary_chunks():
 
     store = MagicMock()
     store.batch_is_exist.side_effect = lambda keys: [0] * len(keys)
-    store.batch_put_from_multi_buffers.side_effect = (
-        lambda keys, addrs, sizes, replicate_config: [256] * len(keys)
-    )
+    store.batch_put_from_multi_buffers.side_effect = lambda keys, addrs, sizes, replicate_config: [256] * len(keys)
 
-    full_spec = FullAttentionSpec(
-        block_size=32, num_kv_heads=8, head_size=64, dtype=None
-    )
+    full_spec = FullAttentionSpec(block_size=32, num_kv_heads=8, head_size=64, dtype=None)
     swa_spec = SlidingWindowSpec(
         block_size=8,
         num_kv_heads=8,
@@ -1461,9 +1425,7 @@ def test_store_sending_thread_kv_events_use_group_chunk_metadata():
     store.batch_is_exist.side_effect = lambda keys: [0] * len(keys)
     store.batch_put_from_multi_buffers.return_value = [256, 256]
 
-    full_spec = FullAttentionSpec(
-        block_size=32, num_kv_heads=8, head_size=64, dtype=None
-    )
+    full_spec = FullAttentionSpec(block_size=32, num_kv_heads=8, head_size=64, dtype=None)
     swa_spec = SlidingWindowSpec(
         block_size=8,
         num_kv_heads=8,
@@ -1594,9 +1556,7 @@ def _make_bare_worker(
     worker._kv_connector_stats_lock = threading.Lock()
     worker.kv_connector_stats = MooncakeStoreConnectorStats()
 
-    spec = FullAttentionSpec(
-        block_size=block_size, num_kv_heads=8, head_size=64, dtype=None
-    )
+    spec = FullAttentionSpec(block_size=block_size, num_kv_heads=8, head_size=64, dtype=None)
     group = KVCacheGroupSpec(["layer0", "__cross_layer__"], spec)
     worker._kv_cache_groups = [group]
     worker.pcp_size = 1
@@ -1682,9 +1642,7 @@ def test_lookup_swa_single_group_returns_full_when_tail_window_present():
     from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec, SlidingWindowSpec
 
     worker = _make_bare_worker(block_size=16)
-    swa = SlidingWindowSpec(
-        block_size=16, num_kv_heads=8, head_size=64, dtype=None, sliding_window=32
-    )
+    swa = SlidingWindowSpec(block_size=16, num_kv_heads=8, head_size=64, dtype=None, sliding_window=32)
     worker._kv_cache_groups = [KVCacheGroupSpec(["layer0"], swa)]
     worker.coord = mooncake_store_worker.MooncakeStoreCoordinator(
         worker._kv_cache_groups,
@@ -1708,9 +1666,7 @@ def test_lookup_checks_all_potential_swa_hit_boundaries():
 
     worker = _make_bare_worker(block_size=8)
     full = FullAttentionSpec(block_size=32, num_kv_heads=8, head_size=64, dtype=None)
-    swa = SlidingWindowSpec(
-        block_size=8, num_kv_heads=8, head_size=64, dtype=None, sliding_window=8
-    )
+    swa = SlidingWindowSpec(block_size=8, num_kv_heads=8, head_size=64, dtype=None, sliding_window=8)
     worker._kv_cache_groups = [
         KVCacheGroupSpec(["full"], full),
         KVCacheGroupSpec(["swa"], swa),
@@ -1823,13 +1779,11 @@ def test_register_kv_caches_cross_layer_single_segment():
 
     with (
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "worker.KVCacheStoreSendingThread",
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.KVCacheStoreSendingThread",
             side_effect=_auto_set_ready_event,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "worker.KVCacheStoreRecvingThread",
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.KVCacheStoreRecvingThread",
             side_effect=_auto_set_ready_event,
         ),
     ):
@@ -1842,10 +1796,7 @@ def test_register_kv_caches_cross_layer_single_segment():
 
     expected_block_len = tensor.untyped_storage().nbytes() // num_blocks
     # block_len should be per_layer_page_size * num_layers
-    assert (
-        expected_block_len
-        == num_layers * per_layer_page_elements * tensor.element_size()
-    )
+    assert expected_block_len == num_layers * per_layer_page_elements * tensor.element_size()
     assert len(db.block_len) == 1
     assert db.block_len[0] == expected_block_len
 
@@ -1853,13 +1804,11 @@ def test_register_kv_caches_cross_layer_single_segment():
     worker2 = _make_bare_worker(num_gpu_blocks=num_blocks)
     with (
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "worker.KVCacheStoreSendingThread",
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.KVCacheStoreSendingThread",
             side_effect=_auto_set_ready_event,
         ),
         patch(
-            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store."
-            "worker.KVCacheStoreRecvingThread",
+            "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.KVCacheStoreRecvingThread",
             side_effect=_auto_set_ready_event,
         ),
     ):
@@ -1922,9 +1871,7 @@ def test_config_pr40900_unchanged(tmp_path):
 
 
 def test_config_embedded_rejects_zero_segment():
-    with pytest.raises(
-        ValueError, match=r"embedded mode requires global_segment_size > 0"
-    ):
+    with pytest.raises(ValueError, match=r"embedded mode requires global_segment_size > 0"):
         _make_config(mode="embedded", global_segment_size=0)
 
 

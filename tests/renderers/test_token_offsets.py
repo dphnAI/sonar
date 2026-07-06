@@ -143,9 +143,7 @@ class TestTokenizePromptOffsets:
         renderer = _make_base_renderer_with(fast_tokenizer)
         params = TokenizeParams(max_total_tokens=None, return_token_offsets=True)
 
-        result = await renderer._tokenize_prompt_async(
-            {"prompt": "Hello, world."}, params
-        )
+        result = await renderer._tokenize_prompt_async({"prompt": "Hello, world."}, params)
 
         offsets = result["prompt_token_offsets"]
         assert offsets is not None
@@ -178,9 +176,7 @@ class TestProcessTokensForwardsOffsets:
         renderer = _make_base_renderer_with(fast_tokenizer)
         params = TokenizeParams(max_total_tokens=None, return_token_offsets=True)
 
-        tokens_prompt = await renderer._tokenize_prompt_async(
-            {"prompt": "Hello, world."}, params
-        )
+        tokens_prompt = await renderer._tokenize_prompt_async({"prompt": "Hello, world."}, params)
         expected = tokens_prompt["prompt_token_offsets"]
 
         engine_input = await renderer._process_tokens_async(tokens_prompt)

@@ -8,8 +8,7 @@ from aphrodite.platforms import current_platform
 
 if not current_platform.is_device_capability_family(120):
     pytest.skip(
-        reason="FlashInfer CuteDSL SM12x MoE requires SM120 "
-        "(RTX Pro 6000 / DGX Spark).",
+        reason="FlashInfer CuteDSL SM12x MoE requires SM120 (RTX Pro 6000 / DGX Spark).",
         allow_module_level=True,
     )
 
@@ -28,9 +27,7 @@ if not has_flashinfer_b12x_moe():
 from flashinfer.fp4_quantization import fp4_quantize
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from tests.kernels.moe.utils import make_dummy_moe_config
-from tests.kernels.utils import torch_moe
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
 from aphrodite.model_executor.layers.fused_moe import fused_topk
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
@@ -42,6 +39,8 @@ from aphrodite.model_executor.layers.fused_moe.experts.flashinfer_b12x_moe impor
 )
 from aphrodite.utils.flashinfer import flashinfer_convert_sf_to_mma_layout
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.moe.utils import make_dummy_moe_config
+from tests.kernels.utils import torch_moe
 
 # Dimensions chosen to satisfy FP4 alignment requirements (k multiple of 256,
 # n multiple of 128) while keeping tests fast.
@@ -103,9 +102,7 @@ def test_flashinfer_b12x_moe(
     ``g1_alphas = 1/w_gs`` — is incompatible with this kernel.
     """
     set_random_seed(7)
-    with set_current_aphrodite_config(
-        AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
-    ):
+    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
 
         # Generate BF16 reference weights in [gate, up] order.
@@ -126,9 +123,7 @@ def test_flashinfer_b12x_moe(
         sf_vec_size = 16
 
         # W1: reorder BF16 from [gate, up] → [up, gate], then quantise.
-        w1_reordered = torch.cat(
-            [w1_bf16[:, n:, :], w1_bf16[:, :n, :]], dim=1
-        )  # shape (e, 2n, k), [up, gate]
+        w1_reordered = torch.cat([w1_bf16[:, n:, :], w1_bf16[:, :n, :]], dim=1)  # shape (e, 2n, k), [up, gate]
         w1_flat = w1_reordered.reshape(e * 2 * n, k)
         w1_q_flat, w1_sf_flat = fp4_quantize(
             w1_flat,

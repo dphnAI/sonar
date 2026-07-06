@@ -40,8 +40,7 @@ class XPUwNa16LinearKernel(MPLinearKernel):
         if c.group_size != -1 and c.group_size % 32 != 0:
             return (
                 False,
-                f"Group size ({c.group_size}) not supported by "
-                "XPUwNa16, supported group sizes are multiples of 32",
+                f"Group size ({c.group_size}) not supported by XPUwNa16, supported group sizes are multiples of 32",
             )
 
         if c.partition_weight_shape[0] % 32 != 0:
@@ -71,25 +70,17 @@ class XPUwNa16LinearKernel(MPLinearKernel):
             need_transpose = True
 
         if need_transpose:
-            getattr(layer, self.w_q_name).data = (
-                getattr(layer, self.w_q_name).data.t().contiguous()
-            )
+            getattr(layer, self.w_q_name).data = getattr(layer, self.w_q_name).data.t().contiguous()
             getattr(layer, self.w_s_name).data = getattr(layer, self.w_s_name).data
         else:
-            getattr(layer, self.w_s_name).data = (
-                getattr(layer, self.w_s_name).data.t().contiguous()
-            )
+            getattr(layer, self.w_s_name).data = getattr(layer, self.w_s_name).data.t().contiguous()
 
         if self.config.zero_points:
             # (FIXME): maybe zero points should also be transposed.
-            getattr(layer, self.w_zp_name).data = (
-                getattr(layer, self.w_zp_name).data.t().contiguous()
-            )
+            getattr(layer, self.w_zp_name).data = getattr(layer, self.w_zp_name).data.t().contiguous()
         else:
             weight_zero_point = torch.Tensor([8]).to(torch.int8).to("xpu")
-            setattr(
-                layer, self.w_zp_name, Parameter(weight_zero_point, requires_grad=False)
-            )
+            setattr(layer, self.w_zp_name, Parameter(weight_zero_point, requires_grad=False))
         if self.config.has_g_idx:
             setattr(
                 layer,
@@ -149,8 +140,7 @@ class XPUW4A8IntLinearKernel(MPLinearKernel):
         if c.group_size != -1 and c.group_size % 32 != 0:
             return (
                 False,
-                f"Group size ({c.group_size}) not supported by XPUW4A8Int, "
-                "must be a multiple of 32",
+                f"Group size ({c.group_size}) not supported by XPUW4A8Int, must be a multiple of 32",
             )
         in_size, out_size = c.partition_weight_shape
         if in_size % 8 != 0 or out_size % 8 != 0:
@@ -212,9 +202,7 @@ class XPUW4A8IntLinearKernel(MPLinearKernel):
 
         # TODO: static and asymmetric quantization case
         # Common code for CompressedTensorsW4A8Int does not read act symmetry data
-        quant_x, x_scale, x_zero = ops.dynamic_per_token_int8_quant_ref(
-            reshaped_x, True, 8
-        )
+        quant_x, x_scale, x_zero = ops.dynamic_per_token_int8_quant_ref(reshaped_x, True, 8)
 
         out = torch.ops._xpu_C.int4_gemm_w4a8(
             quant_x,

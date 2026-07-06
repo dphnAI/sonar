@@ -193,15 +193,9 @@ class EVA2CLIPTransformerLayer(nn.Module):
     ):
         super().__init__()
         self.input_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = EVA2CLIPAttention(
-            config, quant_config=quant_config, prefix=f"{prefix}.attention"
-        )
-        self.mlp = EVA2CLIPMLP(
-            config, quant_config=quant_config, prefix=f"{prefix}.mlp"
-        )
-        self.post_attention_layernorm = LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps
-        )
+        self.attention = EVA2CLIPAttention(config, quant_config=quant_config, prefix=f"{prefix}.attention")
+        self.mlp = EVA2CLIPMLP(config, quant_config=quant_config, prefix=f"{prefix}.mlp")
+        self.post_attention_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         attention_input = hidden_states
@@ -329,9 +323,7 @@ class EVA2CLIPModel(nn.Module):
         super().__init__()
         vision_config = Namespace(**config.vision_config)
         self.patch_embedding = EVA2CLIPPatchEmbedding(vision_config)
-        self.transformer = EVA2CLIPTransformer(
-            vision_config, quant_config=quant_config, prefix=f"{prefix}.transformer"
-        )
+        self.transformer = EVA2CLIPTransformer(vision_config, quant_config=quant_config, prefix=f"{prefix}.transformer")
         self.linear_proj = EVA2CLIPGLU(
             config,
             in_features=config.hidden_size,
@@ -391,9 +383,7 @@ class GLM4VModel(ChatGLMModel):
 
         quant_config = aphrodite_config.quant_config
 
-        self.vision = EVA2CLIPModel(
-            self.config, quant_config, prefix=f"{prefix}.vision"
-        )
+        self.vision = EVA2CLIPModel(self.config, quant_config, prefix=f"{prefix}.vision")
 
 
 class GLM4VProcessingInfo(BaseProcessingInfo):
@@ -514,9 +504,7 @@ class GLM4VMultiModalProcessor(BaseMultiModalProcessor[GLM4VProcessingInfo]):
     info=GLM4VProcessingInfo,
     dummy_inputs=GLM4VDummyInputsBuilder,
 )
-class GLM4VForCausalLM(
-    ChatGLMBaseModel, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE
-):
+class GLM4VForCausalLM(ChatGLMBaseModel, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
     # NOTE: we must bring this to the surface because GLM4VModel.hf_to_aphrodite_mapper
     # contains non-stacking related mappings which LoRA/BnB needs to know about
     hf_to_aphrodite_mapper = GLM4VModel.hf_to_aphrodite_mapper
@@ -563,9 +551,7 @@ class GLM4VForCausalLM(
 
         self.transformer: GLM4VModel
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> GLMVImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> GLMVImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
 
         if pixel_values is not None:
@@ -583,9 +569,7 @@ class GLM4VForCausalLM(
 
         return self.transformer.vision(pixel_values)
 
-    def iter_mm_grid_thw(
-        self, mm_features: list[MultiModalFeatureSpec]
-    ) -> Iterator[tuple[int, int, int, int]]:
+    def iter_mm_grid_thw(self, mm_features: list[MultiModalFeatureSpec]) -> Iterator[tuple[int, int, int, int]]:
         hf_config = self.config
         spatial_merge_size = hf_config.vision_config.spatial_merge_size
         for mm_feature in sorted(mm_features, key=lambda f: f.mm_position.offset):
@@ -613,12 +597,8 @@ class GLM4VForCausalLM(
         ) in self.iter_mm_grid_thw(mm_features):
             text_len = offset - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(
-                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
-            )
-            grid_indices = np.indices((llm_grid_t, llm_grid_h, llm_grid_w)).reshape(
-                3, -1
-            )
+            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
+            grid_indices = np.indices((llm_grid_t, llm_grid_h, llm_grid_w)).reshape(3, -1)
             llm_pos_ids_list.append(grid_indices + text_len + st_idx)
             # EVA2CLIPModel has embeddings for boi and eoi tokens as well
             st = offset + 1 + llm_grid_t * llm_grid_h * llm_grid_w + 1
@@ -626,9 +606,7 @@ class GLM4VForCausalLM(
         if st < len(input_tokens):
             text_len = len(input_tokens) - st
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(
-                np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx
-            )
+            llm_pos_ids_list.append(np.broadcast_to(np.arange(text_len), (3, text_len)) + st_idx)
 
         llm_positions = np.concatenate(llm_pos_ids_list, axis=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()
@@ -655,8 +633,6 @@ class GLM4VForCausalLM(
         if intermediate_tensors is not None:
             inputs_embeds = None
 
-        hidden_states = self.transformer(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.transformer(input_ids, positions, intermediate_tensors, inputs_embeds)
 
         return hidden_states

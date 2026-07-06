@@ -76,9 +76,7 @@ class TablePrinter:
         print("=" * (total_col_width + 3 * (len(self.column_widths) - 1)))
 
 
-def indent_string(
-    string: str, indent: int, indent_style: Callable[[int], str] | str = " "
-) -> str:
+def indent_string(string: str, indent: int, indent_style: Callable[[int], str] | str = " ") -> str:
     if indent:
         if isinstance(indent_style, str):
             return indent_style * indent + string
@@ -127,17 +125,13 @@ def event_module_repr(event: _ProfilerEvent) -> str:
     assert event_has_module(event)
     module = event.typed[1].module
     if module.parameters and len(module.parameters) > 0:
-        args_str = ", ".join(
-            [f"{x[0]}={event_arg_repr(x[1])}" for x in module.parameters]
-        )
+        args_str = ", ".join([f"{x[0]}={event_arg_repr(x[1])}" for x in module.parameters])
         return f"{module.cls_name}({args_str})"
     else:
         return module.cls_name
 
 
-def event_torch_op_stack_trace(
-    curr_event: _ProfilerEvent, until: Callable[[_ProfilerEvent], bool]
-) -> str:
+def event_torch_op_stack_trace(curr_event: _ProfilerEvent, until: Callable[[_ProfilerEvent], bool]) -> str:
     trace = ""
     curr_event = curr_event.parent
     while curr_event and not until(curr_event):

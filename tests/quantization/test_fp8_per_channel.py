@@ -12,7 +12,6 @@ output channel for weights and one fp32 scale per token for activations
 import pytest
 import torch
 
-from tests.quantization.utils import is_quant_method_supported
 from aphrodite import _custom_ops as ops
 from aphrodite.config.quantization import (
     _ONLINE_SHORTHANDS,
@@ -31,6 +30,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticChannelSym,
 )
 from aphrodite.platforms import current_platform
+from tests.quantization.utils import is_quant_method_supported
 
 
 def test_fp8_per_channel_shorthand_registered() -> None:

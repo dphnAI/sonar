@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Whisper model configuration.
 
 Keep this module MLX-free so config consumers can import it without

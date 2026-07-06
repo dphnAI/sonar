@@ -211,9 +211,7 @@ def build_dots_ocr_prompt(images, config):
 
 def build_processor_prompt(images, config):
     """Build prompt using AutoProcessor.apply_chat_template()."""
-    processor = AutoProcessor.from_pretrained(
-        config["model_name"], trust_remote_code=True
-    )
+    processor = AutoProcessor.from_pretrained(config["model_name"], trust_remote_code=True)
 
     image_urls = [encode_image_url(img) for img in images]
     placeholders = [{"type": "image", "image": url} for url in image_urls]
@@ -227,23 +225,16 @@ def build_processor_prompt(images, config):
         },
     ]
 
-    return processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
+    return processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
 
 def build_ovis_prompt(images, config):
     """Build Ovis2.5 specific prompt with custom format."""
     image_urls = [encode_image_url(img) for img in images]
 
-    placeholders = "\n".join(
-        f"Image-{i}: <image>\n" for i, _ in enumerate(image_urls, start=1)
-    )
+    placeholders = "\n".join(f"Image-{i}: <image>\n" for i, _ in enumerate(image_urls, start=1))
 
-    return (
-        f"<|im_start|>user\n\n{placeholders}\n{config['question']}<|im_end|>\n"
-        "<|im_start|>assistant\n"
-    )
+    return f"<|im_start|>user\n\n{placeholders}\n{config['question']}<|im_end|>\n<|im_start|>assistant\n"
 
 
 def build_qwen2_5_video_prompt():
@@ -299,17 +290,13 @@ def run_llm_generate_test(config, mm_encoder_attn_backend, image_assets):
     for o in outputs:
         generated_text = o.outputs[0].text
         validator = config.get("output_validator", lambda x: len(x) > 10)
-        assert validator(generated_text), (
-            f"Validation failed for {config['model_name']}: {generated_text}"
-        )
+        assert validator(generated_text), f"Validation failed for {config['model_name']}: {generated_text}"
 
 
 def run_llm_chat_test(config, mm_encoder_attn_backend, image_assets):
     """LLM.chat() interface handler for Dots.OCR."""
     # Filter to stop_sign image only
-    stop_sign_image = [
-        asset.pil_image for asset in image_assets if asset.name == "stop_sign"
-    ][0]
+    stop_sign_image = [asset.pil_image for asset in image_assets if asset.name == "stop_sign"][0]
 
     # Build messages
     messages = build_dots_ocr_prompt([stop_sign_image], config)
@@ -335,9 +322,7 @@ def run_llm_chat_test(config, mm_encoder_attn_backend, image_assets):
     for o in outputs:
         generated_text = o.outputs[0].text
         validator = config.get("output_validator", lambda x: len(x) > 10)
-        assert validator(generated_text), (
-            f"Validation failed for {config['model_name']}: {generated_text}"
-        )
+        assert validator(generated_text), f"Validation failed for {config['model_name']}: {generated_text}"
 
 
 def run_video_test(config, mm_encoder_attn_backend, video_assets, aphrodite_runner):
@@ -346,10 +331,7 @@ def run_video_test(config, mm_encoder_attn_backend, video_assets, aphrodite_runn
         num_frames = config["video_params"]["num_frames"]
 
         # Sample frames from video
-        sampled_vids = [
-            sample_frames_from_video(asset.np_ndarrays, num_frames)
-            for asset in video_assets
-        ]
+        sampled_vids = [sample_frames_from_video(asset.np_ndarrays, num_frames) for asset in video_assets]
 
         # Build prompt and prepare video
         prompt = build_qwen2_5_video_prompt()
@@ -380,9 +362,7 @@ def run_video_test(config, mm_encoder_attn_backend, video_assets, aphrodite_runn
             output_ids, output_text = outputs[0]
             assert len(output_ids) > 0, "Generated no output IDs"
             assert len(output_text) > 0, "Generated empty text"
-            assert isinstance(output_text, str), (
-                f"Output is not string: {type(output_text)}"
-            )
+            assert isinstance(output_text, str), f"Output is not string: {type(output_text)}"
 
 
 # Main test function
@@ -418,9 +398,7 @@ def test_vit_backend_functionality(
         and mm_encoder_attn_backend is not None
         and mm_encoder_attn_backend not in config["supported_backends"]
     ):
-        pytest.skip(
-            f"{model_key} does not support {mm_encoder_attn_backend} backend now."
-        )
+        pytest.skip(f"{model_key} does not support {mm_encoder_attn_backend} backend now.")
 
     # Step 2: Apply GPU marks dynamically
     if "gpu_marks" in config:

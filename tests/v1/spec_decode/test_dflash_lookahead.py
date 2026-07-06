@@ -5,14 +5,13 @@ from types import SimpleNamespace
 
 import torch
 
-from tests.v1.core.utils import create_requests
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     ModelConfig,
     ParallelConfig,
     SchedulerConfig,
     SpeculativeConfig,
-    AphroditeConfig,
 )
 from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.kv_cache_interface import (
@@ -22,6 +21,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 from aphrodite.v1.structured_output import StructuredOutputManager
 from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
+from tests.v1.core.utils import create_requests
 
 # Matches defaults from tests/v1/spec_decode/test_eagle.py
 DFLASH_TARGET_DIR = "Qwen/Qwen3-8B"

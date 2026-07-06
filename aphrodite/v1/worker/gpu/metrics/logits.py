@@ -19,9 +19,7 @@ def _num_nans_kernel(
     for i in range(0, vocab_size, BLOCK_SIZE):
         block = i + tl.arange(0, BLOCK_SIZE)
         mask = block < vocab_size
-        logits = tl.load(
-            logits_ptr + req_idx * logits_stride + block, mask=mask, other=0
-        )
+        logits = tl.load(logits_ptr + req_idx * logits_stride + block, mask=mask, other=0)
         logits = logits.to(tl.float32)
         is_nan = libdevice.isnan(logits).to(tl.int1)
         num_nans += tl.sum(is_nan).to(tl.int32)

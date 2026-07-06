@@ -60,12 +60,7 @@ def quantize_weight_block_fp8(
     q_fp8 = (w_blocks / scales).clamp(-fp8_max, fp8_max).to(torch.float8_e4m3fn)
 
     # Reshape back
-    fp8_weight = (
-        q_fp8.permute(0, 2, 1, 3)
-        .contiguous()
-        .view(N + pad_N, K + pad_K)[:N, :K]
-        .contiguous()
-    )
+    fp8_weight = q_fp8.permute(0, 2, 1, 3).contiguous().view(N + pad_N, K + pad_K)[:N, :K].contiguous()
 
     scales = scales.view(n_tiles, k_tiles)
     return fp8_weight, scales
@@ -143,9 +138,7 @@ def test_cpu_fp8_scaled_mm(M: int, N: int, K: int, use_bias: bool):
 
     bias = torch.randn(N, dtype=torch.float32) * 0.1 if use_bias else None
 
-    ref_out = ref_fp8_block_scaled_mm(
-        x, fp8_weight, scales, block_size, bias, out_dtype
-    )
+    ref_out = ref_fp8_block_scaled_mm(x, fp8_weight, scales, block_size, bias, out_dtype)
 
     packed_weight = torch.ops._C.convert_weight_packed(fp8_weight)
     kernel_out = ops.fp8_scaled_mm_cpu(

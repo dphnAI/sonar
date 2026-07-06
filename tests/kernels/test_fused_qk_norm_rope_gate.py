@@ -100,19 +100,11 @@ def test_fused_qk_norm_rope_gate_matches_reference(
     torch.set_default_device(device)
     set_random_seed(seed)
 
-    q_gate = torch.randn(
-        num_tokens, NUM_Q_HEADS * 2 * HEAD_DIM, dtype=dtype, device=device
-    )
+    q_gate = torch.randn(num_tokens, NUM_Q_HEADS * 2 * HEAD_DIM, dtype=dtype, device=device)
     k = torch.randn(num_tokens, NUM_KV_HEADS * HEAD_DIM, dtype=dtype, device=device)
     # GemmaRMSNorm-style: the kernel takes the effective gamma (weight + 1).
-    q_gamma = (
-        torch.empty(HEAD_DIM, dtype=dtype, device=device).normal_(mean=0.0, std=0.1)
-        + 1.0
-    )
-    k_gamma = (
-        torch.empty(HEAD_DIM, dtype=dtype, device=device).normal_(mean=0.0, std=0.1)
-        + 1.0
-    )
+    q_gamma = torch.empty(HEAD_DIM, dtype=dtype, device=device).normal_(mean=0.0, std=0.1) + 1.0
+    k_gamma = torch.empty(HEAD_DIM, dtype=dtype, device=device).normal_(mean=0.0, std=0.1) + 1.0
 
     # fused_qk_rmsnorm_rope_gate only handles NeoX-style RoPE.
     rope = RotaryEmbedding(

@@ -8,10 +8,10 @@ import random
 import pytest
 import torch
 
-from tests.kernels.utils import torch_moe_single
 from aphrodite import _custom_ops as ops
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.utils import torch_moe_single
 
 random.seed(42)
 set_random_seed(42)
@@ -31,9 +31,7 @@ def calc_diff(x, y):
 
 
 def is_sm100_supported() -> bool:
-    return current_platform.is_cuda() and current_platform.is_device_capability_family(
-        100
-    )
+    return current_platform.is_cuda() and current_platform.is_device_capability_family(100)
 
 
 def compute_ref_output(
@@ -55,9 +53,7 @@ def compute_ref_output(
         end = expert_offsets[g + 1] if g + 1 < num_experts else expert_offset
         score[start:end, g] = 0.0
 
-    return torch_moe_single(
-        input_tensor, torch.stack(weight_list, dim=0), score, topk=1
-    )
+    return torch_moe_single(input_tensor, torch.stack(weight_list, dim=0), score, topk=1)
 
 
 @pytest.mark.skipif(
@@ -92,12 +88,8 @@ def test_cutlass_mxfp4_grouped_mm(num_experts, out_dtype):
         expert_offset += m_g
         problem_sizes.append([m_g, n_g, k_g])
 
-        input_list.append(
-            torch.normal(0.0, std=0.5, size=(m_g, k_g), device=device, dtype=out_dtype)
-        )
-        weight_list.append(
-            torch.normal(0.0, std=0.5, size=(n_g, k_g), device=device, dtype=out_dtype)
-        )
+        input_list.append(torch.normal(0.0, std=0.5, size=(m_g, k_g), device=device, dtype=out_dtype))
+        weight_list.append(torch.normal(0.0, std=0.5, size=(n_g, k_g), device=device, dtype=out_dtype))
 
     input_tensor = torch.concat(input_list, dim=0)  # [M_total, K]
 
@@ -109,9 +101,7 @@ def test_cutlass_mxfp4_grouped_mm(num_experts, out_dtype):
         tot += align(problem_sizes[g][0], 128)
     input_bs_offsets.append(tot)
 
-    _inp_expert_offsets = torch.tensor(
-        expert_offsets_input + [expert_offset], device=device, dtype=torch.int32
-    )
+    _inp_expert_offsets = torch.tensor(expert_offsets_input + [expert_offset], device=device, dtype=torch.int32)
     _inp_bs_offsets = torch.tensor(input_bs_offsets, device=device, dtype=torch.int32)
 
     input_quant, input_sf = ops.mxfp4_experts_quant(
@@ -129,9 +119,7 @@ def test_cutlass_mxfp4_grouped_mm(num_experts, out_dtype):
     # N is always multiple of 128, so blockscale offsets are clean
     weight_bs_offsets = [g * n_g for g in range(num_experts)] + [num_experts * n_g]
 
-    _wt_expert_offsets = torch.tensor(
-        weight_expert_offsets, device=device, dtype=torch.int32
-    )
+    _wt_expert_offsets = torch.tensor(weight_expert_offsets, device=device, dtype=torch.int32)
     _wt_bs_offsets = torch.tensor(weight_bs_offsets, device=device, dtype=torch.int32)
 
     weight_quant, weight_sf = ops.mxfp4_experts_quant(
@@ -155,9 +143,7 @@ def test_cutlass_mxfp4_grouped_mm(num_experts, out_dtype):
     output = torch.empty((expert_offset, n_g), device=device, dtype=out_dtype)
 
     _problem_sizes = torch.tensor(problem_sizes, device=device, dtype=torch.int32)
-    _expert_offsets = torch.tensor(
-        expert_offsets_input, device=device, dtype=torch.int32
-    )
+    _expert_offsets = torch.tensor(expert_offsets_input, device=device, dtype=torch.int32)
     _input_bs = torch.tensor(input_bs_offsets[:-1], device=device, dtype=torch.int32)
 
     # Run the MXFP4 grouped GEMM
@@ -191,9 +177,7 @@ def test_cutlass_mxfp4_grouped_mm(num_experts, out_dtype):
         actual = output[start:end]
         diff = calc_diff(actual, baseline)
         print(
-            f"m_g={end - start} n_g={n_g} k_g={k_g} "
-            f"num_experts={num_experts}, "
-            f"out_dtype={out_dtype}, diff={diff:.5f}"
+            f"m_g={end - start} n_g={n_g} k_g={k_g} num_experts={num_experts}, out_dtype={out_dtype}, diff={diff:.5f}"
         )
         # FP4 quantization is very lossy (~4 bits precision)
         # Comparing quantized vs full-precision gives cosine diff of 0.05-0.15
@@ -217,14 +201,10 @@ def test_mxfp4_experts_quant_basic():
     input_tensor = torch.randn(total_tokens, k, device=device, dtype=torch.bfloat16) / 5
 
     expert_offsets = [i * tokens_per_expert for i in range(num_experts + 1)]
-    blockscale_offsets = [
-        align(i * tokens_per_expert, 128) for i in range(num_experts + 1)
-    ]
+    blockscale_offsets = [align(i * tokens_per_expert, 128) for i in range(num_experts + 1)]
 
     _expert_offsets = torch.tensor(expert_offsets, device=device, dtype=torch.int32)
-    _blockscale_offsets = torch.tensor(
-        blockscale_offsets, device=device, dtype=torch.int32
-    )
+    _blockscale_offsets = torch.tensor(blockscale_offsets, device=device, dtype=torch.int32)
 
     output, output_sf = ops.mxfp4_experts_quant(
         input_tensor,
@@ -238,9 +218,7 @@ def test_mxfp4_experts_quant_basic():
     assert output.dtype == torch.uint8
     assert output_sf.dtype == torch.uint8
     assert output.any(), "Quantized output is all zeros"
-    print(
-        f"MXFP4 experts quant: output shape={output.shape}, sf shape={output_sf.shape}"
-    )
+    print(f"MXFP4 experts quant: output shape={output.shape}, sf shape={output_sf.shape}")
     print("PASSED")
 
 
@@ -316,9 +294,7 @@ def test_mxfp4_experts_quant_e8m0_scale_correctness(m, k):
     num_experts = 1
     expert_offsets = torch.tensor([0, m], device=device, dtype=torch.int32)
     num_k_tiles = (k // MXFP4_BLOCK_SIZE + 3) // 4
-    blockscale_offsets = torch.tensor(
-        [0, align(m, 128) * num_k_tiles], device=device, dtype=torch.int32
-    )
+    blockscale_offsets = torch.tensor([0, align(m, 128) * num_k_tiles], device=device, dtype=torch.int32)
 
     output_fp4, output_sf = ops.mxfp4_experts_quant(
         input_tensor, expert_offsets, blockscale_offsets, num_experts, topk=1
@@ -337,9 +313,7 @@ def test_mxfp4_experts_quant_e8m0_scale_correctness(m, k):
         for blk in range(num_blocks):
             block_start = blk * MXFP4_BLOCK_SIZE
             block_end = block_start + MXFP4_BLOCK_SIZE
-            block_max = (
-                input_tensor[row, block_start:block_end].float().abs().max().item()
-            )
+            block_max = input_tensor[row, block_start:block_end].float().abs().max().item()
 
             actual_scale = scale_flat[row, blk].item()
             expected_scale = compute_reference_e8m0_scale(block_max)
@@ -352,10 +326,7 @@ def test_mxfp4_experts_quant_e8m0_scale_correctness(m, k):
     total_blocks = m * num_blocks
     match_rate = (total_blocks - mismatches) / total_blocks
 
-    print(
-        f"  m={m}, k={k}: scale match rate = {match_rate * 100:.2f}% "
-        f"({mismatches}/{total_blocks} mismatches)"
-    )
+    print(f"  m={m}, k={k}: scale match rate = {match_rate * 100:.2f}% ({mismatches}/{total_blocks} mismatches)")
 
     # The fixed kernel should match the reference formula exactly
     assert match_rate > 0.99, (
@@ -395,13 +366,10 @@ def test_mxfp4_experts_quant_e8m0_scale_correctness(m, k):
     ).item()
     max_abs_diff = (recon.float() - input_tensor.float()).abs().max().item()
 
-    print(
-        f"  Reconstruction: cosine_sim={cos_sim:.6f}, max_abs_diff={max_abs_diff:.4f}"
-    )
+    print(f"  Reconstruction: cosine_sim={cos_sim:.6f}, max_abs_diff={max_abs_diff:.4f}")
 
     assert cos_sim > 0.99, (
-        f"Reconstruction cosine similarity too low: {cos_sim:.6f}. "
-        f"Expected > 0.99 for correct MXFP4 quantization."
+        f"Reconstruction cosine similarity too low: {cos_sim:.6f}. Expected > 0.99 for correct MXFP4 quantization."
     )
     # With correct E8M0, max abs diff should be bounded by scale * 6
     # (worst case: value just below threshold rounds to wrong FP4 code)
@@ -432,9 +400,7 @@ def test_mxfp4_experts_quant_no_saturation():
     num_experts = 1
     expert_offsets = torch.tensor([0, m], device=device, dtype=torch.int32)
     num_k_tiles = (k // MXFP4_BLOCK_SIZE + 3) // 4
-    blockscale_offsets = torch.tensor(
-        [0, align(m, 128) * num_k_tiles], device=device, dtype=torch.int32
-    )
+    blockscale_offsets = torch.tensor([0, align(m, 128) * num_k_tiles], device=device, dtype=torch.int32)
 
     output_fp4, output_sf = ops.mxfp4_experts_quant(
         input_tensor, expert_offsets, blockscale_offsets, num_experts, topk=1
@@ -448,10 +414,7 @@ def test_mxfp4_experts_quant_no_saturation():
     total_values = m * k
     saturation_rate = saturated / total_values
 
-    print(
-        f"  Saturation rate: {saturation_rate * 100:.2f}% "
-        f"({saturated}/{total_values} values at ±6)"
-    )
+    print(f"  Saturation rate: {saturation_rate * 100:.2f}% ({saturated}/{total_values} values at ±6)")
 
     # For Gaussian input with std=0.5, saturation should be very rare
     # (±6 * scale is far from the typical range).

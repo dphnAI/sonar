@@ -230,9 +230,7 @@ class CustomOp(nn.Module):
         if compilation_config.backend == "eager":
             return fn
 
-        compile_options = maybe_disable_graph_partition(
-            current_platform.simple_compile_backend
-        )
+        compile_options = maybe_disable_graph_partition(current_platform.simple_compile_backend)
         backend = current_platform.simple_compile_backend
 
         dynamic_arg_dims = getattr(self.__class__, "_dynamic_arg_dims", None)

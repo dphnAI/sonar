@@ -29,9 +29,7 @@ assert ASSETS_DIR.exists()
 @VIDEO_LOADER_REGISTRY.register("assert_10_frames_1_fps")
 class Assert10Frames1FPSVideoLoader(VideoLoader):
     @classmethod
-    def load_bytes(
-        cls, data: bytes, num_frames: int = -1, fps: float = -1.0, **kwargs
-    ) -> npt.NDArray:
+    def load_bytes(cls, data: bytes, num_frames: int = -1, fps: float = -1.0, **kwargs) -> npt.NDArray:
         assert num_frames == 10, "bad num_frames"
         assert fps == 1.0, "bad fps"
         return FAKE_OUTPUT_2
@@ -46,9 +44,7 @@ def test_video_media_io_kwargs(monkeypatch: pytest.MonkeyPatch):
         videoio = VideoMediaIO(imageio, **{"num_frames": 10, "fps": 1.0})
         _ = videoio.load_bytes(b"test")
 
-        videoio = VideoMediaIO(
-            imageio, **{"num_frames": 10, "fps": 1.0, "not_used": "not_used"}
-        )
+        videoio = VideoMediaIO(imageio, **{"num_frames": 10, "fps": 1.0, "not_used": "not_used"})
         _ = videoio.load_bytes(b"test")
 
         with pytest.raises(AssertionError, match="bad num_frames"):
@@ -71,9 +67,7 @@ def test_opencv_video_io_colorspace(tmp_path, is_color: bool, fourcc: str, ext: 
     Test all functions that use OpenCV for video I/O return RGB format.
     Both RGB and grayscale videos are tested.
     """
-    image_path = get_aphrodite_public_assets(
-        filename="stop_sign.jpg", s3_prefix="vision_model_images"
-    )
+    image_path = get_aphrodite_public_assets(filename="stop_sign.jpg", s3_prefix="vision_model_images")
     image = Image.open(image_path)
 
     if not is_color:
@@ -93,25 +87,19 @@ def test_opencv_video_io_colorspace(tmp_path, is_color: bool, fourcc: str, ext: 
 
     frames = video_to_ndarrays(video_path)
     for frame in frames:
-        sim = cosine_similarity(
-            normalize_image(np.array(frame)), normalize_image(np.array(image))
-        )
+        sim = cosine_similarity(normalize_image(np.array(frame)), normalize_image(np.array(image)))
         assert np.sum(np.isnan(sim)) / sim.size < 0.001
         assert np.nanmean(sim) > 0.99
 
     pil_frames = video_to_pil_images_list(video_path)
     for frame in pil_frames:
-        sim = cosine_similarity(
-            normalize_image(np.array(frame)), normalize_image(np.array(image))
-        )
+        sim = cosine_similarity(normalize_image(np.array(frame)), normalize_image(np.array(image)))
         assert np.sum(np.isnan(sim)) / sim.size < 0.001
         assert np.nanmean(sim) > 0.99
 
     io_frames, _ = VideoMediaIO(ImageMediaIO()).load_file(Path(video_path))
     for frame in io_frames:
-        sim = cosine_similarity(
-            normalize_image(np.array(frame)), normalize_image(np.array(image))
-        )
+        sim = cosine_similarity(normalize_image(np.array(frame)), normalize_image(np.array(image)))
         assert np.sum(np.isnan(sim)) / sim.size < 0.001
         assert np.nanmean(sim) > 0.99
 
@@ -140,9 +128,7 @@ class TestVideoBackendOverride1(VideoLoader):
     """Test loader that returns FAKE_OUTPUT_1 to verify backend selection."""
 
     @classmethod
-    def load_bytes(
-        cls, data: bytes, num_frames: int = -1, **kwargs
-    ) -> tuple[npt.NDArray, dict]:
+    def load_bytes(cls, data: bytes, num_frames: int = -1, **kwargs) -> tuple[npt.NDArray, dict]:
         return FAKE_OUTPUT_1, {"video_backend": "test_video_backend_override_1"}
 
 
@@ -151,9 +137,7 @@ class TestVideoBackendOverride2(VideoLoader):
     """Test loader that returns FAKE_OUTPUT_2 to verify backend selection."""
 
     @classmethod
-    def load_bytes(
-        cls, data: bytes, num_frames: int = -1, **kwargs
-    ) -> tuple[npt.NDArray, dict]:
+    def load_bytes(cls, data: bytes, num_frames: int = -1, **kwargs) -> tuple[npt.NDArray, dict]:
         return FAKE_OUTPUT_2, {"video_backend": "test_video_backend_override_2"}
 
 
@@ -180,9 +164,7 @@ def test_video_media_io_backend_kwarg_override(monkeypatch: pytest.MonkeyPatch):
         assert metadata_default["video_backend"] == "test_video_backend_override_1"
 
         # With video_backend kwarg, should override env var
-        videoio_override = VideoMediaIO(
-            imageio, num_frames=10, video_backend="test_video_backend_override_2"
-        )
+        videoio_override = VideoMediaIO(imageio, num_frames=10, video_backend="test_video_backend_override_2")
         frames_override, metadata_override = videoio_override.load_bytes(b"test")
         np.testing.assert_array_equal(frames_override, FAKE_OUTPUT_2)
         assert metadata_override["video_backend"] == "test_video_backend_override_2"
@@ -203,15 +185,10 @@ def test_video_media_io_backend_kwarg_not_passed_to_loader(
         """Test loader that fails if video_backend is passed through."""
 
         @classmethod
-        def load_bytes(
-            cls, data: bytes, num_frames: int = -1, **kwargs
-        ) -> tuple[npt.NDArray, dict]:
+        def load_bytes(cls, data: bytes, num_frames: int = -1, **kwargs) -> tuple[npt.NDArray, dict]:
             # This should never receive video_backend in kwargs
             if "video_backend" in kwargs:
-                raise AssertionError(
-                    "video_backend should be consumed by VideoMediaIO, "
-                    "not passed to loader"
-                )
+                raise AssertionError("video_backend should be consumed by VideoMediaIO, not passed to loader")
             return FAKE_OUTPUT_1, {"received_kwargs": list(kwargs.keys())}
 
     with monkeypatch.context() as m:
@@ -297,9 +274,7 @@ def test_load_base64_jpeg_returns_metadata():
         "frames_indices",
         "do_sample_frames",
     }
-    assert required_keys.issubset(metadata.keys()), (
-        f"Missing metadata keys: {required_keys - metadata.keys()}"
-    )
+    assert required_keys.issubset(metadata.keys()), f"Missing metadata keys: {required_keys - metadata.keys()}"
 
     assert metadata["total_num_frames"] == num_test_frames
     assert metadata["video_backend"] == "jpeg_sequence"

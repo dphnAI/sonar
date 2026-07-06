@@ -23,24 +23,24 @@ __device__ void rms_norm_dynamic_per_token_quant_vec(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
 
   // Compute scale
-  aphrodite::vectorized::compute_dynamic_per_token_scales<scalar_t, scalar_out_t,
-                                                     has_residual>(
-      &token_scale, scales, input, weight, rms, scale_ub, hidden_size,
-      input_stride, residual);
+  aphrodite::vectorized::compute_dynamic_per_token_scales<
+      scalar_t, scalar_out_t, has_residual>(&token_scale, scales, input, weight,
+                                            rms, scale_ub, hidden_size,
+                                            input_stride, residual);
 
   // RMS Norm + Quant
   if constexpr (std::is_same_v<scalar_out_t, int8_t>) {
     token_scale = 1.0f / token_scale;
     aphrodite::vectorized::norm_and_quant<scalar_t, scalar_out_t, true,
-                                     has_residual>(out, input, weight, rms,
-                                                   &token_scale, hidden_size,
-                                                   input_stride, residual);
+                                          has_residual>(
+        out, input, weight, rms, &token_scale, hidden_size, input_stride,
+        residual);
   } else {
     // FP8 - Do not invert token_scale for exact match with FBGemm
     aphrodite::vectorized::norm_and_quant<scalar_t, scalar_out_t, false,
-                                     has_residual>(out, input, weight, rms,
-                                                   &token_scale, hidden_size,
-                                                   input_stride, residual);
+                                          has_residual>(
+        out, input, weight, rms, &token_scale, hidden_size, input_stride,
+        residual);
   }
 }
 
@@ -71,7 +71,8 @@ __global__ void rms_norm_dynamic_per_token_quant_kernel(
   aphrodite::compute_rms<scalar_t, has_residual>(
       &rms, input, hidden_size, input_stride, var_epsilon, residual);
   // Compute Scale
-  aphrodite::compute_dynamic_per_token_scales<scalar_t, scalar_out_t, has_residual>(
+  aphrodite::compute_dynamic_per_token_scales<scalar_t, scalar_out_t,
+                                              has_residual>(
       &token_scale, scales, input, weight, rms, scale_ub, hidden_size,
       input_stride, residual);
 
@@ -154,18 +155,17 @@ void rms_norm_dynamic_per_token_quant_dispatch(
   APHRODITE_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
     APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
         out.scalar_type(), "rms_norm_dynamic_per_token_quant_kernel", [&] {
-          aphrodite::rms_norm_dynamic_per_token_quant_kernel<scalar_in_t, scalar_t,
-                                                        has_residual>
-              <<<grid, block, 0, stream>>>(
-                  out.mutable_data_ptr<scalar_t>(),
-                  scales.mutable_data_ptr<float>(),
-                  input.const_data_ptr<scalar_in_t>(),
-                  weight.const_data_ptr<scalar_in_t>(),
-                  scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
-                                       : nullptr,
-                  var_epsilon, hidden_size, input_stride,
-                  has_residual ? residual->mutable_data_ptr<scalar_in_t>()
-                               : nullptr);
+          aphrodite::rms_norm_dynamic_per_token_quant_kernel<
+              scalar_in_t, scalar_t, has_residual><<<grid, block, 0, stream>>>(
+              out.mutable_data_ptr<scalar_t>(),
+              scales.mutable_data_ptr<float>(),
+              input.const_data_ptr<scalar_in_t>(),
+              weight.const_data_ptr<scalar_in_t>(),
+              scale_ub.has_value() ? scale_ub->const_data_ptr<float>()
+                                   : nullptr,
+              var_epsilon, hidden_size, input_stride,
+              has_residual ? residual->mutable_data_ptr<scalar_in_t>()
+                           : nullptr);
         });
   });
 }
@@ -241,30 +241,33 @@ void rms_norm_per_block_quant_dispatch(
       input.scalar_type(), "rms_norm_per_block_quant_fp_dispatch", [&] {
         using scalar_in_t = scalar_t;
         APHRODITE_STABLE_DISPATCH_GROUP_SIZE(group_size, gs, [&] {
-          APHRODITE_STABLE_DISPATCH_BOOL(residual.has_value(), has_residual, [&] {
-            APHRODITE_STABLE_DISPATCH_BOOL(
-                is_scale_transposed, transpose_scale, [&] {
-                  APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
-                      out.scalar_type(), "rms_norm_per_block_quant_kernel",
-                      [&] {
-                        aphrodite::rms_norm_per_block_quant_kernel<
-                            scalar_in_t, scalar_t, has_residual,
-                            transpose_scale, gs><<<grid, block, 0, stream>>>(
-                            out.mutable_data_ptr<scalar_t>(),
-                            scales.mutable_data_ptr<float>(),
-                            input.const_data_ptr<scalar_in_t>(),
-                            weight.const_data_ptr<scalar_in_t>(),
-                            scale_ub.has_value()
-                                ? scale_ub->const_data_ptr<float>()
-                                : nullptr,
-                            var_epsilon, hidden_size, input_stride,
-                            has_residual
-                                ? residual->mutable_data_ptr<scalar_in_t>()
-                                : nullptr,
-                            scales.stride(1));
-                      });
-                });
-          });
+          APHRODITE_STABLE_DISPATCH_BOOL(
+              residual.has_value(), has_residual, [&] {
+                APHRODITE_STABLE_DISPATCH_BOOL(
+                    is_scale_transposed, transpose_scale, [&] {
+                      APHRODITE_STABLE_DISPATCH_QUANT_TYPES(
+                          out.scalar_type(), "rms_norm_per_block_quant_kernel",
+                          [&] {
+                            aphrodite::rms_norm_per_block_quant_kernel<
+                                scalar_in_t, scalar_t, has_residual,
+                                transpose_scale, gs>
+                                <<<grid, block, 0, stream>>>(
+                                    out.mutable_data_ptr<scalar_t>(),
+                                    scales.mutable_data_ptr<float>(),
+                                    input.const_data_ptr<scalar_in_t>(),
+                                    weight.const_data_ptr<scalar_in_t>(),
+                                    scale_ub.has_value()
+                                        ? scale_ub->const_data_ptr<float>()
+                                        : nullptr,
+                                    var_epsilon, hidden_size, input_stride,
+                                    has_residual
+                                        ? residual
+                                              ->mutable_data_ptr<scalar_in_t>()
+                                        : nullptr,
+                                    scales.stride(1));
+                          });
+                    });
+              });
         });
       });
 }

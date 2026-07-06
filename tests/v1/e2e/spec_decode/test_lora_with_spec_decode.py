@@ -69,9 +69,7 @@ def test_batch_inference_correctness(
 
         prompts = [LORA_TEST_PROMPT_MAP[lora_path]] * 100
         lora_request = LoRARequest("adapter", 1, lora_path)
-        sampling_params = SamplingParams(
-            temperature=0.0, top_p=1.0, top_k=-1, seed=SEED, max_tokens=128
-        )
+        sampling_params = SamplingParams(temperature=0.0, top_p=1.0, top_k=-1, seed=SEED, max_tokens=128)
 
         # without speculative decoding
         ref_llm = LLM(
@@ -86,9 +84,7 @@ def test_batch_inference_correctness(
             max_lora_rank=16,
         )
         try:
-            ref_outputs = ref_llm.generate(
-                prompts, sampling_params, lora_request=lora_request
-            )
+            ref_outputs = ref_llm.generate(prompts, sampling_params, lora_request=lora_request)
         finally:
             del ref_llm
             torch.accelerator.empty_cache()
@@ -112,9 +108,7 @@ def test_batch_inference_correctness(
             max_lora_rank=16,
         )
         try:
-            lora_spec_outputs = lora_spec_llm.generate(
-                prompts, sampling_params, lora_request=lora_request
-            )
+            lora_spec_outputs = lora_spec_llm.generate(prompts, sampling_params, lora_request=lora_request)
 
             matches = 0
             for ref_output, spec_output in zip(ref_outputs, lora_spec_outputs):
@@ -130,9 +124,7 @@ def test_batch_inference_correctness(
             # num_speculative_tokens+1 vs 1). 90% leaves slack for that noise.
             threshold = int(0.90 * len(ref_outputs))
             print(f"match ratio: {matches}/{len(ref_outputs)}")
-            assert matches > threshold, (
-                f"match ratio {matches}/{len(ref_outputs)} <= {threshold}"
-            )
+            assert matches > threshold, f"match ratio {matches}/{len(ref_outputs)} <= {threshold}"
         finally:
             del lora_spec_llm
             torch.accelerator.empty_cache()

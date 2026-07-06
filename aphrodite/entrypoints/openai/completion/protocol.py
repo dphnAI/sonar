@@ -68,13 +68,7 @@ class CompletionRequest(OpenAIBaseModel):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/completions/create
     model: str | None = None
-    prompt: (
-        list[Annotated[int, Field(ge=0)]]
-        | list[list[Annotated[int, Field(ge=0)]]]
-        | str
-        | list[str]
-        | None
-    ) = None
+    prompt: list[Annotated[int, Field(ge=0)]] | list[list[Annotated[int, Field(ge=0)]]] | str | list[str] | None = None
     echo: bool | None = False
     frequency_penalty: float | None = 0.0
     logit_bias: dict[str, float] | None = None
@@ -148,10 +142,7 @@ class CompletionRequest(OpenAIBaseModel):
     prompt_embeds: bytes | list[bytes] | None = None
     add_special_tokens: bool = Field(
         default=True,
-        description=(
-            "If true (the default), special tokens (e.g. BOS) will be added to "
-            "the prompt."
-        ),
+        description=("If true (the default), special tokens (e.g. BOS) will be added to the prompt."),
     )
     response_format: AnyResponseFormat | None = Field(
         default=None,
@@ -238,10 +229,7 @@ class CompletionRequest(OpenAIBaseModel):
     aphrodite_xargs: dict[str, str | int | float] | None = Field(
         default=None,
         validation_alias=AliasChoices("aphrodite_xargs", "aphrodite_xargs"),
-        description=(
-            "Additional request parameters with string or "
-            "numeric values, used by custom extensions."
-        ),
+        description=("Additional request parameters with string or numeric values, used by custom extensions."),
     )
 
     repetition_detection: RepetitionDetectionParams | None = Field(
@@ -323,21 +311,13 @@ class CompletionRequest(OpenAIBaseModel):
                 self._DEFAULT_SAMPLING_PARAMS["repetition_penalty"],
             )
         if (temperature := self.temperature) is None:
-            temperature = default_sampling_params.get(
-                "temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"]
-            )
+            temperature = default_sampling_params.get("temperature", self._DEFAULT_SAMPLING_PARAMS["temperature"])
         if (top_p := self.top_p) is None:
-            top_p = default_sampling_params.get(
-                "top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"]
-            )
+            top_p = default_sampling_params.get("top_p", self._DEFAULT_SAMPLING_PARAMS["top_p"])
         if (top_k := self.top_k) is None:
-            top_k = default_sampling_params.get(
-                "top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"]
-            )
+            top_k = default_sampling_params.get("top_k", self._DEFAULT_SAMPLING_PARAMS["top_k"])
         if (min_p := self.min_p) is None:
-            min_p = default_sampling_params.get(
-                "min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"]
-            )
+            min_p = default_sampling_params.get("min_p", self._DEFAULT_SAMPLING_PARAMS["min_p"])
 
         # Merge server-default stop_token_ids (e.g., model-specific tokens
         # like </call> for gpt-oss) with any request-specified ones
@@ -347,9 +327,7 @@ class CompletionRequest(OpenAIBaseModel):
             if not stop_token_ids:
                 stop_token_ids = list(default_stop_ids)
             else:
-                stop_token_ids = list(
-                    dict.fromkeys([*stop_token_ids, *default_stop_ids])
-                )
+                stop_token_ids = list(dict.fromkeys([*stop_token_ids, *default_stop_ids]))
 
         prompt_logprobs = self.prompt_logprobs
         if prompt_logprobs is None and self.echo:
@@ -386,7 +364,7 @@ class CompletionRequest(OpenAIBaseModel):
                 self.structured_outputs = (
                     StructuredOutputsParams(**structured_outputs_kwargs)
                     if self.structured_outputs is None
-                    else replace(self.structured_outputs, **structured_outputs_kwargs)
+                    else replace(self.structured_outputs, **structured_outputs_kwargs)  # type: ignore[type-var]
                 )
 
         extra_args: dict[str, Any] = self.aphrodite_xargs if self.aphrodite_xargs else {}
@@ -413,9 +391,7 @@ class CompletionRequest(OpenAIBaseModel):
             skip_special_tokens=self.skip_special_tokens,
             spaces_between_special_tokens=self.spaces_between_special_tokens,
             include_stop_str_in_output=self.include_stop_str_in_output,
-            output_kind=RequestOutputKind.DELTA
-            if self.stream
-            else RequestOutputKind.FINAL_ONLY,
+            output_kind=RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY,
             structured_outputs=self.structured_outputs,
             logit_bias=self.logit_bias,
             allowed_token_ids=self.allowed_token_ids,
@@ -474,9 +450,7 @@ class CompletionRequest(OpenAIBaseModel):
             return data
 
         rf_type = (
-            response_format.get("type")
-            if isinstance(response_format, dict)
-            else getattr(response_format, "type", None)
+            response_format.get("type") if isinstance(response_format, dict) else getattr(response_format, "type", None)
         )
 
         if rf_type == "json_schema":
@@ -487,8 +461,7 @@ class CompletionRequest(OpenAIBaseModel):
             )
             if json_schema is None:
                 raise APHRODITEValidationError(
-                    "When response_format type is 'json_schema', the "
-                    "'json_schema' field must be provided.",
+                    "When response_format type is 'json_schema', the 'json_schema' field must be provided.",
                     parameter="response_format",
                 )
 
@@ -508,18 +481,13 @@ class CompletionRequest(OpenAIBaseModel):
         # as a StructuredOutputsParams dataclass instance.
         is_dataclass = isinstance(structured_outputs_kwargs, StructuredOutputsParams)
         count = sum(
-            (
-                getattr(structured_outputs_kwargs, k, None)
-                if is_dataclass
-                else structured_outputs_kwargs.get(k)
-            )
+            (getattr(structured_outputs_kwargs, k, None) if is_dataclass else structured_outputs_kwargs.get(k))
             is not None
             for k in ("json", "regex", "choice")
         )
         if count > 1:
             raise APHRODITEValidationError(
-                "You can only use one kind of constraints for structured "
-                "outputs ('json', 'regex' or 'choice').",
+                "You can only use one kind of constraints for structured outputs ('json', 'regex' or 'choice').",
                 parameter="structured_outputs",
             )
         validate_structured_outputs_structural_tag(structured_outputs_kwargs)
@@ -568,9 +536,7 @@ class CompletionRequest(OpenAIBaseModel):
         prompt_embeds = data.get("prompt_embeds")
 
         prompt_is_empty = prompt is None or (isinstance(prompt, str) and prompt == "")
-        embeds_is_empty = prompt_embeds is None or (
-            isinstance(prompt_embeds, list) and len(prompt_embeds) == 0
-        )
+        embeds_is_empty = prompt_embeds is None or (isinstance(prompt_embeds, list) and len(prompt_embeds) == 0)
 
         if prompt_is_empty and embeds_is_empty:
             raise APHRODITEValidationError(
@@ -583,9 +549,7 @@ class CompletionRequest(OpenAIBaseModel):
     @model_validator(mode="before")
     @classmethod
     def check_cache_salt_support(cls, data):
-        if data.get("cache_salt") is not None and (
-            not isinstance(data["cache_salt"], str) or not data["cache_salt"]
-        ):
+        if data.get("cache_salt") is not None and (not isinstance(data["cache_salt"], str) or not data["cache_salt"]):
             raise APHRODITEValidationError(
                 "Parameter 'cache_salt' must be a non-empty string if provided.",
                 parameter="cache_salt",
@@ -639,9 +603,7 @@ class CompletionResponse(OpenAIBaseModel):
     usage: UsageInfo
 
     # Aphrodite-specific fields that are not in OpenAI spec
-    kv_transfer_params: dict[str, Any] | None = Field(
-        default=None, description="KVTransfer parameters."
-    )
+    kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
 
 
 class CompletionResponseStreamChoice(OpenAIBaseModel):

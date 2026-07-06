@@ -25,10 +25,7 @@ def _fake_aphrodite_config(model_type: str) -> SimpleNamespace:
 
 def test_sm120_backend_uses_dedicated_backend_name() -> None:
     assert FlashInferMLASparseSM120Backend.get_name() == "FLASHINFER_MLA_SPARSE_SM120"
-    assert (
-        AttentionBackendEnum.FLASHINFER_MLA_SPARSE_SM120.get_class()
-        is FlashInferMLASparseSM120Backend
-    )
+    assert AttentionBackendEnum.FLASHINFER_MLA_SPARSE_SM120.get_class() is FlashInferMLASparseSM120Backend
 
 
 def test_v32_glm_sm120_backend_accepts_glm_block_size(

@@ -75,9 +75,7 @@ class KVConnectorFactory:
         return connector_cls(config, role, kv_cache_config)
 
     @classmethod
-    def get_connector_class_by_name(
-        cls, connector_name: str
-    ) -> type[KVConnectorBaseType]:
+    def get_connector_class_by_name(cls, connector_name: str) -> type[KVConnectorBaseType]:
         """Get a registered connector class by name.
 
         Raises ValueError if the connector is not registered.
@@ -93,9 +91,7 @@ class KVConnectorFactory:
         return cls._registry[connector_name]()
 
     @classmethod
-    def get_connector_class(
-        cls, kv_transfer_config: "KVTransferConfig"
-    ) -> type[KVConnectorBaseType]:
+    def get_connector_class(cls, kv_transfer_config: "KVTransferConfig") -> type[KVConnectorBaseType]:
         connector_name = kv_transfer_config.kv_connector
         if connector_name is None:
             raise ValueError("Connector name is not set in KVTransferConfig")
@@ -108,9 +104,7 @@ class KVConnectorFactory:
             try:
                 connector_cls = getattr(connector_module, connector_name)
             except AttributeError as e:
-                raise AttributeError(
-                    f"Class {connector_name} not found in {connector_module_path}"
-                ) from e
+                raise AttributeError(f"Class {connector_name} not found in {connector_module_path}") from e
             connector_cls = cast(type[KVConnectorBaseType], connector_cls)
             if not supports_kw(connector_cls, "kv_cache_config"):
                 msg = (

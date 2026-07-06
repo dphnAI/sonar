@@ -65,12 +65,8 @@ class AllSparkLinearKernel(MPLinearKernel):
         permute_param_layout_(old_scale_param, input_dim=0, output_dim=1)
 
         # unpack weight from K / 4 x N int32 to K x N uint8
-        new_weight_param = torch.nn.Parameter(
-            old_weight_param.data, requires_grad=False
-        )
-        new_weight_param.data = (
-            new_weight_param.data.t().contiguous().view(dtype=torch.uint8)
-        )
+        new_weight_param = torch.nn.Parameter(old_weight_param.data, requires_grad=False)
+        new_weight_param.data = new_weight_param.data.t().contiguous().view(dtype=torch.uint8)
         new_weight_param.data = new_weight_param.data.t().contiguous()
 
         new_scale_param = torch.nn.Parameter(old_scale_param.data, requires_grad=False)

@@ -27,9 +27,7 @@ from aphrodite.utils.flashinfer import (
     scaled_fp4_grouped_quantize,
 )
 
-kE2M1ToFloat = torch.tensor(
-    [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32
-)
+kE2M1ToFloat = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32)
 
 FLOAT8_E4M3_MAX = 448.0
 FLOAT4_E2M1_MAX = 6.0
@@ -45,9 +43,7 @@ def convert_swizzled_to_linear(a_sf_swizzled: torch.Tensor, m, k, block_size):
     return out[0:m, 0:k]
 
 
-def dequantize_nvfp4_to_dtype(
-    tensor_fp4, tensor_sf, global_scale, dtype, device, block_size=16
-):
+def dequantize_nvfp4_to_dtype(tensor_fp4, tensor_sf, global_scale, dtype, device, block_size=16):
     """Dequantize the fp4 tensor back to high precision."""
     # Two fp4 values are packed into one uint8.
     assert tensor_fp4.dtype == torch.uint8
@@ -88,9 +84,7 @@ def break_fp4_bytes(a, dtype):
     return values.reshape(m, n * 2).to(dtype=dtype)
 
 
-def generate_balanced_routing(
-    hidden_states: torch.Tensor, num_experts: int, top_k: int
-):
+def generate_balanced_routing(hidden_states: torch.Tensor, num_experts: int, top_k: int):
     """
     Generate routing weights and topk indices such that every expert is active.
     Returns routing_weights, topk_idx
@@ -129,9 +123,7 @@ def prepare_inputs(
     num_experts: int,
     topk: int,
 ):
-    routing_weights, topk_idx = generate_balanced_routing(
-        router_logits, num_experts, topk
-    )
+    routing_weights, topk_idx = generate_balanced_routing(router_logits, num_experts, topk)
 
     masked_m = []
     for i in range(num_experts):
@@ -180,12 +172,8 @@ def torch_moe(a, w1, w2, score, topk, expert_map):
     for i in range(w1.shape[0]):
         mask = topk_ids == i
         if mask.sum():
-            out[mask] = SiluAndMul()(a[mask] @ w1[i].transpose(0, 1)) @ w2[i].transpose(
-                0, 1
-            )
-    return (
-        out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)
-    ).sum(dim=1)
+            out[mask] = SiluAndMul()(a[mask] @ w1[i].transpose(0, 1)) @ w2[i].transpose(0, 1)
+    return (out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)).sum(dim=1)
 
 
 def torch_moe_nvfp4(a, w1, w2, topk, topk_weight, topk_ids):
@@ -215,9 +203,7 @@ def torch_moe_nvfp4(a, w1, w2, topk, topk_weight, topk_ids):
                 block_size=16,
             ).cuda()
             out[mask] = inter @ w2[i].transpose(0, 1)
-    return (
-        out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)
-    ).sum(dim=1)
+    return (out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)).sum(dim=1)
 
 
 def grouped_gemm_ref(
@@ -300,10 +286,7 @@ def grouped_gemm_ref(
             out_ref[expert_id, slot, :] = out[i]
             expert_slot[expert_id] += 1
         else:
-            raise IndexError(
-                f"Expert {expert_id} exceeded max slots ({max_m_val}). "
-                "Increase max_m or check masked_m."
-            )
+            raise IndexError(f"Expert {expert_id} exceeded max slots ({max_m_val}). Increase max_m or check masked_m.")
 
     return out_ref
 
@@ -329,17 +312,13 @@ def flashinfer_cutedsl_grouped_gemm_nt_masked(
         w_global_scale,
     )
 
-    out = torch.zeros(
-        (num_experts, max(masked_m), n), dtype=weights.dtype, device=aq.device
-    )
+    out = torch.zeros((num_experts, max(masked_m), n), dtype=weights.dtype, device=aq.device)
     out = out.permute(1, 2, 0)  # requirement of kernel
     sf_vec_size = 16
     ab_dtype = "float4_e2m1fn"
     sf_dtype = "float8_e4m3fn"
     c_dtype = "bfloat16"
-    alpha = 1.0 / (input_global_scale * w_global_scale).to(out.dtype).view(
-        1, 1, num_experts
-    )
+    alpha = 1.0 / (input_global_scale * w_global_scale).to(out.dtype).view(1, 1, num_experts)
 
     def get_cute_dtype(input: torch.Tensor) -> str:
         if input.dtype == torch.bfloat16:
@@ -370,43 +349,23 @@ def flashinfer_cutedsl_grouped_gemm_nt_masked(
 @pytest.mark.parametrize("bs, hidden_dim, inter_dim", [(2, 128, 256), (16, 128, 512)])
 @pytest.mark.parametrize("topk", [1, 2, 4])
 @torch.inference_mode()
-def test_flashinfer_cutedsl_moe_masked(
-    bs: int, hidden_dim: int, inter_dim: int, topk: int
-):
+def test_flashinfer_cutedsl_moe_masked(bs: int, hidden_dim: int, inter_dim: int, topk: int):
     torch.manual_seed(42)
     device = "cuda"
     num_experts = 8
-    hidden_states = (
-        torch.randn(bs, hidden_dim, dtype=torch.bfloat16, device=device) / 5.0
-    )
-    w1 = (
-        torch.randn(
-            num_experts, 2 * inter_dim, hidden_dim, dtype=torch.bfloat16, device=device
-        )
-        / 10.0
-    )
-    w2 = (
-        torch.randn(
-            num_experts, hidden_dim, inter_dim, dtype=torch.bfloat16, device=device
-        )
-        / 10.0
-    )
+    hidden_states = torch.randn(bs, hidden_dim, dtype=torch.bfloat16, device=device) / 5.0
+    w1 = torch.randn(num_experts, 2 * inter_dim, hidden_dim, dtype=torch.bfloat16, device=device) / 10.0
+    w2 = torch.randn(num_experts, hidden_dim, inter_dim, dtype=torch.bfloat16, device=device) / 10.0
     router_logits = torch.randn(bs, num_experts, dtype=torch.float32)
 
-    hidden_states_expanded = (
-        hidden_states.view(bs, -1, hidden_dim)
-        .repeat(1, topk, 1)
-        .reshape(-1, hidden_dim)
-    )
+    hidden_states_expanded = hidden_states.view(bs, -1, hidden_dim).repeat(1, topk, 1).reshape(-1, hidden_dim)
     hidden_states_3d, masked_m, topk_idx, routing_weights = prepare_inputs(
         hidden_states_expanded, router_logits, num_experts, topk
     )
 
     w1_amax = w1.abs().amax(dim=(1, 2)).to(torch.float32).to(w1.device)
     w2_amax = w2.abs().amax(dim=(1, 2)).to(torch.float32).to(w2.device)
-    input_global_scale = torch.ones(
-        (num_experts,), dtype=torch.float32, device=hidden_states.device
-    )
+    input_global_scale = torch.ones((num_experts,), dtype=torch.float32, device=hidden_states.device)
 
     w1_global_scale = FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX / w1_amax
     w2_global_scale = FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX / w2_amax
@@ -466,20 +425,12 @@ def test_flashinfer_cutedsl_moe_masked(
         device=hidden_states.device,
         block_size=16,
     )
-    w1_d = torch.empty(
-        (num_experts, 2 * inter_dim, hidden_dim), device=w1.device, dtype=w1.dtype
-    )
-    w2_d = torch.empty(
-        (num_experts, hidden_dim, inter_dim), device=w2.device, dtype=w2.dtype
-    )
+    w1_d = torch.empty((num_experts, 2 * inter_dim, hidden_dim), device=w1.device, dtype=w1.dtype)
+    w2_d = torch.empty((num_experts, hidden_dim, inter_dim), device=w2.device, dtype=w2.dtype)
 
     for idx in range(0, num_experts):
-        w1_fp4_sliced, w1_blockscale_sliced = fp4_quantize(
-            w1[idx], w1_global_scale[idx]
-        )
-        w2_fp4_sliced, w2_blockscale_sliced = fp4_quantize(
-            w2[idx], w2_global_scale[idx]
-        )
+        w1_fp4_sliced, w1_blockscale_sliced = fp4_quantize(w1[idx], w1_global_scale[idx])
+        w2_fp4_sliced, w2_blockscale_sliced = fp4_quantize(w2[idx], w2_global_scale[idx])
         w1_d[idx] = dequantize_nvfp4_to_dtype(
             w1_fp4_sliced,
             w1_blockscale_sliced,
@@ -515,21 +466,13 @@ def test_flashinfer_cutedsl_moe_masked(
         if mask.any():
             idx = torch.nonzero(mask, as_tuple=False).squeeze(-1)
             r, c = rows[idx], cols[idx]
-            out_weighted[r] += out[i, : len(r), :] * routing_weights[r, c].to(
-                out.device
-            ).unsqueeze(-1)
-    torch.testing.assert_close(
-        out_weighted.cpu(), ref_output.cpu(), atol=2e-1, rtol=2e-1
-    )
+            out_weighted[r] += out[i, : len(r), :] * routing_weights[r, c].to(out.device).unsqueeze(-1)
+    torch.testing.assert_close(out_weighted.cpu(), ref_output.cpu(), atol=2e-1, rtol=2e-1)
 
 
-@pytest.mark.parametrize(
-    "bs, hidden_dim, inter_dim, topk", [(2, 128, 256, 2), (16, 128, 512, 5)]
-)
+@pytest.mark.parametrize("bs, hidden_dim, inter_dim, topk", [(2, 128, 256, 2), (16, 128, 512, 5)])
 @torch.inference_mode()
-def test_grouped_gemm_nt_masked(
-    bs: int, hidden_dim: int, inter_dim: int, topk: int
-) -> None:
+def test_grouped_gemm_nt_masked(bs: int, hidden_dim: int, inter_dim: int, topk: int) -> None:
     torch.manual_seed(42)
     B = bs
     D = hidden_dim
@@ -542,19 +485,10 @@ def test_grouped_gemm_nt_masked(
     weights = torch.randn(num_experts, N, D, dtype=torch.bfloat16, device="cuda")
     router_logits = torch.randn(B, num_experts, dtype=torch.float32)
 
-    hidden_states_expanded = (
-        hidden_states.view(B, -1, D).repeat(1, topk, 1).reshape(-1, D)
-    )
-    hidden_states_3d, masked_m, topk_idx, _ = prepare_inputs(
-        hidden_states_expanded, router_logits, num_experts, topk
-    )
+    hidden_states_expanded = hidden_states.view(B, -1, D).repeat(1, topk, 1).reshape(-1, D)
+    hidden_states_3d, masked_m, topk_idx, _ = prepare_inputs(hidden_states_expanded, router_logits, num_experts, topk)
 
-    a_amax = (
-        hidden_states_3d.abs()
-        .amax(dim=(1, 2))
-        .to(torch.float32)
-        .to(hidden_states.device)
-    )
+    a_amax = hidden_states_3d.abs().amax(dim=(1, 2)).to(torch.float32).to(hidden_states.device)
     b_amax = weights.abs().amax(dim=(1, 2)).to(torch.float32).to(weights.device)
     a_gs = FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX / a_amax
     b_gs = FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX / b_amax

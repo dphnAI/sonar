@@ -18,22 +18,18 @@ def test_phimoe_routing_function():
 
     test_case = {
         0: {
-            "hidden_states": torch.tensor(
-                [1, 2, 3, 4, 5, 6, 7, 8], dtype=torch.float32, requires_grad=False
-            ).view(4, 2),
-            "gating_output": torch.tensor(
-                [0.1, 0.2, 0.3, 0.4], dtype=torch.float32, requires_grad=False
+            "hidden_states": torch.tensor([1, 2, 3, 4, 5, 6, 7, 8], dtype=torch.float32, requires_grad=False).view(
+                4, 2
             ),
+            "gating_output": torch.tensor([0.1, 0.2, 0.3, 0.4], dtype=torch.float32, requires_grad=False),
             "topk": 2,
             "renormalize": False,
         },
         1: {
-            "hidden_states": torch.tensor(
-                [1, 2, 3, 4, 5, 6, 7, 8], dtype=torch.float32, requires_grad=False
-            ).view(4, 2),
-            "gating_output": torch.tensor(
-                [0.4, 0.2, 0.3, 0.4], dtype=torch.float32, requires_grad=False
+            "hidden_states": torch.tensor([1, 2, 3, 4, 5, 6, 7, 8], dtype=torch.float32, requires_grad=False).view(
+                4, 2
             ),
+            "gating_output": torch.tensor([0.4, 0.2, 0.3, 0.4], dtype=torch.float32, requires_grad=False),
             "topk": 2,
             "renormalize": False,
         },
@@ -41,15 +37,11 @@ def test_phimoe_routing_function():
 
     ground_truth = {
         0: {
-            "topk_weights": torch.tensor(
-                [1.0, 1.0], dtype=torch.float32, requires_grad=False
-            ),
+            "topk_weights": torch.tensor([1.0, 1.0], dtype=torch.float32, requires_grad=False),
             "topk_ids": torch.tensor([3, 2], dtype=torch.long, requires_grad=False),
         },
         1: {
-            "topk_weights": torch.tensor(
-                [0.5, 1.0], dtype=torch.float32, requires_grad=False
-            ),
+            "topk_weights": torch.tensor([0.5, 1.0], dtype=torch.float32, requires_grad=False),
             "topk_ids": torch.tensor([0, 3], dtype=torch.long, requires_grad=False),
         },
     }
@@ -75,8 +67,7 @@ def test_phimoe_routing_function():
 )
 @pytest.mark.skipif(
     condition=current_platform.is_cpu(),
-    reason="This test takes a lot time to run on CPU, "
-    "and aphrodite CI's disk space is not enough for this model.",
+    reason="This test takes a lot time to run on CPU, and aphrodite CI's disk space is not enough for this model.",
 )
 @large_gpu_test(min_gb=80)
 @pytest.mark.parametrize("model", MODELS)
@@ -93,14 +84,10 @@ def test_models(
     num_logprobs: int,
 ) -> None:
     with hf_runner(model, dtype=dtype) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(
-            example_prompts, max_tokens, num_logprobs
-        )
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
     with aphrodite_runner(model, dtype=dtype) as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
-            example_prompts, max_tokens, num_logprobs
-        )
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
         outputs_1_lst=aphrodite_outputs,

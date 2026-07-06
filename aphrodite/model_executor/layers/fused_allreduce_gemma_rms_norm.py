@@ -39,9 +39,7 @@ try:
     )
 
     _AR_RESIDUAL_RMS_NORM = (
-        flashinfer_comm.AllReduceFusionPattern.kARResidualRMSNorm
-        if flashinfer_comm is not None
-        else None
+        flashinfer_comm.AllReduceFusionPattern.kARResidualRMSNorm if flashinfer_comm is not None else None
     )
 except ImportError:
     flashinfer_trtllm_fused_allreduce_norm = None  # type: ignore[assignment]
@@ -66,11 +64,7 @@ def _max_token_num(tp_size: int, hidden_size: int, dtype: torch.dtype) -> int | 
 
 def _can_use_flashinfer(hidden_states: torch.Tensor, tp_size: int) -> tuple[bool, int]:
     """Whether the flashinfer fused path applies; returns (ok, max_token_num)."""
-    if (
-        flashinfer_trtllm_fused_allreduce_norm is None
-        or get_fi_ar_workspace is None
-        or _AR_RESIDUAL_RMS_NORM is None
-    ):
+    if flashinfer_trtllm_fused_allreduce_norm is None or get_fi_ar_workspace is None or _AR_RESIDUAL_RMS_NORM is None:
         return False, 0
     if (
         not hidden_states.is_cuda

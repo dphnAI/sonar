@@ -23,17 +23,14 @@ class ParakeetConfig(ParakeetEncoderConfig):
         self.projection_eps = projection_eps
 
     @staticmethod
-    def from_hf_config(
-        config: PretrainedConfig, *, llm_hidden_size: int, max_model_len: int
-    ) -> "ParakeetConfig":
+    def from_hf_config(config: PretrainedConfig, *, llm_hidden_size: int, max_model_len: int) -> "ParakeetConfig":
         assert isinstance(config, PretrainedConfig)
         return ParakeetConfig(
             **config.to_dict(),
             scale_input=False,
             attention_bias=False,
             llm_hidden_size=llm_hidden_size,
-            max_position_embeddings=max_model_len
-            + 1,  # + 1 because it seems like max_model_len+1 can be passed
+            max_position_embeddings=max_model_len + 1,  # + 1 because it seems like max_model_len+1 can be passed
         )
 
 
@@ -58,9 +55,7 @@ class ExtractorConfig:
     def from_hf_config(cls, config: PretrainedConfig) -> "ExtractorConfig":
         assert isinstance(config, PretrainedConfig)
         defaults = ("hop_length", "win_length", "preemphasis", "n_fft", "padding_value")
-        optional_kwargs = {
-            name: getattr(config, name) for name in defaults if hasattr(config, name)
-        }
+        optional_kwargs = {name: getattr(config, name) for name in defaults if hasattr(config, name)}
 
         return cls(
             feature_size=config.num_mel_bins,

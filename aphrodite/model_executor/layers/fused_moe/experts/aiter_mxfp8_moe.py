@@ -84,18 +84,14 @@ class AiterMxfp8Experts(Mxfp8TritonExpertsBase):
         return True
 
     @staticmethod
-    def is_supported_config(
-        cls, moe_config, weight_key, activation_key, activation_format
-    ):
+    def is_supported_config(cls, moe_config, weight_key, activation_key, activation_format):
         is_supported, reason = super().is_supported_config(
             cls, moe_config, weight_key, activation_key, activation_format
         )
         # _supports_current_device() only gates on the device; surface a clear
         # reason when the device is fine but the flydsl package is missing.
         if is_supported and not is_aiter_mxfp8_moe_available():
-            return False, (
-                "kernel requires the aiter flydsl package, which is not installed"
-            )
+            return False, ("kernel requires the aiter flydsl package, which is not installed")
         return is_supported, reason
 
     def apply(

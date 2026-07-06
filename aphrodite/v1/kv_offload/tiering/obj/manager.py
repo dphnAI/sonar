@@ -67,9 +67,7 @@ class ObjAsyncLookupManager(AsyncLookupManager):
         super().__init__(tier_type=tier_type)
         self._tier = tier
 
-    def batch_lookup(
-        self, keys: list[OffloadKey], req_context: ReqContext
-    ) -> Iterable[bool]:
+    def batch_lookup(self, keys: list[OffloadKey], req_context: ReqContext) -> Iterable[bool]:
         descriptors = [
             (
                 _PROBE_ADDR,
@@ -114,9 +112,7 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
         self._block_size_bytes: int = 0
         root_dir = f"{prefix}/" if prefix else ""
         # Opt in; FileMapper enables it only for a parallelism-invariant block.
-        self._file_mapper = FileMapper.from_offloading_spec(
-            root_dir, offloading_spec, parallel_agnostic=True
-        )
+        self._file_mapper = FileMapper.from_offloading_spec(root_dir, offloading_spec, parallel_agnostic=True)
         self._next_obj_dev_id: int = 1  # dev_id=0 is reserved for _exists() probes
 
         self._probe_connectivity()
@@ -124,24 +120,17 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
         base_addr = ctypes.addressof(ctypes.c_char.from_buffer(primary_kv_view))
         assert primary_kv_view.strides is not None
         stride = primary_kv_view.strides[0]
-        self._primary_reg = self._agent.register_memory(
-            [(base_addr, primary_kv_view.nbytes, NIXL_DEV_ID, "")], "DRAM"
-        )
+        self._primary_reg = self._agent.register_memory([(base_addr, primary_kv_view.nbytes, NIXL_DEV_ID, "")], "DRAM")
         self._block_size_bytes = stride
-        all_blocks = [
-            (base_addr + i * stride, stride, NIXL_DEV_ID)
-            for i in range(len(primary_kv_view))
-        ]
+        all_blocks = [(base_addr + i * stride, stride, NIXL_DEV_ID) for i in range(len(primary_kv_view))]
         # NIXL_INIT_AGENT marks this as the local side; make_prepped_xfer requires
         # local_xfer_side tagged with NIXL_INIT_AGENT and remote_xfer_side tagged
         # with the peer agent name ("ObjAgent").
-        self._dram_prepped_handle: nixl_prepped_dlist_handle = (
-            self._agent.prep_xfer_dlist("NIXL_INIT_AGENT", all_blocks, "DRAM")
+        self._dram_prepped_handle: nixl_prepped_dlist_handle = self._agent.prep_xfer_dlist(
+            "NIXL_INIT_AGENT", all_blocks, "DRAM"
         )
 
-        self._lookup_manager = ObjAsyncLookupManager(
-            tier=self, tier_type=self.tier_type
-        )
+        self._lookup_manager = ObjAsyncLookupManager(tier=self, tier_type=self.tier_type)
 
     def _probe_connectivity(self) -> None:
         """Verify object store connectivity at startup via a NIXL lookup probe.
@@ -162,9 +151,7 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
             ) from e
 
     def _exists(self, obj_key: str) -> bool:
-        results = self._agent.query_memory(
-            [(_PROBE_ADDR, _PROBE_LEN, _PROBE_DEV_ID, obj_key)], "OBJ", "OBJ"
-        )
+        results = self._agent.query_memory([(_PROBE_ADDR, _PROBE_LEN, _PROBE_DEV_ID, obj_key)], "OBJ", "OBJ")
         return results[0] is not None
 
     def _submit_transfer(
@@ -179,8 +166,7 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
         # The OBJ backend maps devId -> obj_key. All descriptors must have
         # unique devIds or later registrations overwrite earlier ones.
         nixl_files = [
-            (0, self._block_size_bytes, dev_id, key)
-            for dev_id, key in enumerate(obj_keys, self._next_obj_dev_id)
+            (0, self._block_size_bytes, dev_id, key) for dev_id, key in enumerate(obj_keys, self._next_obj_dev_id)
         ]
         self._next_obj_dev_id += len(nixl_files)
 
@@ -230,15 +216,11 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
 
     def submit_store(self, job_metadata: JobMetadata) -> None:
         obj_keys = (self._file_mapper.get_file_name(k) for k in job_metadata.keys)
-        self._submit_transfer(
-            job_metadata.job_id, job_metadata.block_ids, obj_keys, NIXL_WRITE
-        )
+        self._submit_transfer(job_metadata.job_id, job_metadata.block_ids, obj_keys, NIXL_WRITE)
 
     def submit_load(self, job_metadata: JobMetadata) -> None:
         obj_keys = (self._file_mapper.get_file_name(k) for k in job_metadata.keys)
-        self._submit_transfer(
-            job_metadata.job_id, job_metadata.block_ids, obj_keys, NIXL_READ
-        )
+        self._submit_transfer(job_metadata.job_id, job_metadata.block_ids, obj_keys, NIXL_READ)
 
     def on_request_finished(self, req_context: ReqContext) -> None:
         self._lookup_manager.cleanup(req_context.req_id)
@@ -313,9 +295,7 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
             try:
                 self._agent.release_dlist_handle(entry.obj_handle)
             except Exception as exc:
-                logger.warning(
-                    "release_dlist_handle failed for job %d: %s", job_id, exc
-                )
+                logger.warning("release_dlist_handle failed for job %d: %s", job_id, exc)
             try:
                 self._agent.deregister_memory(entry.files_desc)
             except Exception as exc:

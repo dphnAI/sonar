@@ -52,9 +52,7 @@ class ECExampleConnector(ECConnectorBase):
         self._mm_datas_need_loads: dict[str, int] = {}
         transfer_config = aphrodite_config.ec_transfer_config
         if transfer_config is not None:
-            self._storage_path = transfer_config.get_from_extra_config(
-                "shared_storage_path", "/tmp"
-            )
+            self._storage_path = transfer_config.get_from_extra_config("shared_storage_path", "/tmp")
             logger.debug(transfer_config)
             logger.debug("Shared storage path is %s", self._storage_path)
         else:
@@ -80,18 +78,14 @@ class ECExampleConnector(ECConnectorBase):
         assert isinstance(metadata, ECExampleConnectorMetadata)
         assert encoder_cache is not None
         if metadata is None:
-            logger.warning(
-                "In connector.start_load_caches, but the connector metadata is None"
-            )
+            logger.warning("In connector.start_load_caches, but the connector metadata is None")
             return
         # Load the EC for each mm data
         for mm_data in metadata.mm_datas:
             if mm_data.mm_hash in encoder_cache:
                 continue
             filename = self._generate_filename_debug(mm_data.mm_hash)
-            ec_cache = safetensors.torch.load_file(
-                filename, device=current_platform.device_type
-            )["ec_cache"]
+            ec_cache = safetensors.torch.load_file(filename, device=current_platform.device_type)["ec_cache"]
             encoder_cache[mm_data.mm_hash] = ec_cache
             logger.debug("Success load encoder cache for hash %s", mm_data.mm_hash)
 

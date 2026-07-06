@@ -92,11 +92,7 @@ def record_tool_parser_invocation(
 
     match is_tool_called:
         case bool():
-            outcome = (
-                ToolCallOutcome.TOOL_CALL
-                if is_tool_called
-                else ToolCallOutcome.NO_TOOL_CALL
-            )
+            outcome = ToolCallOutcome.TOOL_CALL if is_tool_called else ToolCallOutcome.NO_TOOL_CALL
         case _:
             outcome = ToolCallOutcome.NO_TOOL_CALL
 

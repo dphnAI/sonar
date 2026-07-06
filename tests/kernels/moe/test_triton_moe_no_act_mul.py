@@ -10,13 +10,13 @@ equals N (not N // 2 like gated activations).
 import pytest
 import torch
 
-from tests.kernels.moe.utils import make_dummy_moe_config
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
 )
 from aphrodite.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
 from aphrodite.platforms import current_platform
+from tests.kernels.moe.utils import make_dummy_moe_config
 
 # Test parameters
 M_SIZES = [1, 16, 64]
@@ -75,9 +75,7 @@ def test_triton_experts_no_mul_activation(
     topk: int,
     activation: MoEActivation,
 ):
-    hidden_states, w1, w2, topk_weights, topk_ids = make_test_tensors(
-        m, n, k, NUM_EXPERTS, topk
-    )
+    hidden_states, w1, w2, topk_weights, topk_ids = make_test_tensors(m, n, k, NUM_EXPERTS, topk)
 
     experts = TritonExperts(
         moe_config=make_dummy_moe_config(),
@@ -104,9 +102,7 @@ def test_triton_experts_no_mul_activation(
     assert ws2_shape == (m, topk, max(n, k)), (
         f"workspace2 shape mismatch: expected {(m, topk, max(n, k))}, got {ws2_shape}"
     )
-    assert out_shape == (m, k), (
-        f"output shape mismatch: expected {(m, k)}, got {out_shape}"
-    )
+    assert out_shape == (m, k), f"output shape mismatch: expected {(m, k)}, got {out_shape}"
 
     workspace1 = torch.empty(
         ws1_shape[0] * ws1_shape[1] * ws1_shape[2],
@@ -160,13 +156,9 @@ def test_workspace_shapes_no_mul_vs_gated():
         quant_config=FUSED_MOE_UNQUANTIZED_CONFIG,
     )
 
-    ws1_no_mul, _, out_no_mul = experts.workspace_shapes(
-        M, N, K, topk, 8, 8, None, MoEActivation.SILU_NO_MUL
-    )
+    ws1_no_mul, _, out_no_mul = experts.workspace_shapes(M, N, K, topk, 8, 8, None, MoEActivation.SILU_NO_MUL)
 
-    ws1_gated, _, out_gated = experts.workspace_shapes(
-        M, N, K, topk, 8, 8, None, MoEActivation.SILU
-    )
+    ws1_gated, _, out_gated = experts.workspace_shapes(M, N, K, topk, 8, 8, None, MoEActivation.SILU)
 
     # For no_mul: activation_out_dim = N
     # For gated: activation_out_dim = N // 2

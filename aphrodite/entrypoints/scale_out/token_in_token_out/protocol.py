@@ -290,9 +290,7 @@ class DerenderCompletionRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_prompt_tokens_length(self) -> "DerenderCompletionRequest":
-        if self.prompt_tokens is not None and len(self.prompt_tokens) != len(
-            self.generate_responses
-        ):
+        if self.prompt_tokens is not None and len(self.prompt_tokens) != len(self.generate_responses):
             raise ValueError(
                 f"prompt_tokens length ({len(self.prompt_tokens)}) must equal "
                 f"generate_responses length ({len(self.generate_responses)})"

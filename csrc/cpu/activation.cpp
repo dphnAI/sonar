@@ -88,12 +88,14 @@ void silu_and_mul(torch::Tensor& out, torch::Tensor& input) {
   int num_tokens = input.numel() / input.size(-1);
   int d = input.size(-1) / 2;
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "silu_and_mul_impl", [&] {
-    CPU_KERNEL_GUARD_IN(silu_and_mul_impl)
-    activation_kernel<scalar_t, silu_act, true>(
-        num_tokens, d, input.data_ptr<scalar_t>(), out.data_ptr<scalar_t>());
-    CPU_KERNEL_GUARD_OUT(silu_and_mul_impl)
-  });
+  APHRODITE_DISPATCH_FLOATING_TYPES(
+      input.scalar_type(), "silu_and_mul_impl", [&] {
+        CPU_KERNEL_GUARD_IN(silu_and_mul_impl)
+        activation_kernel<scalar_t, silu_act, true>(num_tokens, d,
+                                                    input.data_ptr<scalar_t>(),
+                                                    out.data_ptr<scalar_t>());
+        CPU_KERNEL_GUARD_OUT(silu_and_mul_impl)
+      });
 }
 
 void gelu_and_mul(torch::Tensor& out,    // [..., d]
@@ -102,12 +104,14 @@ void gelu_and_mul(torch::Tensor& out,    // [..., d]
   int num_tokens = input.numel() / input.size(-1);
   int d = input.size(-1) / 2;
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "gelu_and_mul_impl", [&] {
-    CPU_KERNEL_GUARD_IN(gelu_and_mul_impl)
-    activation_kernel<scalar_t, gelu_act, true>(
-        num_tokens, d, input.data_ptr<scalar_t>(), out.data_ptr<scalar_t>());
-    CPU_KERNEL_GUARD_OUT(gelu_and_mul_impl)
-  });
+  APHRODITE_DISPATCH_FLOATING_TYPES(
+      input.scalar_type(), "gelu_and_mul_impl", [&] {
+        CPU_KERNEL_GUARD_IN(gelu_and_mul_impl)
+        activation_kernel<scalar_t, gelu_act, true>(num_tokens, d,
+                                                    input.data_ptr<scalar_t>(),
+                                                    out.data_ptr<scalar_t>());
+        CPU_KERNEL_GUARD_OUT(gelu_and_mul_impl)
+      });
 }
 
 void gelu_tanh_and_mul(torch::Tensor& out,    // [..., d]
@@ -166,10 +170,12 @@ void gelu_quick(torch::Tensor& out, torch::Tensor& input) {
   int num_tokens = input.numel() / input.size(-1);
   int d = input.size(-1);
 
-  APHRODITE_DISPATCH_FLOATING_TYPES(input.scalar_type(), "gelu_quick_impl", [&] {
-    CPU_KERNEL_GUARD_IN(gelu_quick_impl)
-    activation_kernel<scalar_t, gelu_quick_act, false>(
-        num_tokens, d, input.data_ptr<scalar_t>(), out.data_ptr<scalar_t>());
-    CPU_KERNEL_GUARD_OUT(gelu_quick_impl)
-  });
+  APHRODITE_DISPATCH_FLOATING_TYPES(
+      input.scalar_type(), "gelu_quick_impl", [&] {
+        CPU_KERNEL_GUARD_IN(gelu_quick_impl)
+        activation_kernel<scalar_t, gelu_quick_act, false>(
+            num_tokens, d, input.data_ptr<scalar_t>(),
+            out.data_ptr<scalar_t>());
+        CPU_KERNEL_GUARD_OUT(gelu_quick_impl)
+      });
 }

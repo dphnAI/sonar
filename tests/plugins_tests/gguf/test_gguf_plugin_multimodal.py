@@ -16,7 +16,7 @@ from aphrodite.assets.image import ImageAsset
 from aphrodite.multimodal.image import rescale_image_size
 from aphrodite.utils.torch_utils import set_default_torch_num_threads
 
-from ...conftest import IMAGE_ASSETS, HfRunner, AphroditeRunner
+from ...conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner
 from ...models.utils import check_logprobs_close
 
 
@@ -46,9 +46,7 @@ _GEMMA3_PROMPTS = IMAGE_ASSETS.prompts(
             "<end_of_turn>\n<start_of_turn>model\n"
         ),
         "cherry_blossom": (
-            "<bos><start_of_turn>user\n"
-            "<start_of_image>What is the season?"
-            "<end_of_turn>\n<start_of_turn>model\n"
+            "<bos><start_of_turn>user\n<start_of_image>What is the season?<end_of_turn>\n<start_of_turn>model\n"
         ),
     }
 )
@@ -162,6 +160,4 @@ def test_gemma3_mm_gguf(
     max_tokens: int,
     num_logprobs: int,
 ) -> None:
-    run_multimodal_gguf_test(
-        hf_runner, aphrodite_runner, model, dtype, max_tokens, num_logprobs
-    )
+    run_multimodal_gguf_test(hf_runner, aphrodite_runner, model, dtype, max_tokens, num_logprobs)

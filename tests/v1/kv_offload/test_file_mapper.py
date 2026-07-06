@@ -52,17 +52,11 @@ def make_mapper_from_offloading_spec(**kwargs) -> FileMapper:
     mock_aphrodite_config = MagicMock()
     mock_aphrodite_config.model_config.model = kwargs.get("model_name", "test-model")
     mock_aphrodite_config.cache_config.block_size = kwargs.get("hash_block_size", 16)
-    mock_aphrodite_config.cache_config.cache_dtype = (
-        f"torch.{kwargs.get('dtype', 'float16')}"
-    )
+    mock_aphrodite_config.cache_config.cache_dtype = f"torch.{kwargs.get('dtype', 'float16')}"
     mock_aphrodite_config.parallel_config.tensor_parallel_size = kwargs.get("tp_size", 1)
     mock_aphrodite_config.parallel_config.pipeline_parallel_size = kwargs.get("pp_size", 1)
-    mock_aphrodite_config.parallel_config.prefill_context_parallel_size = kwargs.get(
-        "pcp_size", 1
-    )
-    mock_aphrodite_config.parallel_config.decode_context_parallel_size = kwargs.get(
-        "dcp_size", 1
-    )
+    mock_aphrodite_config.parallel_config.prefill_context_parallel_size = kwargs.get("pcp_size", 1)
+    mock_aphrodite_config.parallel_config.decode_context_parallel_size = kwargs.get("dcp_size", 1)
     mock_aphrodite_config.parallel_config.rank = kwargs.get("rank", 0)
     mock_aphrodite_config.use_v2_model_runner = kwargs.get("use_v2_model_runner", False)
 
@@ -104,9 +98,7 @@ def test_get_file_name_full_structure():
     key = make_offload_key(block_hash, group_idx)
     path = fm.get_file_name(key)
 
-    expected_path = (
-        "/tmp/cache/test-model_588656ebcc66_r3/000/10_g2/0001020304050607.bin"
-    )
+    expected_path = "/tmp/cache/test-model_588656ebcc66_r3/000/10_g2/0001020304050607.bin"
     assert path == expected_path
 
 
@@ -145,9 +137,7 @@ def test_get_config_file_path():
 def _full_attention_group() -> KVCacheGroupSpec:
     return KVCacheGroupSpec(
         layer_names=["layer0"],
-        kv_cache_spec=FullAttentionSpec(
-            block_size=16, num_kv_heads=4, head_size=128, dtype=torch.float32
-        ),
+        kv_cache_spec=FullAttentionSpec(block_size=16, num_kv_heads=4, head_size=128, dtype=torch.float32),
     )
 
 
@@ -202,13 +192,9 @@ def test_parallel_agnostic_excludes_mla():
     # parallelism-invariant: the opt-in must not collapse tp/rank.
     group = KVCacheGroupSpec(
         layer_names=["layer0"],
-        kv_cache_spec=MLAAttentionSpec(
-            block_size=16, num_kv_heads=1, head_size=576, dtype=torch.float32
-        ),
+        kv_cache_spec=MLAAttentionSpec(block_size=16, num_kv_heads=1, head_size=576, dtype=torch.float32),
     )
-    fm = make_mapper_from_offloading_spec(
-        tp_size=2, rank=1, kv_cache_groups=[group], parallel_agnostic=True
-    )
+    fm = make_mapper_from_offloading_spec(tp_size=2, rank=1, kv_cache_groups=[group], parallel_agnostic=True)
     assert fm.fields["tp_size"] == 2
     assert fm.rank == 1
 

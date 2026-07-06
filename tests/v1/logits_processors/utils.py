@@ -9,7 +9,6 @@ from typing import Any
 
 import torch
 
-from tests.utils import requires_spawn_multiprocessing
 from aphrodite.config import AphroditeConfig
 from aphrodite.logger import init_logger
 from aphrodite.sampling_params import SamplingParams
@@ -21,6 +20,7 @@ from aphrodite.v1.sample.logits_processor import (
     RequestLogitsProcessor,
 )
 from aphrodite.v1.sample.logits_processor.builtin import process_dict_updates
+from tests.utils import requires_spawn_multiprocessing
 
 logger = init_logger(__name__)
 
@@ -57,17 +57,11 @@ class DummyLogitsProcessor(LogitsProcessor):
 
     @classmethod
     def validate_params(cls, params: SamplingParams):
-        target_token: int | None = params.extra_args and params.extra_args.get(
-            "target_token"
-        )
+        target_token: int | None = params.extra_args and params.extra_args.get("target_token")
         if target_token is not None and not isinstance(target_token, int):
-            raise ValueError(
-                f"target_token value {target_token} {type(target_token)} is not int"
-            )
+            raise ValueError(f"target_token value {target_token} {type(target_token)} is not int")
 
-    def __init__(
-        self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool
-    ):
+    def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
         self.req_info: dict[int, int] = {}
 
     def is_argmax_invariant(self) -> bool:
@@ -90,12 +84,8 @@ class DummyLogitsProcessor(LogitsProcessor):
             return logits
 
         # Save target values before modification
-        cols = torch.tensor(
-            list(self.req_info.values()), dtype=torch.long, device=logits.device
-        )
-        rows = torch.tensor(
-            list(self.req_info.keys()), dtype=torch.long, device=logits.device
-        )
+        cols = torch.tensor(list(self.req_info.values()), dtype=torch.long, device=logits.device)
+        rows = torch.tensor(list(self.req_info.keys()), dtype=torch.long, device=logits.device)
         values_to_keep = logits[rows, cols].clone()
 
         # Mask all but target tokens
@@ -170,15 +160,12 @@ class WrappedPerReqLogitsProcessor(AdapterLogitsProcessor):
         Returns:
           `Callable` request logits processor, or None
         """
-        target_token: Any | None = params.extra_args and params.extra_args.get(
-            "target_token"
-        )
+        target_token: Any | None = params.extra_args and params.extra_args.get("target_token")
         if target_token is None:
             return None
         if not isinstance(target_token, int):
             logger.warning(
-                "target_token value %s is not int; not applying logits"
-                " processor to request.",
+                "target_token value %s is not int; not applying logits processor to request.",
                 target_token,
             )
             return None
@@ -207,16 +194,13 @@ def register_fake_entrypoint(monkeypatch) -> str:
 
     # Write entry_points.txt
     (dist_info / "entry_points.txt").write_text(
-        f"[{LOGITSPROCS_GROUP}]\n"
-        f"{DUMMY_LOGITPROC_ENTRYPOINT} = {DUMMY_LOGITPROC_FQCN}\n",
+        f"[{LOGITSPROCS_GROUP}]\n{DUMMY_LOGITPROC_ENTRYPOINT} = {DUMMY_LOGITPROC_FQCN}\n",
         encoding="utf-8",
     )
 
     # Add to PYTHONPATH so spawned subprocesses can discover it
     existing = os.environ.get("PYTHONPATH", "")
-    monkeypatch.setenv(
-        "PYTHONPATH", str(tmpdir) + (os.pathsep + existing if existing else "")
-    )
+    monkeypatch.setenv("PYTHONPATH", str(tmpdir) + (os.pathsep + existing if existing else ""))
 
     # Also update sys.path for the current process so the driver can
     # discover the entrypoint.

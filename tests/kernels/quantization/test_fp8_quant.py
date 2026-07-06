@@ -5,17 +5,17 @@ import pytest
 import torch
 
 import aphrodite._custom_ops as ops
+from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+    scaled_quantize,
+)
+from aphrodite.platforms import current_platform
+from aphrodite.utils.torch_utils import set_random_seed
 from tests.kernels.quant_utils import (
     FP8_DTYPE,
     ref_dynamic_per_tensor_fp8_quant,
     ref_dynamic_per_token_quant,
 )
 from tests.kernels.utils import opcheck
-from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
-    scaled_quantize,
-)
-from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import set_random_seed
 
 DTYPES = [torch.bfloat16, torch.float]
 HIDDEN_SIZES = [17, 1024, 1025, 1026, 5137, 8193]
@@ -38,9 +38,7 @@ def opcheck_fp8_quant(
             (output, input, scale, group_shape),
         )
     elif use_per_token_if_dynamic:
-        scale = torch.empty(
-            (input.shape[0], 1), device=input.device, dtype=torch.float32
-        )
+        scale = torch.empty((input.shape[0], 1), device=input.device, dtype=torch.float32)
         opcheck(
             torch.ops._C.dynamic_per_token_scaled_fp8_quant,
             (output, input, scale, scale_ub),
@@ -65,22 +63,14 @@ def test_dynamic_per_token_fp8_quant(
 ) -> None:
     set_random_seed(seed)
 
-    x = (
-        torch.rand(num_tokens, hidden_size, dtype=dtype, device="cuda") + 1e-6
-    )  # avoid nans
+    x = torch.rand(num_tokens, hidden_size, dtype=dtype, device="cuda") + 1e-6  # avoid nans
 
-    scale_ub = (
-        torch.mean(x).to(dtype=torch.float32, device="cuda") if do_scale_ub else None
-    )
+    scale_ub = torch.mean(x).to(dtype=torch.float32, device="cuda") if do_scale_ub else None
     ref_out, ref_scales = ref_dynamic_per_token_quant(x, FP8_DTYPE, scale_ub)
-    ops_out, ops_scales = ops.scaled_fp8_quant(
-        x, scale_ub=scale_ub, use_per_token_if_dynamic=True
-    )
+    ops_out, ops_scales = ops.scaled_fp8_quant(x, scale_ub=scale_ub, use_per_token_if_dynamic=True)
 
     torch.testing.assert_close(ref_scales, ops_scales)
-    torch.testing.assert_close(
-        ref_out.to(dtype=torch.float32), ops_out.to(dtype=torch.float32)
-    )
+    torch.testing.assert_close(ref_out.to(dtype=torch.float32), ops_out.to(dtype=torch.float32))
 
     opcheck_fp8_quant(ops_out, x, None, scale_ub, use_per_token_if_dynamic=True)
 
@@ -90,9 +80,7 @@ def test_dynamic_per_token_fp8_quant(
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("seed", SEEDS)
 @torch.inference_mode()
-def test_dynamic_per_tensor_fp8_quant(
-    num_tokens: int, hidden_size: int, dtype: torch.dtype, seed: int
-) -> None:
+def test_dynamic_per_tensor_fp8_quant(num_tokens: int, hidden_size: int, dtype: torch.dtype, seed: int) -> None:
     set_random_seed(seed)
 
     x = torch.rand(num_tokens, hidden_size, dtype=dtype, device="cuda")
@@ -101,9 +89,7 @@ def test_dynamic_per_tensor_fp8_quant(
     ops_out, ops_scale = ops.scaled_fp8_quant(x)
 
     torch.testing.assert_close(ref_scale, ops_scale)
-    torch.testing.assert_close(
-        ref_out.to(dtype=torch.float32), ops_out.to(dtype=torch.float32)
-    )
+    torch.testing.assert_close(ref_out.to(dtype=torch.float32), ops_out.to(dtype=torch.float32))
 
     opcheck_fp8_quant(ops_out, x)
 
@@ -170,16 +156,13 @@ def test_static_fp8_quant_group_2d(
     # Skip if sizes are not divisible by group shape
     if num_tokens % norm_group_m != 0 or hidden_size % norm_group_n != 0:
         pytest.skip(
-            f"Skipping: ({num_tokens}, {hidden_size}) not divisible by "
-            f"group_shape ({group_shape[0]}, {group_shape[1]})"
+            f"Skipping: ({num_tokens}, {hidden_size}) not divisible by group_shape ({group_shape[0]}, {group_shape[1]})"
         )
 
     set_random_seed(seed)
 
     x = torch.rand(num_tokens, hidden_size, dtype=dtype, device="cuda")
-    ref_out, scale = scaled_quantize(
-        x, group_shape, current_platform.fp8_dtype(), compute_dtype=torch.float32
-    )
+    ref_out, scale = scaled_quantize(x, group_shape, current_platform.fp8_dtype(), compute_dtype=torch.float32)
     ops_out, ops_scale = ops.scaled_fp8_quant(x, scale=scale, group_shape=group_shape)
 
     torch.testing.assert_close(scale, ops_scale)
@@ -205,15 +188,11 @@ def test_static_fp8_quant_1d_scale(
     set_random_seed(seed)
 
     x = torch.rand(num_tokens, hidden_size, dtype=dtype, device="cuda")
-    ref_out, scale_2d = scaled_quantize(
-        x, group_shape, FP8_DTYPE, compute_dtype=torch.float32
-    )
+    ref_out, scale_2d = scaled_quantize(x, group_shape, FP8_DTYPE, compute_dtype=torch.float32)
 
     # Flatten scale to 1D for testing 1D scale path
     scale_1d = scale_2d.flatten()
-    ops_out, ops_scale = ops.scaled_fp8_quant(
-        x, scale=scale_1d, group_shape=group_shape
-    )
+    ops_out, ops_scale = ops.scaled_fp8_quant(x, scale=scale_1d, group_shape=group_shape)
 
     torch.testing.assert_close(scale_1d, ops_scale)
     torch.testing.assert_close(ref_out.float(), ops_out.float(), rtol=0.12, atol=0.0)

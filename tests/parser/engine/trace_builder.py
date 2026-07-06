@@ -18,13 +18,6 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from tests.parser.engine.replay_harness import (
-    MockTokenizer,
-    Sample,
-    assert_parse_output,
-    collect_output,
-    replay_streaming,
-)
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionToolsParam,
 )
@@ -36,6 +29,13 @@ from aphrodite.parser.engine.registered_adapters import (
     NemotronV3Parser,
     Qwen3Parser,
     SeedOssParser,
+)
+from tests.parser.engine.replay_harness import (
+    MockTokenizer,
+    Sample,
+    assert_parse_output,
+    collect_output,
+    replay_streaming,
 )
 
 # ── Data structures ──────────────────────────────────────────────────
@@ -60,9 +60,7 @@ class Scenario:
 # ── Scenarios ────────────────────────────────────────────────────────
 
 _READ_TOOL = ToolCallSpec("read_file", {"path": "/tmp/test.txt"})
-_BASH_TOOL = ToolCallSpec(
-    "bash", {"command": "hostname", "description": "Get hostname"}
-)
+_BASH_TOOL = ToolCallSpec("bash", {"command": "hostname", "description": "Get hostname"})
 _WEATHER_TOOL = ToolCallSpec(
     "get_weather",
     {"city": "Dallas", "state": "TX", "unit": "fahrenheit"},
@@ -366,11 +364,7 @@ def _qwen3_segments(scenario: Scenario) -> list[tuple[str, bool]]:
 
 
 def _qwen3_expected_content(scenario: Scenario) -> str | None:
-    if (
-        scenario.content is not None
-        and scenario.tool_calls
-        and not scenario.content.strip()
-    ):
+    if scenario.content is not None and scenario.tool_calls and not scenario.content.strip():
         return ""
     return scenario.content
 
@@ -433,9 +427,7 @@ def _minimax_m2_tool_segments(tool_calls: list[ToolCallSpec]) -> list[tuple[str,
         for key, value in tc.arguments.items():
             segs.append(
                 (
-                    f'<parameter name="{key}">'
-                    f"{_minimax_m2_arg_value(value)}"
-                    "</parameter>",
+                    f'<parameter name="{key}">{_minimax_m2_arg_value(value)}</parameter>',
                     False,
                 )
             )
@@ -769,11 +761,7 @@ def _build_kimi_k2(
     validate: bool = True,
     thinking: bool = True,
 ) -> Sample:
-    expected_reasoning = (
-        scenario.reasoning.rstrip()
-        if (thinking and scenario.reasoning is not None)
-        else None
-    )
+    expected_reasoning = scenario.reasoning.rstrip() if (thinking and scenario.reasoning is not None) else None
     if thinking and scenario.reasoning is None:
         expected_reasoning = ""
 
@@ -834,9 +822,7 @@ def build_sample(model: str, scenario: Scenario) -> Sample:
     return _BUILDERS[model](scenario)
 
 
-def build_scaling_sample(
-    model: str, token_count: int, validate: bool = False
-) -> Sample:
+def build_scaling_sample(model: str, token_count: int, validate: bool = False) -> Sample:
     """Build a sample with approximately *token_count* tokens."""
     sentence = "The quick brown fox jumps over the lazy dog. "
     text = sentence * (token_count // 10 + 1)

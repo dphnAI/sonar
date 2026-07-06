@@ -103,8 +103,7 @@ class BaseDummyInputsBuilder(ABC, Generic[_I]):
         if overrides and overrides.length:
             if overrides.length > length:
                 logger.warning(
-                    "audio.length override (%d) exceeds model's "
-                    "maximum length (%d), will be ignored",
+                    "audio.length override (%d) exceeds model's maximum length (%d), will be ignored",
                     overrides.length,
                     length,
                 )
@@ -126,8 +125,7 @@ class BaseDummyInputsBuilder(ABC, Generic[_I]):
             if overrides.width:
                 if overrides.width > width:
                     logger.warning(
-                        "image.width override (%d) exceeds model's "
-                        "maximum width (%d), will be ignored",
+                        "image.width override (%d) exceeds model's maximum width (%d), will be ignored",
                         overrides.width,
                         width,
                     )
@@ -135,8 +133,7 @@ class BaseDummyInputsBuilder(ABC, Generic[_I]):
             if overrides.height:
                 if overrides.height > height:
                     logger.warning(
-                        "image.height override (%d) exceeds model's "
-                        "maximum height (%d), will be ignored",
+                        "image.height override (%d) exceeds model's maximum height (%d), will be ignored",
                         overrides.height,
                         height,
                     )
@@ -159,8 +156,7 @@ class BaseDummyInputsBuilder(ABC, Generic[_I]):
             if overrides.num_frames:
                 if overrides.num_frames > num_frames:
                     logger.warning(
-                        "video.num_frames override (%d) exceeds model's "
-                        "maximum number of frames (%d), will be ignored",
+                        "video.num_frames override (%d) exceeds model's maximum number of frames (%d), will be ignored",
                         overrides.num_frames,
                         num_frames,
                     )
@@ -168,8 +164,7 @@ class BaseDummyInputsBuilder(ABC, Generic[_I]):
             if overrides.width:
                 if overrides.width > width:
                     logger.warning(
-                        "video.width override (%d) exceeds model's "
-                        "maximum width (%d), will be ignored",
+                        "video.width override (%d) exceeds model's maximum width (%d), will be ignored",
                         overrides.width,
                         width,
                     )
@@ -177,8 +172,7 @@ class BaseDummyInputsBuilder(ABC, Generic[_I]):
             if overrides.height:
                 if overrides.height > height:
                     logger.warning(
-                        "video.height override (%d) exceeds model's "
-                        "maximum height (%d), will be ignored",
+                        "video.height override (%d) exceeds model's maximum height (%d), will be ignored",
                         overrides.height,
                         height,
                     )

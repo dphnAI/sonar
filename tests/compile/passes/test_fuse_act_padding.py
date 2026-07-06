@@ -6,19 +6,19 @@ import pytest
 import torch
 
 import aphrodite.config
-from tests.compile.backend import TestBackend
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.utils import rocm_unquantized_gemm
+from tests.compile.backend import TestBackend
 
 
 class TestModel(torch.nn.Module):
@@ -36,9 +36,7 @@ class TestModel(torch.nn.Module):
         self.pad_dim = x_pad_to_multiple - (hidden_size % x_pad_to_multiple)
 
         self.norm = [RMSNorm(hidden_size, eps=1e-5) for _ in range(num_layers)]
-        self.router = [
-            torch.nn.Linear(hidden_size, num_local_experts) for _ in range(4)
-        ]
+        self.router = [torch.nn.Linear(hidden_size, num_local_experts) for _ in range(4)]
 
     def forward(self, x):
         # avoid having graph input be an arg to a pattern directly
@@ -47,12 +45,8 @@ class TestModel(torch.nn.Module):
         for layer in range(self.num_layers):
             x = x[:, : self.hidden_size]
             x, resid = self.norm[layer](x, resid)
-            router_logits = rocm_unquantized_gemm(
-                self, x, self.router[layer].weight, self.router[layer].bias
-            )
-            x = torch.nn.functional.pad(
-                x, (0, self.pad_dim), mode="constant", value=0.0
-            )
+            router_logits = rocm_unquantized_gemm(self, x, self.router[layer].weight, self.router[layer].bias)
+            x = torch.nn.functional.pad(x, (0, self.pad_dim), mode="constant", value=0.0)
             all_router_logits.append(router_logits)
 
         return x, resid, *all_router_logits

@@ -9,9 +9,7 @@ import torch
 import aphrodite.envs as envs
 from aphrodite.platforms import current_platform
 
-SYNC_ERROR_MESSAGE = (
-    "GPU<->CPU sync detected - avoid it or wrap with gpu_sync_allowed()"
-)
+SYNC_ERROR_MESSAGE = "GPU<->CPU sync detected - avoid it or wrap with gpu_sync_allowed()"
 
 _GPU_SYNC_ALLOWED_FIRST_SEEN: set[tuple[str, int]] = set()
 

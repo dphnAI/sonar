@@ -28,9 +28,7 @@ def test_validate_apply_chat_template_args():
 
     # both add_generation_prompt and continue_final_message → error
     with pytest.raises(ValueError):
-        _validate_apply_chat_template_args(
-            messages, add_generation_prompt=True, continue_final_message=True
-        )
+        _validate_apply_chat_template_args(messages, add_generation_prompt=True, continue_final_message=True)
 
     # continue_final_message with assistant last message → ok
     messages = [{"role": "assistant", "content": "Hello"}]
@@ -96,60 +94,30 @@ class TestMistralTokenizer:
             ] + [f"[control_{i}]" for i in range(8, 769)]
 
     def get_vocab(self, mistral_tokenizer: MistralTokenizer):
-        assert (
-            mistral_tokenizer.get_vocab()
-            == mistral_tokenizer.transformers_tokenizer.get_vocab()
-        )
+        assert mistral_tokenizer.get_vocab() == mistral_tokenizer.transformers_tokenizer.get_vocab()
 
     def test_get_added_vocab(self, mistral_tokenizer: MistralTokenizer):
         assert mistral_tokenizer.get_added_vocab() == {}
 
     def test_encode(self, mistral_tokenizer: MistralTokenizer):
-        token_ids = (
-            [1, 22177, 4304, 2662]
-            if mistral_tokenizer.is_tekken
-            else [1, 23325, 2294, 1686]
-        )
+        token_ids = [1, 22177, 4304, 2662] if mistral_tokenizer.is_tekken else [1, 23325, 2294, 1686]
 
         assert mistral_tokenizer.encode("Hello world !") == token_ids
         assert mistral_tokenizer.encode("Hello world !", max_length=3) == token_ids[:-1]
-        assert (
-            mistral_tokenizer.encode("Hello world !", truncation=True, max_length=3)
-            == token_ids[:-1]
-        )
-        assert (
-            mistral_tokenizer.encode("Hello world !", truncation=False, max_length=3)
-            == token_ids
-        )
+        assert mistral_tokenizer.encode("Hello world !", truncation=True, max_length=3) == token_ids[:-1]
+        assert mistral_tokenizer.encode("Hello world !", truncation=False, max_length=3) == token_ids
 
+        assert mistral_tokenizer.encode("Hello world !", add_special_tokens=True) == token_ids
+        assert mistral_tokenizer.encode("Hello world !", add_special_tokens=True, max_length=3) == token_ids[:-1]
         assert (
-            mistral_tokenizer.encode("Hello world !", add_special_tokens=True)
+            mistral_tokenizer.encode("Hello world !", add_special_tokens=True, truncation=False, max_length=3)
             == token_ids
         )
-        assert (
-            mistral_tokenizer.encode(
-                "Hello world !", add_special_tokens=True, max_length=3
-            )
-            == token_ids[:-1]
-        )
-        assert (
-            mistral_tokenizer.encode(
-                "Hello world !", add_special_tokens=True, truncation=False, max_length=3
-            )
-            == token_ids
-        )
-        assert (
-            mistral_tokenizer.encode("Hello world !", add_special_tokens=False)
-            == token_ids[1:]
-        )
+        assert mistral_tokenizer.encode("Hello world !", add_special_tokens=False) == token_ids[1:]
         assert mistral_tokenizer.encode("", add_special_tokens=False) == []
 
     def test_call(self, mistral_tokenizer: MistralTokenizer):
-        token_ids = (
-            [1, 22177, 4304, 2662]
-            if mistral_tokenizer.is_tekken
-            else [1, 23325, 2294, 1686]
-        )
+        token_ids = [1, 22177, 4304, 2662] if mistral_tokenizer.is_tekken else [1, 23325, 2294, 1686]
         attn_mask = [1 for _ in range(len(token_ids))]
 
         # Test 1: no special tokens
@@ -163,16 +131,12 @@ class TestMistralTokenizer:
             "input_ids": token_ids,
         }
         # Test 3: special tokens + truncation
-        assert mistral_tokenizer(
-            "Hello world !", add_special_tokens=True, truncation=True, max_length=3
-        ) == {
+        assert mistral_tokenizer("Hello world !", add_special_tokens=True, truncation=True, max_length=3) == {
             "attention_mask": attn_mask[:-1],
             "input_ids": token_ids[:-1],
         }
         # Test 4: special tokens + no truncation + max length
-        assert mistral_tokenizer(
-            "Hello world !", add_special_tokens=True, max_length=3
-        ) == {
+        assert mistral_tokenizer("Hello world !", add_special_tokens=True, max_length=3) == {
             "attention_mask": attn_mask,
             "input_ids": token_ids,
         }
@@ -821,15 +785,10 @@ class TestMistralTokenizer:
             add_generation_prompt=add_generation_prompt,
             continue_final_message=continue_final_message,
         )
-        decoded_actual_output = mistral_tokenizer.tokenizer.decode(
-            actual_output, SpecialTokenPolicy.KEEP
-        )
+        decoded_actual_output = mistral_tokenizer.tokenizer.decode(actual_output, SpecialTokenPolicy.KEEP)
 
         assert actual_output == expected_output[mistral_tokenizer.is_tekken]
-        assert (
-            decoded_actual_output
-            == decoded_expected_output[mistral_tokenizer.is_tekken]
-        )
+        assert decoded_actual_output == decoded_expected_output[mistral_tokenizer.is_tekken]
 
     def test_apply_chat_template_error(self, mistral_tokenizer: MistralTokenizer):
         messages = [{"role": "user", "content": "Hello world !"}]
@@ -1251,9 +1210,7 @@ class TestMistralTokenizer:
         )
 
         assert (
-            mistral_tokenizer.convert_tokens_to_string(
-                tokens[mistral_tokenizer.is_tekken]
-            )
+            mistral_tokenizer.convert_tokens_to_string(tokens[mistral_tokenizer.is_tekken])
             == expected_strings[mistral_tokenizer.is_tekken]
         )
 
@@ -2085,9 +2042,7 @@ class TestMistralTokenizer:
 
         ids = tuple_ids[mistral_tokenizer.is_tekken]
         expected_tokens = tuple_expected_tokens[mistral_tokenizer.is_tekken]
-        actual_tokens = mistral_tokenizer.convert_ids_to_tokens(
-            ids, skip_special_tokens=skip_special_tokens
-        )
+        actual_tokens = mistral_tokenizer.convert_ids_to_tokens(ids, skip_special_tokens=skip_special_tokens)
         assert actual_tokens == expected_tokens
 
         assert mistral_tokenizer.convert_ids_to_tokens([]) == []
@@ -2166,22 +2121,14 @@ class TestMistralTokenizer:
         tekken_expected_substrings: list[str],
         spm_expected_substrings: list[str],
     ) -> None:
-        output = mistral_tokenizer.apply_chat_template(
-            messages, tools=tools, add_generation_prompt=True
-        )
+        output = mistral_tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True)
         decoded = mistral_tokenizer.tokenizer.decode(output, SpecialTokenPolicy.KEEP)
 
-        expected = (
-            tekken_expected_substrings
-            if mistral_tokenizer.is_tekken
-            else spm_expected_substrings
-        )
+        expected = tekken_expected_substrings if mistral_tokenizer.is_tekken else spm_expected_substrings
         for substring in expected:
             assert substring in decoded
 
-    def test_apply_chat_template_tools_not_mutated(
-        self, mistral_tokenizer: MistralTokenizer
-    ) -> None:
+    def test_apply_chat_template_tools_not_mutated(self, mistral_tokenizer: MistralTokenizer) -> None:
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": "Hello"},
         ]
@@ -2202,9 +2149,7 @@ class TestMistralTokenizer:
         ]
         original_tools = copy.deepcopy(tools)
 
-        mistral_tokenizer.apply_chat_template(
-            messages, tools=tools, add_generation_prompt=True
-        )
+        mistral_tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True)
 
         assert tools == original_tools
 
@@ -2228,9 +2173,7 @@ class TestMistralTokenizer:
             {"role": "user", "content": "Are you sure?"},
         ]
 
-        output = mistral_tokenizer.apply_chat_template(
-            messages, add_generation_prompt=True
-        )
+        output = mistral_tokenizer.apply_chat_template(messages, add_generation_prompt=True)
         decoded = mistral_tokenizer.tokenizer.decode(output, SpecialTokenPolicy.KEEP)
 
         assert "[THINK]2+2 equals 4[/THINK]" in decoded

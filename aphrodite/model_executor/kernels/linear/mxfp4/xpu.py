@@ -16,9 +16,7 @@ class XPUMxFp4LinearKernel(MxFp4LinearKernel):
     """MXFP4 W4A4 GEMM on XPU."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_xpu():
             return False, "XPUMxFp4 only support on XPU"
         return True, None

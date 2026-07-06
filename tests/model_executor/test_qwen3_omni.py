@@ -197,9 +197,7 @@ def test_qwen3_omni_get_updates_use_audio_in_video(
     audio_count = updates.count(audio_token_id)
     video_count = updates.count(video_token_id)
 
-    assert audio_count == audio_len, (
-        f"Expected {audio_len} audio tokens, got {audio_count}"
-    )
+    assert audio_count == audio_len, f"Expected {audio_len} audio tokens, got {audio_count}"
 
     # Calculate expected video token count
     spatial_merge_size = mock_qwen3_omni_config.vision_config.spatial_merge_size
@@ -207,15 +205,11 @@ def test_qwen3_omni_get_updates_use_audio_in_video(
     width = video_grid_thw[2] // spatial_merge_size
     expected_video_count = video_grid_thw[0] * height * width
 
-    assert video_count == expected_video_count, (
-        f"Expected {expected_video_count} video tokens, got {video_count}"
-    )
+    assert video_count == expected_video_count, f"Expected {expected_video_count} video tokens, got {video_count}"
 
     # Total tokens should be: 1 (start) + audio_len + video_count + 1 (end)
     expected_total = 1 + audio_len + expected_video_count + 1
-    assert len(updates) == expected_total, (
-        f"Expected {expected_total} total tokens, got {len(updates)}"
-    )
+    assert len(updates) == expected_total, f"Expected {expected_total} total tokens, got {len(updates)}"
 
 
 if __name__ == "__main__":

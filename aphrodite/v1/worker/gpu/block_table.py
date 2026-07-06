@@ -40,17 +40,13 @@ class BlockTables:
         self.num_kv_cache_groups = len(self.block_sizes)
         assert len(max_num_blocks_per_group) == self.num_kv_cache_groups
 
-        self.blocks_per_kv_block = [
-            bs // kbs for bs, kbs in zip(block_sizes, kernel_block_sizes)
-        ]
+        self.blocks_per_kv_block = [bs // kbs for bs, kbs in zip(block_sizes, kernel_block_sizes)]
 
         # num_kv_cache_groups x [max_num_reqs, max_num_blocks]
         self.block_tables: list[StagedWriteTensor] = []
         for i in range(self.num_kv_cache_groups):
             max_num_blocks = max_num_blocks_per_group[i] * self.blocks_per_kv_block[i]
-            block_table = StagedWriteTensor(
-                (self.max_num_reqs, max_num_blocks), dtype=torch.int32, device=device
-            )
+            block_table = StagedWriteTensor((self.max_num_reqs, max_num_blocks), dtype=torch.int32, device=device)
             self.block_tables.append(block_table)
 
         self.num_blocks = UvaBackedTensor(
@@ -60,15 +56,11 @@ class BlockTables:
         self.fused_writer: FusedStagedWriter | None = None
         if self.num_kv_cache_groups > 1:
             # Only the multi-group path uses the fused writer.
-            self.fused_writer = FusedStagedWriter(
-                self.device, self.num_kv_cache_groups * self.max_num_reqs
-            )
+            self.fused_writer = FusedStagedWriter(self.device, self.num_kv_cache_groups * self.max_num_reqs)
 
         # Block tables used for model's forward pass.
         # num_kv_cache_groups x [max_num_reqs, max_num_blocks]
-        self.input_block_tables: list[torch.Tensor] = [
-            torch.zeros_like(b.gpu) for b in self.block_tables
-        ]
+        self.input_block_tables: list[torch.Tensor] = [torch.zeros_like(b.gpu) for b in self.block_tables]
 
         self.slot_mappings = torch.zeros(
             self.num_kv_cache_groups,
@@ -81,9 +73,7 @@ class BlockTables:
 
     def _make_ptr_tensor(self, x: Iterable[torch.Tensor]) -> torch.Tensor:
         # NOTE(woosuk): Use uint64 instead of int64 to cover all possible addresses.
-        return torch.tensor(
-            [t.data_ptr() for t in x], dtype=torch.uint64, device=self.device
-        )
+        return torch.tensor([t.data_ptr() for t in x], dtype=torch.uint64, device=self.device)
 
     def init_block_table_layout_tensors(self) -> None:
         # Called at init and after a CuMem kv_cache wake-up. The ptr tensors
@@ -91,17 +81,13 @@ class BlockTables:
         # are reallocated on wake; block_sizes_tensor needs re-populating
         # because its storage lives under the kv_cache pool tag and comes back
         # with undefined contents.
-        self.block_table_ptrs = self._make_ptr_tensor(
-            [b.gpu for b in self.block_tables]
-        )
+        self.block_table_ptrs = self._make_ptr_tensor([b.gpu for b in self.block_tables])
         self.block_table_strides = torch.tensor(
             [b.gpu.stride(0) for b in self.block_tables],
             dtype=torch.int64,
             device=self.device,
         )
-        self.block_sizes_tensor = torch.tensor(
-            self.kernel_block_sizes, dtype=torch.int32, device=self.device
-        )
+        self.block_sizes_tensor = torch.tensor(self.kernel_block_sizes, dtype=torch.int32, device=self.device)
         self.input_block_table_ptrs = self._make_ptr_tensor(self.input_block_tables)
 
     def append_block_ids(
@@ -126,9 +112,7 @@ class BlockTables:
         else:
             # Multiple groups: apply all block tables with one fused kernel.
             assert self.fused_writer is not None
-            self.fused_writer.apply(
-                self.block_tables, self.block_table_ptrs, self.block_table_strides
-            )
+            self.fused_writer.apply(self.block_tables, self.block_table_ptrs, self.block_table_strides)
         self.num_blocks.copy_to_uva()
 
     def gather_block_tables(
@@ -282,9 +266,7 @@ def _compute_slot_mappings_kernel(
 
         block_indices = positions // (block_size * CP_SIZE)
         block_offsets = positions % (block_size * CP_SIZE)
-        block_numbers = tl.load(
-            block_table_ptr + req_state_idx * block_table_stride + block_indices
-        )
+        block_numbers = tl.load(block_table_ptr + req_state_idx * block_table_stride + block_indices)
 
         if CP_SIZE == 1:
             # Common case: Context parallelism is not used.

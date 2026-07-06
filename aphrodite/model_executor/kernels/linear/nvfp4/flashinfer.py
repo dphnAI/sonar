@@ -32,9 +32,7 @@ class FlashInferCuteDslNvFp4LinearKernel(NvFp4LinearKernel):
     """NVFP4 GEMM via FlashInfer's cutedsl backend."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_device_capability_family(100):
             return False, "FlashInfer cutedsl requires sm_10x"
         if not has_flashinfer():
@@ -47,12 +45,8 @@ class FlashInferCuteDslNvFp4LinearKernel(NvFp4LinearKernel):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         # cutedsl uses the same swizzled + padded layout as cutlass.
-        layer.weight_scale = torch.nn.Parameter(
-            swizzle_blockscale(layer.weight_scale.data), requires_grad=False
-        )
-        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(
-            layer.weight.data
-        )
+        layer.weight_scale = torch.nn.Parameter(swizzle_blockscale(layer.weight_scale.data), requires_grad=False)
+        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(layer.weight.data)
         layer.weight = torch.nn.Parameter(padded_weight, requires_grad=False)
         layer.weights_padding_cols = weights_padding_cols
 
@@ -73,9 +67,7 @@ class FlashInferCuteDslNvFp4LinearKernel(NvFp4LinearKernel):
             backend="flashinfer-cutedsl",
         )
 
-        x_fp4 = pad_nvfp4_activation_for_cutlass(
-            x_fp4, getattr(layer, "weights_padding_cols", 0)
-        )
+        x_fp4 = pad_nvfp4_activation_for_cutlass(x_fp4, getattr(layer, "weights_padding_cols", 0))
 
         out = flashinfer_scaled_fp4_mm(
             x_fp4,
@@ -103,18 +95,12 @@ class FlashInferCutlassNvFp4LinearKernel(NvFp4LinearKernel):
         return kNvfp4Dynamic
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
             cutlass_fp4_supported,
         )
 
-        if (
-            cutlass_fp4_supported()
-            and current_platform.has_device_capability(100)
-            and has_flashinfer()
-        ):
+        if cutlass_fp4_supported() and current_platform.has_device_capability(100) and has_flashinfer():
             return True, None
         return False, "FlashInfer + >=sm_100 required"
 
@@ -123,12 +109,8 @@ class FlashInferCutlassNvFp4LinearKernel(NvFp4LinearKernel):
         return True, None
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        layer.weight_scale = torch.nn.Parameter(
-            swizzle_blockscale(layer.weight_scale.data), requires_grad=False
-        )
-        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(
-            layer.weight.data
-        )
+        layer.weight_scale = torch.nn.Parameter(swizzle_blockscale(layer.weight_scale.data), requires_grad=False)
+        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(layer.weight.data)
         layer.weight = torch.nn.Parameter(padded_weight, requires_grad=False)
         layer.weights_padding_cols = weights_padding_cols
 
@@ -180,9 +162,7 @@ class FlashInferTrtllmNvFp4LinearKernel(NvFp4LinearKernel):
     """NVFP4 GEMM via FlashInfer's TensorRT-LLM wrapper."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if has_flashinfer():
             return True, None
         return False, "FlashInfer required"
@@ -247,9 +227,7 @@ class FlashInferCudnnNvFp4LinearKernel(NvFp4LinearKernel):
     """NVFP4 GEMM via FlashInfer's cuDNN wrapper."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if has_flashinfer():
             return True, None
         return False, "FlashInfer required"
@@ -260,12 +238,8 @@ class FlashInferCudnnNvFp4LinearKernel(NvFp4LinearKernel):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         # cuDNN uses the same swizzled + padded layout as CUTLASS
-        layer.weight_scale = torch.nn.Parameter(
-            swizzle_blockscale(layer.weight_scale.data), requires_grad=False
-        )
-        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(
-            layer.weight.data
-        )
+        layer.weight_scale = torch.nn.Parameter(swizzle_blockscale(layer.weight_scale.data), requires_grad=False)
+        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(layer.weight.data)
         layer.weight = torch.nn.Parameter(padded_weight, requires_grad=False)
         layer.weights_padding_cols = weights_padding_cols
 
@@ -309,15 +283,12 @@ class FlashInferB12xNvFp4LinearKernel(NvFp4LinearKernel):
     """NVFP4 GEMM via FlashInfer's b12x CuTe DSL warp-level MMA kernel (SM120+)."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if current_platform.has_device_capability(120) and has_flashinfer_b12x_gemm():
             return True, None
         return (
             False,
-            "FlashInfer b12x requires SM120+ and FlashInfer "
-            "with Sm120BlockScaledDenseGemmKernel",
+            "FlashInfer b12x requires SM120+ and FlashInfer with Sm120BlockScaledDenseGemmKernel",
         )
 
     @classmethod
@@ -325,12 +296,8 @@ class FlashInferB12xNvFp4LinearKernel(NvFp4LinearKernel):
         return True, None
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        layer.weight_scale = torch.nn.Parameter(
-            swizzle_blockscale(layer.weight_scale.data), requires_grad=False
-        )
-        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(
-            layer.weight.data
-        )
+        layer.weight_scale = torch.nn.Parameter(swizzle_blockscale(layer.weight_scale.data), requires_grad=False)
+        padded_weight, weights_padding_cols = pad_nvfp4_weight_for_cutlass(layer.weight.data)
         layer.weight = torch.nn.Parameter(padded_weight, requires_grad=False)
         layer.weights_padding_cols = weights_padding_cols
 
@@ -351,9 +318,7 @@ class FlashInferB12xNvFp4LinearKernel(NvFp4LinearKernel):
             backend="b12x",
         )
 
-        x_fp4 = pad_nvfp4_activation_for_cutlass(
-            x_fp4, getattr(layer, "weights_padding_cols", 0)
-        )
+        x_fp4 = pad_nvfp4_activation_for_cutlass(x_fp4, getattr(layer, "weights_padding_cols", 0))
 
         out = flashinfer_scaled_fp4_mm(
             x_fp4,

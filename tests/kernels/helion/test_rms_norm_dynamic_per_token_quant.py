@@ -11,7 +11,6 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from tests.kernels.helion.utils import skip_if_platform_unsupported
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import ConfigManager
 from aphrodite.kernels.helion.ops.rms_norm_dynamic_per_token_quant import (
@@ -23,6 +22,7 @@ from aphrodite.kernels.helion.ops.rms_norm_dynamic_per_token_quant import (
 from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_helion
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.helion.utils import skip_if_platform_unsupported
 
 if not has_helion():
     pytest.skip(
@@ -33,12 +33,8 @@ if not has_helion():
 
 def _generate_fake_input(num_tokens: int, hidden_size: int) -> tuple[Any, ...]:
     with FakeTensorMode():
-        input = torch.randn(
-            num_tokens, hidden_size, device="cuda", dtype=torch.bfloat16
-        )
-        result = torch.empty(
-            input.shape, device=input.device, dtype=current_platform.fp8_dtype()
-        )
+        input = torch.randn(num_tokens, hidden_size, device="cuda", dtype=torch.bfloat16)
+        result = torch.empty(input.shape, device=input.device, dtype=current_platform.fp8_dtype())
         scale = torch.empty((num_tokens, 1), device=input.device, dtype=torch.float32)
         scale_ub = torch.mean(input).to(torch.float32)
         residual = torch.randn_like(input)
@@ -150,15 +146,9 @@ class TestRmsNormDynamicPerTokenQuantCorrectness:
 
         scale = 1 / (hidden_size)
         x = torch.randn(num_tokens, hidden_size, dtype=dtype, device="cuda") * scale
-        weight = torch.normal(
-            mean=1.0, std=1.0, size=(hidden_size,), dtype=dtype, device=x.device
-        )
+        weight = torch.normal(mean=1.0, std=1.0, size=(hidden_size,), dtype=dtype, device=x.device)
         residual = torch.randn_like(x) * scale if add_residual else None
-        scale_ub = (
-            torch.mean(x).to(dtype=torch.float32, device="cuda")
-            if has_scale_ub
-            else None
-        )
+        scale_ub = torch.mean(x).to(dtype=torch.float32, device="cuda") if has_scale_ub else None
 
         ref_out = torch.empty(x.shape, device=x.device, dtype=quant_dtype)
         ref_scales = torch.empty((x.shape[0], 1), device=x.device, dtype=torch.float32)
@@ -168,16 +158,11 @@ class TestRmsNormDynamicPerTokenQuantCorrectness:
         ops_out = torch.empty(x.shape, device=x.device, dtype=quant_dtype)
         ops_scales = torch.empty((x.shape[0], 1), device=x.device, dtype=torch.float32)
         ops_residual = residual.clone() if residual is not None else None
-        rms_norm_dynamic_per_token_quant(
-            ops_out, x, weight, ops_scales, EPS, scale_ub, ops_residual
-        )
+        rms_norm_dynamic_per_token_quant(ops_out, x, weight, ops_scales, EPS, scale_ub, ops_residual)
 
         torch.testing.assert_close(ref_scales, ops_scales)
         # allow 1 ULP difference
-        assert (
-            ref_out.view(torch.uint8).to(torch.int16)
-            - ops_out.view(torch.uint8).to(torch.int16)
-        ).abs().max() <= 1
+        assert (ref_out.view(torch.uint8).to(torch.int16) - ops_out.view(torch.uint8).to(torch.int16)).abs().max() <= 1
 
         if add_residual:
             torch.testing.assert_close(ref_residual, ops_residual)

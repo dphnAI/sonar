@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
 Metal Aphrodite v1 model runner.
 
@@ -19,23 +20,9 @@ import mlx.core as mx
 import torch
 from mlx_lm import stream_generate
 from mlx_lm.generate import generate_step, generation_stream
+
 from aphrodite.config import AphroditeConfig
 from aphrodite.logger import init_logger
-from aphrodite.sampling_params import SamplingParams
-from aphrodite.tasks import SupportedTask
-from aphrodite.utils.platform_utils import is_pin_memory_available
-from aphrodite.v1.core.sched.output import (
-    CachedRequestData,
-    GrammarOutput,
-    NewRequestData,
-    SchedulerOutput,
-)
-from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
-from aphrodite.v1.outputs import LogprobsTensors, ModelRunnerOutput
-from aphrodite.v1.sample.logits_processor import build_logitsprocs
-from aphrodite.v1.sample.metadata import SamplingMetadata
-from aphrodite.v1.sample.sampler import Sampler
-
 from aphrodite.metal.config import get_config
 from aphrodite.metal.paged_attention_backend.hybrid import HybridPagedAttentionBackend
 from aphrodite.metal.paged_attention_backend.mla import MLA_DEFAULT_QK_ROPE_HEAD_DIM
@@ -64,12 +51,26 @@ from aphrodite.metal.v1.sampling_batch import (
     GREEDY_TEMPERATURE_EPS,
     MetalSamplerResult,
     SamplingBatch,
+    _merge_single_row_logprobs,
     sample_decode_tokens,
     sample_from_logits,
     sample_prefill_tokens,
-    _merge_single_row_logprobs,
 )
 from aphrodite.metal.v1.structured_output import MetalStructuredOutputApplier
+from aphrodite.sampling_params import SamplingParams
+from aphrodite.tasks import SupportedTask
+from aphrodite.utils.platform_utils import is_pin_memory_available
+from aphrodite.v1.core.sched.output import (
+    CachedRequestData,
+    GrammarOutput,
+    NewRequestData,
+    SchedulerOutput,
+)
+from aphrodite.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
+from aphrodite.v1.outputs import LogprobsTensors, ModelRunnerOutput
+from aphrodite.v1.sample.logits_processor import build_logitsprocs
+from aphrodite.v1.sample.metadata import SamplingMetadata
+from aphrodite.v1.sample.sampler import Sampler
 
 logger = init_logger(__name__)
 
@@ -113,9 +114,7 @@ class RequestState:
     generator: torch.Generator | None = None
     mlx_generator: Any | None = None
     generated_tokens: int = 0
-    block_ids: list[int] = field(
-        default_factory=list
-    )  # Scheduler-assigned paged KV blocks
+    block_ids: list[int] = field(default_factory=list)  # Scheduler-assigned paged KV blocks
 
 
 class PrefillRequest(NamedTuple):
@@ -211,29 +210,21 @@ def _make_top_k_first_mlx_sampler(
         logits = logprobs * (1.0 / temperature)
 
         if use_top_k:
-            topk_indices = mx.argpartition(-logits, top_k - 1, axis=-1)[
-                :, :top_k
-            ]
+            topk_indices = mx.argpartition(-logits, top_k - 1, axis=-1)[:, :top_k]
             logits = mx.take_along_axis(logits, topk_indices, axis=-1)
 
             if use_top_p:
                 sorted_positions = mx.argsort(-logits, axis=-1)
                 sorted_logits = mx.take_along_axis(logits, sorted_positions, axis=-1)
-                sorted_indices = mx.take_along_axis(
-                    topk_indices, sorted_positions, axis=-1
-                )
+                sorted_indices = mx.take_along_axis(topk_indices, sorted_positions, axis=-1)
                 sorted_probs = mx.softmax(sorted_logits, axis=-1)
                 remove = (mx.cumsum(sorted_probs, axis=-1) - sorted_probs) > top_p
                 sorted_logits = mx.where(remove, -float("inf"), sorted_logits)
                 sampled_positions = mx.random.categorical(sorted_logits, axis=-1)
-                return mx.take_along_axis(
-                    sorted_indices, sampled_positions[:, None], axis=-1
-                )[:, 0]
+                return mx.take_along_axis(sorted_indices, sampled_positions[:, None], axis=-1)[:, 0]
 
             sampled_positions = mx.random.categorical(logits, axis=-1)
-            return mx.take_along_axis(
-                topk_indices, sampled_positions[:, None], axis=-1
-            )[:, 0]
+            return mx.take_along_axis(topk_indices, sampled_positions[:, None], axis=-1)[:, 0]
 
         if use_top_p:
             sorted_indices = mx.argsort(-logits, axis=-1)
@@ -242,9 +233,7 @@ def _make_top_k_first_mlx_sampler(
             remove = (mx.cumsum(sorted_probs, axis=-1) - sorted_probs) > top_p
             sorted_logits = mx.where(remove, -float("inf"), sorted_logits)
             sampled_positions = mx.random.categorical(sorted_logits, axis=-1)
-            return mx.take_along_axis(
-                sorted_indices, sampled_positions[:, None], axis=-1
-            )[:, 0]
+            return mx.take_along_axis(sorted_indices, sampled_positions[:, None], axis=-1)[:, 0]
 
         return mx.random.categorical(logits, axis=-1)
 
@@ -319,6 +308,28 @@ class MetalModelRunner:
     Uses true batched decode with BatchKVCache for efficient parallel processing.
     """
 
+    # Model dimensions resolved during model loading by ModelLifecycle.
+    # Declared here (annotation-only) so static type checkers know about the
+    # dynamically-assigned attributes without changing runtime behavior.
+    _vocab_size: int
+    num_layers: int
+    num_attention_heads: int | None
+    num_kv_heads: int
+    hidden_size: int | None
+    head_dim: int
+    num_kv_cache_layers: int
+    _yoco_cache_mapping: tuple[int, dict[int, int]] | None
+    full_attention_interval: int
+    sdpa_layer_indices: frozenset[int]
+    num_sdpa_layers: int
+    num_linear_layers: int
+    linear_num_k_heads: int
+    linear_num_v_heads: int
+    linear_key_head_dim: int
+    linear_value_head_dim: int
+    linear_conv_kernel_dim: int
+    linear_conv_dim: int
+
     def __init__(
         self,
         aphrodite_config: AphroditeConfig,
@@ -346,9 +357,7 @@ class MetalModelRunner:
         self.model_args: dict[str, Any] = {}
         self._is_vlm: bool = False  # Will be set during model loading
         self._is_stt: bool = False  # Will be set during model loading
-        self._stt_runtime_adapter: STTRuntimeAdapter | None = (
-            None  # Set during STT loading
-        )
+        self._stt_runtime_adapter: STTRuntimeAdapter | None = None  # Set during STT loading
 
         # Request state cache for incremental decoding
         self._request_states: dict[str, RequestState] = {}
@@ -468,17 +477,13 @@ class MetalModelRunner:
         """Validate that the loaded model can run on the paged-attention path."""
         self._cache_policy.validate_paged_attention_support()
 
-    def scheduler_memory_reporting_mode(
-        self, *, paged_attention_enabled: bool
-    ) -> SchedulerMemoryReportingMode:
+    def scheduler_memory_reporting_mode(self, *, paged_attention_enabled: bool) -> SchedulerMemoryReportingMode:
         """Return which scheduler memory-reporting mode worker should use.
 
         Worker delegates this decision to the runner so STT-specific policy is
         not open-coded in `worker.py`.
         """
-        return self._cache_policy.scheduler_memory_reporting_mode(
-            paged_attention_enabled=paged_attention_enabled
-        )
+        return self._cache_policy.scheduler_memory_reporting_mode(paged_attention_enabled=paged_attention_enabled)
 
     def supported_worker_tasks(self) -> tuple[SupportedTask, ...]:
         """Return worker task capabilities for the loaded model."""
@@ -650,15 +655,11 @@ class MetalModelRunner:
         mx.set_cache_limit(overhead)
         return overhead
 
-    def build_paged_attention_backend(
-        self, *, block_size: int
-    ) -> PagedAttentionBackend:
+    def build_paged_attention_backend(self, *, block_size: int) -> PagedAttentionBackend:
         """Build the paged-attention backend for the loaded model."""
         return self._cache_policy.build_paged_attention_backend(block_size=block_size)
 
-    def estimate_one_sequence_kv_bytes(
-        self, *, max_model_len: int, block_size: int
-    ) -> int:
+    def estimate_one_sequence_kv_bytes(self, *, max_model_len: int, block_size: int) -> int:
         """Estimate bytes for one max-length sequence of cache state."""
         return self._cache_policy.estimate_one_sequence_kv_bytes(
             max_model_len=max_model_len,
@@ -694,7 +695,7 @@ class MetalModelRunner:
             mx.eval(logits)
             logger.info("Model warm-up complete")
         except Exception as e:
-            logger.warning(f"Model warm-up failed: {e}")
+            logger.warning("Model warm-up failed: %s", e)
 
         if self._paged_attention_backend is not None:
             self._paged_attention_backend.warm_up()
@@ -729,17 +730,12 @@ class MetalModelRunner:
             if self.metal_config.debug:
                 logger.info("Metal raw MLX generator skipped: prefix cache enabled")
             return None
-        if self._paged_attention_backend is not None:
-            if not (
-                allow_paged_hybrid
-                and self.is_hybrid
-                and self.scheduler_config.max_num_seqs == 1
-            ):
-                if self.metal_config.debug:
-                    logger.info(
-                        "Metal raw MLX generator skipped: paged attention enabled"
-                    )
-                return None
+        if self._paged_attention_backend is not None and not (
+            allow_paged_hybrid and self.is_hybrid and self.scheduler_config.max_num_seqs == 1
+        ):
+            if self.metal_config.debug:
+                logger.info("Metal raw MLX generator skipped: paged attention enabled")
+            return None
 
         batch = SamplingBatch(
             [sampling_params],
@@ -749,10 +745,7 @@ class MetalModelRunner:
             device=self.device,
             logitsprocs=self._logitsprocs,
         )
-        if not (
-            batch.can_use_native_greedy_for_batch()
-            or batch.can_use_native_random_for_batch()
-        ):
+        if not (batch.can_use_native_greedy_for_batch() or batch.can_use_native_random_for_batch()):
             if self.metal_config.debug:
                 logger.info(
                     "Metal raw MLX generator skipped: unsupported sampling params %s",
@@ -784,8 +777,7 @@ class MetalModelRunner:
             )
         if self.metal_config.debug:
             logger.info(
-                "Metal raw MLX generator enabled: prompt_tokens=%d temperature=%s "
-                "top_p=%s top_k=%s",
+                "Metal raw MLX generator enabled: prompt_tokens=%d temperature=%s top_p=%s top_k=%s",
                 len(token_ids),
                 sampling_params.temperature,
                 sampling_params.top_p,
@@ -861,9 +853,7 @@ class MetalModelRunner:
             cached = self._prefix_cache.lookup(prefix)
             if cached is not None:
                 # Cache hit: restore KV for prefix, process only last token
-                cache = self._prefix_cache.restore_cache(
-                    cached, self.model, self._is_vlm
-                )
+                cache = self._prefix_cache.restore_cache(cached, self.model, self._is_vlm)
                 cached_prefix_len = len(cached.token_ids)
             else:
                 # Cache miss: process prefix first, cache it, then last token
@@ -892,17 +882,13 @@ class MetalModelRunner:
             logitsprocs=self._logitsprocs,
             generators=generators,
         )
-        sample_result = sample_from_logits(
-            last_logits, batch, self._sampler, self.device
-        )
+        sample_result = sample_from_logits(last_logits, batch, self._sampler, self.device)
         [next_token] = sample_result.token_ids
         mx.eval(*[c.state for c in cache])
 
         return next_token, cache, sample_result.logprobs_tensors
 
-    def _batched_decode(
-        self, decode_reqs: list[tuple[str, RequestState]]
-    ) -> MetalSamplerResult:
+    def _batched_decode(self, decode_reqs: list[tuple[str, RequestState]]) -> MetalSamplerResult:
         """Process multiple decode requests in a single batched forward pass.
 
         Uses BatchKVCache to merge individual caches, run ONE forward pass,
@@ -915,9 +901,7 @@ class MetalModelRunner:
             List of next tokens for each request
         """
         self._non_paged_prefetch = None
-        last_tokens = [
-            state.token_ids[-1] if state.token_ids else 0 for _, state in decode_reqs
-        ]
+        last_tokens = [state.token_ids[-1] if state.token_ids else 0 for _, state in decode_reqs]
 
         # Collect individual caches for merging
         caches_list = [state.cache for _, state in decode_reqs]
@@ -937,17 +921,9 @@ class MetalModelRunner:
 
         vocab_size = self._vocab_size
         sampling_params_list = [state.sampling_params for _, state in decode_reqs]
-        prompt_token_ids_list = [
-            state.token_ids[: state.prompt_len] for _, state in decode_reqs
-        ]
-        output_tokens_list = [
-            state.token_ids[state.prompt_len :] for _, state in decode_reqs
-        ]
-        generators = {
-            i: state.generator
-            for i, (_, state) in enumerate(decode_reqs)
-            if state.generator is not None
-        }
+        prompt_token_ids_list = [state.token_ids[: state.prompt_len] for _, state in decode_reqs]
+        output_tokens_list = [state.token_ids[state.prompt_len :] for _, state in decode_reqs]
+        generators = {i: state.generator for i, (_, state) in enumerate(decode_reqs) if state.generator is not None}
         batch = SamplingBatch(
             sampling_params_list,
             prompt_token_ids_list,
@@ -957,9 +933,7 @@ class MetalModelRunner:
             logitsprocs=self._logitsprocs,
             generators=generators,
         )
-        sample_result = sample_from_logits(
-            next_token_logits, batch, self._sampler, self.device
-        )
+        sample_result = sample_from_logits(next_token_logits, batch, self._sampler, self.device)
         next_tokens = sample_result.token_ids
 
         # Extract updated caches back to individual requests
@@ -970,9 +944,7 @@ class MetalModelRunner:
 
         return sample_result
 
-    def _sequential_decode(
-        self, decode_reqs: list[tuple[str, RequestState]]
-    ) -> MetalSamplerResult:
+    def _sequential_decode(self, decode_reqs: list[tuple[str, RequestState]]) -> MetalSamplerResult:
         """Fallback: process decode requests sequentially.
 
         Used when batch size is 1 (no benefit from batching).
@@ -1024,9 +996,7 @@ class MetalModelRunner:
                 logitsprocs=self._logitsprocs,
                 generators=generators,
             )
-            sample_result = sample_from_logits(
-                last_logits, batch, self._sampler, self.device
-            )
+            sample_result = sample_from_logits(last_logits, batch, self._sampler, self.device)
             [next_token] = sample_result.token_ids
 
             next_tokens.append(next_token)
@@ -1049,11 +1019,7 @@ class MetalModelRunner:
         token_id: int,
     ) -> None:
         """Submit one-token lookahead for raw MLX-style decode pipelining."""
-        if (
-            self._paged_attention_backend is not None
-            or self._prefix_cache is not None
-            or len(self._request_states) > 1
-        ):
+        if self._paged_attention_backend is not None or self._prefix_cache is not None or len(self._request_states) > 1:
             self._non_paged_prefetch = None
             return
 
@@ -1089,9 +1055,7 @@ class MetalModelRunner:
         all_token_ids: list[int] = []
 
         # Decode: last token per request
-        last_tokens = [
-            state.token_ids[-1] if state.token_ids else 0 for _, state in decode_reqs
-        ]
+        last_tokens = [state.token_ids[-1] if state.token_ids else 0 for _, state in decode_reqs]
         all_token_ids.extend(last_tokens)
 
         # Prefill: tokens per request
@@ -1133,14 +1097,9 @@ class MetalModelRunner:
 
         logit_cu_seqlens = cu_seqlens
         logit_indices: list[int] | None = None
-        if prefill_reqs and self._can_compact_paged_logits(
-            scheduler_output, prefill_reqs
-        ):
+        if prefill_reqs and self._can_compact_paged_logits(scheduler_output, prefill_reqs):
             logit_indices = list(range(num_decode))
-            logit_indices.extend(
-                cu_seqlens[num_decode + j + 1] - 1
-                for j in range(len(prefill_reqs))
-            )
+            logit_indices.extend(cu_seqlens[num_decode + j + 1] - 1 for j in range(len(prefill_reqs)))
             if len(logit_indices) < len(all_token_ids):
                 logit_cu_seqlens = list(range(len(logit_indices) + 1))
             else:
@@ -1235,11 +1194,11 @@ class MetalModelRunner:
         prefill_next_tokens = prefill_sample_result.token_ids
 
         # ---- update decode state ----
-        for i, (req_id, state) in enumerate(decode_reqs):
-            state.token_ids.append(decode_next_tokens[i])
-            state.generated_tokens += 1
+        for i, (req_id, req_state) in enumerate(decode_reqs):
+            req_state.token_ids.append(decode_next_tokens[i])
+            req_state.generated_tokens += 1
             self._paged_request_seq_lens[req_id] = (
-                self._paged_request_seq_lens.get(req_id, len(state.token_ids) - 2) + 1
+                self._paged_request_seq_lens.get(req_id, len(req_state.token_ids) - 2) + 1
             )
 
         # ---- update prefill seq lens ----
@@ -1250,9 +1209,7 @@ class MetalModelRunner:
         for i, entry in enumerate(batch.paged_prefill_entries):
             next_token = prefill_next_tokens[i]
             prefill = prefill_reqs[i]
-            prefill_logprobs = _slice_logprobs_row(
-                prefill_sample_result.logprobs_tensors, i
-            )
+            prefill_logprobs = _slice_logprobs_row(prefill_sample_result.logprobs_tensors, i)
 
             if entry.result_mode == "intermediate":
                 batch.sampled_tokens[entry.output_idx] = []
@@ -1265,9 +1222,7 @@ class MetalModelRunner:
                 prompt_len = prefill.prompt_len
                 assert prompt_len is not None
                 full_prompt = (
-                    prefill.full_prompt_token_ids
-                    if prefill.full_prompt_token_ids is not None
-                    else prefill.token_ids
+                    prefill.full_prompt_token_ids if prefill.full_prompt_token_ids is not None else prefill.token_ids
                 )
                 self._request_states[prefill.req_id] = RequestState(
                     token_ids=full_prompt + [next_token],
@@ -1474,15 +1429,11 @@ class MetalModelRunner:
                             sampling_params=state.sampling_params,
                             block_ids=state.block_ids,
                             generator=state.generator,
-                            prompt_len=(
-                                state.prompt_len if not is_intermediate else None
-                            ),
+                            prompt_len=(state.prompt_len if not is_intermediate else None),
                             start_pos=computed_tokens,
                             full_prompt_token_ids=None,
                         ),
-                        result_mode=(
-                            "intermediate" if is_intermediate else "cached_final"
-                        ),
+                        result_mode=("intermediate" if is_intermediate else "cached_final"),
                     )
                 )
                 continue
@@ -1543,9 +1494,7 @@ class MetalModelRunner:
             req_ids=batch.req_ids,
             req_id_to_index=batch.req_id_to_index,
             sampled_token_ids=batch.sampled_tokens,
-            logprobs=(
-                None if logprobs_tensors is None else logprobs_tensors.tolists()
-            ),
+            logprobs=(None if logprobs_tensors is None else logprobs_tensors.tolists()),
             prompt_logprobs_dict={},
             pooler_output=[None] * len(batch.req_ids),
         )
@@ -1600,17 +1549,14 @@ class MetalModelRunner:
                     prompt_len = len(new_req.prompt_token_ids or [])
                     computed_tokens = new_req.num_computed_tokens
                     scheduled_tokens = scheduler_output.num_scheduled_tokens[req_id]
-                    is_intermediate_ctx = (
-                        computed_tokens + scheduled_tokens < prompt_len
-                    )
+                    is_intermediate_ctx = computed_tokens + scheduled_tokens < prompt_len
 
             if not is_intermediate_ctx:
                 unexpected_empty_req_ids.append(req_id)
 
         if missing_req_ids or unexpected_empty_req_ids:
             logger.error(
-                "ModelRunner scheduled/output mismatch: scheduled=%d emitted=%d "
-                "missing=%d unexpected_empty=%d",
+                "ModelRunner scheduled/output mismatch: scheduled=%d emitted=%d missing=%d unexpected_empty=%d",
                 len(scheduler_output.num_scheduled_tokens),
                 len(batch.req_ids),
                 len(missing_req_ids),
@@ -1635,10 +1581,7 @@ class MetalModelRunner:
 
         for req_id in finished_req_ids:
             self._pending_mlx_generators.pop(req_id, None)
-            if (
-                self._non_paged_prefetch is not None
-                and self._non_paged_prefetch.req_id == req_id
-            ):
+            if self._non_paged_prefetch is not None and self._non_paged_prefetch.req_id == req_id:
                 self._non_paged_prefetch = None
             state = self._request_states.pop(req_id, None)
             if state is not None:
@@ -1652,9 +1595,7 @@ class MetalModelRunner:
         self._gdn_release_slots(finished_req_ids)
         self._gdn_materialize_pending_state_cache()
 
-    def execute_model(
-        self, scheduler_output: SchedulerOutput
-    ) -> ModelRunnerOutput | None:
+    def execute_model(self, scheduler_output: SchedulerOutput) -> ModelRunnerOutput | None:
         """Execute model forward pass and submit to GPU.
 
         For the paged attention path, the forward pass is submitted
@@ -1670,10 +1611,7 @@ class MetalModelRunner:
         # Fail fast before any model work runs.  On the non-paged path,
         # _handle_new_requests immediately calls _prefill_single for new
         # requests, so the guard must come before it — not after.
-        if (
-            self._paged_attention_backend is None
-            and scheduler_output.has_structured_output_requests
-        ):
+        if self._paged_attention_backend is None and scheduler_output.has_structured_output_requests:
             raise NotImplementedError(
                 "Grammar/structured-output constraints are not supported on "
                 "the non-paged (legacy) Metal path. "
@@ -1682,9 +1620,7 @@ class MetalModelRunner:
             )
 
         batch = _ExecutionBatch()
-        self._handle_new_requests(
-            batch, scheduler_output.scheduled_new_reqs, scheduler_output
-        )
+        self._handle_new_requests(batch, scheduler_output.scheduled_new_reqs, scheduler_output)
 
         cached_reqs = scheduler_output.scheduled_cached_reqs
         self._update_cached_request_blocks(cached_reqs)
@@ -1711,13 +1647,9 @@ class MetalModelRunner:
         # contribute a paged decode or prefill entry, so has_paged_work() must be
         # True. If this fires, a scheduler change broke that contract and the
         # bitmask would have been silently skipped on the synchronous tail.
-        if (
-            self._paged_attention_backend is not None
-            and scheduler_output.has_structured_output_requests
-        ):
+        if self._paged_attention_backend is not None and scheduler_output.has_structured_output_requests:
             raise RuntimeError(
-                "Structured-output request present but no paged work was scheduled — "
-                "invariant violated."
+                "Structured-output request present but no paged work was scheduled — invariant violated."
             )
 
         if batch.valid_decode_reqs:
@@ -1731,9 +1663,7 @@ class MetalModelRunner:
         self._pending_output = self._build_output(batch)
         return None
 
-    def sample_tokens(
-        self, grammar_output: GrammarOutput | None
-    ) -> ModelRunnerOutput | None:
+    def sample_tokens(self, grammar_output: GrammarOutput | None) -> ModelRunnerOutput | None:
         """Wait for GPU forward, sample tokens, and postprocess.
 
         Called by the Aphrodite v1 engine after ``execute_model`` returns ``None``.
@@ -1757,8 +1687,7 @@ class MetalModelRunner:
         # Async scheduling: execute_model may have failed; return None so
         # Aphrodite can surface the original exception.
         logger.error(
-            "sample_tokens called with no pending state — "
-            "neither _execute_model_state nor _pending_output was set."
+            "sample_tokens called with no pending state — neither _execute_model_state nor _pending_output was set."
         )
         return None
 
@@ -1766,9 +1695,7 @@ class MetalModelRunner:
     # STT (Speech-to-Text) helpers
     # ------------------------------------------------------------------
 
-    def _execute_stt(
-        self, scheduler_output: SchedulerOutput
-    ) -> ModelRunnerOutput | None:
+    def _execute_stt(self, scheduler_output: SchedulerOutput) -> ModelRunnerOutput | None:
         """Execute STT inference for all new requests in the batch.
 
         Raises:
@@ -1793,12 +1720,8 @@ class MetalModelRunner:
                     f"Got temperature={sampling_params.temperature}"
                 )
 
-            audio_features = self._stt_runtime_adapter.extract_audio_features(
-                stt_request.input_features
-            )
-            tokens = self._stt_runtime_adapter.decode_tokens(
-                audio_features, list(stt_request.prompt_token_ids)
-            )
+            audio_features = self._stt_runtime_adapter.extract_audio_features(stt_request.input_features)
+            tokens = self._stt_runtime_adapter.decode_tokens(audio_features, list(stt_request.prompt_token_ids))
 
             req_ids.append(stt_request.req_id)
             req_id_to_index[stt_request.req_id] = len(req_ids) - 1

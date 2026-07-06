@@ -109,10 +109,7 @@ def test_compile_correctness(
     attn_backend = test_setting.attn_backend
     method = test_setting.method
     if current_platform.device_count() < pp_size * tp_size:
-        pytest.skip(
-            f"Need at least {pp_size}*{tp_size} CUDA gpus but got "
-            f"{current_platform.device_count()}"
-        )
+        pytest.skip(f"Need at least {pp_size}*{tp_size} CUDA gpus but got {current_platform.device_count()}")
 
     final_args = [
         *model_args,
@@ -133,9 +130,7 @@ def test_compile_correctness(
         CompilationMode.APHRODITE_COMPILE,
     ]:
         for mode in [CompilationMode.NONE, comp_mode]:
-            all_args.append(
-                final_args + [f"-cc.mode={mode.name}", "-cc.backend=inductor"]
-            )
+            all_args.append(final_args + [f"-cc.mode={mode.name}", "-cc.backend=inductor"])
             all_envs.append({})
 
         # inductor will change the output, so we only compare if the output

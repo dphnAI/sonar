@@ -10,9 +10,9 @@ import os
 
 import pytest
 
-from tests.utils import multi_gpu_test
 from aphrodite import LLM, SamplingParams
 from aphrodite.lora.request import LoRARequest
+from tests.utils import multi_gpu_test
 
 MODEL_PATH = "Qwen/Qwen3-0.6B"
 LORA_NAME_PATH_MAP = {
@@ -32,9 +32,7 @@ LORA_TEST_EXPECTED = [
 ]
 
 
-def format_chatml_messages(
-    prompt: str, system_prompt: str = "You are a helpful assistant."
-) -> list[dict[str, str]]:
+def format_chatml_messages(prompt: str, system_prompt: str = "You are a helpful assistant.") -> list[dict[str, str]]:
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt},
@@ -114,9 +112,7 @@ def test_multi_loras_with_tp_sync():
         outputs = llm.chat(
             [messages],
             sampling_params,
-            chat_template_kwargs={
-                "enable_thinking": False
-            },  # for those loras, ensure enable_thinking=False
+            chat_template_kwargs={"enable_thinking": False},  # for those loras, ensure enable_thinking=False
             lora_request=lora_request,
             use_tqdm=False,
         )
@@ -129,13 +125,9 @@ def test_multi_loras_with_tp_sync():
         setting `APHRODITE_ALLOW_RUNTIME_LORA_UPDATING=true`
         for dynamic lora loading and unloading
         """
-        remove_lora_response = llm.llm_engine.remove_lora(
-            lora_id=LORA_NAME_ID_MAP[name]
-        )
+        remove_lora_response = llm.llm_engine.remove_lora(lora_id=LORA_NAME_ID_MAP[name])
 
-        add_lora_response = llm.llm_engine.add_lora(
-            make_add_lora_request(name, LORA_NAME_PATH_MAP[name])
-        )
+        add_lora_response = llm.llm_engine.add_lora(make_add_lora_request(name, LORA_NAME_PATH_MAP[name]))
 
         print(f"{remove_lora_response=}, {add_lora_response=}")
 
@@ -184,8 +176,7 @@ def test_multiple_lora_requests():
     PROMPTS = ["Hello, my name is"] * 2
     LORA_NAME = "Alice"
     lora_request = [
-        LoRARequest(LORA_NAME + str(idx), idx + 1, LORA_NAME_PATH_MAP[LORA_NAME])
-        for idx in range(len(PROMPTS))
+        LoRARequest(LORA_NAME + str(idx), idx + 1, LORA_NAME_PATH_MAP[LORA_NAME]) for idx in range(len(PROMPTS))
     ]
     # Multiple SamplingParams should be matched with each prompt
     outputs = llm.generate(PROMPTS, lora_request=lora_request)
@@ -201,9 +192,7 @@ def test_multiple_lora_requests():
     assert len(PROMPTS) == len(outputs)
 
 
-def test_load_inplace_offline_reload(
-    qwen3_meowing_lora_files: str, qwen3_woofing_lora_files: str
-) -> None:
+def test_load_inplace_offline_reload(qwen3_meowing_lora_files: str, qwen3_woofing_lora_files: str) -> None:
     """
     Test that load_inplace=True allows reloading LoRA adapters with the same ID
     in offline mode (using LLM class directly).
@@ -232,9 +221,7 @@ def test_load_inplace_offline_reload(
 
     outputs = llm.chat([messages], sampling_params, lora_request=meowing_request)
     first_output = outputs[0].outputs[0].text.strip()
-    assert "Meow Meow Meow" in first_output, (
-        f"Expected meowing output, got: {first_output}"
-    )
+    assert "Meow Meow Meow" in first_output, f"Expected meowing output, got: {first_output}"
 
     # Reload with woofing LoRA (same ID, different weights, load_inplace=True)
     woofing_request = LoRARequest(
@@ -246,14 +233,10 @@ def test_load_inplace_offline_reload(
 
     outputs = llm.chat([messages], sampling_params, lora_request=woofing_request)
     second_output = outputs[0].outputs[0].text.strip()
-    assert "Woof Woof Woof" in second_output, (
-        f"Expected woofing output, got: {second_output}"
-    )
+    assert "Woof Woof Woof" in second_output, f"Expected woofing output, got: {second_output}"
 
 
-def test_load_inplace_false_no_reload(
-    qwen3_meowing_lora_files: str, qwen3_woofing_lora_files: str
-) -> None:
+def test_load_inplace_false_no_reload(qwen3_meowing_lora_files: str, qwen3_woofing_lora_files: str) -> None:
     """
     Test that load_inplace=False prevents reloading when an adapter
     with the same ID already exists.
@@ -280,13 +263,9 @@ def test_load_inplace_false_no_reload(
         lora_path=qwen3_meowing_lora_files,
     )
 
-    outputs = llm.chat(
-        [messages], sampling_params, lora_request=meowing_request_initial
-    )
+    outputs = llm.chat([messages], sampling_params, lora_request=meowing_request_initial)
     first_output = outputs[0].outputs[0].text.strip()
-    assert "Meow Meow Meow" in first_output, (
-        f"Expected meowing output, got: {first_output}"
-    )
+    assert "Meow Meow Meow" in first_output, f"Expected meowing output, got: {first_output}"
 
     # Try to load woofing LoRA with same ID but load_inplace=False
     # This should NOT reload (adapter 2 already exists)
@@ -296,11 +275,7 @@ def test_load_inplace_false_no_reload(
         lora_path=qwen3_woofing_lora_files,
     )
 
-    outputs = llm.chat(
-        [messages], sampling_params, lora_request=woofing_request_no_reload
-    )
+    outputs = llm.chat([messages], sampling_params, lora_request=woofing_request_no_reload)
     second_output = outputs[0].outputs[0].text.strip()
     # Should still get meowing output because it didn't reload
-    assert "Meow Meow Meow" in second_output, (
-        f"Expected meowing output (no reload), got: {second_output}"
-    )
+    assert "Meow Meow Meow" in second_output, f"Expected meowing output (no reload), got: {second_output}"

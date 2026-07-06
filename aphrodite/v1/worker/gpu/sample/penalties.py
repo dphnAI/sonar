@@ -37,9 +37,7 @@ class PenaltiesState:
         )
         # TODO(woosuk): This tensor is rarely used but can be very large, taking up
         # GBs of GPU memory. Optimize the memory usage.
-        self.output_bin_counts = torch.zeros(
-            max_num_reqs, self.vocab_size, dtype=torch.int32, device=self.device
-        )
+        self.output_bin_counts = torch.zeros(max_num_reqs, self.vocab_size, dtype=torch.int32, device=self.device)
 
         self._new_penalties_reqs: list[int] = []
 
@@ -240,9 +238,7 @@ def _bincount_kernel(
     block = block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     if block_idx * BLOCK_SIZE < prompt_len:
         mask = block < prompt_len
-        prompt_tokens = tl.load(
-            all_token_ids_ptr + req_state_idx * all_token_ids_stride + block, mask=mask
-        )
+        prompt_tokens = tl.load(all_token_ids_ptr + req_state_idx * all_token_ids_stride + block, mask=mask)
         idx = prompt_tokens // 32
         bit_idx = prompt_tokens % 32
         bit = tl.full((BLOCK_SIZE,), 1, tl.int32) << bit_idx
@@ -255,13 +251,9 @@ def _bincount_kernel(
     if (block_idx + 1) * BLOCK_SIZE >= prompt_len:
         mask = block < prefill_len
         mask &= block >= prompt_len
-        output_tokens = tl.load(
-            all_token_ids_ptr + req_state_idx * all_token_ids_stride + block, mask=mask
-        )
+        output_tokens = tl.load(all_token_ids_ptr + req_state_idx * all_token_ids_stride + block, mask=mask)
         tl.atomic_add(
-            output_bin_counts_ptr
-            + req_state_idx * output_bin_counts_stride
-            + output_tokens,
+            output_bin_counts_ptr + req_state_idx * output_bin_counts_stride + output_tokens,
             1,
             mask=mask,
         )

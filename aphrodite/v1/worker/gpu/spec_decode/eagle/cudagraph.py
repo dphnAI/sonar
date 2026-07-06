@@ -9,8 +9,8 @@ from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 from aphrodite.v1.worker.gpu.block_table import BlockTables
 from aphrodite.v1.worker.gpu.cudagraph_utils import (
+    AttentionState,
     BatchExecutionDescriptor,
-    CapturedAttentionState,
     CudaGraphManager,
     prepare_inputs_to_capture,
 )
@@ -46,12 +46,12 @@ class PrefillEagleCudaGraphManager(EagleCudaGraphManagerBase):
     def capture(
         self,
         forward_fn: Callable,
-        full_cg_attn_states: dict[BatchExecutionDescriptor, CapturedAttentionState],
+        full_cg_attn_states: dict[BatchExecutionDescriptor, AttentionState],
         progress_bar_desc: str = "Capturing CUDA graphs",
     ) -> None:
         def create_forward_fn(
             desc: BatchExecutionDescriptor,
-        ) -> tuple[Callable[[CUDAGraphMode], None], CapturedAttentionState]:
+        ) -> tuple[Callable[[CUDAGraphMode], None], AttentionState]:
             num_tokens = desc.num_tokens
             num_reqs = desc.num_reqs or min(num_tokens, self.max_num_reqs)
             num_tokens_across_dp = (
@@ -88,7 +88,7 @@ class DecodeEagleCudaGraphManager(EagleCudaGraphManagerBase):
     ) -> None:
         def create_forward_fn(
             desc: BatchExecutionDescriptor,
-        ) -> tuple[Callable[[CUDAGraphMode], None], CapturedAttentionState]:
+        ) -> tuple[Callable[[CUDAGraphMode], None], AttentionState]:
             num_tokens = desc.num_tokens
             num_reqs = desc.num_reqs or min(num_tokens, self.max_num_reqs)
             num_tokens_across_dp = (

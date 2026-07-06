@@ -88,9 +88,7 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
     ) -> tuple[torch.dtype, torch.dtype]:
         if self.model_config is None or self.cache_config is None:
             raise ValueError("model_config and cache_config must be set")
-        return MambaStateDtypeCalculator.kda_state_dtype(
-            self.model_config.dtype, self.cache_config.mamba_cache_dtype
-        )
+        return MambaStateDtypeCalculator.kda_state_dtype(self.model_config.dtype, self.cache_config.mamba_cache_dtype)
 
     def get_state_shape(
         self,
@@ -154,9 +152,7 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
             quant_config=self.quant_config,
             prefix=f"{prefix}.f_b_proj",
         )
-        self.dt_bias = nn.Parameter(
-            torch.empty(divide(projection_size, self.tp_size), dtype=torch.float32)
-        )
+        self.dt_bias = nn.Parameter(torch.empty(divide(projection_size, self.tp_size), dtype=torch.float32))
 
         set_weight_attrs(self.dt_bias, {"weight_loader": sharded_weight_loader(0)})
 
@@ -197,9 +193,7 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
         self.k_conv1d.weight.data = self.k_conv1d.weight.data.unsqueeze(1)
         self.v_conv1d.weight.data = self.v_conv1d.weight.data.unsqueeze(1)
 
-        self.A_log = nn.Parameter(
-            torch.empty(1, 1, self.local_num_heads, 1, dtype=torch.float32)
-        )
+        self.A_log = nn.Parameter(torch.empty(1, 1, self.local_num_heads, 1, dtype=torch.float32))
         set_weight_attrs(self.A_log, {"weight_loader": sharded_weight_loader(2)})
 
         self.g_a_proj = ReplicatedLinear(
@@ -288,9 +282,7 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
         assert isinstance(attn_metadata_narrowed, GDNAttentionMetadata)
         has_initial_state = attn_metadata_narrowed.has_initial_state
         non_spec_query_start_loc = attn_metadata_narrowed.non_spec_query_start_loc
-        non_spec_state_indices_tensor = (
-            attn_metadata_narrowed.non_spec_state_indices_tensor
-        )  # noqa: E501
+        non_spec_state_indices_tensor = attn_metadata_narrowed.non_spec_state_indices_tensor  # noqa: E501
         num_actual_tokens = attn_metadata_narrowed.num_actual_tokens
         constant_caches = self.kv_cache
 
@@ -308,15 +300,9 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
 
         conv_state_q, conv_state_k, conv_state_v = conv_state.chunk(3, dim=-2)
 
-        q_conv_weights = self.q_conv1d.weight.view(
-            self.q_conv1d.weight.size(0), self.q_conv1d.weight.size(2)
-        )
-        k_conv_weights = self.k_conv1d.weight.view(
-            self.k_conv1d.weight.size(0), self.k_conv1d.weight.size(2)
-        )
-        v_conv_weights = self.v_conv1d.weight.view(
-            self.v_conv1d.weight.size(0), self.v_conv1d.weight.size(2)
-        )
+        q_conv_weights = self.q_conv1d.weight.view(self.q_conv1d.weight.size(0), self.q_conv1d.weight.size(2))
+        k_conv_weights = self.k_conv1d.weight.view(self.k_conv1d.weight.size(0), self.k_conv1d.weight.size(2))
+        v_conv_weights = self.v_conv1d.weight.view(self.v_conv1d.weight.size(0), self.v_conv1d.weight.size(2))
         if attn_metadata_narrowed.num_prefills > 0:
             q_proj_states = q_proj_states.transpose(0, 1)
             k_proj_states = k_proj_states.transpose(0, 1)
@@ -356,9 +342,7 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
             ).transpose(0, 1)
         else:
             assert non_spec_state_indices_tensor is not None
-            decode_conv_indices = non_spec_state_indices_tensor[
-                : attn_metadata_narrowed.num_actual_tokens
-            ]
+            decode_conv_indices = non_spec_state_indices_tensor[: attn_metadata_narrowed.num_actual_tokens]
             q = causal_conv1d_update(
                 q_proj_states,
                 conv_state_q,
@@ -387,9 +371,7 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
                 validate_data=True,
             )
 
-        q, k, v = map(
-            lambda x: rearrange(x, "n (h d) -> 1 n h d", d=self.head_dim), (q, k, v)
-        )
+        q, k, v = map(lambda x: rearrange(x, "n (h d) -> 1 n h d", d=self.head_dim), (q, k, v))
 
         if attn_metadata_narrowed.num_prefills > 0:
             assert non_spec_state_indices_tensor is not None
@@ -434,11 +416,7 @@ class KimiGatedDeltaNetAttention(GatedDeltaNetAttention):
                 beta=beta,
                 initial_state=recurrent_state,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=non_spec_query_start_loc[
-                    : attn_metadata_narrowed.num_decodes + 1
-                ],
+                cu_seqlens=non_spec_query_start_loc[: attn_metadata_narrowed.num_decodes + 1],
                 ssm_state_indices=non_spec_state_indices_tensor,
             )
-        core_attn_out[0, :num_actual_tokens] = core_attn_out_non_spec[
-            0, :num_actual_tokens
-        ]
+        core_attn_out[0, :num_actual_tokens] = core_attn_out_non_spec[0, :num_actual_tokens]

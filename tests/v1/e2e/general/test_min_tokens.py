@@ -43,10 +43,7 @@ class MinTokensTestCase:
         self.expected_exact_len = expected_exact_len
 
     def __str__(self):
-        return (
-            f"{self.name}: min={self.min_tokens}, "
-            f"max={self.max_tokens}, stop={self.stop}"
-        )
+        return f"{self.name}: min={self.min_tokens}, max={self.max_tokens}, stop={self.stop}"
 
 
 # Test scenarios covering all critical cases
@@ -98,9 +95,7 @@ MIN_TOKENS_TEST_CASES = [
             expected_min_len=5,
         ),
         marks=pytest.mark.xfail(
-            reason=(
-                "Known bug #21987: stop strings bypass min_tokens (fixed by PR #22014)"
-            ),
+            reason=("Known bug #21987: stop strings bypass min_tokens (fixed by PR #22014)"),
             strict=False,
         ),
         id="min_tokens_with_comprehensive_stops",
@@ -114,9 +109,7 @@ MIN_TOKENS_TEST_CASES = [
             expected_min_len=3,
         ),
         marks=pytest.mark.xfail(
-            reason=(
-                "Known bug #21987: stop strings bypass min_tokens (fixed by PR #22014)"
-            ),
+            reason=("Known bug #21987: stop strings bypass min_tokens (fixed by PR #22014)"),
             strict=False,
         ),
         id="min_tokens_with_simple_char_stop",
@@ -174,9 +167,7 @@ def get_token_count(output: RequestOutput) -> int:
     return len(output.outputs[0].token_ids)
 
 
-def assert_min_tokens_satisfied(
-    output: RequestOutput, test_case: MinTokensTestCase
-) -> None:
+def assert_min_tokens_satisfied(output: RequestOutput, test_case: MinTokensTestCase) -> None:
     """Assert that min_tokens requirement is satisfied"""
     token_count = get_token_count(output)
     stop_reason = output.outputs[0].stop_reason if output.outputs else "no output"
@@ -312,14 +303,9 @@ def test_min_tokens_stop_strings_bug(llm_v1: LLM):
 
     # This assertion should fail due to the bug - if stop string is found early,
     # the model should still continue generating until min_tokens is reached
-    stop_reason = (
-        outputs[0].outputs[0].stop_reason if outputs[0].outputs else "no output"
-    )
+    stop_reason = outputs[0].outputs[0].stop_reason if outputs[0].outputs else "no output"
     assert token_count >= 15, (
-        "Bug confirmed: "
-        f"{token_count} tokens < min_tokens=15. "
-        f"Reason: {stop_reason}. "
-        f"Text: {repr(generated_text)}"
+        f"Bug confirmed: {token_count} tokens < min_tokens=15. Reason: {stop_reason}. Text: {repr(generated_text)}"
     )
 
 
@@ -363,9 +349,7 @@ def test_min_tokens_stop_strings_guaranteed_early_trigger(llm_v1: LLM):
     # will trigger early termination before min_tokens=50 is reached
     # It's virtually impossible to generate 50 tokens without hitting
     # at least one of: e, a, i, o, u, space, t, n, s, r
-    finish_reason = (
-        outputs[0].outputs[0].finish_reason if outputs[0].outputs else "unknown"
-    )
+    finish_reason = outputs[0].outputs[0].finish_reason if outputs[0].outputs else "unknown"
 
     print(f"Finish reason: {finish_reason}")
 
@@ -421,15 +405,9 @@ def test_min_tokens_eos_behavior(llm_v1: LLM):
         stop_no_min,
     )
 
-    assert finish_no_min == "stop", (
-        f"Expected finish_reason 'stop' without min_tokens, got {finish_no_min}"
-    )
-    assert stop_no_min is None, (
-        "For EOS-based stop (no user stop strings), stop_reason should be None."
-    )
-    assert len(ids_no_min) < max_toks, (
-        f"Expected early EOS with < {max_toks} tokens, got {len(ids_no_min)}"
-    )
+    assert finish_no_min == "stop", f"Expected finish_reason 'stop' without min_tokens, got {finish_no_min}"
+    assert stop_no_min is None, "For EOS-based stop (no user stop strings), stop_reason should be None."
+    assert len(ids_no_min) < max_toks, f"Expected early EOS with < {max_toks} tokens, got {len(ids_no_min)}"
 
     # Case 2: WITH min_tokens
     sp_with_min = SamplingParams(
@@ -455,15 +433,9 @@ def test_min_tokens_eos_behavior(llm_v1: LLM):
     )
 
     # Exact length reached; EOS should have been blocked
-    assert len(ids_with_min) == max_toks, (
-        f"Expected exactly {max_toks} tokens with min_tokens; got {len(ids_with_min)}"
-    )
-    assert finish_with_min == "length", (
-        f"Expected finish_reason 'length'; got {finish_with_min}"
-    )
-    assert eos_token_id not in ids_with_min, (
-        "EOS token id should not appear when min_tokens prevents early EOS."
-    )
+    assert len(ids_with_min) == max_toks, f"Expected exactly {max_toks} tokens with min_tokens; got {len(ids_with_min)}"
+    assert finish_with_min == "length", f"Expected finish_reason 'length'; got {finish_with_min}"
+    assert eos_token_id not in ids_with_min, "EOS token id should not appear when min_tokens prevents early EOS."
 
 
 def test_min_tokens_validation():

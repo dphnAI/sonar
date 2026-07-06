@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Aphrodite v1 compatibility module for Metal platform."""
 
 __all__ = ["MetalWorker"]

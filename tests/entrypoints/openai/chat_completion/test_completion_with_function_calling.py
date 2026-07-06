@@ -28,14 +28,12 @@ tools = [
                 "properties": {
                     "city": {
                         "type": "string",
-                        "description": "The city to find the weather for, e.g. "
-                        "'Vienna'",
+                        "description": "The city to find the weather for, e.g. 'Vienna'",
                         "default": "Vienna",
                     },
                     "country": {
                         "type": "string",
-                        "description": "The country that the city is in, e.g. "
-                        "'Austria'",
+                        "description": "The country that the city is in, e.g. 'Austria'",
                     },
                     "unit": {
                         "type": "string",
@@ -90,14 +88,12 @@ tools = [
                 "properties": {
                     "city": {
                         "type": "string",
-                        "description": "The city to get the forecast for, e.g. "
-                        "'Vienna'",
+                        "description": "The city to get the forecast for, e.g. 'Vienna'",
                         "default": "Vienna",
                     },
                     "country": {
                         "type": "string",
-                        "description": "The country that the city is in, e.g. "
-                        "'Austria'",
+                        "description": "The country that the city is in, e.g. 'Austria'",
                     },
                     "days": {
                         "type": "integer",
@@ -144,9 +140,7 @@ def server():
         "--enforce-eager",
     ] + ROCM_EXTRA_ARGS
 
-    with RemoteOpenAIServer(
-        MODEL_NAME, args, env_dict=ROCM_ENV_OVERRIDES
-    ) as remote_server:
+    with RemoteOpenAIServer(MODEL_NAME, args, env_dict=ROCM_ENV_OVERRIDES) as remote_server:
         yield remote_server
 
 
@@ -204,9 +198,7 @@ async def test_function_tool_use(
         reasoning = []
         async for chunk in output_stream:
             if chunk.choices:
-                if enable_thinking and getattr(
-                    chunk.choices[0].delta, "reasoning", None
-                ):
+                if enable_thinking and getattr(chunk.choices[0].delta, "reasoning", None):
                     reasoning.append(chunk.choices[0].delta.reasoning)
                 if chunk.choices[0].delta.tool_calls:
                     output.extend(chunk.choices[0].delta.tool_calls)
@@ -219,9 +211,7 @@ async def test_function_tool_use(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 @pytest.mark.parametrize("arguments", ["{}", ""])
-async def test_no_args_tool_call(
-    client: openai.AsyncOpenAI, model_name: str, arguments: str
-):
+async def test_no_args_tool_call(client: openai.AsyncOpenAI, model_name: str, arguments: str):
     # Step 1: Define a tool that requires no parameters
     tools = [
         {
@@ -313,9 +303,7 @@ async def test_named_tool_use(
         {"role": "system", "content": "you are a helpful assistant"},
         {
             "role": "user",
-            "content": (
-                "Give an example JSON for an employee profile using the specified tool."
-            ),
+            "content": ("Give an example JSON for an employee profile using the specified tool."),
         },
     ]
     tools = [
@@ -347,9 +335,7 @@ async def test_named_tool_use(
     jsonschema.validate(instance=json1, schema=sample_json_schema)
 
     messages.append({"role": "assistant", "content": json_string})
-    messages.append(
-        {"role": "user", "content": "Give me another one with a different name and age"}
-    )
+    messages.append({"role": "user", "content": "Give me another one with a different name and age"})
 
     # streaming
 
@@ -383,15 +369,12 @@ async def test_named_tool_use(
 
 
 @pytest.mark.asyncio
-async def test_inconsistent_tool_choice_and_tools(
-    client: openai.AsyncOpenAI, sample_json_schema
-):
+async def test_inconsistent_tool_choice_and_tools(client: openai.AsyncOpenAI, sample_json_schema):
     messages = [
         {"role": "system", "content": "you are a helpful assistant"},
         {
             "role": "user",
-            "content": f"Give an example JSON for an employee profile that "
-            f"fits this schema: {sample_json_schema}",
+            "content": f"Give an example JSON for an employee profile that fits this schema: {sample_json_schema}",
         },
     ]
 
@@ -450,9 +433,7 @@ async def test_inconsistent_tool_choice_and_tools(
     "tool_choice",
     ["required", {"type": "function", "function": {"name": "get_current_weather"}}],
 )
-async def test_max_tokens_with_tool_choice_required(
-    client: openai.AsyncOpenAI, tool_choice
-):
+async def test_max_tokens_with_tool_choice_required(client: openai.AsyncOpenAI, tool_choice):
     """ """
     models = await client.models.list()
     model_name: str = models.data[0].id

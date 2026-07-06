@@ -59,9 +59,7 @@ class LexerShape:
             if len(lit) > max_len:
                 max_len = len(lit)
         self.max_literal_len = max_len
-        self.literal_first_chars = frozenset(
-            lit[0] for lit, _ in literal_strings if lit
-        )
+        self.literal_first_chars = frozenset(lit[0] for lit, _ in literal_strings if lit)
         self.has_only_literals = all(t.is_literal for t in terminals)
 
         prefix_set: set[str] = set()
@@ -158,9 +156,7 @@ class IncrementalLexer:
 
             first = self.buffer[0]
             for lit, name in literals_by_first.get(first, ()):
-                if self.buffer.startswith(lit) and (
-                    best_match is None or len(lit) > best_match[2]
-                ):
+                if self.buffer.startswith(lit) and (best_match is None or len(lit) > best_match[2]):
                     best_match = (name, lit, len(lit))
 
             # If the current buffer is both a complete literal and the prefix

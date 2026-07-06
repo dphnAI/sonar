@@ -34,9 +34,7 @@ class ProcessGroupInfo:
     device: torch.device
 
 
-def _set_aphrodite_config(
-    aphrodite_config: AphroditeConfig, world_size: int, rank: int, local_rank: int
-):
+def _set_aphrodite_config(aphrodite_config: AphroditeConfig, world_size: int, rank: int, local_rank: int):
     import tempfile
 
     temp_file = tempfile.mkstemp()[1]
@@ -67,9 +65,7 @@ def _set_aphrodite_config(
                 group_desc="moe_test_cpu",
             )
         else:
-            cpu_group = torch.distributed.new_group(
-                list(range(world_size)), backend="gloo"
-            )
+            cpu_group = torch.distributed.new_group(list(range(world_size)), backend="gloo")
     return cpu_group
 
 

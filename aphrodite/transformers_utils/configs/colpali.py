@@ -46,9 +46,7 @@ class ColPaliConfig(PaliGemmaConfig):
         # model_type="colpali" would be clobbered by "paligemma" from
         # vlm_config).
         if vlm_config is not None:
-            vlm_dict = (
-                vlm_config if isinstance(vlm_config, dict) else vlm_config.to_dict()
-            )
+            vlm_dict = vlm_config if isinstance(vlm_config, dict) else vlm_config.to_dict()
             _conflicting = {"model_type", "_name_or_path"}
             for key, value in vlm_dict.items():
                 if key not in _conflicting:

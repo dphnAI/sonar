@@ -75,9 +75,7 @@ class PoolingBasicRequestMixin(OpenAIBaseModel):
         if not isinstance(data, dict):
             return data
 
-        if data.get("cache_salt") is not None and (
-            not isinstance(data["cache_salt"], str) or not data["cache_salt"]
-        ):
+        if data.get("cache_salt") is not None and (not isinstance(data["cache_salt"], str) or not data["cache_salt"]):
             raise APHRODITEValidationError(
                 "Parameter 'cache_salt' must be a non-empty string if provided.",
                 parameter="cache_salt",
@@ -175,10 +173,7 @@ class CompletionRequestMixin(OpenAIBaseModel):
     # --8<-- [start:completion-extra-params]
     add_special_tokens: bool = Field(
         default=True,
-        description=(
-            "If true (the default), special tokens (e.g. BOS) will be added to "
-            "the prompt."
-        ),
+        description=("If true (the default), special tokens (e.g. BOS) will be added to the prompt."),
     )
     # --8<-- [end:completion-extra-params]
 
@@ -225,8 +220,7 @@ class ChatRequestOptionsMixin(OpenAIBaseModel):
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Additional keyword args to pass to the template renderer. "
-            "Will be accessible by the chat template."
+            "Additional keyword args to pass to the template renderer. Will be accessible by the chat template."
         ),
     )
     media_io_kwargs: dict[str, dict[str, Any]] | None = Field(
@@ -243,8 +237,7 @@ class ChatRequestOptionsMixin(OpenAIBaseModel):
     def check_generation_prompt(cls, data):
         if data.get("continue_final_message") and data.get("add_generation_prompt"):
             raise APHRODITEValidationError(
-                "Cannot set both `continue_final_message` and "
-                "`add_generation_prompt` to True.",
+                "Cannot set both `continue_final_message` and `add_generation_prompt` to True.",
             )
         return data
 

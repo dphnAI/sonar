@@ -4,8 +4,8 @@
 import torch
 
 import aphrodite.envs as envs
-from tests.v1.kv_connector.unit.utils import MockKVConfig
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     ECTransferConfig,
     KVTransferConfig,
@@ -13,7 +13,6 @@ from aphrodite.config import (
     ParallelConfig,
     SchedulerConfig,
     SpeculativeConfig,
-    AphroditeConfig,
 )
 from aphrodite.multimodal.inputs import (
     MultiModalFeatureSpec,
@@ -33,6 +32,7 @@ from aphrodite.v1.kv_cache_interface import (
 )
 from aphrodite.v1.request import Request
 from aphrodite.v1.structured_output import StructuredOutputManager
+from tests.v1.kv_connector.unit.utils import MockKVConfig
 
 EOS_TOKEN_ID = 50256
 
@@ -126,9 +126,7 @@ def create_scheduler(
 
     speculative_config: SpeculativeConfig | None = None
     if num_speculative_tokens is not None:
-        speculative_config = SpeculativeConfig(
-            model="ngram", num_speculative_tokens=num_speculative_tokens
-        )
+        speculative_config = SpeculativeConfig(model="ngram", num_speculative_tokens=num_speculative_tokens)
 
     ec_transfer_config = (
         ECTransferConfig(
@@ -214,9 +212,7 @@ def create_requests(
     if mm_hashes_list is not None:
         # NOTE: allow manual input; some mm items can have the same identifier
         # no. of mm_hashes and mm_positions for each request should be identical
-        assert mm_positions is not None, (
-            "mm_positions must be provided when mm_hashes_list is provided"
-        )
+        assert mm_positions is not None, "mm_positions must be provided when mm_hashes_list is provided"
         assert len(mm_hashes_list) == len(mm_positions) == num_requests
         assert [len(h) for h in mm_hashes_list] == [len(p) for p in mm_positions]
 
@@ -232,9 +228,7 @@ def create_requests(
     for i in range(num_requests):
         mm_features = []
 
-        for j, position in enumerate(
-            mm_positions[i] if mm_positions is not None else []
-        ):
+        for j, position in enumerate(mm_positions[i] if mm_positions is not None else []):
             if mm_hashes_list is not None:
                 identifier = mm_hashes_list[i][j]
 

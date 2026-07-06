@@ -6,8 +6,6 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange, repeat
 
-from tests.kernels.mamba.utils import selective_state_update_ref
-from tests.kernels.utils import opcheck
 from aphrodite import _custom_ops as ops  # noqa: F401
 from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import (
     selective_scan_fn,
@@ -16,6 +14,8 @@ from aphrodite.model_executor.layers.mamba.ops.mamba_ssm import (
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
 from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
+from tests.kernels.mamba.utils import selective_state_update_ref
+from tests.kernels.utils import opcheck
 
 DEVICE = current_platform.device_type
 
@@ -245,17 +245,9 @@ def test_selective_scan(
     C_ref = C.clone()
     D = torch.randn(dim, device=device, dtype=torch.float32) if has_D else None
     D_ref = D.clone() if D is not None else None
-    z = (
-        torch.randn(batch_size, dim, seqlen, device=device, dtype=itype)
-        if has_z
-        else None
-    )
+    z = torch.randn(batch_size, dim, seqlen, device=device, dtype=itype) if has_z else None
     z_ref = z.clone() if z is not None else None
-    delta_bias = (
-        (0.5 * torch.rand(dim, device=device, dtype=torch.float32))
-        if has_delta_bias
-        else None
-    )
+    delta_bias = (0.5 * torch.rand(dim, device=device, dtype=torch.float32)) if has_delta_bias else None
     u = torch.randn(batch_size, dim, seqlen, device=device, dtype=itype)
     u_ref = u.clone()
     delta = 0.5 * torch.rand(batch_size, dim, seqlen, device=device, dtype=itype)
@@ -293,9 +285,7 @@ def test_selective_scan(
             z=_z,
             delta_bias=delta_bias,
             delta_softplus=delta_softplus,
-            has_initial_state=torch.ones(batch_size, device=u.device, dtype=torch.bool)
-            if c > 0
-            else None,
+            has_initial_state=torch.ones(batch_size, device=u.device, dtype=torch.bool) if c > 0 else None,
             block_size=2048,
             block_idx_first_scheduled_token=None,
             block_idx_last_scheduled_token=None,
@@ -363,12 +353,8 @@ def test_selective_state_update(dim, dstate, has_z, itype):
     D = torch.randn(dim, device=device)
     z = torch.randn_like(x) if has_z else None
     state_ref = state.detach().clone()
-    selective_state_update(
-        state, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True, out=out
-    )
-    out_ref = selective_state_update_ref(
-        state_ref, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True
-    )
+    selective_state_update(state, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True, out=out)
+    out_ref = selective_state_update_ref(state_ref, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True)
 
     assert torch.allclose(state, state_ref, rtol=rtol, atol=atol)
     assert torch.allclose(out, out_ref, rtol=rtol, atol=atol)
@@ -379,11 +365,8 @@ def test_selective_state_update(dim, dstate, has_z, itype):
 @pytest.mark.parametrize("dstate", [16, 64])
 @pytest.mark.parametrize("dim", [2048, 4096])
 @pytest.mark.skipif(
-    not (
-        current_platform.is_cuda() and current_platform.is_device_capability_family(100)
-    ),
-    reason="Stochastic rounding in triton is only supported"
-    " on compute capability 10.0 CUDA devices.",
+    not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)),
+    reason="Stochastic rounding in triton is only supported on compute capability 10.0 CUDA devices.",
 )
 def test_selective_state_update_stochastic_rounding(dim, dstate, has_z, philox_rounds):
     device = DEVICE
@@ -418,9 +401,7 @@ def test_selective_state_update_stochastic_rounding(dim, dstate, has_z, philox_r
         enable_stochastic_rounding=True,
         cache_philox_rounds=philox_rounds,
     )
-    out_ref = selective_state_update_ref(
-        state_ref, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True
-    )
+    out_ref = selective_state_update_ref(state_ref, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True)
 
     assert state.dtype == torch.float16
     assert torch.allclose(state, state_ref.to(torch.float16), rtol=rtol, atol=atol)
@@ -553,11 +534,7 @@ def test_selective_scan_varlen(
 
     nsplits = padded_batch_size - 1
     eos_pos = torch.randperm(seqlen - 1)[:nsplits].sort().values
-    seqlens.append(
-        torch.diff(
-            torch.cat([torch.tensor([-1]), eos_pos, torch.tensor([seqlen - 1])])
-        ).tolist()
-    )
+    seqlens.append(torch.diff(torch.cat([torch.tensor([-1]), eos_pos, torch.tensor([seqlen - 1])])).tolist())
 
     assert sum(seqlens[-1]) == seqlen
     assert all(s > 0 for s in seqlens[-1])
@@ -580,11 +557,7 @@ def test_selective_scan_varlen(
     D_ref = D.clone() if D is not None else None
     z = torch.randn(dim, seqlen, device=device, dtype=itype)
     z_ref = z.clone()
-    delta_bias = (
-        (0.5 * torch.rand(dim, device=device, dtype=torch.float32))
-        if has_delta_bias
-        else None
-    )
+    delta_bias = (0.5 * torch.rand(dim, device=device, dtype=torch.float32)) if has_delta_bias else None
     u = torch.randn(dim, seqlen, device=device, dtype=itype)
     u_ref = u.clone()
     delta = 0.5 * torch.rand(dim, seqlen, device=device, dtype=itype)
@@ -593,32 +566,21 @@ def test_selective_scan_varlen(
     out_ref = None
 
     prev_state_shape = (total_entries, u.shape[0], int(A.shape[1]))
-    prev_state = torch.randn(
-        prev_state_shape, device=u.device, dtype=itype, requires_grad=False
-    )
+    prev_state = torch.randn(prev_state_shape, device=u.device, dtype=itype, requires_grad=False)
     prev_state_ref = prev_state.clone()
     # +1 to exclude index 0 (null block)
-    state_indices = (
-        torch.randperm(total_entries - 1, dtype=torch.int32, device=u.device)[
-            :batch_size
-        ]
-        + 1
-    )
+    state_indices = torch.randperm(total_entries - 1, dtype=torch.int32, device=u.device)[:batch_size] + 1
     unused_states_bool = torch.ones(total_entries, dtype=torch.bool, device=device)
     unused_states_bool[state_indices] = False
     padded_state_indices = torch.concat(
         [
             state_indices,
-            torch.as_tensor(
-                [NULL_BLOCK_ID] * padding, dtype=torch.int32, device=device
-            ),
+            torch.as_tensor([NULL_BLOCK_ID] * padding, dtype=torch.int32, device=device),
         ],
         dim=-1,
     )
 
-    has_initial_state = torch.randint(
-        0, 2, (cumsum.shape[0] - 1,), dtype=torch.bool, device=u.device
-    )
+    has_initial_state = torch.randint(0, 2, (cumsum.shape[0] - 1,), dtype=torch.bool, device=u.device)
     out = selective_scan_fn(
         u,
         prev_state,
@@ -635,10 +597,7 @@ def test_selective_scan_varlen(
         has_initial_state,
     )
     outs_ref = []
-    splits = [
-        torch.split(var, seqlens[0], dim=-1)
-        for var in (u_ref, delta_ref, B_ref, C_ref, z_ref)
-    ]
+    splits = [torch.split(var, seqlens[0], dim=-1) for var in (u_ref, delta_ref, B_ref, C_ref, z_ref)]
     for i in range(len(seqlens[0])):
         u_s, delta_s, B_s, C_s, z_s = (v[i].unsqueeze(0) for v in splits)
         if padded_state_indices[i] == NULL_BLOCK_ID:
@@ -654,9 +613,7 @@ def test_selective_scan_varlen(
             delta_bias=delta_bias,
             delta_softplus=delta_softplus,
             return_last_state=return_last_state,
-            prev_state=prev_state_ref[padded_state_indices[i]].unsqueeze(0)
-            if has_initial_state[i]
-            else None,
+            prev_state=prev_state_ref[padded_state_indices[i]].unsqueeze(0) if has_initial_state[i] else None,
             final_state_out=prev_state_ref[padded_state_indices[i]].unsqueeze(0),
         )
         outs_ref.append(out_ref_s)
@@ -693,9 +650,7 @@ def test_selective_scan_varlen(
 @pytest.mark.parametrize("dim", [2048, 2048 + 16, 4096])
 # tests correctness in case subset of the sequences are padded
 @pytest.mark.parametrize("with_padding", [True, False])
-def test_selective_state_update_with_batch_indices(
-    with_padding, dim, dstate, has_z, itype
-):
+def test_selective_state_update_with_batch_indices(with_padding, dim, dstate, has_z, itype):
     device = DEVICE
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (5e-3, 1e-2)
     if itype == torch.bfloat16:
@@ -710,17 +665,13 @@ def test_selective_state_update_with_batch_indices(
     total_entries = 10 * batch_size
     state = torch.randn(total_entries, dim, dstate, dtype=itype, device=device)
     # +1 to exclude index 0 (null block)
-    state_indices = (torch.randperm(total_entries - 1)[:batch_size] + 1).to(
-        dtype=torch.int32, device=device
-    )
+    state_indices = (torch.randperm(total_entries - 1)[:batch_size] + 1).to(dtype=torch.int32, device=device)
     unused_states_bool = torch.ones(total_entries, dtype=torch.bool, device=device)
     unused_states_bool[state_indices] = False
     padded_state_indices = torch.concat(
         [
             state_indices,
-            torch.as_tensor(
-                [NULL_BLOCK_ID] * padding, dtype=torch.int32, device=device
-            ),
+            torch.as_tensor([NULL_BLOCK_ID] * padding, dtype=torch.int32, device=device),
         ],
         dim=0,
     )
@@ -785,9 +736,7 @@ def test_selective_state_update_with_batch_indices(
 @pytest.mark.parametrize("ngroups", [1, 4])
 @pytest.mark.parametrize("dstate", [16, 64])
 @pytest.mark.parametrize("dim", [2048, 4096])
-def test_selective_state_update_with_heads_with_batch_indices(
-    dim, dstate, ngroups, has_z, tie_hdim, itype
-):
+def test_selective_state_update_with_heads_with_batch_indices(dim, dstate, ngroups, has_z, tie_hdim, itype):
     device = DEVICE
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (5e-3, 3e-2)
     if itype == torch.bfloat16:
@@ -799,13 +748,9 @@ def test_selective_state_update_with_heads_with_batch_indices(
     nheads = dim // headdim
 
     total_entries = 10 * batch_size
-    state = torch.randn(
-        total_entries, nheads, headdim, dstate, dtype=itype, device=device
-    )
+    state = torch.randn(total_entries, nheads, headdim, dstate, dtype=itype, device=device)
     # +1 to exclude index 0 (null block)
-    state_indices = (torch.randperm(total_entries - 1)[:batch_size] + 1).to(
-        dtype=torch.int32, device=device
-    )
+    state_indices = (torch.randperm(total_entries - 1)[:batch_size] + 1).to(dtype=torch.int32, device=device)
 
     x = torch.randn(batch_size, nheads, headdim, device=device, dtype=itype)
     out = torch.empty_like(x)
@@ -821,9 +766,7 @@ def test_selective_state_update_with_heads_with_batch_indices(
             p=headdim,
         )
         dt_bias = repeat(torch.rand(nheads, device=device) - 4.0, "h -> h p", p=headdim)
-        A = repeat(
-            -torch.rand(nheads, device=device) - 1.0, "h -> h p n", p=headdim, n=dstate
-        )
+        A = repeat(-torch.rand(nheads, device=device) - 1.0, "h -> h p n", p=headdim, n=dstate)
         D = repeat(torch.randn(nheads, device=device), "h -> h p", p=headdim)
     B = torch.randn(batch_size, ngroups, dstate, device=device)
     C = torch.randn(batch_size, ngroups, dstate, device=device)
@@ -843,9 +786,7 @@ def test_selective_state_update_with_heads_with_batch_indices(
         state_batch_indices=state_indices,
         out=out,
     )
-    out_ref = selective_state_update_ref(
-        state_ref, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True
-    )
+    out_ref = selective_state_update_ref(state_ref, x, dt, A, B, C, D=D, z=z, dt_bias=dt_bias, dt_softplus=True)
 
     print(f"Output max diff: {(out - out_ref).abs().max().item()}")
     print(f"Output mean diff: {(out - out_ref).abs().mean().item()}")
@@ -858,9 +799,7 @@ def test_selective_state_update_with_heads_with_batch_indices(
 @pytest.mark.parametrize("dstate", [16, 64])
 @pytest.mark.parametrize("dim", [2048, 4096])
 @pytest.mark.parametrize("max_seq_len", [2, 4])
-def test_selective_state_update_with_num_accepted_tokens(
-    dim, dstate, has_z, itype, max_seq_len
-):
+def test_selective_state_update_with_num_accepted_tokens(dim, dstate, has_z, itype, max_seq_len):
     device = DEVICE
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (5e-3, 1e-2)
     if itype == torch.bfloat16:
@@ -887,20 +826,14 @@ def test_selective_state_update_with_num_accepted_tokens(
     total_state_slots = 50
     state = torch.randn(total_state_slots, dim, dstate, dtype=itype, device=device)
 
-    state_batch_indices = torch.full(
-        (batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device
-    )
+    state_batch_indices = torch.full((batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device)
     # Start from 1 to exclude null block at index 0
-    initial_state_slots = torch.randint(
-        1, 15, (batch_size,), device=device, dtype=torch.int32
-    )
+    initial_state_slots = torch.randint(1, 15, (batch_size,), device=device, dtype=torch.int32)
     for seq_idx in range(batch_size):
         token_pos = max(num_accepted_tokens[seq_idx].item() - 1, 0)
         state_batch_indices[seq_idx, token_pos] = initial_state_slots[seq_idx]
 
-    dst_state_batch_indices = torch.full(
-        (batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device
-    )
+    dst_state_batch_indices = torch.full((batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device)
     slot_offset = 15
     dst_slots_map = {}
     for seq_idx in range(batch_size):
@@ -984,9 +917,7 @@ def test_selective_state_update_with_num_accepted_tokens(
 @pytest.mark.parametrize("dstate", [16, 64])
 @pytest.mark.parametrize("dim", [2048, 4096])
 @pytest.mark.parametrize("max_seq_len", [2, 4])
-def test_selective_state_update_varlen_with_num_accepted(
-    dim, dstate, has_z, itype, max_seq_len
-):
+def test_selective_state_update_varlen_with_num_accepted(dim, dstate, has_z, itype, max_seq_len):
     device = DEVICE
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (5e-3, 1e-2)
     if itype == torch.bfloat16:
@@ -1013,21 +944,15 @@ def test_selective_state_update_varlen_with_num_accepted(
     total_state_slots = 50
     state = torch.randn(total_state_slots, dim, dstate, dtype=itype, device=device)
 
-    state_batch_indices = torch.full(
-        (batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device
-    )
+    state_batch_indices = torch.full((batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device)
 
     # Start from 1 to exclude null block at index 0
-    initial_state_slots = torch.randint(
-        1, 15, (batch_size,), device=device, dtype=torch.int32
-    )
+    initial_state_slots = torch.randint(1, 15, (batch_size,), device=device, dtype=torch.int32)
     for seq_idx in range(batch_size):
         token_pos = max(num_accepted_tokens[seq_idx].item() - 1, 0)
         state_batch_indices[seq_idx, token_pos] = initial_state_slots[seq_idx]
 
-    dst_state_batch_indices = torch.full(
-        (batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device
-    )
+    dst_state_batch_indices = torch.full((batch_size, max_seq_len), NULL_BLOCK_ID, dtype=torch.int32, device=device)
 
     slot_offset = 15
     dst_slots_map = {}

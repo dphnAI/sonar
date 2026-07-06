@@ -14,9 +14,9 @@ import openai
 import psutil
 import pytest
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.platforms import current_platform
 from aphrodite.utils.network_utils import get_open_port
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "hmellor/tiny-random-LlamaForCausalLM"
 
@@ -62,8 +62,7 @@ async def _assert_children_cleaned_up(
         await asyncio.sleep(0.5)
 
     pytest.fail(
-        f"Child processes {still_alive} still alive after {timeout}s. "
-        f"Process cleanup may not be working correctly."
+        f"Child processes {still_alive} still alive after {timeout}s. Process cleanup may not be working correctly."
     )
 
 
@@ -178,9 +177,7 @@ async def test_shutdown_on_engine_failure():
     # Poll until server is ready
     while time.time() - start_time < _SERVER_STARTUP_TIMEOUT:
         try:
-            await client.completions.create(
-                model=MODEL_NAME, prompt="Hello", max_tokens=1
-            )
+            await client.completions.create(model=MODEL_NAME, prompt="Hello", max_tokens=1)
             break
         except Exception:
             time.sleep(0.5)
@@ -189,10 +186,7 @@ async def test_shutdown_on_engine_failure():
                     pytest.fail(f"Server died during startup: {proc.returncode}")
                 else:
                     stdout, stderr = proc.communicate(timeout=1)
-                    pytest.fail(
-                        f"Server died during startup. "
-                        f"stdout: {stdout}, stderr: {stderr}"
-                    )
+                    pytest.fail(f"Server died during startup. stdout: {stdout}, stderr: {stderr}")
     else:
         proc.terminate()
         proc.wait(timeout=_PROCESS_EXIT_TIMEOUT)
@@ -204,9 +198,7 @@ async def test_shutdown_on_engine_failure():
 
     # Verify API calls now fail
     with pytest.raises((openai.APIConnectionError, openai.APIStatusError)):
-        await client.completions.create(
-            model=MODEL_NAME, prompt="This should fail", max_tokens=1
-        )
+        await client.completions.create(model=MODEL_NAME, prompt="This should fail", max_tokens=1)
 
     return_code = proc.wait(timeout=_PROCESS_EXIT_TIMEOUT)
     assert return_code is not None
@@ -237,9 +229,7 @@ async def test_wait_timeout_completes_requests():
         state = ShutdownState()
         sigterm_sent = asyncio.Event()
 
-        request_task = asyncio.create_task(
-            _concurrent_request_loop(client, state, sigterm_sent, concurrency=10)
-        )
+        request_task = asyncio.create_task(_concurrent_request_loop(client, state, sigterm_sent, concurrency=10))
 
         await asyncio.sleep(0.5)
         proc.send_signal(signal.SIGTERM)
@@ -263,8 +253,7 @@ async def test_wait_timeout_completes_requests():
         )
         # server must stop accepting new requests (503, 500, or connection close)
         assert state.got_503 or state.got_500 or state.connection_errors > 0, (
-            f"Server should stop accepting requests. "
-            f"completed: {state.requests_after_sigterm}, errors: {state.errors}"
+            f"Server should stop accepting requests. completed: {state.requests_after_sigterm}, errors: {state.errors}"
         )
 
         await _assert_children_cleaned_up(child_pids)
@@ -345,9 +334,7 @@ async def test_wait_timeout_with_short_duration():
         child_pids = _get_child_pids(proc.pid)
 
         state = ShutdownState()
-        request_task = asyncio.create_task(
-            _concurrent_request_loop(client, state, concurrency=3)
-        )
+        request_task = asyncio.create_task(_concurrent_request_loop(client, state, concurrency=3))
 
         await asyncio.sleep(0.5)
 
@@ -406,9 +393,7 @@ async def test_abort_timeout_fails_inflight_requests():
         state = ShutdownState()
         sigterm_sent = asyncio.Event()
 
-        request_task = asyncio.create_task(
-            _concurrent_request_loop(client, state, sigterm_sent, concurrency=10)
-        )
+        request_task = asyncio.create_task(_concurrent_request_loop(client, state, sigterm_sent, concurrency=10))
 
         deadline = time.time() + _INFLIGHT_REQUEST_START_TIMEOUT
         while state.inflight_requests == 0 and time.time() < deadline:
@@ -430,12 +415,7 @@ async def test_abort_timeout_fails_inflight_requests():
 
         # With abort timeout (0), requests should be aborted (finish_reason='abort')
         # or rejected (connection errors or API errors)
-        assert (
-            state.aborted_requests > 0
-            or state.connection_errors > 0
-            or state.got_500
-            or state.got_503
-        ), (
+        assert state.aborted_requests > 0 or state.connection_errors > 0 or state.got_500 or state.got_503, (
             f"Abort timeout should cause request aborts or failures. "
             f"aborted: {state.aborted_requests}, "
             f"503: {state.got_503}, 500: {state.got_500}, "
@@ -486,9 +466,7 @@ async def test_request_rejection_during_shutdown():
         rejected_count = 0
         for _ in range(10):
             try:
-                await client.completions.create(
-                    model=MODEL_NAME, prompt="Hello", max_tokens=10
-                )
+                await client.completions.create(model=MODEL_NAME, prompt="Hello", max_tokens=10)
             except (
                 openai.APIStatusError,
                 openai.APIConnectionError,
@@ -498,8 +476,7 @@ async def test_request_rejection_during_shutdown():
             await asyncio.sleep(0.1)
 
         assert rejected_count > 0, (
-            f"Expected requests to be rejected during shutdown, "
-            f"but {rejected_count} were rejected out of 10"
+            f"Expected requests to be rejected during shutdown, but {rejected_count} were rejected out of 10"
         )
 
         await _assert_children_cleaned_up(child_pids)
@@ -529,17 +506,13 @@ async def test_multi_api_server_shutdown():
         proc = remote_server.proc
         child_pids = _get_child_pids(proc.pid)
 
-        assert len(child_pids) >= 2, (
-            f"Expected at least 2 child processes, got {len(child_pids)}"
-        )
+        assert len(child_pids) >= 2, f"Expected at least 2 child processes, got {len(child_pids)}"
 
         state = ShutdownState()
         sigterm_sent = asyncio.Event()
 
         # Start concurrent requests across both API servers
-        request_task = asyncio.create_task(
-            _concurrent_request_loop(client, state, sigterm_sent, concurrency=8)
-        )
+        request_task = asyncio.create_task(_concurrent_request_loop(client, state, sigterm_sent, concurrency=8))
 
         await asyncio.sleep(0.5)
 

@@ -27,9 +27,7 @@ def create_qwen3_lora_with_lm_head(save_dir: str, rank: int = 8) -> None:
     """Create synthetic Qwen3 LoRA weights with lm_head."""
     lora_weights = {}
     for module in ["q_proj", "v_proj"]:
-        lora_A = torch.from_numpy(
-            np.random.randn(rank, HIDDEN_SIZE).astype(np.float16) * 0.01
-        )
+        lora_A = torch.from_numpy(np.random.randn(rank, HIDDEN_SIZE).astype(np.float16) * 0.01)
         lora_B = torch.zeros(HIDDEN_SIZE, rank, dtype=torch.float16)
         key_prefix = f"base_model.model.model.layers.0.self_attn.{module}"
         lora_weights[f"{key_prefix}.lora_A.weight"] = lora_A
@@ -39,9 +37,7 @@ def create_qwen3_lora_with_lm_head(save_dir: str, rank: int = 8) -> None:
     lora_weights["base_model.model.lm_head.lora_A.weight"] = torch.from_numpy(
         np.random.randn(rank, HIDDEN_SIZE).astype(np.float16) * 0.01
     )
-    lora_weights["base_model.model.lm_head.lora_B.weight"] = torch.zeros(
-        VOCAB_SIZE, rank, dtype=torch.float16
-    )
+    lora_weights["base_model.model.lm_head.lora_B.weight"] = torch.zeros(VOCAB_SIZE, rank, dtype=torch.float16)
 
     adapter_config = {
         "peft_type": "LORA",
@@ -93,8 +89,6 @@ def test_qwen3_unembed_lora():
         assert len(base_outputs[0].outputs[0].text) > 0
 
         # Generate with lm_head LoRA
-        lora_outputs = llm.generate(
-            prompts, sampling_params, lora_request=lora_request, use_tqdm=False
-        )
+        lora_outputs = llm.generate(prompts, sampling_params, lora_request=lora_request, use_tqdm=False)
         assert len(lora_outputs) == 1
         assert len(lora_outputs[0].outputs[0].text) > 0

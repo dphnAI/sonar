@@ -92,24 +92,16 @@ def maybe_roundup_layer_hidden_size(
         Original hidden size otherwise.
     """
     if moe_parallel_config.use_deepep_ht_kernels:
-        hidden_size = DeepEPHTPrepareAndFinalize.maybe_roundup_layer_hidden_size(
-            hidden_size, act_dtype
-        )
+        hidden_size = DeepEPHTPrepareAndFinalize.maybe_roundup_layer_hidden_size(hidden_size, act_dtype)
 
     if moe_parallel_config.use_deepep_ll_kernels:
-        hidden_size = DeepEPLLPrepareAndFinalize.maybe_roundup_layer_hidden_size(
-            hidden_size
-        )
+        hidden_size = DeepEPLLPrepareAndFinalize.maybe_roundup_layer_hidden_size(hidden_size)
 
     if moe_parallel_config.use_deepep_v2_kernels:
-        hidden_size = DeepEPV2PrepareAndFinalize.maybe_roundup_layer_hidden_size(
-            hidden_size, act_dtype
-        )
+        hidden_size = DeepEPV2PrepareAndFinalize.maybe_roundup_layer_hidden_size(hidden_size, act_dtype)
 
     if moe_parallel_config.use_nixl_ep_kernels:
-        hidden_size = NixlEPPrepareAndFinalize.maybe_roundup_layer_hidden_size(
-            hidden_size
-        )
+        hidden_size = NixlEPPrepareAndFinalize.maybe_roundup_layer_hidden_size(hidden_size)
 
     return hidden_size
 
@@ -240,9 +232,7 @@ def maybe_make_prepare_finalize(
 
         # Note: We may want to use FP8 dispatch just to reduce
         # data movement.
-        use_fp8_dispatch = (
-            quant_config.is_per_act_token or quant_config.is_block_quantized
-        )
+        use_fp8_dispatch = quant_config.is_per_act_token or quant_config.is_block_quantized
         if use_fp8_dispatch:
             # For PTPC (per token per channel) quant, scale dim is 1
             # For 1x128 quant, scale dim is hidden_dim // 128
@@ -282,9 +272,7 @@ def maybe_make_prepare_finalize(
 
     elif moe.use_fi_nvl_one_sided_kernels:
         assert quant_config is not None
-        max_num_tokens = (
-            get_current_aphrodite_config().scheduler_config.max_num_batched_tokens
-        )
+        max_num_tokens = get_current_aphrodite_config().scheduler_config.max_num_batched_tokens
         if quant_config.quant_dtype is None:
             dispatch_dtype_bytes_per_elem = 2
             dispatch_scale_bytes_per_token = 0

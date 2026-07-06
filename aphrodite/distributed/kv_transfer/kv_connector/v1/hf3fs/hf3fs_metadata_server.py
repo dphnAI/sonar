@@ -25,9 +25,7 @@ from fastapi.responses import ORJSONResponse
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -103,14 +101,10 @@ class GlobalMetadataState:
         """Initialize a new rank with specified number of pages."""
         with self.global_lock:
             if rank not in self.rank_metadata:
-                self.rank_metadata[rank] = RankFileMetadata(
-                    rank, num_pages, list(range(num_pages))
-                )
+                self.rank_metadata[rank] = RankFileMetadata(rank, num_pages, list(range(num_pages)))
                 logger.info("Initialized rank %s with %s pages", rank, num_pages)
 
-    def allocate_pages_for_keys(
-        self, rank: int, keys: list[tuple[str, str]]
-    ) -> dict[str, int]:
+    def allocate_pages_for_keys(self, rank: int, keys: list[tuple[str, str]]) -> dict[str, int]:
         """Allocate one page for each key on the specified rank.
 
         Args:
@@ -278,19 +272,13 @@ class Hf3fsMetadataServer:
         num_pages = data.get("num_pages", 0)
 
         if role == "scheduler":
-            return self._json_response(
-                {"message": "Scheduler role does not require initialization"}
-            )
+            return self._json_response({"message": "Scheduler role does not require initialization"})
 
         if role == "worker" and num_pages > 0:
             self.state.initialize_rank(rank, num_pages)
-            return self._json_response(
-                {"message": f"Rank {rank} initialized with {num_pages} pages"}
-            )
+            return self._json_response({"message": f"Rank {rank} initialized with {num_pages} pages"})
         else:
-            raise HTTPException(
-                status_code=400, detail="Invalid initialization parameters"
-            )
+            raise HTTPException(status_code=400, detail="Invalid initialization parameters")
 
     async def batch_allocate_pages_for_keys(self, request: Request):
         """Allocate one page for each key on a specific rank."""
@@ -300,9 +288,7 @@ class Hf3fsMetadataServer:
 
         # Validate input format
         if rank is None or not isinstance(keys, list):
-            raise HTTPException(
-                status_code=400, detail="Invalid request format: need 'rank' and 'keys'"
-            )
+            raise HTTPException(status_code=400, detail="Invalid request format: need 'rank' and 'keys'")
 
         try:
             # Perform allocation
@@ -312,9 +298,7 @@ class Hf3fsMetadataServer:
             response = {"rank": rank, "results": list(results.items())}
             return self._json_response(response)
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Allocation failed: {str(e)}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Allocation failed: {str(e)}") from e
 
     async def confirm_write_for_keys(self, request: Request):
         """Confirm write operations for keys."""
@@ -337,9 +321,7 @@ class Hf3fsMetadataServer:
 
         except Exception as e:
             logger.error("Confirm write for keys failed: %s", e)
-            raise HTTPException(
-                status_code=500, detail=f"Confirmation failed: {str(e)}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Confirmation failed: {str(e)}") from e
 
     async def batch_key_exists(self, request: Request):
         """Check if multiple keys exist in metadata."""
@@ -353,9 +335,7 @@ class Hf3fsMetadataServer:
             exists_results = self.state.batch_key_exists(keys)
             return self._json_response({"exists": exists_results})
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Key existence check failed: {str(e)}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Key existence check failed: {str(e)}") from e
 
     async def get_key_locations(self, request: Request):
         """Get page indices for keys on a specific rank."""
@@ -365,18 +345,14 @@ class Hf3fsMetadataServer:
 
         # Validate input format
         if rank is None or not isinstance(keys, list):
-            raise HTTPException(
-                status_code=400, detail="Invalid request format: need 'rank' and 'keys'"
-            )
+            raise HTTPException(status_code=400, detail="Invalid request format: need 'rank' and 'keys'")
 
         try:
             # Get key locations
             locations = self.state.get_key_locations(rank, keys)
             return self._json_response({"locations": locations})
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Failed to get key locations: {str(e)}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Failed to get key locations: {str(e)}") from e
 
     async def clear(self, request: Request):
         """Clear the metadata server."""
@@ -401,9 +377,7 @@ class Hf3fsMetadataInterface(ABC):
         pass
 
     @abstractmethod
-    def allocate_pages_for_keys(
-        self, rank: int, keys: list[tuple[str, str]]
-    ) -> list[tuple[str, int]]:
+    def allocate_pages_for_keys(self, rank: int, keys: list[tuple[str, str]]) -> list[tuple[str, int]]:
         """Allocate one page for each key on the specified rank."""
         pass
 
@@ -472,9 +446,7 @@ class Hf3fsGlobalMetadataClient(Hf3fsMetadataInterface):
         """Initialize a rank with specified number of pages."""
         self._post(f"rank/{rank}/initialize", {"num_pages": num_pages, "role": role})
 
-    def allocate_pages_for_keys(
-        self, rank: int, keys: list[tuple[str, str]]
-    ) -> list[tuple[str, int]]:
+    def allocate_pages_for_keys(self, rank: int, keys: list[tuple[str, str]]) -> list[tuple[str, int]]:
         """Allocate pages for keys on the specified rank."""
         response = self._post("keys/batch_allocate", {"rank": rank, "keys": keys})
 
@@ -519,12 +491,8 @@ def run_metadata_server(
 # --- Main Execution ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Improved HF3FS Metadata Server")
-    parser.add_argument(
-        "--host", type=str, default="0.0.0.0", help="Host to bind the server to."
-    )
-    parser.add_argument(
-        "--port", type=int, default=18000, help="Port to run the server on."
-    )
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind the server to.")
+    parser.add_argument("--port", type=int, default=18000, help="Port to run the server on.")
     args = parser.parse_args()
 
     run_metadata_server(args.host, args.port)

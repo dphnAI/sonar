@@ -57,9 +57,7 @@ def test_encode_decode(monkeypatch: pytest.MonkeyPatch):
                 torch.tensor(1984),  # test scalar too
                 # Make sure to test bf16 which numpy doesn't support.
                 torch.rand((3, 5, 1000), dtype=torch.bfloat16),
-                torch.tensor(
-                    [float("-inf"), float("inf")] * 1024, dtype=torch.bfloat16
-                ),
+                torch.tensor([float("-inf"), float("inf")] * 1024, dtype=torch.bfloat16),
             ],
             numpy_array=np.arange(512),
             unrecognized=UnrecognizedType(33),
@@ -169,9 +167,7 @@ def nested_equal(a: NestedTensors, b: NestedTensors):
 def assert_equal(obj1: MyType, obj2: MyType):
     assert torch.equal(obj1.tensor1, obj2.tensor1)
     assert obj1.a_string == obj2.a_string
-    assert all(
-        torch.equal(a, b) for a, b in zip(obj1.list_of_tensors, obj2.list_of_tensors)
-    )
+    assert all(torch.equal(a, b) for a, b in zip(obj1.list_of_tensors, obj2.list_of_tensors))
     assert np.array_equal(obj1.numpy_array, obj2.numpy_array)
     assert obj1.unrecognized.an_int == obj2.unrecognized.an_int
     assert torch.equal(obj1.small_f_contig_tensor, obj2.small_f_contig_tensor)
@@ -214,9 +210,7 @@ def test_tensor_serialization():
     decoded = decoder.decode(encoded)
 
     # Verify the decoded tensor matches the original
-    assert torch.allclose(tensor, decoded), (
-        "Decoded tensor does not match the original tensor."
-    )
+    assert torch.allclose(tensor, decoded), "Decoded tensor does not match the original tensor."
 
 
 def test_numpy_array_serialization():
@@ -234,9 +228,7 @@ def test_numpy_array_serialization():
     decoded = decoder.decode(encoded)
 
     # Verify the decoded array matches the original
-    assert np.allclose(array, decoded), (
-        "Decoded numpy array does not match the original array."
-    )
+    assert np.allclose(array, decoded), "Decoded numpy array does not match the original array."
 
 
 class CustomClass:
@@ -329,9 +321,7 @@ def test_non_multimodal_tensor_with_ipc():
     assert isinstance(decoded, RequestWithTensor)
     assert decoded.data == "test_data"
     assert decoded.prompt_embeds is not None
-    assert torch.allclose(decoded.prompt_embeds, original_tensor), (
-        "Decoded tensor does not match the original tensor."
-    )
+    assert torch.allclose(decoded.prompt_embeds, original_tensor), "Decoded tensor does not match the original tensor."
 
 
 def test_non_multimodal_tensor_with_ipc_none_value():

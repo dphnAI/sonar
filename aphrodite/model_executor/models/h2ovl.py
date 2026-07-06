@@ -104,9 +104,7 @@ class H2OVLMultiModalProcessor(BaseInternVLMultiModalProcessor[H2OVLProcessingIn
         num_images = len(image_num_patches)
 
         def get_replacement_internvl(item_idx: int):
-            images = mm_items.get_items(
-                "image", (ImageEmbeddingItems, ImageProcessorItems)
-            )
+            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
 
             if isinstance(images, ImageEmbeddingItems):
                 feature_size = images.get_feature_size(item_idx)
@@ -161,9 +159,7 @@ class H2OVLChatModel(InternVLChatModel):
     ):
         vision_feature_layer = config.select_layer
         if vision_feature_layer < 0:
-            num_hidden_layers = (
-                config.vision_config.num_hidden_layers + vision_feature_layer + 1
-            )
+            num_hidden_layers = config.vision_config.num_hidden_layers + vision_feature_layer + 1
         else:
             num_hidden_layers = vision_feature_layer + 1
 

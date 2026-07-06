@@ -69,9 +69,7 @@ def tokenizer():
 def test_tool_call_parser_complex(min_chunk: int, max_chunk: int, tokenizer):
     input_dicts = create_complex_input(True)
 
-    formatted_tcs = [
-        "<tool_call> " + json.dumps(call) + " </tool_call>" for call in input_dicts
-    ]
+    formatted_tcs = ["<tool_call> " + json.dumps(call) + " </tool_call>" for call in input_dicts]
 
     text_messages = [
         "Here goes the bbox call: \n",

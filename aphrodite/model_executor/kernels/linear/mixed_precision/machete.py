@@ -59,9 +59,7 @@ class MacheteLinearKernel(MPLinearKernel):
                 f"{query_machete_supported_group_sizes(c.act_type)}",
             )
 
-        return check_machete_supports_shape(
-            c.partition_weight_shape[0], c.partition_weight_shape[1]
-        )
+        return check_machete_supports_shape(c.partition_weight_shape[0], c.partition_weight_shape[1])
 
     # note assumes that
     #  `weight_packed` is: {input_dim = 0, output_dim = 1, packed_dim = 0}
@@ -76,23 +74,16 @@ class MacheteLinearKernel(MPLinearKernel):
 
             self.act_perm = lambda x: x[:, perm]
             # use `ops.permute_cols` if possible
-            if (
-                c.act_type in [torch.float16, torch.bfloat16]
-                and c.partition_weight_shape[0] % 8 == 0
-            ):
+            if c.act_type in [torch.float16, torch.bfloat16] and c.partition_weight_shape[0] % 8 == 0:
                 self.act_perm = partial(ops.permute_cols, perm=perm)
 
         def transform_w_q(x):
             assert isinstance(x, BaseAphroditeParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             if c.has_g_idx:
-                x_unpacked = unpack_quantized_values_into_int32(
-                    x.data, c.weight_type, packed_dim=0
-                )
+                x_unpacked = unpack_quantized_values_into_int32(x.data, c.weight_type, packed_dim=0)
                 x_perm = x_unpacked[perm, :]
-                x.data = pack_quantized_values_into_int32(
-                    x_perm, c.weight_type, packed_dim=0
-                )
+                x.data = pack_quantized_values_into_int32(x_perm, c.weight_type, packed_dim=0)
             x.data = ops.machete_prepack_B(
                 x.data.t().contiguous().t(),
                 a_type=c.act_type,
@@ -110,9 +101,7 @@ class MacheteLinearKernel(MPLinearKernel):
         def transform_w_zp(x):
             assert isinstance(x, BaseAphroditeParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=1)
-            x_unpacked = unpack_quantized_values_into_int32(
-                x.data, c.weight_type, packed_dim=1
-            )
+            x_unpacked = unpack_quantized_values_into_int32(x.data, c.weight_type, packed_dim=1)
             w_s = getattr(layer, self.w_s_name).data
             # pre-apply scales to zero-points
             x.data = (-1.0 * w_s * (x_unpacked.to(w_s.dtype))).contiguous()

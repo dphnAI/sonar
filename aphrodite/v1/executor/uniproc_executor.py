@@ -167,8 +167,7 @@ class ExecutorWithExternalLauncher(UniProcExecutor):
     def _init_executor(self) -> None:
         """Initialize the worker and load the model."""
         assert not envs.APHRODITE_ENABLE_V1_MULTIPROCESSING, (
-            "To get deterministic execution, "
-            "please set APHRODITE_ENABLE_V1_MULTIPROCESSING=0"
+            "To get deterministic execution, please set APHRODITE_ENABLE_V1_MULTIPROCESSING=0"
         )
         super()._init_executor()
 

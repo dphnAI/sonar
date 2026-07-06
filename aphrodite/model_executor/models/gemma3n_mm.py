@@ -16,7 +16,7 @@ from transformers.models.gemma3n import (
 )
 from transformers.models.siglip import SiglipImageProcessorFast
 
-from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.inputs import MultiModalDataDict, PromptType, TextPrompt
@@ -120,9 +120,7 @@ class Gemma3nProcessingInfo(BaseProcessingInfo):
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
         return {"image": None, "audio": None}
 
-    def get_max_tokens_per_item(
-        self, seq_len: int, mm_counts: Mapping[str, int]
-    ) -> Mapping[str, int] | None:
+    def get_max_tokens_per_item(self, seq_len: int, mm_counts: Mapping[str, int]) -> Mapping[str, int] | None:
         return {"image": TOKENS_PER_IMAGE, "audio": TOKENS_PER_AUDIO}
 
     def get_image_repl(
@@ -138,9 +136,7 @@ class Gemma3nProcessingInfo(BaseProcessingInfo):
         For Gemma3n, this should return the full_image_sequence which includes
         BOI token, repeated image tokens, and EOI token.
         """
-        return PromptUpdateDetails.select_token_id(
-            processor.full_image_sequence, processor.image_token_id
-        )
+        return PromptUpdateDetails.select_token_id(processor.full_image_sequence, processor.image_token_id)
 
     def get_audio_repl(
         self,
@@ -154,9 +150,7 @@ class Gemma3nProcessingInfo(BaseProcessingInfo):
         BOA token, repeated audio tokens, and EOA token.
         """
         # Return the full audio sequence as defined by the processor
-        return PromptUpdateDetails.select_token_id(
-            processor.full_audio_sequence, processor.audio_token_id
-        )
+        return PromptUpdateDetails.select_token_id(processor.full_audio_sequence, processor.audio_token_id)
 
 
 class Gemma3nDummyInputsBuilder(BaseDummyInputsBuilder[Gemma3nProcessingInfo]):
@@ -179,9 +173,7 @@ class Gemma3nDummyInputsBuilder(BaseDummyInputsBuilder[Gemma3nProcessingInfo]):
         num_images = mm_counts.get("image", 0)
         num_audios = mm_counts.get("audio", 0)
         processor = self.info.get_hf_processor()
-        audio_feature_extractor: Gemma3nAudioFeatureExtractor = (
-            processor.feature_extractor
-        )
+        audio_feature_extractor: Gemma3nAudioFeatureExtractor = processor.feature_extractor
         audio_len = audio_feature_extractor.fft_length
         image_processor: SiglipImageProcessorFast = processor.image_processor
         img_width = image_processor.size.get("width", 224)
@@ -227,9 +219,7 @@ class Gemma3nMultiModalProcessor(BaseMultiModalProcessor[Gemma3nProcessingInfo])
 
         if "input_features" in processed_outputs:
             # Padding enables audio_tower to run in batched mode
-            processed_outputs["input_features_padded"] = processed_outputs[
-                "input_features"
-            ]
+            processed_outputs["input_features_padded"] = processed_outputs["input_features"]
 
             # Unpad features here since we need the output of each item to be
             # independent of other items for the cache to work correctly
@@ -446,9 +436,7 @@ class Gemma3nMultimodalEmbedder(nn.Module):
             A torch.Tensor of embeddings with  shape `[batch_size, seq_len, self.config.text_config.hidden_size]`.
         """  # noqa: E501
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You must specify exactly one of input_ids or inputs_embeds"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is not None:
             emb_norm = self.soft_embedding_norm(inputs_embeds)
@@ -465,9 +453,7 @@ class Gemma3nMultimodalEmbedder(nn.Module):
     info=Gemma3nProcessingInfo,
     dummy_inputs=Gemma3nDummyInputsBuilder,
 )
-class Gemma3nForConditionalGeneration(
-    nn.Module, SupportsMultiModal, SupportsTranscription
-):
+class Gemma3nForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsTranscription):
     supported_languages = ISO639_1_SUPPORTED_LANGS
 
     packed_modules_mapping = {
@@ -508,15 +494,11 @@ class Gemma3nForConditionalGeneration(
 
         with self._mark_tower_model(aphrodite_config, "image"):
             self.vision_tower = AutoModel.from_config(config=config.vision_config)
-            self.embed_vision = Gemma3nMultimodalEmbedder(
-                config.vision_config, config.text_config
-            )
+            self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
 
         with self._mark_tower_model(aphrodite_config, "audio"):
             self.audio_tower = AutoModel.from_config(config=config.audio_config)
-            self.embed_audio = Gemma3nMultimodalEmbedder(
-                config.audio_config, config.text_config
-            )
+            self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
 
         with self._mark_language_model(aphrodite_config):
             self.language_model: Gemma3nForCausalLM = init_aphrodite_registered_model(
@@ -536,9 +518,7 @@ class Gemma3nForConditionalGeneration(
                 dtype=self.language_model.model.embed_tokens.weight.dtype,
             )
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Gemma3nImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Gemma3nImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
         # TODO is this the case?
@@ -548,9 +528,7 @@ class Gemma3nForConditionalGeneration(
 
         return Gemma3nImagePixelInputs(pixel_values=pixel_values)
 
-    def _parse_and_validate_audio_input(
-        self, **kwargs: object
-    ) -> Gemma3nAudioInputs | None:
+    def _parse_and_validate_audio_input(self, **kwargs: object) -> Gemma3nAudioInputs | None:
         input_features_padded = kwargs.pop("input_features_padded", None)
         if input_features_padded is None:
             return None
@@ -570,20 +548,10 @@ class Gemma3nForConditionalGeneration(
         # Preserve the order of modalities if there are multiple of them
         # from the order of kwargs.
         for input_key in kwargs:
-            if (
-                input_key in ("pixel_values", "image_embeds")
-                and "image" not in mm_input_by_modality
-            ):
-                mm_input_by_modality["image"] = self._parse_and_validate_image_input(
-                    **kwargs
-                )
-            if (
-                input_key == "input_features_padded"
-                and "audio" not in mm_input_by_modality
-            ):
-                mm_input_by_modality["audio"] = self._parse_and_validate_audio_input(
-                    **kwargs
-                )
+            if input_key in ("pixel_values", "image_embeds") and "image" not in mm_input_by_modality:
+                mm_input_by_modality["image"] = self._parse_and_validate_image_input(**kwargs)
+            if input_key == "input_features_padded" and "audio" not in mm_input_by_modality:
+                mm_input_by_modality["audio"] = self._parse_and_validate_audio_input(**kwargs)
         return mm_input_by_modality
 
     def _process_image_input(
@@ -632,13 +600,9 @@ class Gemma3nForConditionalGeneration(
         # - If fewer tokens: pad with the embedding of the last vocab token
         # - If more tokens: truncate to the expected count
         # TODO precompute and cache padding
-        audio_padding_toks = torch.tensor(
-            [[self.vocab_size - 1]], dtype=torch.long, device=audio_features.device
-        )
+        audio_padding_toks = torch.tensor([[self.vocab_size - 1]], dtype=torch.long, device=audio_features.device)
         audio_padding_embs = self.embed_audio(input_ids=audio_padding_toks)
-        audio_features = torch.where(
-            audio_mask.unsqueeze(-1), audio_padding_embs, audio_features
-        )
+        audio_features = torch.where(audio_mask.unsqueeze(-1), audio_padding_embs, audio_features)
 
         expected_tokens = self.config.audio_soft_tokens_per_image
         audio_features, tokens_truncated = adjust_audio_features_to_expected_length(
@@ -646,8 +610,7 @@ class Gemma3nForConditionalGeneration(
         )
         if tokens_truncated > 0:
             logger.warning(
-                "Gemma3n audio encoder produced %d extra tokens. "
-                "Truncating to match placeholder count of %d.",
+                "Gemma3n audio encoder produced %d extra tokens. Truncating to match placeholder count of %d.",
                 tokens_truncated,
                 expected_tokens,
             )
@@ -684,17 +647,13 @@ class Gemma3nForConditionalGeneration(
         # NOTE (NickLucche) Each pass needs tokens to compute PLE so we cache
         # them here, as the model  forward has only access to the input_embeds.
         if input_ids is not None:
-            per_layer_inputs = self.language_model.model.get_per_layer_input_embeddings(
-                input_ids
-            )
+            per_layer_inputs = self.language_model.model.get_per_layer_input_embeddings(input_ids)
             per_layer_inputs = per_layer_inputs.reshape(
                 -1,
                 self.config.text_config.num_hidden_layers,
                 self.config.text_config.hidden_size_per_layer_input,
             )
-            self.per_layer_embeddings[: per_layer_inputs.shape[0]].copy_(
-                per_layer_inputs
-            )
+            self.per_layer_embeddings[: per_layer_inputs.shape[0]].copy_(per_layer_inputs)
 
         # This is to satisfy the type checker for each overload
         if multimodal_embeddings is None or is_multimodal is None:
@@ -803,9 +762,7 @@ class Gemma3nForConditionalGeneration(
         )
 
     @classmethod
-    def get_speech_to_text_config(
-        cls, model_config: ModelConfig, task_type: str
-    ) -> SpeechToTextConfig:
+    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
         return SpeechToTextConfig(
             # Let's set this to 30 as suggested in the docs for now, although
             # the model is only limited by its context length.

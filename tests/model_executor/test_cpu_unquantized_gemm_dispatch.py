@@ -22,20 +22,13 @@ def _mock_zentorch_linear_unary():
 
     lib_def = torch.library.Library("zentorch", "DEF")
     lib_def.define(
-        "zentorch_linear_unary("
-        "Tensor input, "
-        "Tensor weight, "
-        "Tensor? bias, "
-        "bool is_weight_prepacked=False"
-        ") -> Tensor"
+        "zentorch_linear_unary(Tensor input, Tensor weight, Tensor? bias, bool is_weight_prepacked=False) -> Tensor"
     )
 
     lib_impl = torch.library.Library("zentorch", "IMPL", "CPU")
     lib_impl.impl(
         "zentorch_linear_unary",
-        lambda input, weight, bias, is_weight_prepacked=False: (
-            torch.nn.functional.linear(input, weight, bias)
-        ),
+        lambda input, weight, bias, is_weight_prepacked=False: (torch.nn.functional.linear(input, weight, bias)),
     )
 
     yield
@@ -76,9 +69,7 @@ def test_dispatch_cpu_unquantized_gemm_logs_zentorch_dispatch(monkeypatch):
     )
 
     log_calls = []
-    monkeypatch.setattr(
-        utils.logger, "debug_once", lambda *args: log_calls.append(args)
-    )
+    monkeypatch.setattr(utils.logger, "debug_once", lambda *args: log_calls.append(args))
 
     layer = torch.nn.Linear(16, 8, bias=True)
     utils.dispatch_cpu_unquantized_gemm(layer, remove_weight=False)

@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 from PIL import Image
 
-from aphrodite.config import ModelConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
 from aphrodite.config.cache import CacheConfig
 from aphrodite.config.multimodal import (
     AudioDummyOptions,
@@ -40,15 +40,11 @@ from ...utils import dummy_hf_overrides
 from .test_common import get_model_ids_to_test, get_text_token_prompts
 
 ImageInput = list[Image.Image]
-VideoInput: TypeAlias = (
-    list[Image.Image] | list[np.ndarray] | list[tuple[np.ndarray, dict[str, Any]]]
-)
+VideoInput: TypeAlias = list[Image.Image] | list[np.ndarray] | list[tuple[np.ndarray, dict[str, Any]]]
 AudioInput = list[tuple[np.ndarray, int]]
 
 
-def _resize_data(
-    _data: Image.Image | np.ndarray, size_factor: float
-) -> Image.Image | np.ndarray:
+def _resize_data(_data: Image.Image | np.ndarray, size_factor: float) -> Image.Image | np.ndarray:
     assert size_factor <= 1, "Size factor must be less than 1"
     # Image input
     if isinstance(_data, Image.Image):
@@ -91,20 +87,14 @@ def create_batched_mm_kwargs(
     processing_info = processor.info
     dummy_inputs = processor.dummy_inputs
     supported_mm_limits = processing_info.get_supported_mm_limits()
-    mm_counts = {
-        modality: 3 if limit is None else limit
-        for modality, limit in supported_mm_limits.items()
-    }
+    mm_counts = {modality: 3 if limit is None else limit for modality, limit in supported_mm_limits.items()}
     processor_inputs = dummy_inputs.get_dummy_processor_inputs(
         seq_len=model_config.max_model_len,
         mm_counts=mm_counts,
         mm_options={},
     )
     mm_items = processor_inputs.mm_data_items
-    resized_mm_data = {
-        modality: resize_mm_data(items.data, size_factors)
-        for modality, items in mm_items.items()
-    }
+    resized_mm_data = {modality: resize_mm_data(items.data, size_factors) for modality, items in mm_items.items()}
 
     # video metadata will be added back to the resized video data here.
     text_prompt, token_prompt = get_text_token_prompts(processor, resized_mm_data)
@@ -116,11 +106,7 @@ def create_batched_mm_kwargs(
     )["mm_kwargs"].require_data()
 
     return group_and_batch_mm_kwargs(
-        [
-            (modality, item)
-            for modality in supported_mm_limits
-            for item in mm_kwargs[modality]
-        ]
+        [(modality, item) for modality in supported_mm_limits for item in mm_kwargs[modality]]
     )
 
 
@@ -132,9 +118,7 @@ def initialize_dummy_model(
 ):
     temp_file = tempfile.mkstemp()[1]
     current_device = torch.get_default_device()
-    aphrodite_config = AphroditeConfig(
-        model_config=model_config, cache_config=CacheConfig(block_size=16)
-    )
+    aphrodite_config = AphroditeConfig(model_config=model_config, cache_config=CacheConfig(block_size=16))
     with set_current_aphrodite_config(aphrodite_config=aphrodite_config):
         init_distributed_environment(
             world_size=1,
@@ -160,9 +144,7 @@ def initialize_dummy_model(
 def test_model_tensor_schema(model_id: str):
     if model_id == "moonshotai/Kimi-K2.5":
         # FIXME(Isotr0py): Fix Kimi-K2.5's offline inference about vision chunks.
-        pytest.skip(
-            "Kimi-K2.5's offline inference has issues about vision chunks. Fix later."
-        )
+        pytest.skip("Kimi-K2.5's offline inference has issues about vision chunks. Fix later.")
 
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model_id)
     model_info.check_available_online(on_fail="skip")
@@ -172,9 +154,7 @@ def test_model_tensor_schema(model_id: str):
         check_version_reason="aphrodite",
     )
 
-    model_arch = next(
-        arch for arch, info in HF_EXAMPLE_MODELS.hf_models.items() if info == model_info
-    )
+    model_arch = next(arch for arch, info in HF_EXAMPLE_MODELS.hf_models.items() if info == model_info)
 
     hf_overrides_fn = partial(
         dummy_hf_overrides,
@@ -225,10 +205,7 @@ def test_model_tensor_schema(model_id: str):
     )
     processing_info = factories.info(ctx)
     supported_mm_limits = processing_info.get_supported_mm_limits()
-    limit_mm_per_prompt = {
-        modality: 3 if limit is None else limit
-        for modality, limit in supported_mm_limits.items()
-    }
+    limit_mm_per_prompt = {modality: 3 if limit is None else limit for modality, limit in supported_mm_limits.items()}
 
     def _to_dummy_options(modality: str, count: int) -> BaseDummyOptions:
         if modality == "video":
@@ -240,16 +217,12 @@ def test_model_tensor_schema(model_id: str):
         return BaseDummyOptions(count=count)
 
     model_config.get_multimodal_config().limit_per_prompt = {
-        modality: _to_dummy_options(modality, count)
-        for modality, count in limit_mm_per_prompt.items()
+        modality: _to_dummy_options(modality, count) for modality, count in limit_mm_per_prompt.items()
     }
     processor = factories.build_processor(ctx, cache=None)
 
     with initialize_dummy_model(model_cls, model_config) as model:
         for modality, _, mm_kwargs in create_batched_mm_kwargs(model_config, processor):
             for method_name in inputs_parse_methods:
-                print(
-                    f"Testing `{method_name}` with modality={modality} "
-                    f"and mm_kwargs{list(mm_kwargs.keys())}"
-                )
+                print(f"Testing `{method_name}` with modality={modality} and mm_kwargs{list(mm_kwargs.keys())}")
                 getattr(model, method_name)(modality=modality, **mm_kwargs)

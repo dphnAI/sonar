@@ -21,9 +21,7 @@ def find_nccl_library() -> str:
     """
     so_file = envs.APHRODITE_NCCL_SO_PATH
     if so_file:
-        logger.info(
-            "Found nccl from environment variable APHRODITE_NCCL_SO_PATH=%s", so_file
-        )
+        logger.info("Found nccl from environment variable APHRODITE_NCCL_SO_PATH=%s", so_file)
     else:
         if torch.version.cuda is not None:
             so_file = "libnccl.so.2"

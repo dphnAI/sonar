@@ -47,15 +47,11 @@ class BeeProcessingInfo(LlavaNextProcessingInfo):
         current_aspect_ratio = current_width / current_height
 
         if aspect_ratio > current_aspect_ratio:
-            new_height = int(
-                round(original_height * (current_width / original_width), 7)
-            )
+            new_height = int(round(original_height * (current_width / original_width), 7))
             padding = (current_height - new_height) // 2
             current_height = current_height - (2 * padding)
         else:
-            new_width = int(
-                round(original_width * (current_height / original_height), 7)
-            )
+            new_width = int(round(original_width * (current_height / original_height), 7))
             padding = (current_width - new_width) // 2
             current_width = current_width - (2 * padding)
 
@@ -67,9 +63,7 @@ class BeeProcessingInfo(LlavaNextProcessingInfo):
         vision_aspect_ratio = getattr(hf_config, "vision_aspect_ratio", "anyres_max_9")
         max_num_patches = int(vision_aspect_ratio.replace("anyres_max_", ""))
 
-        ratio = math.sqrt(
-            current_height * current_width / (max_num_patches * npatches**2)
-        )
+        ratio = math.sqrt(current_height * current_width / (max_num_patches * npatches**2))
         if ratio > 1.1:
             height_factor = int(current_height // ratio)
             width_factor = int(current_width // ratio)

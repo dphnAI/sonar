@@ -32,7 +32,7 @@ from .inputs import (
 )
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig, AphroditeConfig
+    from aphrodite.config import AphroditeConfig, ModelConfig
 
     from .processing.processor import ResolvedPromptUpdate
 
@@ -123,9 +123,7 @@ class MultiModalCache:
         *,
         debug: bool = False,
     ) -> int:
-        size = json_reduce_leaves(
-            operator.add, json_map_leaves(cls.get_leaf_size, value)
-        )
+        size = json_reduce_leaves(operator.add, json_map_leaves(cls.get_leaf_size, value))
 
         if debug:
             leaf_count = json_count_leaves(value)
@@ -238,10 +236,7 @@ class BaseMultiModalCache(ABC, Generic[_I, _O]):
         """
         assert len(mm_items) == len(mm_hashes)
 
-        return [
-            self.get_and_update_item(mm_item, mm_hash)
-            for mm_item, mm_hash in zip(mm_items, mm_hashes)
-        ]
+        return [self.get_and_update_item(mm_item, mm_hash) for mm_item, mm_hash in zip(mm_items, mm_hashes)]
 
     @abstractmethod
     def clear_cache(self) -> None:
@@ -249,14 +244,10 @@ class BaseMultiModalCache(ABC, Generic[_I, _O]):
         raise NotImplementedError
 
 
-MultiModalProcessorCacheInItem: TypeAlias = (
-    tuple[MultiModalKwargsItem, Sequence["ResolvedPromptUpdate"]] | None
-)
+MultiModalProcessorCacheInItem: TypeAlias = tuple[MultiModalKwargsItem, Sequence["ResolvedPromptUpdate"]] | None
 
 
-MultiModalProcessorCacheOutItem: TypeAlias = tuple[
-    MultiModalKwargsItem | None, Sequence["ResolvedPromptUpdate"]
-]
+MultiModalProcessorCacheOutItem: TypeAlias = tuple[MultiModalKwargsItem | None, Sequence["ResolvedPromptUpdate"]]
 
 
 class BaseMultiModalProcessorCache(
@@ -518,8 +509,7 @@ class ShmObjectStoreSenderCache(BaseMultiModalProcessorCache):
             # for an oversize item will fail with a cache miss.
             if "already exists" not in str(e):
                 logger.warning_once(
-                    "mm_input %s too large to cache; "
-                    "raise --mm-shm-cache-max-object-size-mb. (%s)",
+                    "mm_input %s too large to cache; raise --mm-shm-cache-max-object-size-mb. (%s)",
                     mm_hash,
                     str(e),
                 )
@@ -527,8 +517,7 @@ class ShmObjectStoreSenderCache(BaseMultiModalProcessorCache):
         except MemoryError as e:
             # Cache full and protected items prevent eviction.
             logger.debug(
-                "mm_input %s not cached; shm cache full, "
-                "consider raising --mm-processor-cache-gb. (%s)",
+                "mm_input %s not cached; shm cache full, consider raising --mm-processor-cache-gb. (%s)",
                 mm_hash,
                 str(e),
             )
@@ -581,9 +570,7 @@ class ShmObjectStoreSenderCache(BaseMultiModalProcessorCache):
         return MultiModalKwargsItem({"address": addr_elem, "monotonic_id": id_elem})
 
 
-class BaseMultiModalReceiverCache(
-    BaseMultiModalCache[MultiModalKwargsItem | None, MultiModalKwargsItem]
-):
+class BaseMultiModalReceiverCache(BaseMultiModalCache[MultiModalKwargsItem | None, MultiModalKwargsItem]):
     """The required interface for caches on P1."""
 
     def get_and_update_features(

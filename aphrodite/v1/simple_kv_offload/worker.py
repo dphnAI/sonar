@@ -119,14 +119,10 @@ class SimpleCPUOffloadWorker:
         unique_gpu_caches: dict[str, torch.Tensor] = {}
         for name, tensor in seen_ptrs.values():
             storage = tensor.untyped_storage()
-            raw = torch.empty(0, dtype=torch.int8, device=self.device).set_(
-                storage, 0, (storage.nbytes(),)
-            )
+            raw = torch.empty(0, dtype=torch.int8, device=self.device).set_(storage, 0, (storage.nbytes(),))
             el = tensor.element_size()
             page_size_bytes = storage.nbytes() // num_blocks
-            outer_dims = [
-                d for d in range(tensor.ndim) if tensor.stride(d) * el > page_size_bytes
-            ]
+            outer_dims = [d for d in range(tensor.ndim) if tensor.stride(d) * el > page_size_bytes]
             if not outer_dims:
                 unique_gpu_caches[name] = raw.view(num_blocks, -1)
             else:
@@ -138,16 +134,13 @@ class SimpleCPUOffloadWorker:
 
         # Compute per-tensor bytes_per_block. Tensors may have different
         # page_size_bytes (e.g., UniformTypeKVCacheSpecs with varying head_size).
-        per_tensor_bpb = [
-            t.stride(0) * t.element_size() for t in unique_gpu_caches.values()
-        ]
+        per_tensor_bpb = [t.stride(0) * t.element_size() for t in unique_gpu_caches.values()]
         total_bytes_per_block = sum(per_tensor_bpb)
 
         self.num_cpu_blocks = max(1, self.cpu_capacity_bytes // total_bytes_per_block)
 
         logger.info(
-            "SimpleCPUOffloadWorker: %d unique GPU KV tensors, "
-            "allocating %d CPU blocks (%.2f GB)",
+            "SimpleCPUOffloadWorker: %d unique GPU KV tensors, allocating %d CPU blocks (%.2f GB)",
             len(unique_gpu_caches),
             self.num_cpu_blocks,
             (self.num_cpu_blocks * total_bytes_per_block) / (1024**3),
@@ -155,9 +148,7 @@ class SimpleCPUOffloadWorker:
 
         pin_memory = PIN_MEMORY
         if not pin_memory:
-            logger.warning(
-                "Pinned memory not available. CPU offload performance may be degraded."
-            )
+            logger.warning("Pinned memory not available. CPU offload performance may be degraded.")
 
         self.gpu_kv_caches = unique_gpu_caches
         self.cpu_kv_caches = {}
@@ -252,9 +243,7 @@ class SimpleCPUOffloadWorker:
             load_wm = self._poll_stream_events(is_store=False)
             for j in [j for j in self._pending_load_event_indices if j <= load_wm]:
                 self._pending_load_event_indices.discard(j)
-                req_ids = (
-                    metadata.load_event_to_reqs.get(j) if metadata is not None else None
-                )
+                req_ids = metadata.load_event_to_reqs.get(j) if metadata is not None else None
                 if req_ids:
                     finished_recving.update(req_ids)
 
@@ -276,9 +265,7 @@ class SimpleCPUOffloadWorker:
         self._completed_store_events = {}
         return meta
 
-    def handle_preemptions(
-        self, kv_connector_metadata: SimpleCPUOffloadMetadata
-    ) -> None:
+    def handle_preemptions(self, kv_connector_metadata: SimpleCPUOffloadMetadata) -> None:
         """Sync all in-flight transfers before preempted blocks are reused."""
         if not kv_connector_metadata.need_flush:
             return

@@ -80,6 +80,4 @@ async def test_tokenize_then_chat_completion_with_image(
         temperature=0.0,
     )
 
-    assert chat_completion.choices[0].message.content, (
-        "Chat completion must produce non-empty content after tokenize"
-    )
+    assert chat_completion.choices[0].message.content, "Chat completion must produce non-empty content after tokenize"

@@ -6,10 +6,10 @@ import json
 import pytest
 import requests
 
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
 from aphrodite.multimodal.utils import encode_image_url, fetch_image
 from aphrodite.platforms import current_platform
+from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-VL-Reranker-2B"
 HF_OVERRIDES = {
@@ -55,16 +55,10 @@ BACKEND_ABS_TOL: dict[str, float] = {
 # ROCm: disable skinny GEMM to avoid non-deterministic results from
 # atomic reductions in wvSplitKrc kernel.
 # See: https://github.com/vllm-project/vllm/pull/33493#issuecomment-3906083975
-ROCM_ENV_OVERRIDES = (
-    {"APHRODITE_ROCM_USE_SKINNY_GEMM": "0"} if current_platform.is_rocm() else {}
-)
+ROCM_ENV_OVERRIDES = {"APHRODITE_ROCM_USE_SKINNY_GEMM": "0"} if current_platform.is_rocm() else {}
 # ROCm: disable prefix caching and eliminate batch variance to reduce
 # test flakiness.
-ROCM_EXTRA_ARGS = (
-    ["--no-enable-prefix-caching", "--max-num-seqs", "1"]
-    if current_platform.is_rocm()
-    else []
-)
+ROCM_EXTRA_ARGS = ["--no-enable-prefix-caching", "--max-num-seqs", "1"] if current_platform.is_rocm() else []
 
 
 def get_tol(backend: str) -> float:
@@ -135,9 +129,7 @@ def server(request):
         if backend != "ROCM_AITER_FA":
             env["APHRODITE_ROCM_USE_AITER"] = "0"
 
-    with RemoteOpenAIServer(
-        MODEL_NAME, args, override_hf_configs=HF_OVERRIDES, env_dict=env
-    ) as remote_server:
+    with RemoteOpenAIServer(MODEL_NAME, args, override_hf_configs=HF_OVERRIDES, env_dict=env) as remote_server:
         print(f"=== Server ready with backend: {backend} ===")
         yield remote_server, backend
 
@@ -254,9 +246,7 @@ async def test_score_api_queries_str_documents_image_url_plus_text_content(
     assert score.data is not None
     assert len(score.data) == 1
     assert score.usage.prompt_tokens == 107
-    assert_score(
-        score.data[0].score, TEXT_VS_TEXT_PLUS_IMAGE, backend, "text_vs_text_plus_image"
-    )
+    assert_score(score.data[0].score, TEXT_VS_TEXT_PLUS_IMAGE, backend, "text_vs_text_plus_image")
 
 
 @pytest.mark.asyncio
@@ -507,10 +497,6 @@ async def test_rerank_api_instruction_field_matches_chat_template_kwargs(
 
     assert kwargs_rerank.usage.prompt_tokens == field_rerank.usage.prompt_tokens
 
-    field_scores = [
-        r.relevance_score for r in sorted(field_rerank.results, key=lambda x: x.index)
-    ]
-    kwargs_scores = [
-        r.relevance_score for r in sorted(kwargs_rerank.results, key=lambda x: x.index)
-    ]
+    field_scores = [r.relevance_score for r in sorted(field_rerank.results, key=lambda x: x.index)]
+    kwargs_scores = [r.relevance_score for r in sorted(kwargs_rerank.results, key=lambda x: x.index)]
     assert field_scores == pytest.approx(kwargs_scores)

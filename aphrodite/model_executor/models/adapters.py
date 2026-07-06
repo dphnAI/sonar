@@ -22,7 +22,7 @@ from .interfaces import supports_multimodal
 from .interfaces_base import AphroditeModelForPooling, is_pooling_model
 
 if TYPE_CHECKING:
-    from aphrodite.config import ModelConfig, AphroditeConfig
+    from aphrodite.config import AphroditeConfig, ModelConfig
     from aphrodite.model_executor.layers.pooler import Pooler
 
 _T = TypeVar("_T", bound=type[nn.Module])
@@ -40,9 +40,7 @@ _GENERATE_SUFFIXES = [
 def _load_st_projector(model_config: "ModelConfig") -> nn.Module | None:
     """Load Sentence-Transformers Dense projection layers."""
 
-    dense_modules = try_get_dense_modules(
-        model_config.model, revision=model_config.revision
-    )
+    dense_modules = try_get_dense_modules(model_config.model, revision=model_config.revision)
 
     if dense_modules is None:
         return
@@ -69,9 +67,7 @@ def _load_st_projector(model_config: "ModelConfig") -> nn.Module | None:
     return None
 
 
-def _load_dense_weights(
-    linear: nn.Linear, folder: str, model_config: "ModelConfig"
-) -> bool:
+def _load_dense_weights(linear: nn.Linear, folder: str, model_config: "ModelConfig") -> bool:
     """Load weights using Aphrodite's weight_loader pattern."""
     from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 
@@ -79,9 +75,7 @@ def _load_dense_weights(
         file_path = f"{folder}/{filename}" if folder else filename
 
         try:
-            file_bytes = get_hf_file_bytes(
-                file_path, model_config.model, model_config.revision
-            )
+            file_bytes = get_hf_file_bytes(file_path, model_config.model, model_config.revision)
             if not file_bytes:
                 continue
 
@@ -92,22 +86,16 @@ def _load_dense_weights(
             else:
                 import io
 
-                state_dict = torch.load(
-                    io.BytesIO(file_bytes), map_location="cpu", weights_only=True
-                )
+                state_dict = torch.load(io.BytesIO(file_bytes), map_location="cpu", weights_only=True)
 
             for weight_key in ["weight", "linear.weight", "dense.weight"]:
                 if weight_key in state_dict:
-                    weight_loader = getattr(
-                        linear.weight, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(linear.weight, "weight_loader", default_weight_loader)
                     weight_loader(linear.weight, state_dict[weight_key])
 
                     bias_key = weight_key.replace("weight", "bias")
                     if linear.bias is not None and bias_key in state_dict:
-                        bias_loader = getattr(
-                            linear.bias, "weight_loader", default_weight_loader
-                        )
+                        bias_loader = getattr(linear.bias, "weight_loader", default_weight_loader)
                         bias_loader(linear.bias, state_dict[bias_key])
                     return True
         except Exception:
@@ -186,11 +174,7 @@ def _create_pooling_model_cls(orig_cls: _T) -> _T:
                 seen_weights.append((name, loaded_weight.clone()))
 
                 try:
-                    target_prefix = next(
-                        prefix
-                        for prefix in candidate_prefixes
-                        if prefix + name in params_dict
-                    )
+                    target_prefix = next(prefix for prefix in candidate_prefixes if prefix + name in params_dict)
                     break
                 except StopIteration:
                     # The weight might not exist on the model
@@ -204,18 +188,14 @@ def _create_pooling_model_cls(orig_cls: _T) -> _T:
                         target_model = getattr(self, attr)
 
                 logger.info(
-                    "Mapping weights to %s as they are "
-                    "relative to this model instead of %s.",
+                    "Mapping weights to %s as they are relative to this model instead of %s.",
                     target_model._get_name(),
                     self._get_name(),
                 )
 
             # Lazy chain so buffer-reusing weight iterators (e.g.
             # runai_streamer) are consumed one tensor at a time.
-            mapped_weights = (
-                (target_prefix + name, weight)
-                for name, weight in itertools.chain(seen_weights, weights)
-            )
+            mapped_weights = ((target_prefix + name, weight) for name, weight in itertools.chain(seen_weights, weights))
 
             def default_load_weights(weights):
                 loader = AutoWeightsLoader(self)
@@ -284,9 +264,7 @@ def as_seq_cls_model(cls: _T) -> _T:
 
     from .utils import maybe_prefix
 
-    class ModelForSequenceClassification(
-        _create_pooling_model_cls(cls), SupportsCrossEncoding
-    ):
+    class ModelForSequenceClassification(_create_pooling_model_cls(cls), SupportsCrossEncoding):
         def _init_pooler(
             self,
             aphrodite_config: "AphroditeConfig",
@@ -312,11 +290,7 @@ def as_seq_cls_model(cls: _T) -> _T:
             # Online conversion: no score weights in checkpoint, don't
             # quantize (small output_dim breaks FP8/Marlin tile alignment).
             # Checkpoint-based: respect the model's quant_config.
-            quant_config = (
-                None
-                if (tokens is not None or method is not None)
-                else aphrodite_config.quant_config
-            )
+            quant_config = None if (tokens is not None or method is not None) else aphrodite_config.quant_config
 
             self.score = ReplicatedLinear(
                 model_config.get_hidden_size(),
@@ -362,9 +336,7 @@ def as_seq_cls_model(cls: _T) -> _T:
                 # ForSequenceClassification model.
                 return seq_cls_model_loader(self, weights)
 
-    ModelForSequenceClassification.__name__ = _get_pooling_model_name(
-        cls.__name__, "ForSequenceClassification"
-    )
+    ModelForSequenceClassification.__name__ = _get_pooling_model_name(cls.__name__, "ForSequenceClassification")
 
     return ModelForSequenceClassification  # type: ignore
 
@@ -416,18 +388,12 @@ def _get_language_model_for_seq_cls(model) -> nn.Module:
     for attr_name in ("language_model", "lm", "text_model"):
         if hasattr(model, attr_name):
             candidate = getattr(model, attr_name)
-            if (
-                isinstance(candidate, nn.Module)
-                and candidate is not model
-                and hasattr(candidate, "model")
-            ):
+            if isinstance(candidate, nn.Module) and candidate is not model and hasattr(candidate, "model"):
                 return candidate
 
     for name, child in model.named_children():
         child_name = type(child).__name__
-        if ("ForCausalLM" in child_name or "LMHead" in child_name) and hasattr(
-            child, "model"
-        ):
+        if ("ForCausalLM" in child_name or "LMHead" in child_name) and hasattr(child, "model"):
             return child
 
     return model
@@ -470,9 +436,7 @@ def _disable_seq_cls_loading_on_inner_model(language_model, is_vlm: bool):
             inner_hf_config.classifier_from_token = original_hf_tokens
 
 
-def load_weights_using_from_2_way_softmax(
-    model, weights: Iterable[tuple[str, torch.Tensor]]
-):
+def load_weights_using_from_2_way_softmax(model, weights: Iterable[tuple[str, torch.Tensor]]):
     # refer to https://huggingface.co/Qwen/Qwen3-Reranker-0.6B/discussions/3
     from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
     from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
@@ -512,9 +476,7 @@ def load_weights_using_from_2_way_softmax(
     with _disable_seq_cls_loading_on_inner_model(language_model, is_vlm):
         # ModelForPooling is dynamically defined inside the _create_pooling_model_cls
         # function, so we need use this hacky method to obtain it.
-        pooling_model_cls = next(
-            x for x in type(model).__mro__ if x.__name__ == "ModelForPooling"
-        )
+        pooling_model_cls = next(x for x in type(model).__mro__ if x.__name__ == "ModelForPooling")
         loaded_weights = pooling_model_cls.load_weights(model, weights)
 
     from aphrodite.tokenizers import get_tokenizer
@@ -529,9 +491,7 @@ def load_weights_using_from_2_way_softmax(
     false_id = tokenizer.convert_tokens_to_ids(tokens[0])
     true_id = tokenizer.convert_tokens_to_ids(tokens[1])
     lm_head_weight = language_model.lm_head.weight
-    score_weight = lm_head_weight.data[[true_id]].to(
-        torch.float32
-    ) - lm_head_weight.data[[false_id]].to(torch.float32)
+    score_weight = lm_head_weight.data[[true_id]].to(torch.float32) - lm_head_weight.data[[false_id]].to(torch.float32)
 
     score_layer = language_model.score if using_vlm_head else model.score
     param = score_layer.weight
@@ -540,9 +500,7 @@ def load_weights_using_from_2_way_softmax(
 
     del language_model.lm_head
 
-    score_weight_name = (
-        "language_model.score.weight" if using_vlm_head else "score.weight"
-    )
+    score_weight_name = "language_model.score.weight" if using_vlm_head else "score.weight"
     loaded_weights.add(score_weight_name)
 
     lm_head_name = "lm_head.weight"
@@ -584,9 +542,7 @@ def load_weights_no_post_processing(model, weights: Iterable[tuple[str, torch.Te
         language_model.lm_head = language_model.lm_head.tie_weights(embed_tokens)
 
     with _disable_seq_cls_loading_on_inner_model(language_model, is_vlm):
-        pooling_model_cls = next(
-            x for x in type(model).__mro__ if x.__name__ == "ModelForPooling"
-        )
+        pooling_model_cls = next(x for x in type(model).__mro__ if x.__name__ == "ModelForPooling")
         # Skip ModelForSequenceClassification in MRO to avoid infinite recursion
         loaded_weights = pooling_model_cls.load_weights(model, weights)
 
@@ -609,9 +565,7 @@ def load_weights_no_post_processing(model, weights: Iterable[tuple[str, torch.Te
 
     del language_model.lm_head
 
-    score_weight_name = (
-        "language_model.score.weight" if using_vlm_head else "score.weight"
-    )
+    score_weight_name = "language_model.score.weight" if using_vlm_head else "score.weight"
     loaded_weights.add(score_weight_name)
 
     lm_head_name = "lm_head.weight"

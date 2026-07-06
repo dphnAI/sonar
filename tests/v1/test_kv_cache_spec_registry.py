@@ -8,9 +8,9 @@ import pytest
 import torch
 
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     DeviceConfig,
-    AphroditeConfig,
 )
 from aphrodite.v1.core.single_type_kv_cache_manager import (
     ChunkedLocalAttentionManager,
@@ -108,9 +108,7 @@ spec_uniform_base_map: dict[type[KVCacheSpec], type[KVCacheSpec]] = {
 }
 
 spec_args_map: dict[type[KVCacheSpec], dict[str, Any]] = {
-    FullAttentionSpec: dict(
-        block_size=64, num_kv_heads=8, head_size=128, dtype=torch.bfloat16
-    ),
+    FullAttentionSpec: dict(block_size=64, num_kv_heads=8, head_size=128, dtype=torch.bfloat16),
     TQFullAttentionSpec: dict(
         block_size=64,
         num_kv_heads=8,
@@ -118,12 +116,8 @@ spec_args_map: dict[type[KVCacheSpec], dict[str, Any]] = {
         dtype=torch.bfloat16,
         tq_slot_size=256,
     ),
-    MLAAttentionSpec: dict(
-        block_size=64, num_kv_heads=1, head_size=128, dtype=torch.bfloat16
-    ),
-    HiddenStateCacheSpec: dict(
-        block_size=64, num_kv_heads=1, head_size=128, dtype=torch.bfloat16
-    ),
+    MLAAttentionSpec: dict(block_size=64, num_kv_heads=1, head_size=128, dtype=torch.bfloat16),
+    HiddenStateCacheSpec: dict(block_size=64, num_kv_heads=1, head_size=128, dtype=torch.bfloat16),
     SlidingWindowSpec: dict(
         block_size=64,
         num_kv_heads=8,
@@ -152,12 +146,8 @@ spec_args_map: dict[type[KVCacheSpec], dict[str, Any]] = {
         mamba_cache_mode="align",
         num_speculative_blocks=2,
     ),
-    CrossAttentionSpec: dict(
-        block_size=64, num_kv_heads=8, head_size=128, dtype=torch.bfloat16
-    ),
-    SinkFullAttentionSpec: dict(
-        block_size=64, num_kv_heads=8, head_size=128, dtype=torch.bfloat16, sink_len=16
-    ),
+    CrossAttentionSpec: dict(block_size=64, num_kv_heads=8, head_size=128, dtype=torch.bfloat16),
+    SinkFullAttentionSpec: dict(block_size=64, num_kv_heads=8, head_size=128, dtype=torch.bfloat16, sink_len=16),
 }
 
 
@@ -166,9 +156,7 @@ def make_spec(spec_cls: type[KVCacheSpec]) -> KVCacheSpec:
 
 
 def are_uniform_specs(*specs: KVCacheSpec) -> bool:
-    return UniformTypeKVCacheSpecs.is_uniform_type(
-        {f"layer_{i}": spec for i, spec in enumerate(specs)}
-    )
+    return UniformTypeKVCacheSpecs.is_uniform_type({f"layer_{i}": spec for i, spec in enumerate(specs)})
 
 
 class TestKVCacheSpecRegistry:
@@ -179,10 +167,7 @@ class TestKVCacheSpecRegistry:
         for spec_cls, manager in spec_manager_map.items():
             spec = make_spec(spec_cls)
             assert KVCacheSpecRegistry.get_manager_class(spec) is manager
-            assert (
-                KVCacheSpecRegistry.get_uniform_type_base_spec(spec)
-                is spec_uniform_base_map[spec_cls]
-            )
+            assert KVCacheSpecRegistry.get_uniform_type_base_spec(spec) is spec_uniform_base_map[spec_cls]
 
     @pytest.mark.parametrize("spec_cls", list(spec_manager_map))
     def test_custom_spec_register(self, spec_cls):
@@ -227,9 +212,7 @@ class TestKVCacheSpecRegistry:
         assert KVCacheSpecRegistry.get_manager_class(spec) is None
         assert KVCacheSpecRegistry.get_uniform_type_base_spec(spec) is None
 
-        with pytest.raises(
-            ValueError, match="Unsupported KV cache spec type for layer layer_0"
-        ):
+        with pytest.raises(ValueError, match="Unsupported KV cache spec type for layer layer_0"):
             KVCacheSpecRegistry.check_kv_cache_spec_registry({"layer_0": spec})
 
         with pytest.raises(AssertionError, match="Unsupported KV cache spec type"):
@@ -245,9 +228,7 @@ class TestKVCacheSpecRegistry:
         class _ImplicitlyInheritedSpec(FullAttentionSpec):
             pass
 
-        spec = _ImplicitlyInheritedSpec(
-            block_size=16, num_kv_heads=8, head_size=128, dtype=torch.bfloat16
-        )
+        spec = _ImplicitlyInheritedSpec(block_size=16, num_kv_heads=8, head_size=128, dtype=torch.bfloat16)
 
         # MRO walk finds FullAttentionSpec → FullAttentionManager
         assert KVCacheSpecRegistry.get_manager_class(spec) is FullAttentionManager

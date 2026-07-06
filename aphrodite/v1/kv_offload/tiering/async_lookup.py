@@ -85,16 +85,12 @@ class AsyncLookupManager(ABC):
 
         # Scheduler → worker: one full step's batch per item.
         # None is used as a shutdown sentinel.
-        self._lookup_queue: queue.SimpleQueue[
-            list[tuple[OffloadKey, ReqContext]] | None
-        ] = queue.SimpleQueue()
+        self._lookup_queue: queue.SimpleQueue[list[tuple[OffloadKey, ReqContext]] | None] = queue.SimpleQueue()
 
         # Worker → scheduler: completed result batches.
         # Each item is a list of (key, found) pairs.
         # SimpleQueue is explicitly thread-safe for one writer / one reader.
-        self._pending_results: queue.SimpleQueue[list[tuple[OffloadKey, bool]]] = (
-            queue.SimpleQueue()
-        )
+        self._pending_results: queue.SimpleQueue[list[tuple[OffloadKey, bool]]] = queue.SimpleQueue()
         self._need_to_drain: bool = False
 
         self._thread = threading.Thread(
@@ -105,9 +101,7 @@ class AsyncLookupManager(ABC):
         self._thread.start()
 
     @abstractmethod
-    def batch_lookup(
-        self, keys: list[OffloadKey], req_context: ReqContext
-    ) -> Iterable[bool]:
+    def batch_lookup(self, keys: list[OffloadKey], req_context: ReqContext) -> Iterable[bool]:
         """
         Check whether a batch of blocks exist in this tier.
 

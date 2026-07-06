@@ -52,9 +52,7 @@ def _swiglustep_and_mul_kernel(
     tl.store(o_row_ptr + offsets, result, mask=mask)
 
 
-def swiglustep_and_mul_triton(
-    output: torch.Tensor, input: torch.Tensor, limit: float = 7.0
-):
+def swiglustep_and_mul_triton(output: torch.Tensor, input: torch.Tensor, limit: float = 7.0):
     b, n = input.shape
     assert input.ndim == 2
     assert n % 2 == 0
@@ -207,10 +205,7 @@ class SiluAndMulWithClamp(CustomOp):
         return self.forward_native(x)
 
     def extra_repr(self) -> str:
-        return (
-            f"swiglu_limit={self.swiglu_limit!r}, "
-            f"alpha={self.alpha!r}, beta={self.beta!r}"
-        )
+        return f"swiglu_limit={self.swiglu_limit!r}, alpha={self.alpha!r}, beta={self.beta!r}"
 
 
 # --8<-- [start:mul_and_silu]
@@ -388,11 +383,7 @@ class GeluAndMul(CustomOp):
         self.approximate = approximate
         if approximate not in ("none", "tanh"):
             raise ValueError(f"Unknown approximate mode: {approximate}")
-        if (
-            current_platform.is_cuda_alike()
-            or current_platform.is_cpu()
-            or current_platform.is_xpu()
-        ):
+        if current_platform.is_cuda_alike() or current_platform.is_cpu() or current_platform.is_xpu():
             if approximate == "none":
                 self.op = torch.ops._C.gelu_and_mul
             elif approximate == "tanh":
@@ -509,11 +500,7 @@ class NewGELU(CustomOp):
 
     def __init__(self):
         super().__init__()
-        if (
-            current_platform.is_cuda_alike()
-            or current_platform.is_cpu()
-            or current_platform.is_xpu()
-        ):
+        if current_platform.is_cuda_alike() or current_platform.is_cpu() or current_platform.is_xpu():
             self.op = torch.ops._C.gelu_new
 
     def forward_native(self, x: torch.Tensor) -> torch.Tensor:
@@ -537,11 +524,7 @@ class FastGELU(CustomOp):
 
     def __init__(self):
         super().__init__()
-        if (
-            current_platform.is_cuda_alike()
-            or current_platform.is_cpu()
-            or current_platform.is_xpu()
-        ):
+        if current_platform.is_cuda_alike() or current_platform.is_cpu() or current_platform.is_xpu():
             self.op = torch.ops._C.gelu_fast
 
     def forward_native(self, x: torch.Tensor) -> torch.Tensor:
@@ -565,11 +548,7 @@ class QuickGELU(CustomOp):
 
     def __init__(self):
         super().__init__()
-        if (
-            current_platform.is_cuda_alike()
-            or current_platform.is_cpu()
-            or current_platform.is_xpu()
-        ):
+        if current_platform.is_cuda_alike() or current_platform.is_cpu() or current_platform.is_xpu():
             self.op = torch.ops._C.gelu_quick
 
     def forward_native(self, x: torch.Tensor) -> torch.Tensor:
@@ -624,15 +603,9 @@ class XIELU(CustomOp):
         with_vector_loads: bool = False,
     ):
         super().__init__()
-        self.alpha_p = nn.Parameter(
-            torch.log(torch.exp(torch.tensor(alpha_p_init, dtype=dtype)) - 1).unsqueeze(
-                0
-            )
-        )
+        self.alpha_p = nn.Parameter(torch.log(torch.exp(torch.tensor(alpha_p_init, dtype=dtype)) - 1).unsqueeze(0))
         self.alpha_n = nn.Parameter(
-            torch.log(
-                torch.exp(torch.tensor(alpha_n_init - beta, dtype=dtype)) - 1
-            ).unsqueeze(0)
+            torch.log(torch.exp(torch.tensor(alpha_n_init - beta, dtype=dtype)) - 1).unsqueeze(0)
         )
         self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
         self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
@@ -653,10 +626,7 @@ class XIELU(CustomOp):
                 self._xielu_cuda_fn = allow_in_graph(self._xielu_cuda)
                 msg += " Enabled torch._dynamo for xIELU CUDA."
             except Exception as err:
-                msg += (
-                    f" Could not enable torch._dynamo for xIELU ({err}) - "
-                    "this may result in slower performance."
-                )
+                msg += f" Could not enable torch._dynamo for xIELU ({err}) - this may result in slower performance."
                 self._xielu_cuda_fn = self._xielu_cuda
             logger.warning_once(msg)
         except Exception as err:
@@ -687,8 +657,7 @@ class XIELU(CustomOp):
             x = x.view(-1, 1, x.size(-1))
         if original_shape != x.shape:
             logger.warning_once(
-                "Warning: xIELU input tensor expects 3 dimensions"
-                " but got (shape: %s). Reshaping to (shape: %s).",
+                "Warning: xIELU input tensor expects 3 dimensions but got (shape: %s). Reshaping to (shape: %s).",
                 original_shape,
                 x.shape,
             )
@@ -709,9 +678,7 @@ class XIELU(CustomOp):
             if not torch._dynamo.is_compiling():
                 return self._xielu_cuda_fn(input)
             else:
-                logger.warning_once(
-                    "torch._dynamo is compiling, using Python version of xIELU."
-                )
+                logger.warning_once("torch._dynamo is compiling, using Python version of xIELU.")
         return self._xielu_python(input)
 
     def forward_cuda(self, input: torch.Tensor) -> torch.Tensor:
@@ -741,9 +708,7 @@ class ScaledActivation(nn.Module):
             intermediate_size_per_partition = intermediate_size
         if params_dtype is None:
             params_dtype = torch.get_default_dtype()
-        self.scales = nn.Parameter(
-            torch.empty(intermediate_size_per_partition, dtype=params_dtype)
-        )
+        self.scales = nn.Parameter(torch.empty(intermediate_size_per_partition, dtype=params_dtype))
         set_weight_attrs(self.scales, {"weight_loader": self.weight_loader})
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -788,10 +753,7 @@ def _get_gelu_pytorch_tanh() -> nn.Module:
             "Falling back to GELU(approximate='none')."
         )
         return nn.GELU(approximate="none")
-    if (
-        current_platform.is_cpu()
-        and current_platform.get_cpu_architecture() == CpuArchEnum.ARM
-    ):
+    if current_platform.is_cpu() and current_platform.get_cpu_architecture() == CpuArchEnum.ARM:
         return GELUTanh()
     return nn.GELU(approximate="tanh")
 
@@ -834,6 +796,4 @@ def get_act_and_mul_fn(act_fn_name: str, *, compile_native: bool = True) -> nn.M
     try:
         return _ACTIVATION_AND_MUL_REGISTRY[act_fn_name]
     except KeyError:
-        raise ValueError(
-            f"Activation function {act_fn_name!r} is not supported."
-        ) from None
+        raise ValueError(f"Activation function {act_fn_name!r} is not supported.") from None

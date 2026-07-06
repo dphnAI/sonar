@@ -57,20 +57,13 @@ TOLERANCES = {
 }
 
 pytestmark = pytest.mark.skipif(
-    not (
-        current_platform.is_cuda_alike()
-        or current_platform.is_cpu()
-        or current_platform.is_xpu()
-    ),
+    not (current_platform.is_cuda_alike() or current_platform.is_cpu() or current_platform.is_xpu()),
     reason="Backend not supported",
 )
 
 DEVICE_TYPE = current_platform.device_type
 DEVICES = (
-    [
-        f"{DEVICE_TYPE}:{i}"
-        for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-    ]
+    [f"{DEVICE_TYPE}:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
     if (current_platform.is_cuda_alike() or current_platform.is_xpu())
     else ["cpu"]
 )
@@ -102,9 +95,7 @@ def skip_cuda_with_stage_false(request):
     """
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         try:
-            if hasattr(request.node, "callspec") and hasattr(
-                request.node.callspec, "params"
-            ):
+            if hasattr(request.node, "callspec") and hasattr(request.node.callspec, "params"):
                 params = request.node.callspec.params
                 if "stage" in params and params["stage"] is False:
                     pytest.skip("Skip test when stage=False")
@@ -113,9 +104,7 @@ def skip_cuda_with_stage_false(request):
     yield
 
 
-def get_random_id_to_index(
-    num_loras: int, num_slots: int, log: bool = True
-) -> list[int | None]:
+def get_random_id_to_index(num_loras: int, num_slots: int, log: bool = True) -> list[int | None]:
     """Creates a random lora_id_to_index mapping.
 
     Args:
@@ -179,9 +168,7 @@ def populate_loras(
                     module_name=f"fake_{i}",
                     weight=layer_weights,
                 )
-                sublora.lora_b = sublora.lora_b[
-                    (sublora_len * i) : (sublora_len * (i + 1)), :
-                ]
+                sublora.lora_b = sublora.lora_b[(sublora_len * i) : (sublora_len * (i + 1)), :]
                 sublora.optimize()
                 subloras.append(sublora)
 
@@ -226,16 +213,9 @@ def create_random_inputs(
 
     for _ in range(num_inputs):
         if input_type == torch.int:
-            inputs.append(
-                torch.randint(
-                    low=int(low), high=int(high), size=input_size, device=device
-                )
-            )
+            inputs.append(torch.randint(low=int(low), high=int(high), size=input_size, device=device))
         else:
-            inputs.append(
-                torch.rand(size=input_size, dtype=input_type, device=device) * high
-                + low
-            )
+            inputs.append(torch.rand(size=input_size, dtype=input_type, device=device) * high + low)
 
         lora_id = random.choice(active_lora_ids)
         index_mapping += [lora_id] * input_size[0]
@@ -266,9 +246,7 @@ def check_punica_wrapper(punica_wrapper) -> bool:
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("vocab_size", [512, 32000, 64000, 128000])
 @pytest.mark.parametrize("stage", STAGES)
-def test_embeddings(
-    default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage
-) -> None:
+def test_embeddings(default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage) -> None:
     # For multi-GPU testing of Triton kernel, we must explicitly set the CUDA
     # device, see: https://github.com/triton-lang/triton/issues/2925
     # Same below.
@@ -277,9 +255,7 @@ def test_embeddings(
 
     torch.set_default_device(device)
     max_loras = 8
-    lora_config = LoRAConfig(
-        max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16
-    )
+    lora_config = LoRAConfig(max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16)
     punica_wrapper = get_punica_wrapper(8192, 256, device, lora_config=lora_config)
     assert check_punica_wrapper(punica_wrapper)
 
@@ -368,17 +344,13 @@ def test_embeddings(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("vocab_size", [64000, 256512, 258048])
 @pytest.mark.parametrize("stage", STAGES)
-def test_lm_head_logits_processor(
-    default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage
-) -> None:
+def test_lm_head_logits_processor(default_aphrodite_config, dist_init, num_loras, device, vocab_size, stage) -> None:
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
 
     torch.set_default_device(device)
     max_loras = 8
-    lora_config = LoRAConfig(
-        max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16
-    )
+    lora_config = LoRAConfig(max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16)
     punica_wrapper = get_punica_wrapper(8192, 256, device, lora_config=lora_config)
     assert check_punica_wrapper(punica_wrapper)
 
@@ -437,9 +409,7 @@ def test_lm_head_logits_processor(
         expected_results: list[torch.Tensor] = []
         for input_, lora_id in zip(inputs, prompt_mapping):
             lora = lora_dict[lora_id]
-            result = logits_processor._get_logits(
-                hidden_states=input_, lm_head=linear, embedding_bias=None
-            )
+            result = logits_processor._get_logits(hidden_states=input_, lm_head=linear, embedding_bias=None)
 
             result += input_ @ lora.lora_a.T @ lora.lora_b.T * lora.scaling
             expected_results.append(result)
@@ -484,23 +454,17 @@ def test_lm_head_logits_processor(
 @torch.inference_mode()
 @pytest.mark.parametrize("vocab_size", [258049, 300000])
 @pytest.mark.parametrize("device", DEVICES)
-def test_lm_head_logits_processor_invalid_vocab_size(
-    default_aphrodite_config, dist_init, vocab_size, device
-) -> None:
+def test_lm_head_logits_processor_invalid_vocab_size(default_aphrodite_config, dist_init, vocab_size, device) -> None:
     """Test that LogitsProcessorWithLoRA raises ValueError for invalid vocab sizes."""
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
 
     torch.set_default_device(device)
     max_loras = 8
-    lora_config = LoRAConfig(
-        max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16
-    )
+    lora_config = LoRAConfig(max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16)
 
     logits_processor = LogitsProcessor(vocab_size)
-    lora_logits_processor = LogitsProcessorWithLoRA(
-        logits_processor, 1024, torch.float16, device, None
-    )
+    lora_logits_processor = LogitsProcessorWithLoRA(logits_processor, 1024, torch.float16, device, None)
 
     with pytest.raises(ValueError, match="vocab size must be <= 258048"):
         lora_logits_processor.create_lora_weights(max_loras, lora_config)
@@ -531,19 +495,12 @@ def test_linear_replicated(
     assert check_punica_wrapper(punica_wrapper)
 
     def create_random_linear_replicated_layer(idx: int = 0):
-        linear = ReplicatedLinear(
-            4096, 4096, bias=False, params_dtype=torch.float16, prefix=f"layer_{idx}"
-        )
+        linear = ReplicatedLinear(4096, 4096, bias=False, params_dtype=torch.float16, prefix=f"layer_{idx}")
         linear.weight.data = torch.rand_like(linear.weight.data)
         lora_linear = ReplicatedLinearWithLoRA(linear)
 
         lora_linear.create_lora_weights(max_loras, lora_config)
-        assert (
-            lora_linear.n_slices
-            == len(lora_linear.lora_a_stacked)
-            == len(lora_linear.lora_b_stacked)
-            == 1
-        )
+        assert lora_linear.n_slices == len(lora_linear.lora_a_stacked) == len(lora_linear.lora_b_stacked) == 1
         return linear, lora_linear
 
     for i in range(NUM_RANDOM_SEEDS):
@@ -651,9 +608,7 @@ def test_linear_parallel(
             )
             linear.weight.data = torch.rand_like(linear.weight.data)
             lora_linear = (
-                RowParallelLinearWithLoRA(linear)
-                if not fully_shard
-                else RowParallelLinearWithShardedLoRA(linear)
+                RowParallelLinearWithLoRA(linear) if not fully_shard else RowParallelLinearWithShardedLoRA(linear)
             )
         else:
             linear = ColumnParallelLinear(
@@ -665,17 +620,10 @@ def test_linear_parallel(
             )
             linear.weight.data = torch.rand_like(linear.weight.data)
             lora_linear = (
-                ColumnParallelLinearWithLoRA(linear)
-                if not fully_shard
-                else ColumnParallelLinearWithShardedLoRA(linear)
+                ColumnParallelLinearWithLoRA(linear) if not fully_shard else ColumnParallelLinearWithShardedLoRA(linear)
             )
         lora_linear.create_lora_weights(max_loras, lora_config)
-        assert (
-            lora_linear.n_slices
-            == len(lora_linear.lora_a_stacked)
-            == len(lora_linear.lora_b_stacked)
-            == 1
-        )
+        assert lora_linear.n_slices == len(lora_linear.lora_a_stacked) == len(lora_linear.lora_b_stacked) == 1
 
         return linear, lora_linear
 
@@ -814,9 +762,7 @@ def test_column_parallel_packed(
             )
             linear.weight.data = torch.rand_like(linear.weight.data)
             lora_linear = (
-                QKVParallelLinearWithLoRA(linear)
-                if not fully_shard
-                else QKVParallelLinearWithShardedLoRA(linear)
+                QKVParallelLinearWithLoRA(linear) if not fully_shard else QKVParallelLinearWithShardedLoRA(linear)
             )
 
         @dataclass
@@ -826,15 +772,8 @@ def test_column_parallel_packed(
             num_attention_heads = 32
 
         n_slices = repeats
-        lora_linear.create_lora_weights(
-            max_loras, lora_config, model_config=FakeConfig()
-        )
-        assert (
-            lora_linear.n_slices
-            == len(lora_linear.lora_a_stacked)
-            == len(lora_linear.lora_b_stacked)
-            == n_slices
-        )
+        lora_linear.create_lora_weights(max_loras, lora_config, model_config=FakeConfig())
+        assert lora_linear.n_slices == len(lora_linear.lora_a_stacked) == len(lora_linear.lora_b_stacked) == n_slices
 
         return linear, lora_linear
 
@@ -877,9 +816,9 @@ def test_column_parallel_packed(
             result = linear(input_)[0]
             subloras = sublora_dict[lora_id]
             for i, sublora in enumerate(subloras):
-                result[
-                    :, sublora.lora_b.shape[0] * i : sublora.lora_b.shape[0] * (i + 1)
-                ] += input_ @ sublora.lora_a.T @ sublora.lora_b.T * sublora.scaling
+                result[:, sublora.lora_b.shape[0] * i : sublora.lora_b.shape[0] * (i + 1)] += (
+                    input_ @ sublora.lora_a.T @ sublora.lora_b.T * sublora.scaling
+                )
             expected_results.append(result)
         expected_result = torch.cat(expected_results)
 
@@ -926,9 +865,7 @@ def test_merged_column_parallel_variable_slice(
 
     max_loras = 8
     torch.set_default_device(device)
-    lora_config = LoRAConfig(
-        max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16
-    )
+    lora_config = LoRAConfig(max_loras=max_loras, max_lora_rank=8, lora_dtype=torch.float16)
     punica_wrapper = get_punica_wrapper(8192, 256, device, lora_config=lora_config)
 
     # Set number of output slices
@@ -999,9 +936,7 @@ def test_merged_column_parallel_variable_slice(
 
         # Check that the LoRA result is close to the expected result
         rtol, atol = TOLERANCES[lora_result.dtype]
-        torch.testing.assert_close(
-            lora_result, torch.cat(expected_results), rtol=rtol, atol=atol
-        )
+        torch.testing.assert_close(lora_result, torch.cat(expected_results), rtol=rtol, atol=atol)
 
         # Reset LoRA weights and check results with zero LoRA weights
         for slot_idx in range(max_loras):
@@ -1028,9 +963,7 @@ def test_merged_column_parallel_variable_slice(
 
 
 @pytest.mark.parametrize("tp_size", [1, 2, 4, 8])
-@pytest.mark.parametrize(
-    "seed", list(range(VOCAB_PARALLEL_EMBEDDING_TEST_NUM_RANDOM_SEEDS))
-)
+@pytest.mark.parametrize("seed", list(range(VOCAB_PARALLEL_EMBEDDING_TEST_NUM_RANDOM_SEEDS)))
 def test_vocab_parallel_embedding_indices(tp_size, seed, default_aphrodite_config):
     random.seed(seed)
     vocab_size = random.randint(4000, 64000)
@@ -1058,9 +991,7 @@ def test_vocab_parallel_embedding_indices(tp_size, seed, default_aphrodite_confi
                 return_value=tp_size,
             ),
         ):
-            vocab_embedding = VocabParallelEmbedding(
-                vocab_size, 1, org_num_embeddings=org_vocab_size
-            )
+            vocab_embedding = VocabParallelEmbedding(vocab_size, 1, org_num_embeddings=org_vocab_size)
         vocab_size_padded = vocab_embedding.num_embeddings_padded
         shard_indices = vocab_embedding.shard_indices
         # Assert that the ranges are contiguous
@@ -1073,11 +1004,7 @@ def test_vocab_parallel_embedding_indices(tp_size, seed, default_aphrodite_confi
         computed_added_vocab_size += shard_indices.num_added_elements
 
         # Ensure that the ranges are not overlapping
-        all_org_tokens.extend(
-            range(
-                shard_indices.org_vocab_start_index, shard_indices.org_vocab_end_index
-            )
-        )
+        all_org_tokens.extend(range(shard_indices.org_vocab_start_index, shard_indices.org_vocab_end_index))
         all_added_tokens.extend(
             range(
                 shard_indices.added_vocab_start_index,
@@ -1085,28 +1012,15 @@ def test_vocab_parallel_embedding_indices(tp_size, seed, default_aphrodite_confi
             )
         )
 
-        token_ids.extend(
-            range(
-                shard_indices.org_vocab_start_index, shard_indices.org_vocab_end_index
-            )
-        )
-        token_ids.extend(
-            [-1]
-            * (shard_indices.num_org_elements_padded - shard_indices.num_org_elements)
-        )
+        token_ids.extend(range(shard_indices.org_vocab_start_index, shard_indices.org_vocab_end_index))
+        token_ids.extend([-1] * (shard_indices.num_org_elements_padded - shard_indices.num_org_elements))
         token_ids.extend(
             range(
                 shard_indices.added_vocab_start_index,
                 shard_indices.added_vocab_end_index,
             )
         )
-        token_ids.extend(
-            [-1]
-            * (
-                shard_indices.num_added_elements_padded
-                - shard_indices.num_added_elements
-            )
-        )
+        token_ids.extend([-1] * (shard_indices.num_added_elements_padded - shard_indices.num_added_elements))
 
         last_org_vocab_end_index = shard_indices.org_vocab_end_index
         last_added_vocab_end_index = shard_indices.added_vocab_end_index
@@ -1161,12 +1075,8 @@ def test_get_masked_input_and_mask():
         added_vocab_end_index=12,
         num_org_vocab_padding=0,
     )
-    assert torch.equal(
-        modified_x_rank_0, torch.tensor([0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 0, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_1, torch.tensor([0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 4, 5])
-    )
+    assert torch.equal(modified_x_rank_0, torch.tensor([0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 0, 0]))
+    assert torch.equal(modified_x_rank_1, torch.tensor([0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 4, 5]))
 
     # tp 4 case, no padding
     modified_x_rank_0, _ = get_masked_input_and_mask(
@@ -1201,18 +1111,10 @@ def test_get_masked_input_and_mask():
         added_vocab_end_index=12,
         num_org_vocab_padding=0,
     )
-    assert torch.equal(
-        modified_x_rank_0, torch.tensor([0, 1, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_1, torch.tensor([0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_2, torch.tensor([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_3, torch.tensor([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2])
-    )
+    assert torch.equal(modified_x_rank_0, torch.tensor([0, 1, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0]))
+    assert torch.equal(modified_x_rank_1, torch.tensor([0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0]))
+    assert torch.equal(modified_x_rank_2, torch.tensor([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0]))
+    assert torch.equal(modified_x_rank_3, torch.tensor([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2]))
 
     # base tp 1 case, with padding
     modified_x, _ = get_masked_input_and_mask(
@@ -1223,9 +1125,7 @@ def test_get_masked_input_and_mask():
         added_vocab_end_index=12,
         num_org_vocab_padding=2,
     )
-    assert torch.equal(
-        modified_x, torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13])
-    )
+    assert torch.equal(modified_x, torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13]))
 
     # tp 2 case, with padding
     modified_x_rank_0, _ = get_masked_input_and_mask(
@@ -1244,12 +1144,8 @@ def test_get_masked_input_and_mask():
         added_vocab_end_index=12,
         num_org_vocab_padding=2,
     )
-    assert torch.equal(
-        modified_x_rank_0, torch.tensor([0, 1, 2, 3, 0, 0, 0, 0, 6, 7, 0, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_1, torch.tensor([0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 6, 7])
-    )
+    assert torch.equal(modified_x_rank_0, torch.tensor([0, 1, 2, 3, 0, 0, 0, 0, 6, 7, 0, 0]))
+    assert torch.equal(modified_x_rank_1, torch.tensor([0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 6, 7]))
 
     # tp 4 case, with padding
     modified_x_rank_0, _ = get_masked_input_and_mask(
@@ -1284,18 +1180,10 @@ def test_get_masked_input_and_mask():
         added_vocab_end_index=12,
         num_org_vocab_padding=2,
     )
-    assert torch.equal(
-        modified_x_rank_0, torch.tensor([0, 1, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_1, torch.tensor([0, 0, 0, 1, 0, 0, 0, 0, 0, 4, 0, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_2, torch.tensor([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0])
-    )
-    assert torch.equal(
-        modified_x_rank_3, torch.tensor([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 4])
-    )
+    assert torch.equal(modified_x_rank_0, torch.tensor([0, 1, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0]))
+    assert torch.equal(modified_x_rank_1, torch.tensor([0, 0, 0, 1, 0, 0, 0, 0, 0, 4, 0, 0]))
+    assert torch.equal(modified_x_rank_2, torch.tensor([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0]))
+    assert torch.equal(modified_x_rank_3, torch.tensor([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 4]))
 
 
 def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init):
@@ -1315,9 +1203,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
     # Case 1: MergedColumnParallelLinear with 3+ output sizes and
     # packed_modules_list with 1 item (nemotron-h style)
     # -> MergedColumnParallelLinearVariableSliceWithLoRA should be selected
-    layer_3_slices = MergedColumnParallelLinear(
-        4096, [1024, 1280, 1536], bias=False, params_dtype=torch.float16
-    )
+    layer_3_slices = MergedColumnParallelLinear(4096, [1024, 1280, 1536], bias=False, params_dtype=torch.float16)
     packed_modules_single = ["mlp"]
 
     assert MergedColumnParallelLinearVariableSliceWithLoRA.can_replace_layer(
@@ -1332,10 +1218,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
         source_layer=layer_3_slices,
         lora_config=lora_config,
         packed_modules_list=packed_modules_single,
-    ), (
-        "ColumnParallelLinearWithLoRA should NOT handle 3+ slices "
-        "(slice_lora_b assumes 2 slices)"
-    )
+    ), "ColumnParallelLinearWithLoRA should NOT handle 3+ slices (slice_lora_b assumes 2 slices)"
 
     # Verify from_layer selects the correct class (Variable, not base)
     selected_layer = from_layer(
@@ -1344,9 +1227,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
         lora_config=lora_config,
         packed_modules_list=packed_modules_single,
     )
-    assert isinstance(
-        selected_layer, MergedColumnParallelLinearVariableSliceWithLoRA
-    ), (
+    assert isinstance(selected_layer, MergedColumnParallelLinearVariableSliceWithLoRA), (
         f"from_layer should select MergedColumnParallelLinearVariableSliceWithLoRA "
         f"for 3+ slices, got {type(selected_layer).__name__}"
     )
@@ -1355,9 +1236,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
     # packed_modules_list with 1 item (standard gate_up style)
     # -> ColumnParallelLinearWithLoRA should be selected
     # -> MergedColumnParallelLinearVariableSliceWithLoRA should NOT match
-    layer_2_slices = MergedColumnParallelLinear(
-        4096, [2048, 2048], bias=False, params_dtype=torch.float16
-    )
+    layer_2_slices = MergedColumnParallelLinear(4096, [2048, 2048], bias=False, params_dtype=torch.float16)
 
     assert ColumnParallelLinearWithLoRA.can_replace_layer(
         source_layer=layer_2_slices,
@@ -1379,15 +1258,11 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
         packed_modules_list=packed_modules_single,
     )
     assert isinstance(selected_layer_2, ColumnParallelLinearWithLoRA), (
-        f"from_layer should select ColumnParallelLinearWithLoRA "
-        f"for 2 slices, got {type(selected_layer_2).__name__}"
+        f"from_layer should select ColumnParallelLinearWithLoRA for 2 slices, got {type(selected_layer_2).__name__}"
     )
     # But NOT the Variable subclass
-    assert not isinstance(
-        selected_layer_2, MergedColumnParallelLinearVariableSliceWithLoRA
-    ), (
-        "from_layer should NOT select "
-        "MergedColumnParallelLinearVariableSliceWithLoRA for 2 slices"
+    assert not isinstance(selected_layer_2, MergedColumnParallelLinearVariableSliceWithLoRA), (
+        "from_layer should NOT select MergedColumnParallelLinearVariableSliceWithLoRA for 2 slices"
     )
 
     # Case 3: MergedColumnParallelLinear with 3+ items in packed_modules_list
@@ -1408,10 +1283,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
         source_layer=layer_2_slices,
         lora_config=lora_config,
         packed_modules_list=packed_modules_two,
-    ), (
-        "MergedColumnParallelLinearVariableSliceWithLoRA"
-        " should NOT handle 2 packed modules"
-    )
+    ), "MergedColumnParallelLinearVariableSliceWithLoRA should NOT handle 2 packed modules"
 
     assert MergedColumnParallelLinearWithLoRA.can_replace_layer(
         source_layer=layer_2_slices,
@@ -1437,9 +1309,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
         lora_dtype=torch.float16,
         fully_sharded_loras=True,
     )
-    fully_sharded_tp_layer = MergedColumnParallelLinear(
-        4096, [2048, 2048], bias=False, params_dtype=torch.float16
-    )
+    fully_sharded_tp_layer = MergedColumnParallelLinear(4096, [2048, 2048], bias=False, params_dtype=torch.float16)
     fully_sharded_tp_layer.tp_size = 2
 
     assert not MergedColumnParallelLinearWithLoRA.can_replace_layer(
@@ -1511,9 +1381,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
     class CustomMergedColumnParallelLinear(MergedColumnParallelLinear):
         pass
 
-    custom_merged_layer = CustomMergedColumnParallelLinear(
-        4096, [2048, 2048], bias=False, params_dtype=torch.float16
-    )
+    custom_merged_layer = CustomMergedColumnParallelLinear(4096, [2048, 2048], bias=False, params_dtype=torch.float16)
     assert MergedColumnParallelLinearWithLoRA.can_replace_layer(
         source_layer=custom_merged_layer,
         lora_config=lora_config,
@@ -1533,9 +1401,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
 
     # Case 7: Plain ColumnParallelLinear (not merged) - common in many models
     # -> ColumnParallelLinearWithLoRA should be selected
-    plain_column_parallel = ColumnParallelLinear(
-        4096, 4096, bias=False, params_dtype=torch.float16
-    )
+    plain_column_parallel = ColumnParallelLinear(4096, 4096, bias=False, params_dtype=torch.float16)
 
     assert ColumnParallelLinearWithLoRA.can_replace_layer(
         source_layer=plain_column_parallel,
@@ -1547,10 +1413,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
         source_layer=plain_column_parallel,
         lora_config=lora_config,
         packed_modules_list=packed_modules_single,
-    ), (
-        "MergedColumnParallelLinearVariableSliceWithLoRA "
-        "should NOT handle plain ColumnParallelLinear"
-    )
+    ), "MergedColumnParallelLinearVariableSliceWithLoRA should NOT handle plain ColumnParallelLinear"
 
     # Verify from_layer selects ColumnParallelLinearWithLoRA for plain layer
     selected_plain = from_layer(
@@ -1578,10 +1441,7 @@ def test_variable_slice_lora_class_selection(default_aphrodite_config, dist_init
         source_layer=layer_2_slices,
         lora_config=lora_config,
         packed_modules_list=[],
-    ), (
-        "MergedColumnParallelLinearVariableSliceWithLoRA "
-        "should NOT handle 2 slices even with empty packed_modules_list"
-    )
+    ), "MergedColumnParallelLinearVariableSliceWithLoRA should NOT handle 2 slices even with empty packed_modules_list"
 
 
 @pytest.mark.parametrize(
@@ -1612,11 +1472,7 @@ def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
         torch.accelerator.set_device_index(device)
 
     torch.set_default_device(device)
-    dtype = (
-        torch.float16
-        if (current_platform.is_cuda_alike() or current_platform.is_xpu())
-        else torch.float32
-    )
+    dtype = torch.float16 if (current_platform.is_cuda_alike() or current_platform.is_xpu()) else torch.float32
     max_loras = 8
     lora_config = LoRAConfig(
         max_loras=max_loras,
@@ -1632,9 +1488,7 @@ def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
             output, output_bias = super().forward(input_)
             return output + 1, output_bias
 
-    layer = OffsetDeepSeekFusedQkvAProjLinear(
-        32, [16, 16], prefix="model.layers.0.self_attn.fused_qkv_a_proj"
-    )
+    layer = OffsetDeepSeekFusedQkvAProjLinear(32, [16, 16], prefix="model.layers.0.self_attn.fused_qkv_a_proj")
     layer.weight.data = torch.rand_like(layer.weight.data, dtype=dtype)
 
     lora_layer = MergedColumnParallelLinearWithLoRA(layer)
@@ -1674,13 +1528,9 @@ def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
         expected_results.append(result)
 
     rtol, atol = TOLERANCES[lora_result.dtype]
-    torch.testing.assert_close(
-        lora_result, torch.cat(expected_results), rtol=rtol, atol=atol
-    )
+    torch.testing.assert_close(lora_result, torch.cat(expected_results), rtol=rtol, atol=atol)
 
-    merged_layer = OffsetDeepSeekFusedQkvAProjLinear(
-        32, [16, 16], prefix="model.layers.0.self_attn.fused_qkv_a_proj"
-    )
+    merged_layer = OffsetDeepSeekFusedQkvAProjLinear(32, [16, 16], prefix="model.layers.0.self_attn.fused_qkv_a_proj")
     merged_layer.weight.data = layer.weight.data.clone()
     merged_layer.weight.data[:16].add_(lora_b[0] @ lora_a[0])
     merged_layer.weight.data[16:].add_(lora_b[1] @ lora_a[1])
@@ -1692,18 +1542,12 @@ def test_deepseek_fused_qkv_a_proj_lora_preserves_base_forward(
 @torch.inference_mode()
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("stage", STAGES)
-def test_replicated_lora_preserves_base_forward_for_subclasses(
-    default_aphrodite_config, dist_init, device, stage
-):
+def test_replicated_lora_preserves_base_forward_for_subclasses(default_aphrodite_config, dist_init, device, stage):
     if current_platform.is_cuda_alike() or current_platform.is_xpu():
         torch.accelerator.set_device_index(device)
 
     torch.set_default_device(device)
-    dtype = (
-        torch.float16
-        if current_platform.is_cuda_alike() or current_platform.is_xpu()
-        else torch.float32
-    )
+    dtype = torch.float16 if current_platform.is_cuda_alike() or current_platform.is_xpu() else torch.float32
     max_loras = 8
     lora_config = LoRAConfig(max_loras=max_loras, max_lora_rank=8, lora_dtype=dtype)
     punica_wrapper = get_punica_wrapper(8192, 256, device, lora_config=lora_config)
@@ -1747,9 +1591,7 @@ def test_replicated_lora_preserves_base_forward_for_subclasses(
         expected_results.append(result)
 
     rtol, atol = TOLERANCES[lora_result.dtype]
-    torch.testing.assert_close(
-        lora_result, torch.cat(expected_results), rtol=rtol, atol=atol
-    )
+    torch.testing.assert_close(lora_result, torch.cat(expected_results), rtol=rtol, atol=atol)
 
     merged_layer = OffsetReplicatedLinear(32, 16, bias=False, params_dtype=dtype)
     merged_layer.weight.data = layer.weight.data.clone()

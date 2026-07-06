@@ -94,16 +94,10 @@ class KVTransferConfig:
             self.engine_id = str(uuid.uuid4())
 
         if self.kv_role is not None and self.kv_role not in get_args(KVRole):
-            raise ValueError(
-                f"Unsupported kv_role: {self.kv_role}. "
-                f"Supported roles are {get_args(KVRole)}"
-            )
+            raise ValueError(f"Unsupported kv_role: {self.kv_role}. Supported roles are {get_args(KVRole)}")
 
         if self.kv_connector is not None and self.kv_role is None:
-            raise ValueError(
-                "Please specify kv_role when kv_connector "
-                f"is set, supported roles are {get_args(KVRole)}"
-            )
+            raise ValueError(f"Please specify kv_role when kv_connector is set, supported roles are {get_args(KVRole)}")
 
     @property
     def is_kv_transfer_instance(self) -> bool:

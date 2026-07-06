@@ -32,23 +32,17 @@ def load_eagle_model(target_model: nn.Module, aphrodite_config: AphroditeConfig)
     assert speculative_config is not None
     draft_model_config = speculative_config.draft_model_config
     with set_model_tag("eagle_head"):
-        eagle_model = get_model(
-            aphrodite_config=aphrodite_config, model_config=draft_model_config
-        )
+        eagle_model = get_model(aphrodite_config=aphrodite_config, model_config=draft_model_config)
 
     target_language_model = (
-        target_model.get_language_model()
-        if hasattr(target_model, "get_language_model")
-        else target_model
+        target_model.get_language_model() if hasattr(target_model, "get_language_model") else target_model
     )
     target_inner = target_language_model.model
     draft_inner = eagle_model.model
 
     # Skip embedding sharing under PP — each rank owns its own embedding.
     if get_pp_group().world_size == 1:
-        target_embed = getattr(target_inner, "embed_tokens", None) or getattr(
-            target_inner, "embedding", None
-        )
+        target_embed = getattr(target_inner, "embed_tokens", None) or getattr(target_inner, "embedding", None)
         # If the target's embedding is LoRA-wrapped, share the underlying base
         # layer. The draft is not part of the LoRA adapter; sharing the wrapper
         # would make the draft run the LoRA embedding kernel with the target's
@@ -57,18 +51,14 @@ def load_eagle_model(target_model: nn.Module, aphrodite_config: AphroditeConfig)
         if isinstance(target_embed, BaseLayerWithLoRA):
             target_embed = target_embed.base_layer
         draft_embed = getattr(draft_inner, "embed_tokens", None)
-        if target_embed is not None and _should_share(
-            eagle_model, "has_own_embed_tokens", draft_embed, target_embed
-        ):
+        if target_embed is not None and _should_share(eagle_model, "has_own_embed_tokens", draft_embed, target_embed):
             if draft_embed is not None:
                 del draft_inner.embed_tokens
             draft_inner.embed_tokens = target_embed
 
     target_lm_head = getattr(target_model, "lm_head", None)
     draft_lm_head = getattr(eagle_model, "lm_head", None)
-    if target_lm_head is not None and _should_share(
-        eagle_model, "has_own_lm_head", draft_lm_head, target_lm_head
-    ):
+    if target_lm_head is not None and _should_share(eagle_model, "has_own_lm_head", draft_lm_head, target_lm_head):
         if draft_lm_head is not None:
             del eagle_model.lm_head
         eagle_model.lm_head = target_lm_head

@@ -24,7 +24,7 @@ from transformers.image_utils import ImageInput
 from transformers.video_utils import VideoMetadata
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.config.multimodal import BaseDummyOptions, VideoDummyOptions
 from aphrodite.distributed import (
     get_pp_group,
@@ -825,32 +825,24 @@ class Molmo2VisionBackbone(nn.Module, SupportsQuant):
         )
 
         # Now [batch, num_features, num_pooled_patches, dim]
-        to_pool = image_features.reshape(batch_size, -1, dim)[
-            batch_idx, torch.clip(token_pooling, 0)
-        ]
+        to_pool = image_features.reshape(batch_size, -1, dim)[batch_idx, torch.clip(token_pooling, 0)]
         to_pool = to_pool * valid.to(self.dtype)[:, :, :, None]
         to_pool = to_pool.reshape([-1, token_pooling.shape[-1], dim])
         if self.adapter_config.pooling_attention_mask:
             attn_mask = valid.reshape([-1, 1, 1, valid.shape[-1]])
             denom = valid.view(-1, to_pool.shape[-2]).float().sum(-1)
             denom = torch.where(denom == 0, 1, denom)
-            query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(
-                to_pool.dtype
-            )
+            query = to_pool.sum(-2, keepdim=True) / denom[:, None, None].to(to_pool.dtype)
         else:
             attn_mask = None
             query = to_pool.mean(-2, keepdim=True)
 
         pooled_features = self.image_pooling_2d(query, to_pool, attn_mask=attn_mask)
-        pooled_features = pooled_features.reshape(
-            [batch_size, -1, pooled_features.shape[-1]]
-        )
+        pooled_features = pooled_features.reshape([batch_size, -1, pooled_features.shape[-1]])
 
         # MLP layer to map the feature.
         pooled_features = self.image_projector(pooled_features)
-        return pooled_features.view(-1, pooled_features.shape[-1])[
-            valid_token.flatten()
-        ]
+        return pooled_features.view(-1, pooled_features.shape[-1])[valid_token.flatten()]
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
@@ -905,26 +897,15 @@ class Molmo2Attention(nn.Module):
         self.q_norm: nn.Module | None = None
         self.qk_norm_type: str | None = None
         if config.use_qk_norm:
-            k_norm_size = (
-                self.head_dim
-                if config.qk_norm_type == "qwen3"
-                else self.total_num_kv_heads * self.head_dim
-            )
+            k_norm_size = self.head_dim if config.qk_norm_type == "qwen3" else self.total_num_kv_heads * self.head_dim
             self.tp_rank = get_tensor_model_parallel_rank()
             self.k_norm = RMSNorm(k_norm_size, eps=config.layer_norm_eps)
-            q_norm_size = (
-                self.head_dim
-                if config.qk_norm_type == "qwen3"
-                else self.total_num_heads * self.head_dim
-            )
+            q_norm_size = self.head_dim if config.qk_norm_type == "qwen3" else self.total_num_heads * self.head_dim
             self.q_norm = RMSNorm(q_norm_size, eps=config.layer_norm_eps)
             self.qk_norm_type = config.qk_norm_type
         # Rotary embeddings. Rope scaling is only applied on full attention layers.
         layer_idx = extract_layer_index(prefix)
-        if (
-            config.rope_scaling_layers is not None
-            and layer_idx not in config.rope_scaling_layers
-        ):
+        if config.rope_scaling_layers is not None and layer_idx not in config.rope_scaling_layers:
             rope_theta = rope_parameters["rope_theta"]
             rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
         self.rotary_emb = get_rope(
@@ -975,11 +956,7 @@ class Molmo2Attention(nn.Module):
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        if (
-            self.q_norm is not None
-            and self.k_norm is not None
-            and self.qk_norm_type == "olmo"
-        ):
+        if self.q_norm is not None and self.k_norm is not None and self.qk_norm_type == "olmo":
             q, k = self._apply_qk_norm(q, k)
         elif self.q_norm is not None and self.k_norm is not None:
             q_by_head = q.view(
@@ -1156,11 +1133,7 @@ class Molmo2TextModel(nn.Module, SupportsQuant):
             quant_config=quant_config,
         )
 
-        decoder_layer = (
-            Molmo2DecoderNormAfterLayer
-            if text_config.norm_after
-            else Molmo2DecoderLayer
-        )
+        decoder_layer = Molmo2DecoderNormAfterLayer if text_config.norm_after else Molmo2DecoderLayer
         self.start_layer, self.end_layer, self.layers = make_layers(
             text_config.num_hidden_layers,
             lambda prefix: decoder_layer(
@@ -1211,9 +1184,7 @@ class Molmo2TextModel(nn.Module, SupportsQuant):
                 **kwargs,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         if residual is not None:
             hidden_states, _ = self.norm(hidden_states, residual)
         else:
@@ -1256,12 +1227,7 @@ def get_patches_grid_size(
 
 
 def get_candidate_tilings(max_num: int) -> list[tuple[int, int]]:
-    tilings = [
-        (i, j)
-        for i in range(1, max_num + 1)
-        for j in range(1, max_num + 1)
-        if i * j <= max_num
-    ]
+    tilings = [(i, j) for i in range(1, max_num + 1) for j in range(1, max_num + 1) if i * j <= max_num]
     return sorted(tilings, key=lambda x: (x[0] * x[1], x[0]))
 
 
@@ -1306,9 +1272,7 @@ def exif_transpose(
     if images is None:
         return None
     if images is not None and isinstance(images, (list, tuple)):
-        images = [
-            exif_transpose(img) if isinstance(img, Image) else img for img in images
-        ]
+        images = [exif_transpose(img) if isinstance(img, Image) else img for img in images]
     elif images is not None and isinstance(images, Image):
         images = ImageOps.exif_transpose(images)
     return images
@@ -1335,17 +1299,11 @@ def build_flat_image_bool_length(
     h = image_grids[:, 2]
     w = image_grids[:, 3]
 
-    low_res_use_col_tokens = (
-        image_use_col_tokens
-        if use_single_crop_col_tokens is None
-        else use_single_crop_col_tokens
-    )
+    low_res_use_col_tokens = image_use_col_tokens if use_single_crop_col_tokens is None else use_single_crop_col_tokens
     low_res_extra = int(low_res_use_col_tokens)
     high_res_extra = int(image_use_col_tokens)
 
-    lengths = (
-        resized_h * (resized_w + low_res_extra) + h * (w + high_res_extra) + 4
-    )  # [B]
+    lengths = resized_h * (resized_w + low_res_extra) + h * (w + high_res_extra) + 4  # [B]
     total_len = int(lengths.sum().item())
 
     flat = torch.empty(total_len, dtype=torch.long, device=device)
@@ -1357,9 +1315,7 @@ def build_flat_image_bool_length(
 
         idx = offset
 
-        flat[idx] = (
-            low_res_image_start_id if use_single_crop_start_token else image_start_id
-        )
+        flat[idx] = low_res_image_start_id if use_single_crop_start_token else image_start_id
         idx += 1
 
         low_res_block_len = resized_w_i + low_res_extra
@@ -1473,14 +1429,9 @@ def get_candidate_target_fps(
     if sampling_fps is None:
         raise ValueError("sampling_fps must be provided")
     if video_fps <= 0 or sampling_fps <= 0:
-        raise ValueError(
-            "video_fps and sampling_fps must be positive "
-            f"(got {video_fps}, {sampling_fps})"
-        )
+        raise ValueError(f"video_fps and sampling_fps must be positive (got {video_fps}, {sampling_fps})")
     if video_fps % sampling_fps != 0:
-        raise ValueError(
-            f"sampling_fps={sampling_fps} must divide video_fps={video_fps}."
-        )
+        raise ValueError(f"sampling_fps={sampling_fps} must divide video_fps={video_fps}.")
 
     candidates = []
     for candidate in range(sampling_fps, video_fps + 1, sampling_fps):
@@ -1508,10 +1459,7 @@ def get_target_fps(
         step_size = max(int(video_fps / target_fps), 1)
         num_frames_sampled_at_fps = int(total_frames / step_size)
         if num_frames_sampled == 0:
-            if (
-                "uniform" in frame_sample_mode
-                and num_frames_sampled_at_fps > max_frames
-            ):
+            if "uniform" in frame_sample_mode and num_frames_sampled_at_fps > max_frames:
                 break
             selected_target_fps = target_fps
             num_frames_sampled = num_frames_sampled_at_fps
@@ -1531,13 +1479,9 @@ def get_target_fps(
     return selected_target_fps
 
 
-def get_frame_times_and_chosen_fps(
-    selected_target_fps, total_frames, max_frames, video_fps
-):
+def get_frame_times_and_chosen_fps(selected_target_fps, total_frames, max_frames, video_fps):
     if selected_target_fps is None:
-        frame_indices = np.linspace(
-            0, total_frames, max_frames, endpoint=False, dtype=int
-        )
+        frame_indices = np.linspace(0, total_frames, max_frames, endpoint=False, dtype=int)
     else:
         step_size = max(int(video_fps / selected_target_fps), 1)
         frame_indices = np.arange(0, total_frames, step_size)
@@ -1646,9 +1590,7 @@ class Molmo2ProcessingInfo(BaseProcessingInfo):
             image_width=image_width,
             image_processor=image_processor,
         )
-        joint = 2 + overlap_nrows * (
-            overlap_ncols + int(processor.image_use_col_tokens)
-        )
+        joint = 2 + overlap_nrows * (overlap_ncols + int(processor.image_use_col_tokens))
 
         return extra + joint
 
@@ -1755,9 +1697,7 @@ class Molmo2ProcessingInfo(BaseProcessingInfo):
                     step=float(video_fps / max_fps),
                 )
                 if np.round(float_indices[-1]) != total_num_frames - 1:
-                    float_indices = np.concatenate(
-                        [float_indices, [total_num_frames - 1]], axis=0
-                    )
+                    float_indices = np.concatenate([float_indices, [total_num_frames - 1]], axis=0)
                 indices = np.round(float_indices).astype(int)
                 assert indices[-1] < total_num_frames
                 assert len(float_indices) <= num_frames
@@ -1837,9 +1777,7 @@ class Molmo2DummyInputsBuilder(BaseDummyInputsBuilder[Molmo2ProcessingInfo]):
         if num_images == 1:
             image_string = image_placeholder_token
         else:
-            image_string = "".join(
-                [f"Image {i + 1}" + image_placeholder_token for i in range(num_images)]
-            )
+            image_string = "".join([f"Image {i + 1}" + image_placeholder_token for i in range(num_images)])
 
         return image_string + video_placeholder_token * num_videos
 
@@ -1870,9 +1808,7 @@ class Molmo2DummyInputsBuilder(BaseDummyInputsBuilder[Molmo2ProcessingInfo]):
         if num_videos > 0:
             processor = self.info.get_hf_processor()
             video_size = processor.video_processor.size
-            target_num_frames = self.info.get_num_frames_with_most_features(
-                seq_len, mm_counts
-            )
+            target_num_frames = self.info.get_num_frames_with_most_features(seq_len, mm_counts)
 
             video_overrides = mm_options.get("video")
 
@@ -1889,8 +1825,7 @@ class Molmo2DummyInputsBuilder(BaseDummyInputsBuilder[Molmo2ProcessingInfo]):
                         )
                     if num_frames_override < 2:
                         logger.warning(
-                            "video.num_frames override (%d) cannot be less "
-                            "than 2, will be ignored",
+                            "video.num_frames override (%d) cannot be less than 2, will be ignored",
                             num_frames_override,
                         )
                     target_num_frames = min(target_num_frames, num_frames_override)
@@ -2008,13 +1943,9 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
                 if "do_sample_frames" not in video_mm_kwargs:
                     # molmo_utils already has "do_sample_frames" in
                     # mm_kwargs, don't overwrite it.
-                    video_mm_kwargs["do_sample_frames"] = metadata.get(
-                        "do_sample_frames", False
-                    )
+                    video_mm_kwargs["do_sample_frames"] = metadata.get("do_sample_frames", False)
 
-                metadata = VideoMetadata(
-                    **{k: metadata[k] for k in metadata if k != "do_sample_frames"}
-                )
+                metadata = VideoMetadata(**{k: metadata[k] for k in metadata if k != "do_sample_frames"})
 
                 video_mm_data = dict()
                 video_mm_data["videos"] = [[video_array]]
@@ -2034,26 +1965,20 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
                 prompt = prompt.replace(VIDEO_PROMPT, video_string, 1)
 
                 video_grids = video_outputs.pop("video_grids")
-                assert video_grids[:, 0].sum() == len(
-                    video_outputs["pixel_values_videos"]
-                )
+                assert video_grids[:, 0].sum() == len(video_outputs["pixel_values_videos"])
 
                 video_outputs["video_num_crops"] = video_grids[:, 0]
                 video_outputs["video_num_pooled_patches"] = video_grids.prod(dim=1)
                 n_patches = video_outputs["pixel_values_videos"].shape[1]
-                video_outputs["video_num_patches"] = (
-                    video_outputs["video_num_crops"] * n_patches
-                )
-                (video_outputs["video_tokens"], video_outputs["num_video_tokens"]) = (
-                    build_flat_video_bool_length(video_grids, hf_config)
+                video_outputs["video_num_patches"] = video_outputs["video_num_crops"] * n_patches
+                (video_outputs["video_tokens"], video_outputs["num_video_tokens"]) = build_flat_video_bool_length(
+                    video_grids, hf_config
                 )
 
                 pixel_values_videos_lst.append(video_outputs["pixel_values_videos"])
                 video_token_pooling_lst.append(video_outputs["video_token_pooling"])
                 video_num_crops_lst.append(video_outputs["video_num_crops"])
-                video_num_pooled_patches_lst.append(
-                    video_outputs["video_num_pooled_patches"]
-                )
+                video_num_pooled_patches_lst.append(video_outputs["video_num_pooled_patches"])
                 video_num_patches_lst.append(video_outputs["video_num_patches"])
                 video_tokens_lst.append(video_outputs["video_tokens"])
                 num_video_tokens_lst.append(video_outputs["num_video_tokens"])
@@ -2079,9 +2004,7 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
         if (images := mm_data.get("images")) is not None:
             mm_items = self.info.parse_mm_data({"image": images}, validate=False)
             parsed_images = mm_items.get_items("image", ImageProcessorItems)
-            image_sizes = [
-                parsed_images.get_image_size(i) for i in range(len(parsed_images))
-            ]
+            image_sizes = [parsed_images.get_image_size(i) for i in range(len(parsed_images))]
 
             # For each image: tiling_h * tiling_w + global view
             tilings = [
@@ -2097,15 +2020,11 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
             assert sum(num_crops) == processed_outputs["image_num_crops"].sum().item()
 
             image_grids = processed_outputs.pop("image_grids")
-            image_num_pooled_patches = image_grids[:, :2].prod(dim=1) + image_grids[
-                :, 2:
-            ].prod(dim=1)
+            image_num_pooled_patches = image_grids[:, :2].prod(dim=1) + image_grids[:, 2:].prod(dim=1)
 
             processed_outputs["image_num_pooled_patches"] = image_num_pooled_patches
             n_patches = processed_outputs["pixel_values"].shape[1]
-            processed_outputs["image_num_patches"] = (
-                processed_outputs["image_num_crops"] * n_patches
-            )
+            processed_outputs["image_num_patches"] = processed_outputs["image_num_crops"] * n_patches
             (
                 processed_outputs["image_tokens"],
                 processed_outputs["num_image_tokens"],
@@ -2125,42 +2044,26 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
         hf_processor_mm_kwargs: Mapping[str, object],
     ) -> Mapping[str, MultiModalFieldConfig]:
         image_num_crops = hf_inputs.get("image_num_crops", torch.empty(0))
-        image_num_pooled_patches = hf_inputs.get(
-            "image_num_pooled_patches", torch.empty(0)
-        )
+        image_num_pooled_patches = hf_inputs.get("image_num_pooled_patches", torch.empty(0))
         video_num_crops = hf_inputs.get("video_num_crops", torch.empty(0))
-        video_num_pooled_patches = hf_inputs.get(
-            "video_num_pooled_patches", torch.empty(0)
-        )
+        video_num_pooled_patches = hf_inputs.get("video_num_pooled_patches", torch.empty(0))
         num_image_tokens = hf_inputs.get("num_image_tokens", torch.empty(0))
         num_video_tokens = hf_inputs.get("num_video_tokens", torch.empty(0))
 
         return dict(
-            pixel_values=MultiModalFieldConfig.flat_from_sizes(
-                "image", image_num_crops
-            ),
-            image_token_pooling=MultiModalFieldConfig.flat_from_sizes(
-                "image", image_num_pooled_patches
-            ),
+            pixel_values=MultiModalFieldConfig.flat_from_sizes("image", image_num_crops),
+            image_token_pooling=MultiModalFieldConfig.flat_from_sizes("image", image_num_pooled_patches),
             image_num_crops=MultiModalFieldConfig.batched("image"),
             image_num_pooled_patches=MultiModalFieldConfig.batched("image"),
             image_num_patches=MultiModalFieldConfig.batched("image"),
-            image_tokens=MultiModalFieldConfig.flat_from_sizes(
-                "image", num_image_tokens
-            ),
+            image_tokens=MultiModalFieldConfig.flat_from_sizes("image", num_image_tokens),
             num_image_tokens=MultiModalFieldConfig.batched("image"),
-            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes(
-                "video", video_num_crops
-            ),
-            video_token_pooling=MultiModalFieldConfig.flat_from_sizes(
-                "video", video_num_pooled_patches
-            ),
+            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes("video", video_num_crops),
+            video_token_pooling=MultiModalFieldConfig.flat_from_sizes("video", video_num_pooled_patches),
             video_num_crops=MultiModalFieldConfig.batched("video"),
             video_num_pooled_patches=MultiModalFieldConfig.batched("video"),
             video_num_patches=MultiModalFieldConfig.batched("video"),
-            video_tokens=MultiModalFieldConfig.flat_from_sizes(
-                "video", num_video_tokens
-            ),
+            video_tokens=MultiModalFieldConfig.flat_from_sizes("video", num_video_tokens),
             num_video_tokens=MultiModalFieldConfig.batched("video"),
         )
 
@@ -2218,9 +2121,7 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
                 start_id = low_res_im_start_id
             else:
                 start_id = img_start_id
-            extra_row = [img_patch_id] * resize_ncols + [img_col_id] * int(
-                use_col_tokens
-            )
+            extra_row = [img_patch_id] * resize_ncols + [img_col_id] * int(use_col_tokens)
             extra_joint = [start_id] + extra_row * resize_nrows + [img_end_id]
 
             image_size = get_image_size(image)
@@ -2231,9 +2132,7 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
                 image_processor=image_processor,
             )
 
-            joint_row = [img_patch_id] * ncols + [img_col_id] * int(
-                image_use_col_tokens
-            )
+            joint_row = [img_patch_id] * ncols + [img_col_id] * int(image_use_col_tokens)
             joint = [img_start_id] + joint_row * nrows + [img_end_id]
             img_token_ids = extra_joint + joint
 
@@ -2257,18 +2156,14 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
 
             for frame_idx, frame_time in enumerate(timestamps):
                 prev_space = " " if frame_idx > 0 else ""
-                frame_prefix = (
-                    prev_space + f"{frame_time:.1f} "
-                )  # explicit whitespace before/after image tokens
+                frame_prefix = prev_space + f"{frame_time:.1f} "  # explicit whitespace before/after image tokens
 
                 img_token_ids += tokenizer.encode(
                     frame_prefix,
                     add_special_tokens=False,
                 )
 
-                joint_row = [img_patch_id] * ncols + [img_col_id] * int(
-                    video_use_col_tokens
-                )
+                joint_row = [img_patch_id] * ncols + [img_col_id] * int(video_use_col_tokens)
                 joint = [start_id] + nrows * joint_row + [end_id]
                 img_token_ids += joint
 
@@ -2293,9 +2188,7 @@ class Molmo2MultiModalProcessor(BaseMultiModalProcessor[Molmo2ProcessingInfo]):
     info=Molmo2ProcessingInfo,
     dummy_inputs=Molmo2DummyInputsBuilder,
 )
-class Molmo2ForConditionalGeneration(
-    nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsQuant
-):
+class Molmo2ForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsQuant):
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_substr={
             # vision backbone mapping
@@ -2388,9 +2281,7 @@ class Molmo2ForConditionalGeneration(
         )
         self.logits_processor = LogitsProcessor(hf_text_config.vocab_size)
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     @property
     def dtype(self):
@@ -2492,14 +2383,10 @@ class Molmo2ForConditionalGeneration(
         )
 
         assert len(image_features_flat) == num_pooled_patches.sum()
-        image_features_list = image_features_flat.split(
-            num_pooled_patches.tolist(), dim=0
-        )
+        image_features_list = image_features_flat.split(num_pooled_patches.tolist(), dim=0)
         image_tokens_list = image_tokens.split(num_image_tokens.tolist(), dim=0)
         out = []
-        for image_features_i, image_tokens_i in zip(
-            image_features_list, image_tokens_list
-        ):
+        for image_features_i, image_tokens_i in zip(image_features_list, image_tokens_list):
             out_features = self.get_language_model().embed_input_ids(image_tokens_i)
             is_image_patch = image_tokens_i == self.img_patch_id
             out_features[is_image_patch] = image_features_i
@@ -2522,14 +2409,10 @@ class Molmo2ForConditionalGeneration(
         )
 
         assert len(image_features_flat) == num_pooled_patches.sum()
-        image_features_list = image_features_flat.split(
-            num_pooled_patches.tolist(), dim=0
-        )
+        image_features_list = image_features_flat.split(num_pooled_patches.tolist(), dim=0)
         video_tokens_list = video_tokens.split(num_video_tokens.tolist(), dim=0)
         out = []
-        for image_features_i, video_tokens_i in zip(
-            image_features_list, video_tokens_list
-        ):
+        for image_features_i, video_tokens_i in zip(image_features_list, video_tokens_list):
             out_features = self.get_language_model().embed_input_ids(video_tokens_i)
             is_image_patch = video_tokens_i == self.img_patch_id
             out_features[is_image_patch] = image_features_i
@@ -2640,10 +2523,7 @@ def _get_weights_with_merged_embedding(
     # this is compatible with most of quantization,
     # because they won't quantize embed_tokens
     if "embedding" not in embedding_weights or "new_embedding" not in embedding_weights:
-        raise ValueError(
-            "Checkpoint is missing 'wte.embedding' or "
-            "'wte.new_embedding' weights required for Molmo2."
-        )
+        raise ValueError("Checkpoint is missing 'wte.embedding' or 'wte.new_embedding' weights required for Molmo2.")
 
     embedding_weights = torch.cat(
         [embedding_weights["embedding"], embedding_weights["new_embedding"]],

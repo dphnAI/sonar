@@ -5,10 +5,10 @@
 import pytest
 import torch
 
-from tests.kernels.allclose_default import get_default_atol, get_default_rtol
-from tests.kernels.utils import opcheck
 from aphrodite.platforms import CpuArchEnum, current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.allclose_default import get_default_atol, get_default_rtol
+from tests.kernels.utils import opcheck
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -57,9 +57,7 @@ def test_cpu_act_and_mul(
     out = layer(x)
     ref_out = layer.forward_native(x)
 
-    torch.testing.assert_close(
-        out, ref_out, atol=get_default_atol(out), rtol=get_default_rtol(out)
-    )
+    torch.testing.assert_close(out, ref_out, atol=get_default_atol(out), rtol=get_default_rtol(out))
 
     output_shape = x.shape[:-1] + (x.shape[-1] // 2,)
     raw_out = torch.empty(output_shape, dtype=x.dtype, device=x.device)
@@ -103,9 +101,7 @@ def test_cpu_unary_activation(
     layer = activation_cls()
     out = layer(x)
     ref_out = layer.forward_native(x)
-    torch.testing.assert_close(
-        out, ref_out, atol=get_default_atol(out), rtol=get_default_rtol(out)
-    )
+    torch.testing.assert_close(out, ref_out, atol=get_default_atol(out), rtol=get_default_rtol(out))
     # gelu with activation_lut_bf16 only makes sense for BF16
     if not (activation_cls is GELU and dtype != torch.bfloat16):
         raw_out = torch.empty_like(x)

@@ -95,12 +95,8 @@ def test_video_loader_consistency(
     with open(video_path, "rb") as f:
         video_bytes = f.read()
 
-    static_video, static_metadata = VideoBackend.load_bytes(
-        video_bytes, backend=backend
-    )
-    dynamic_video, dynamic_metadata = DynamicVideoBackend.load_bytes(
-        video_bytes, fps=fps, backend=backend
-    )
+    static_video, static_metadata = VideoBackend.load_bytes(video_bytes, backend=backend)
+    dynamic_video, dynamic_metadata = DynamicVideoBackend.load_bytes(video_bytes, fps=fps, backend=backend)
 
     # pre-sampled loader shouldn't read all frames
     assert len(dynamic_video) < len(static_video)

@@ -14,10 +14,7 @@ from aphrodite.utils.math_utils import cdiv
 # registering the Python wrapper modules does not require TileLang everywhere.
 if TYPE_CHECKING or current_platform.is_cuda_alike():
     if not has_tilelang():
-        raise ImportError(
-            "tilelang is required for mhc but is not installed. Install it with "
-            "`pip install tilelang`."
-        )
+        raise ImportError("tilelang is required for mhc but is not installed. Install it with `pip install tilelang`.")
     import tilelang
     import tilelang.language as T
 else:
@@ -111,15 +108,11 @@ def mhc_pre_big_fuse_tilelang(
             cm = T.alloc_fragment((hc_mult, hc_mult), T.float32)
             for j in T.Parallel(hc_mult):
                 post_mix[i, j] = (
-                    T.sigmoid(
-                        mixes_shared[j + hc_mult] * hc_scale[1] + hc_base[j + hc_mult]
-                    )
-                    * hc_post_mult_value
+                    T.sigmoid(mixes_shared[j + hc_mult] * hc_scale[1] + hc_base[j + hc_mult]) * hc_post_mult_value
                 )
             for j, k in T.Parallel(hc_mult, hc_mult):
                 cm[j, k] = (
-                    mixes_shared[j * hc_mult + k + hc_mult * 2] * hc_scale[2]
-                    + hc_base[j * hc_mult + k + hc_mult * 2]
+                    mixes_shared[j * hc_mult + k + hc_mult * 2] * hc_scale[2] + hc_base[j * hc_mult + k + hc_mult * 2]
                 )
 
             ##################################################################
@@ -255,15 +248,11 @@ def mhc_pre_big_fuse_with_norm_tilelang(
             cm = T.alloc_fragment((hc_mult, hc_mult), T.float32)
             for j in T.Parallel(hc_mult):
                 post_mix[i, j] = (
-                    T.sigmoid(
-                        mixes_shared[j + hc_mult] * hc_scale[1] + hc_base[j + hc_mult]
-                    )
-                    * hc_post_mult_value
+                    T.sigmoid(mixes_shared[j + hc_mult] * hc_scale[1] + hc_base[j + hc_mult]) * hc_post_mult_value
                 )
             for j, k in T.Parallel(hc_mult, hc_mult):
                 cm[j, k] = (
-                    mixes_shared[j * hc_mult + k + hc_mult * 2] * hc_scale[2]
-                    + hc_base[j * hc_mult + k + hc_mult * 2]
+                    mixes_shared[j * hc_mult + k + hc_mult * 2] * hc_scale[2] + hc_base[j * hc_mult + k + hc_mult * 2]
                 )
 
             row_sum = T.alloc_fragment(hc_mult, T.float32)
@@ -341,11 +330,7 @@ def mhc_pre_big_fuse_with_norm_tilelang(
 
                 ol = T.alloc_fragment(hidden_block, T.float32)
                 for i1_h in T.Parallel(hidden_block):
-                    ol[i1_h] = (
-                        output_shared[i0_h * hidden_block + i1_h]
-                        * rsqrt_norm[0]
-                        * w_local[i1_h]
-                    )
+                    ol[i1_h] = output_shared[i0_h * hidden_block + i1_h] * rsqrt_norm[0] * w_local[i1_h]
 
                 T.copy(ol, layer_input[i, i0_h * hidden_block])
 
@@ -785,9 +770,7 @@ def hc_head_fuse_tilelang(
         rsqrt_val = T.alloc_fragment(1, T.float32)
         rsqrt_val[0] = T.rsqrt(sqrsum_r[0] / hc_dim + rms_eps)
         for m in T.Parallel(hc_mult):
-            pre_mix_shared[m] = (
-                T.sigmoid(mixes_r[m] * rsqrt_val[0] * hc_scale[0] + hc_base[m]) + hc_eps
-            )
+            pre_mix_shared[m] = T.sigmoid(mixes_r[m] * rsqrt_val[0] * hc_scale[0] + hc_base[m]) + hc_eps
 
         # ------------------------------------------------------------------
         # Pass 2 – apply_mix: pipelined weighted sum over residual channels

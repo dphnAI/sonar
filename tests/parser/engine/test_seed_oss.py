@@ -16,6 +16,11 @@ import json
 
 import pytest
 
+from aphrodite.parser.engine.registered_adapters import (
+    SeedOssParserReasoningAdapter,
+    SeedOssParserToolAdapter,
+)
+from aphrodite.parser.seed_oss import SeedOssParser
 from tests.parser.engine.conftest import make_mock_tokenizer
 from tests.parser.engine.streaming_helpers import (
     collect_function_name,
@@ -23,11 +28,6 @@ from tests.parser.engine.streaming_helpers import (
     simulate_reasoning_streaming,
     simulate_tool_streaming,
 )
-from aphrodite.parser.engine.registered_adapters import (
-    SeedOssParserReasoningAdapter,
-    SeedOssParserToolAdapter,
-)
-from aphrodite.parser.seed_oss import SeedOssParser
 
 TOOL_CALL_START = "<seed:tool_call>"
 TOOL_CALL_END = "</seed:tool_call>"
@@ -52,9 +52,7 @@ def mock_tokenizer():
 
 @pytest.fixture
 def tool_parser(mock_tokenizer):
-    return SeedOssParser(
-        mock_tokenizer, chat_template_kwargs={"enable_thinking": False}
-    )
+    return SeedOssParser(mock_tokenizer, chat_template_kwargs={"enable_thinking": False})
 
 
 @pytest.fixture
@@ -69,11 +67,7 @@ def test_token_overrides_wired(parser):
 
 
 def test_single_tool_call(tool_parser, mock_request):
-    text = (
-        f"{TOOL_CALL_START}\n<function=get_weather>\n"
-        "<parameter=city>Tokyo</parameter>\n"
-        f"</function>\n{TOOL_CALL_END}"
-    )
+    text = f"{TOOL_CALL_START}\n<function=get_weather>\n<parameter=city>Tokyo</parameter>\n</function>\n{TOOL_CALL_END}"
     result = tool_parser.extract_tool_calls(text, mock_request)
 
     assert result.tools_called is True
@@ -184,6 +178,4 @@ def test_budget_reflect_tags_do_not_break_adapter_pipeline(
 
     tool_result = tool_parser.extract_tool_calls(remaining, mock_request)
     assert tool_result.tool_calls[0].function.name == "get_weather"
-    assert json.loads(tool_result.tool_calls[0].function.arguments) == {
-        "city": "Barcelona"
-    }
+    assert json.loads(tool_result.tool_calls[0].function.arguments) == {"city": "Barcelona"}

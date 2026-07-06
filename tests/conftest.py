@@ -499,11 +499,9 @@ class HfRunner:
             self.model = model
 
         if not skip_tokenizer_init:
-            self.tokenizer: "PreTrainedTokenizer | PreTrainedTokenizerFast" = (
-                AutoTokenizer.from_pretrained(
-                    tokenizer_name or model_name,
-                    trust_remote_code=trust_remote_code,
-                )
+            self.tokenizer: "PreTrainedTokenizer | PreTrainedTokenizerFast" = AutoTokenizer.from_pretrained(
+                tokenizer_name or model_name,
+                trust_remote_code=trust_remote_code,
             )
 
         if processor is not None:
@@ -519,9 +517,7 @@ class HfRunner:
             )
         if skip_tokenizer_init:
             if self.processor is None:
-                raise ValueError(
-                    "skip_tokenizer_init=True requires processor initialization."
-                )
+                raise ValueError("skip_tokenizer_init=True requires processor initialization.")
             self.tokenizer = self.processor.tokenizer
 
     def get_inputs(
@@ -551,11 +547,7 @@ class HfRunner:
                         "hf_model.processor before generation."
                     )
                 # Create a copy to avoid modifying the original dict
-                processor_kwargs = (
-                    tokenization_kwargs.copy()
-                    if tokenization_kwargs is not None
-                    else {}
-                )
+                processor_kwargs = tokenization_kwargs.copy() if tokenization_kwargs is not None else {}
                 processor_kwargs.update(
                     {
                         "text": prompt,
@@ -583,14 +575,10 @@ class HfRunner:
             else:
                 # check that prompt is (batched) list of integers (token ids)
                 if not is_list_of(prompt, typ=int, check="all"):
-                    raise ValueError(
-                        "Prompt must be a list of ints corresponding to the prompt token ids."
-                    )
+                    raise ValueError("Prompt must be a list of ints corresponding to the prompt token ids.")
                 # check that no multimodal input is provided
                 if images or videos or audios:
-                    raise ValueError(
-                        "When providing prompt token ids multimodal inputs are not supported."
-                    )
+                    raise ValueError("When providing prompt token ids multimodal inputs are not supported.")
                 input_dict = {
                     "input_ids": torch.tensor(prompt, dtype=torch.long).unsqueeze(0),
                 }
@@ -636,9 +624,7 @@ class HfRunner:
         audios: PromptAudioInput | None = None,
         **kwargs: Any,
     ) -> list[tuple[list[list[int]], list[str]]]:
-        all_inputs = self.get_inputs(
-            prompts, images=images, videos=videos, audios=audios
-        )
+        all_inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
 
         outputs: list[tuple[list[list[int]], list[str]]] = []
         for inputs in all_inputs:
@@ -648,9 +634,7 @@ class HfRunner:
                 **kwargs,
             )
             if self.processor is None:
-                raise RuntimeError(
-                    "HfRunner.processor is not initialized; cannot decode output."
-                )
+                raise RuntimeError("HfRunner.processor is not initialized; cannot decode output.")
             output_str = self.processor.batch_decode(
                 output_ids,
                 skip_special_tokens=True,
@@ -703,9 +687,7 @@ class HfRunner:
         for i in range(len(outputs)):
             output_ids, output_str = outputs[i]
             for j in range(len(output_ids)):
-                output_ids[j] = [
-                    x for x in output_ids[j] if x != self.tokenizer.pad_token_id
-                ]
+                output_ids[j] = [x for x in output_ids[j] if x != self.tokenizer.pad_token_id]
             outputs[i] = (output_ids, output_str)
         return outputs
 
@@ -718,9 +700,7 @@ class HfRunner:
         audios: PromptAudioInput | None = None,
         **kwargs: Any,
     ) -> list[list[torch.Tensor]]:
-        all_inputs = self.get_inputs(
-            prompts, images=images, videos=videos, audios=audios
-        )
+        all_inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
 
         all_logprobs: list[list[torch.Tensor]] = []
         for inputs in all_inputs:
@@ -824,9 +804,7 @@ class HfRunner:
 
             # Encoder-decoder models return decoder_hidden_states instead of
             # hidden_states
-            hidden_states = (
-                getattr(output, "hidden_states", None) or output.decoder_hidden_states
-            )
+            hidden_states = getattr(output, "hidden_states", None) or output.decoder_hidden_states
 
             (
                 seq_logprobs_lst,
@@ -841,10 +819,7 @@ class HfRunner:
             all_output_strs.append(self.tokenizer.decode(output_ids))
 
         outputs = zip(all_output_ids, all_output_strs, all_logprobs)
-        return [
-            (output_ids, output_str, output_logprobs)
-            for output_ids, output_str, output_logprobs in outputs
-        ]
+        return [(output_ids, output_str, output_logprobs) for output_ids, output_str, output_logprobs in outputs]
 
     def encode(self, prompts: list[str], *args, **kwargs) -> list[list[torch.Tensor]]:
         return self.model.encode(prompts, *args, **kwargs)
@@ -868,8 +843,7 @@ class HfRunner:
                 devices = get_physical_device_indices(devices=list(range(device_count)))
                 mem_usage_stats = record_gpu_memory_usage_stats(devices=devices)
                 self.threshold_ratios = {
-                    device: 0.05 + mem_used / mem_tot
-                    for device, (mem_used, mem_tot) in mem_usage_stats.items()
+                    device: 0.05 + mem_used / mem_tot for device, (mem_used, mem_tot) in mem_usage_stats.items()
                 }
         return self
 
@@ -880,9 +854,7 @@ class HfRunner:
         cleanup_dist_env_and_memory()
         # ROCm frees VRAM lazily; wait so a runner started right after this HF
         # model exits does not OOM on its startup memory guard.
-        wait_for_rocm_memory_to_settle(
-            threshold_ratio=getattr(self, "threshold_ratios", None)
-        )
+        wait_for_rocm_memory_to_settle(threshold_ratio=getattr(self, "threshold_ratios", None))
         if hasattr(self, "threshold_ratios"):
             del self.threshold_ratios
 
@@ -944,9 +916,7 @@ class AphroditeRunner:
             if (speculative_config := kwargs.get("speculative_config")) and (
                 num_speculative_tokens := speculative_config["num_speculative_tokens"]
             ):
-                kwargs["compilation_config"]["cudagraph_capture_sizes"].append(
-                    num_speculative_tokens + 1
-                )
+                kwargs["compilation_config"]["cudagraph_capture_sizes"].append(num_speculative_tokens + 1)
 
         from aphrodite.platforms import current_platform
 
@@ -983,20 +953,13 @@ class AphroditeRunner:
 
     def get_inputs(
         self,
-        prompts: list[str]
-        | list[torch.Tensor]
-        | list[list[int]]
-        | list[dict[str, Any]],
+        prompts: list[str] | list[torch.Tensor] | list[list[int]] | list[dict[str, Any]],
         images: PromptImageInput | None = None,
         videos: PromptVideoInput | None = None,
         audios: PromptAudioInput | None = None,
     ) -> list[dict[str, Any]]:
-        if any(
-            x is not None and len(x) != len(prompts) for x in [images, videos, audios]
-        ):
-            raise ValueError(
-                "All non-None multimodal inputs must have the same length as prompts"
-            )
+        if any(x is not None and len(x) != len(prompts) for x in [images, videos, audios]):
+            raise ValueError("All non-None multimodal inputs must have the same length as prompts")
 
         inputs = list[dict[str, Any]]()
         for i, prompt in enumerate(prompts):
@@ -1041,9 +1004,7 @@ class AphroditeRunner:
     ) -> list[tuple[list[list[int]], list[str]]] | tuple[list, list]:
         inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
 
-        req_outputs = self.llm.generate(
-            inputs, sampling_params=sampling_params, **kwargs
-        )
+        req_outputs = self.llm.generate(inputs, sampling_params=sampling_params, **kwargs)
 
         outputs: list[tuple[list[list[int]], list[str]]] = []
         logprobs = []
@@ -1112,9 +1073,7 @@ class AphroditeRunner:
     ) -> list[TokensTextLogprobs] | list[TokensTextLogprobsPromptLogprobs]:
         inputs = self.get_inputs(prompts, images=images, videos=videos, audios=audios)
 
-        req_outputs = self.llm.generate(
-            inputs, sampling_params=sampling_params, **kwargs
-        )
+        req_outputs = self.llm.generate(inputs, sampling_params=sampling_params, **kwargs)
 
         toks_str_logsprobs_prompt_logprobs = self._final_steps_generate_w_logprobs(
             req_outputs, include_prompt_token_ids
@@ -1177,18 +1136,14 @@ class AphroditeRunner:
             **kwargs,
         )
 
-    def generate_prompt_perplexity(
-        self, prompts: list[str], mask: Optional[list[str]] = None
-    ) -> list[float]:
+    def generate_prompt_perplexity(self, prompts: list[str], mask: Optional[list[str]] = None) -> list[float]:
         """
         Return the perplexity score associated with generating the prompts
 
         :param prompts: list of prompts to score
         :return: perplexity score of each prompt
         """
-        outputs = self.generate_greedy_logprobs(
-            prompts, max_tokens=1, num_logprobs=None, num_prompt_logprobs=0
-        )
+        outputs = self.generate_greedy_logprobs(prompts, max_tokens=1, num_logprobs=None, num_prompt_logprobs=0)
 
         mask_prefix_lens = (
             [len(self.llm.get_tokenizer()(prefix)["input_ids"]) for prefix in mask]
@@ -1300,9 +1255,7 @@ class AphroditeRunner:
         # This is needed because when executing consecutive tests, the GC
         # might not be fast enough in shutting down the llm engine. This can lead to OOMs
         # because when the next test starts some GPU memory is still in use.
-        gpu_memory_utilization = (
-            self.llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
-        )
+        gpu_memory_utilization = self.llm.llm_engine.aphrodite_config.cache_config.gpu_memory_utilization
         from aphrodite.platforms import current_platform
 
         try:
@@ -1527,9 +1480,7 @@ def dummy_gemma2_embedding_path():
 # Add the flag `--optional` to allow run tests
 # that are marked with @pytest.mark.optional
 def pytest_addoption(parser):
-    parser.addoption(
-        "--optional", action="store_true", default=False, help="run optional test"
-    )
+    parser.addoption("--optional", action="store_true", default=False, help="run optional test")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -1590,9 +1541,7 @@ class AssetHandler(http.server.BaseHTTPRequestHandler):
         try:
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError) as e:
-            logger.debug(
-                "Client disconnected while serving test asset %s: %r", filename, e
-            )
+            logger.debug("Client disconnected while serving test asset %s: %r", filename, e)
             self.close_connection = True
 
 
@@ -1616,9 +1565,7 @@ class LocalAssetServer:
 
     def __enter__(self):
         self.port = _find_free_port()
-        self.server = http.server.ThreadingHTTPServer(
-            (self.address, self.port), AssetHandler
-        )
+        self.server = http.server.ThreadingHTTPServer((self.address, self.port), AssetHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         return self

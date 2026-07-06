@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Model load and metadata derivation for MetalModelRunner."""
 
 from __future__ import annotations
@@ -15,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 import torch
 from mlx_lm import load as mlx_lm_load
 from mlx_vlm import load as mlx_vlm_load
-from aphrodite.logger import init_logger
 
+from aphrodite.logger import init_logger
 from aphrodite.metal.compat import apply_compat_patches
 from aphrodite.metal.paged_attention_backend.mla import MLA_DEFAULT_QK_ROPE_HEAD_DIM
 from aphrodite.metal.pytorch_backend.tensor_bridge import torch_to_mlx
@@ -167,9 +168,7 @@ class ModelLifecycle:
         if runner.metal_config.debug:
             logger.info("Model args: %s", model_args)
         self.resolve_model_dims()
-        runner.kv_cache_dtype = torch_to_mlx(
-            torch.empty(0, dtype=model_config.dtype)
-        ).dtype
+        runner.kv_cache_dtype = torch_to_mlx(torch.empty(0, dtype=model_config.dtype)).dtype
 
     def _load_generation_model(self, model_name: str, is_vlm: bool) -> tuple[Any, Any]:
         logger.info("Loading model: %s (VLM: %s)", model_name, is_vlm)
@@ -197,9 +196,7 @@ class ModelLifecycle:
             with _mlx_lm_compatible_model_path(model_name) as compatible_model_name:
                 model, tokenizer = mlx_lm_load(
                     compatible_model_name,
-                    tokenizer_config={
-                        "trust_remote_code": self._runner.model_config.trust_remote_code
-                    },
+                    tokenizer_config={"trust_remote_code": self._runner.model_config.trust_remote_code},
                 )
 
         with _MODEL_CACHE_LOCK:
@@ -243,16 +240,10 @@ class ModelLifecycle:
         args = self._runner.model_args
         num_layers = args.get("num_hidden_layers") or args.get("n_layers")
         num_attention_heads = args.get("num_attention_heads")
-        num_kv_heads = (
-            args.get("num_key_value_heads")
-            or args.get("n_kv_heads")
-            or num_attention_heads
-        )
+        num_kv_heads = args.get("num_key_value_heads") or args.get("n_kv_heads") or num_attention_heads
         hidden_size = args.get("hidden_size")
         base_head_dim = args.get("head_dim") or (
-            hidden_size // num_attention_heads
-            if hidden_size and num_attention_heads
-            else None
+            hidden_size // num_attention_heads if hidden_size and num_attention_heads else None
         )
         head_dim = self._model_adapter.resolve_max_head_dim(args, base_head_dim)
 
@@ -265,14 +256,15 @@ class ModelLifecycle:
             missing.append("head_dim")
         if missing:
             raise ValueError(
-                f"Cannot resolve model dimensions: {', '.join(missing)}. "
-                f"Available keys: {sorted(args.keys())}"
+                f"Cannot resolve model dimensions: {', '.join(missing)}. Available keys: {sorted(args.keys())}"
             )
 
+        # The missing-check above guarantees these are present and truthy.
+        assert num_layers is not None
+        assert num_kv_heads is not None
+        assert head_dim is not None
         self._runner.num_layers = int(num_layers)
-        self._runner.num_attention_heads = (
-            int(num_attention_heads) if num_attention_heads is not None else None
-        )
+        self._runner.num_attention_heads = int(num_attention_heads) if num_attention_heads is not None else None
         self._runner.num_kv_heads = int(num_kv_heads)
         self._runner.hidden_size = int(hidden_size) if hidden_size is not None else None
         self._runner.head_dim = int(head_dim)
@@ -285,9 +277,7 @@ class ModelLifecycle:
 
         yoco = self._model_adapter.build_yoco_cache_mapping(args)
         self._runner._yoco_cache_mapping = yoco
-        self._runner.num_kv_cache_layers = (
-            yoco[0] if yoco is not None else self._runner.num_layers
-        )
+        self._runner.num_kv_cache_layers = yoco[0] if yoco is not None else self._runner.num_layers
 
         # Per-layer KV shapes for heterogeneous models (Gemma4 26B/31B).
         # Uses the unresolved ``base_head_dim`` so sliding-attention layers
@@ -314,22 +304,16 @@ class ModelLifecycle:
             self._runner.kv_heads_per_layer = None
             self._runner.head_dim_per_layer = None
 
-        self._runner.sliding_window_per_layer = (
-            self._model_adapter.build_sliding_window_per_layer(
-                args, self._runner.num_layers
-            )
+        self._runner.sliding_window_per_layer = self._model_adapter.build_sliding_window_per_layer(
+            args, self._runner.num_layers
         )
 
         if self._runner.is_hybrid:
             fai = int(args["full_attention_interval"])
             self._runner.full_attention_interval = fai
-            self._runner.sdpa_layer_indices = frozenset(
-                i for i in range(self._runner.num_layers) if (i + 1) % fai == 0
-            )
+            self._runner.sdpa_layer_indices = frozenset(i for i in range(self._runner.num_layers) if (i + 1) % fai == 0)
             self._runner.num_sdpa_layers = len(self._runner.sdpa_layer_indices)
-            self._runner.num_linear_layers = (
-                self._runner.num_layers - self._runner.num_sdpa_layers
-            )
+            self._runner.num_linear_layers = self._runner.num_layers - self._runner.num_sdpa_layers
             self._runner.linear_num_k_heads = int(args["linear_num_key_heads"])
             self._runner.linear_num_v_heads = int(args["linear_num_value_heads"])
             self._runner.linear_key_head_dim = int(args["linear_key_head_dim"])
@@ -351,10 +335,7 @@ class ModelLifecycle:
         else:
             config = getattr(model, "config", None)
             if config is None:
-                raise ValueError(
-                    "Cannot extract model config: model has neither .args nor "
-                    ".config attribute."
-                )
+                raise ValueError("Cannot extract model config: model has neither .args nor .config attribute.")
 
             config_values = self._config_to_mapping(config, label="config")
             if is_vlm and "text_config" in config_values:
@@ -406,6 +387,4 @@ class ModelLifecycle:
         if slot_values:
             return slot_values
 
-        raise TypeError(
-            f"{label} must expose a mapping, to_dict(), __dict__, or __slots__."
-        )
+        raise TypeError(f"{label} must expose a mapping, to_dict(), __dict__, or __slots__.")

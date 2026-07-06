@@ -76,19 +76,13 @@ def _kmeans(samples, num_clusters: int, num_iters: int = 10):
     means = _sample_vectors(samples, num_clusters)
 
     for _ in range(num_iters):
-        dists = -(
-            samples.pow(2).sum(1, keepdim=True)
-            - 2 * samples @ means.t()
-            + means.t().pow(2).sum(0, keepdim=True)
-        )
+        dists = -(samples.pow(2).sum(1, keepdim=True) - 2 * samples @ means.t() + means.t().pow(2).sum(0, keepdim=True))
 
         buckets = dists.max(dim=-1).indices
         bins = torch.bincount(buckets, minlength=num_clusters)
 
         new_means = buckets.new_zeros(num_clusters, dim, dtype=dtype)
-        new_means = new_means.scatter_add_(
-            0, repeat(buckets, "n -> n d", d=dim), samples
-        )
+        new_means = new_means.scatter_add_(0, repeat(buckets, "n -> n d", d=dim), samples)
 
         if dist.is_initialized():
             dist.all_reduce(bins, op=dist.ReduceOp.SUM)
@@ -118,38 +112,19 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def _compute_default_rope_parameters(
-    config=None, device=None, seq_len=None, **rope_kwargs
-):
+def _compute_default_rope_parameters(config=None, device=None, seq_len=None, **rope_kwargs):
     if config is not None and len(rope_kwargs) > 0:
-        raise ValueError(
-            "Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive"
-        )
+        raise ValueError("Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive")
     if len(rope_kwargs) > 0:
         base = rope_kwargs["base"]
         dim = rope_kwargs["dim"]
     elif config is not None:
         base = config.rope_theta
-        partial_rotary_factor = (
-            config.partial_rotary_factor
-            if hasattr(config, "partial_rotary_factor")
-            else 1.0
-        )
-        head_dim = (
-            getattr(config, "head_dim", None)
-            or config.hidden_size // config.num_attention_heads
-        )
+        partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
     attention_factor = 1.0
-    inv_freq = 1.0 / (
-        base
-        ** (
-            torch.arange(0, dim, 2, dtype=torch.int64).to(
-                device=device, dtype=torch.float
-            )
-            / dim
-        )
-    )
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
     return inv_freq, attention_factor
 
 
@@ -162,16 +137,11 @@ def _dynamic_rope_update(rope_forward):
     def dynamic_frequency_update(self, position_ids, device):
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)
             self.max_seq_len_cached = seq_len
 
-        if (
-            seq_len < self.original_max_seq_len
-            and self.max_seq_len_cached > self.original_max_seq_len
-        ):
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:
             self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
@@ -191,9 +161,7 @@ class AudioRotaryEmbedding(nn.Module):
         self.max_seq_len = max_seq_len
         self.rope_type = rope_type
         self.rope_init_fn = _ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            device=device, base=base, dim=dim
-        )
+        inv_freq, self.attention_scaling = self.rope_init_fn(device=device, base=base, dim=dim)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -202,15 +170,9 @@ class AudioRotaryEmbedding(nn.Module):
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[:, None].float().expand(-1, 1).to(x.device)
         position_ids_expanded = position_ids[None, :].float()
-        device_type = (
-            x.device.type
-            if isinstance(x.device.type, str) and x.device.type != "mps"
-            else "cpu"
-        )
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (
-                inv_freq_expanded.float() @ position_ids_expanded.float()
-            ).transpose(0, 1)
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(0, 1)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
@@ -230,9 +192,7 @@ class EuclideanCodebook(nn.Module):
     ):
         super().__init__()
         self.decay = decay
-        init_fn: tp.Callable[..., torch.Tensor] | tp.Any = (
-            _uniform_init if not kmeans_init else torch.zeros
-        )
+        init_fn: tp.Callable[..., torch.Tensor] | tp.Any = _uniform_init if not kmeans_init else torch.zeros
         embed = init_fn(codebook_size, dim)
 
         self.codebook_size = codebook_size
@@ -279,11 +239,7 @@ class EuclideanCodebook(nn.Module):
 
     def quantize(self, x):
         embed = self.embed.t()
-        dist_val = -(
-            x.pow(2).sum(1, keepdim=True)
-            - 2 * x @ embed
-            + embed.pow(2).sum(0, keepdim=True)
-        )
+        dist_val = -(x.pow(2).sum(1, keepdim=True) - 2 * x @ embed + embed.pow(2).sum(0, keepdim=True))
         embed_ind = dist_val.max(dim=-1).indices
         return embed_ind
 
@@ -322,8 +278,7 @@ class EuclideanCodebook(nn.Module):
             embed_sum = x.t() @ embed_onehot
             _ema_inplace(self.embed_avg, embed_sum.t().contiguous(), self.decay)
             cluster_size = (
-                _laplace_smoothing(self.cluster_size, self.codebook_size, self.epsilon)
-                * self.cluster_size.sum()
+                _laplace_smoothing(self.cluster_size, self.codebook_size, self.epsilon) * self.cluster_size.sum()
             )
             embed_normalized = self.embed_avg / cluster_size.unsqueeze(1)
             self.embed.data.copy_(embed_normalized)
@@ -348,12 +303,8 @@ class VectorQuantization(nn.Module):
         _codebook_dim: int = _vq_default(codebook_dim, dim)
 
         requires_projection = _codebook_dim != dim
-        self.project_in = (
-            nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity()
-        )
-        self.project_out = (
-            nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity()
-        )
+        self.project_in = nn.Linear(dim, _codebook_dim) if requires_projection else nn.Identity()
+        self.project_out = nn.Linear(_codebook_dim, dim) if requires_projection else nn.Identity()
 
         self.epsilon = epsilon
         self.commitment_weight = commitment_weight
@@ -406,10 +357,7 @@ class ResidualVectorQuantization(nn.Module):
         elif len(codebook_size) < num_quantizers:
             codebook_size += [codebook_size[-1]] * (num_quantizers - len(codebook_size))
         self.layers = nn.ModuleList(
-            [
-                VectorQuantization(codebook_size=codebook_size[i], **kwargs)
-                for i in range(num_quantizers)
-            ]
+            [VectorQuantization(codebook_size=codebook_size[i], **kwargs) for i in range(num_quantizers)]
         )
 
     def forward(self, x, n_q: int | None = None, layers: list | None = None):
@@ -435,9 +383,7 @@ class ResidualVectorQuantization(nn.Module):
         out_losses, out_indices = map(torch.stack, (all_losses, all_indices))
         return quantized_out, out_indices, out_losses, out_quantized
 
-    def encode(
-        self, x: torch.Tensor, n_q: int | None = None, st: int | None = None
-    ) -> torch.Tensor:
+    def encode(self, x: torch.Tensor, n_q: int | None = None, st: int | None = None) -> torch.Tensor:
         residual = x
         all_indices = []
         n_q = len(self.layers) if n_q is None else n_q
@@ -495,14 +441,10 @@ class ResidualVectorQuantizer(nn.Module):
         layers: list | None = None,
     ):
         n_q = n_q if n_q else self.n_q
-        quantized, codes, commit_loss, quantized_list = self.vq(
-            x, n_q=n_q, layers=layers
-        )
+        quantized, codes, commit_loss, quantized_list = self.vq(x, n_q=n_q, layers=layers)
         return quantized, codes, torch.mean(commit_loss), quantized_list
 
-    def encode(
-        self, x: torch.Tensor, n_q: int | None = None, st: int | None = None
-    ) -> torch.Tensor:
+    def encode(self, x: torch.Tensor, n_q: int | None = None, st: int | None = None) -> torch.Tensor:
         n_q = n_q if n_q else self.n_q
         st = st or 0
         codes = self.vq.encode(x, n_q=n_q, st=st)
@@ -582,22 +524,14 @@ class MiMoAudioTokenizerConfig(PretrainedConfig):
         self.encoder_attention_heads = encoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_causal = encoder_causal
-        self.encoder_attn_window_size = (
-            encoder_attn_window_size
-            if encoder_attn_window_size is not None
-            else [-1, -1]
-        )
+        self.encoder_attn_window_size = encoder_attn_window_size if encoder_attn_window_size is not None else [-1, -1]
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_kernel_size = decoder_kernel_size
         self.decoder_stride_size = decoder_stride_size
         self.decoder_causal = decoder_causal
-        self.decoder_attn_window_size = (
-            decoder_attn_window_size
-            if decoder_attn_window_size is not None
-            else [-1, -1]
-        )
+        self.decoder_attn_window_size = decoder_attn_window_size if decoder_attn_window_size is not None else [-1, -1]
         self.nfft = nfft
         self.vocoder_dim = vocoder_dim
         self.vocoder_intermediate_dim = vocoder_intermediate_dim
@@ -617,11 +551,7 @@ class MiMoAudioTokenizerConfig(PretrainedConfig):
         self.rope_type = rope_type
         self.ln_type = ln_type
         self.vocoder_attention_heads = vocoder_attention_heads
-        self.vocoder_attn_window_size = (
-            vocoder_attn_window_size
-            if vocoder_attn_window_size is not None
-            else [40, 10]
-        )
+        self.vocoder_attn_window_size = vocoder_attn_window_size if vocoder_attn_window_size is not None else [40, 10]
         self.use_istft_only = use_istft_only
         self.hybrid_attention = hybrid_attention
         self.hybrid_block_size = hybrid_block_size
@@ -634,16 +564,12 @@ def get_sequence_mask(inputs, inputs_length):
     else:
         bsz, tgt_len = inputs_length.shape[0], torch.max(inputs_length)
     sequence_mask = torch.arange(0, tgt_len).to(inputs.device)
-    sequence_mask = torch.lt(sequence_mask, inputs_length.reshape(bsz, 1)).view(
-        bsz, tgt_len, 1
-    )
+    sequence_mask = torch.lt(sequence_mask, inputs_length.reshape(bsz, 1)).view(bsz, tgt_len, 1)
     unpacking_index = torch.cumsum(sequence_mask.to(torch.int64).view(-1), dim=0) - 1
     return sequence_mask, unpacking_index
 
 
-def unpack_hidden_states(
-    hidden_states, lengths, sequence_mask=None, unpacking_index=None
-):
+def unpack_hidden_states(hidden_states, lengths, sequence_mask=None, unpacking_index=None):
     bsz = lengths.shape[0]
     if sequence_mask is None or unpacking_index is None:
         sequence_mask, unpacking_index = get_sequence_mask(hidden_states, lengths)
@@ -694,19 +620,13 @@ class AudioEncoderAttention(nn.Module):
 
         bsz, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states).view(
-            bsz, self.num_heads, self.head_dim
-        )
+        query_states = self.q_proj(hidden_states).view(bsz, self.num_heads, self.head_dim)
         key_states = self.k_proj(hidden_states).view(bsz, self.num_heads, self.head_dim)
-        value_states = self.v_proj(hidden_states).view(
-            bsz, self.num_heads, self.head_dim
-        )
+        value_states = self.v_proj(hidden_states).view(bsz, self.num_heads, self.head_dim)
 
         if rope_position_embeddings is not None:
             cos, sin = rope_position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(
-                query_states, key_states, cos, sin
-            )
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         attn_output = flash_attn_varlen_func(
             query_states,
@@ -816,9 +736,7 @@ class AudioEncoder(nn.Module):
                 else:
                     attn_window_sizes.append((-1, -1))
         else:
-            attn_window_sizes = [
-                tuple(config.encoder_attn_window_size)
-            ] * config.encoder_layers
+            attn_window_sizes = [tuple(config.encoder_attn_window_size)] * config.encoder_layers
 
         self.layers = nn.ModuleList(
             [
@@ -869,16 +787,14 @@ class AudioEncoder(nn.Module):
         position_ids = get_position_ids(output_length).long().to(input_features.device)
         rope_position_embeddings = self.position_embedding(input_features, position_ids)
 
-        attention_mask, unpacking_index = get_sequence_mask(
-            hidden_states, output_length
-        )
+        attention_mask, unpacking_index = get_sequence_mask(hidden_states, output_length)
         hidden_states = torch.masked_select(hidden_states, attention_mask).view(
             torch.sum(output_length), self.config.d_model
         )
 
-        cu_seqlens = F.pad(
-            torch.cumsum(output_length, dim=0), (1, 0), "constant", 0
-        ).to(device=hidden_states.device, dtype=torch.int32)
+        cu_seqlens = F.pad(torch.cumsum(output_length, dim=0), (1, 0), "constant", 0).to(
+            device=hidden_states.device, dtype=torch.int32
+        )
         max_seqlen = torch.max(output_length).to(torch.int32).item()
 
         skip_connect_hidden_states = 0.0
@@ -900,24 +816,16 @@ class AudioEncoder(nn.Module):
                 bsz, tgt_len, self.config.d_model
             )
             if hidden_states.size(1) % self.config.avg_pooler:
-                pad_len = (
-                    self.config.avg_pooler
-                    - hidden_states.size(1) % self.config.avg_pooler
-                )
-                hidden_states = torch.nn.functional.pad(
-                    hidden_states, (0, 0, 0, pad_len), mode="constant", value=0.0
-                )
+                pad_len = self.config.avg_pooler - hidden_states.size(1) % self.config.avg_pooler
+                hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, pad_len), mode="constant", value=0.0)
                 tgt_len += pad_len
             tgt_len = tgt_len // self.config.avg_pooler
             hidden_states = self.down_sample_layer(hidden_states.transpose(1, 2))
             output_length = (
-                output_length // self.config.avg_pooler
-                + (output_length % self.config.avg_pooler != 0).int()
+                output_length // self.config.avg_pooler + (output_length % self.config.avg_pooler != 0).int()
             )
             hidden_states = hidden_states.transpose(1, 2)
-            attention_mask, unpacking_index = get_sequence_mask(
-                hidden_states, output_length
-            )
+            attention_mask, unpacking_index = get_sequence_mask(hidden_states, output_length)
             hidden_states = torch.masked_select(hidden_states, attention_mask).view(
                 torch.sum(output_length), self.config.d_model
             )
@@ -949,11 +857,9 @@ class AudioEncoder(nn.Module):
         if output_length is None:
             output_length = self.get_output_length(input_lens)
         input_features = unpack_hidden_states(input_features, input_lens)
-        hidden_states, output_length, attention_mask, unpacking_index, tgt_len, bsz = (
-            self.get_features(
-                input_features=input_features.transpose(1, 2),
-                output_length=output_length,
-            )
+        hidden_states, output_length, attention_mask, unpacking_index, tgt_len, bsz = self.get_features(
+            input_features=input_features.transpose(1, 2),
+            output_length=output_length,
         )
 
         dtype = hidden_states.dtype
@@ -968,9 +874,7 @@ class AudioEncoder(nn.Module):
             codes = None
 
         hidden_states_packed = hidden_states.clone()
-        hidden_states = torch.index_select(hidden_states, 0, unpacking_index).view(
-            bsz, tgt_len, self.config.d_model
-        )
+        hidden_states = torch.index_select(hidden_states, 0, unpacking_index).view(bsz, tgt_len, self.config.d_model)
         hidden_states = torch.where(attention_mask, hidden_states, 0)
         return hidden_states, hidden_states_packed, output_length, codes
 
@@ -998,10 +902,8 @@ class MiMoAudioTokenizer(PreTrainedModel):
     def encode(self, mels, input_lens, use_quantizer=True):
         input_features = mels
         encoder_output_length = self.get_output_length(input_lens)
-        hidden_states, hidden_states_packed, encoder_output_length, codes = (
-            self.encoder.encode(
-                input_features, input_lens=input_lens, use_quantizer=use_quantizer
-            )
+        hidden_states, hidden_states_packed, encoder_output_length, codes = self.encoder.encode(
+            input_features, input_lens=input_lens, use_quantizer=use_quantizer
         )
         return hidden_states, hidden_states_packed, encoder_output_length, codes
 
@@ -1013,9 +915,7 @@ class MiMoAudioTokenizer(PreTrainedModel):
 
 def group_by_length(features: torch.Tensor, lengths: torch.Tensor, max_length: int):
     if features.size(0) != lengths.sum().item():
-        raise ValueError(
-            f"Feature size mismatch: {features.size(0)} vs {lengths.sum().item()}"
-        )
+        raise ValueError(f"Feature size mismatch: {features.size(0)} vs {lengths.sum().item()}")
 
     split_points = []
     current_sum = 0
@@ -1053,9 +953,7 @@ def encode_batch(
 
     encoded_parts = []
     for features, lengths in zip(feature_groups, len_groups):
-        codes, _ = audio_tokenizer_encoder.encode(
-            input_features=features, input_lens=lengths, return_codes_only=True
-        )
+        codes, _ = audio_tokenizer_encoder.encode(input_features=features, input_lens=lengths, return_codes_only=True)
         encoded_parts.append(codes)
 
     return torch.cat(encoded_parts, dim=-1)
@@ -1092,9 +990,7 @@ def tokenize_audio_batch(mels, audio_tokenizer_encoder, segment_size=6000, devic
     codes = codes_packed.transpose(0, 1).detach()  # [total_code_T, C]
     code_lengths = []
     for segs in input_len_seg_per_mel:
-        out_len = audio_tokenizer_encoder.get_output_length(
-            torch.tensor(segs, dtype=torch.long, device=device)
-        )
+        out_len = audio_tokenizer_encoder.get_output_length(torch.tensor(segs, dtype=torch.long, device=device))
         if getattr(audio_tokenizer_encoder, "down_sample_layer", None) is not None:
             avg = audio_tokenizer_encoder.config.avg_pooler
             out_len = out_len // avg + (out_len % avg != 0).long()
@@ -1186,12 +1082,8 @@ class MimoAudioEncoder(nn.Module):
         self.audio_group_size = config.group_size
         self.audio_segment_size = config.audio_segment_size
 
-        speech_vocab_sizes = self._parse_maybe_list(
-            config.speech_vocab_size, config.audio_channels
-        )
-        speech_empty_ids = self._parse_maybe_list(
-            config.speech_zeroemb_idx, config.audio_channels
-        )
+        speech_vocab_sizes = self._parse_maybe_list(config.speech_vocab_size, config.audio_channels)
+        speech_empty_ids = self._parse_maybe_list(config.speech_zeroemb_idx, config.audio_channels)
 
         input_local_config = Qwen2Config(
             hidden_size=config.input_local_dim,
@@ -1240,9 +1132,7 @@ class MimoAudioEncoder(nn.Module):
             audio_tokenizer_path = os.path.join(model_path, "audio_tokenizer")
             if os.path.exists(audio_tokenizer_path):
                 dev = torch.get_default_device()
-                self.audio_tokenizer = self._load_audio_tokenizer(
-                    audio_tokenizer_path, dev
-                )
+                self.audio_tokenizer = self._load_audio_tokenizer(audio_tokenizer_path, dev)
             else:
                 logger.warning(
                     "Audio tokenizer not found at %s, audio encoding disabled",
@@ -1267,8 +1157,7 @@ class MimoAudioEncoder(nn.Module):
             state_dict = torch.load(bin_path, map_location="cpu", weights_only=True)
         else:
             raise FileNotFoundError(
-                f"No model weights found in {path} "
-                "(expected model.safetensors or pytorch_model.bin)"
+                f"No model weights found in {path} (expected model.safetensors or pytorch_model.bin)"
             )
         model.load_state_dict(state_dict, strict=False)
         model = model.to(device=device, dtype=torch.bfloat16)
@@ -1311,11 +1200,7 @@ class MimoAudioEncoder(nn.Module):
         """
         T = audio.shape[0]
         audio = audio[:, : self.audio_channels]
-        padded_T = (
-            (T + self.audio_group_size - 1)
-            // self.audio_group_size
-            * self.audio_group_size
-        )
+        padded_T = (T + self.audio_group_size - 1) // self.audio_group_size * self.audio_group_size
         padded_audio = torch.cat(
             [
                 audio,
@@ -1336,9 +1221,7 @@ class MimoAudioEncoder(nn.Module):
         )
         return padded_audio
 
-    def get_audio_feature(
-        self, mel_specs: list[torch.Tensor]
-    ) -> tuple[torch.Tensor, list[int]]:
+    def get_audio_feature(self, mel_specs: list[torch.Tensor]) -> tuple[torch.Tensor, list[int]]:
         """Encode mel spectrograms into LLM embedding space.
 
         Args:
@@ -1351,8 +1234,7 @@ class MimoAudioEncoder(nn.Module):
         """
         if self.audio_tokenizer is None:
             raise RuntimeError(
-                "audio_tokenizer is not loaded. "
-                "Ensure model_path points to a directory containing audio_tokenizer/."
+                "audio_tokenizer is not loaded. Ensure model_path points to a directory containing audio_tokenizer/."
             )
 
         if not mel_specs:
@@ -1378,9 +1260,7 @@ class MimoAudioEncoder(nn.Module):
             codecs_to_concat.append(padded_codes)
             item_token_lens.append(padded_codes.shape[0])
 
-        audio_codes = torch.cat(
-            codecs_to_concat, dim=0
-        )  # [total_T//group_size, group_size, audio_channels]
+        audio_codes = torch.cat(codecs_to_concat, dim=0)  # [total_T//group_size, group_size, audio_channels]
 
         _audio_embeddings = self.apply_speech_embeddings(audio_codes)
         audio_embeds = self.apply_input_local_transformer(_audio_embeddings)

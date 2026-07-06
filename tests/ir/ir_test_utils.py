@@ -23,9 +23,7 @@ def clone_args(args: tuple) -> tuple:
 
 
 def supported_providers(op: IrOp) -> list[str]:
-    return [
-        name for name, impl in op.impls.items() if name != "native" and impl.supported
-    ]
+    return [name for name, impl in op.impls.items() if name != "native" and impl.supported]
 
 
 def assert_close(op: IrOp, actual, expected):

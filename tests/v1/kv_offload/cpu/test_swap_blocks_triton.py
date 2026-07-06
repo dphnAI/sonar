@@ -13,9 +13,7 @@ def _addrs(buffers: list[torch.Tensor]) -> torch.Tensor:
     return torch.tensor([b.data_ptr() for b in buffers], dtype=torch.int64)
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="Triton swap fast path requires CUDA"
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="Triton swap fast path requires CUDA")
 def test_triton_swap_copies_source_bytes():
     # 8-byte-aligned, sub-threshold sizes covering 8 KiB chunk boundaries and
     # odd tail-mask lengths, with enough descriptors to take the Triton path.

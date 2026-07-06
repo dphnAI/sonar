@@ -105,25 +105,14 @@ def build_order_call() -> str:
 
 
 def build_order_invocation(user_id: int) -> str:
-    return (
-        f'{NS}<invoke name="create_order">'
-        f"{NS}<user_id>{user_id}{NS}</user_id>"
-        f"{NS}</invoke>"
-    )
+    return f'{NS}<invoke name="create_order">{NS}<user_id>{user_id}{NS}</user_id>{NS}</invoke>'
 
 
 def build_multiple_order_call() -> str:
-    return (
-        f"{NS}<tool_call>\n"
-        f"{build_order_invocation(1)}\n"
-        f"{build_order_invocation(2)}\n"
-        f"{NS}</tool_call>"
-    )
+    return f"{NS}<tool_call>\n{build_order_invocation(1)}\n{build_order_invocation(2)}\n{NS}</tool_call>"
 
 
-def _feed(
-    parser: MinimaxM3ToolParser, chunks: list[str | tuple[str, list[int]]]
-) -> list[DeltaMessage]:
+def _feed(parser: MinimaxM3ToolParser, chunks: list[str | tuple[str, list[int]]]) -> list[DeltaMessage]:
     previous = ""
     results: list[DeltaMessage] = []
     for chunk in chunks:
@@ -167,9 +156,7 @@ def _collect_tool_calls(results: list[DeltaMessage]) -> dict[int, dict[str, Any]
                 if tool_call.function.name:
                     tool_calls[tool_call.index]["name"] += tool_call.function.name
                 if tool_call.function.arguments:
-                    tool_calls[tool_call.index]["arguments"] += (
-                        tool_call.function.arguments
-                    )
+                    tool_calls[tool_call.index]["arguments"] += tool_call.function.arguments
     return tool_calls
 
 
@@ -222,10 +209,7 @@ def test_non_streaming_multiple_tool_calls(parser):
         "create_order",
         "create_order",
     ]
-    assert [
-        json.loads(tool_call.function.arguments)["user_id"]
-        for tool_call in result.tool_calls
-    ] == [1, 2]
+    assert [json.loads(tool_call.function.arguments)["user_id"] for tool_call in result.tool_calls] == [1, 2]
 
 
 def test_streaming_without_tool_call_emits_text(parser):
@@ -254,8 +238,6 @@ def test_streaming_nested_tool_call(parser):
     assert len(tool_calls) == 1
     assert tool_calls[0]["name"] == "create_order"
     assert tool_calls[0]["id"] is not None
-    assert json.loads(tool_calls[0]["arguments"]) == json.loads(
-        parser.streamed_args_for_tool[0]
-    )
+    assert json.loads(tool_calls[0]["arguments"]) == json.loads(parser.streamed_args_for_tool[0])
     assert json.loads(parser.prev_tool_call_arr[0]["arguments"])["items"][1]["qty"] == 5
     assert results[-1].content is None

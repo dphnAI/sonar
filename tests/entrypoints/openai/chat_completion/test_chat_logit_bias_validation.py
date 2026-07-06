@@ -5,8 +5,8 @@ import openai
 import pytest
 import pytest_asyncio
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.config import ModelConfig
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 

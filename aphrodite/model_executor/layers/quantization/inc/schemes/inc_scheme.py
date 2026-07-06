@@ -51,10 +51,7 @@ class INCScheme(ABC):
     ) -> "FusedMoEMethodBase | None":
         """Optional. Override if this scheme supports MoE.
         Default raises NotImplementedError."""
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support MoE layers. "
-            f"Layer config: {layer_config}"
-        )
+        raise NotImplementedError(f"{type(self).__name__} does not support MoE layers. Layer config: {layer_config}")
 
     def get_kvcache_method(
         self,
@@ -66,8 +63,7 @@ class INCScheme(ABC):
         """Optional. Override if this scheme supports KV cache quantization.
         Default raises NotImplementedError."""
         raise NotImplementedError(
-            f"{type(self).__name__} does not support KV cache quantization. "
-            f"Layer config: {layer_config}"
+            f"{type(self).__name__} does not support KV cache quantization. Layer config: {layer_config}"
         )
 
 

@@ -160,9 +160,7 @@ class ParserEngineToolAdapter(ToolParser):
         model_output: str,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
-        return self._parser_engine.extract_tool_calls_from_content(
-            model_output, request
-        )
+        return self._parser_engine.extract_tool_calls_from_content(model_output, request)
 
     def extract_tool_calls_streaming(
         self,

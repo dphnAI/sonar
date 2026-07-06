@@ -78,18 +78,16 @@ class UltravoxConfig(transformers.PretrainedConfig):
         self.text_model_id = text_model_id
         if text_model_id is None:
             text_config = text_config or {}
-            self.wrapped_model_config = transformers.CONFIG_MAPPING[
-                text_config.get("model_type", "llama")
-            ](**text_config)
+            self.wrapped_model_config = transformers.CONFIG_MAPPING[text_config.get("model_type", "llama")](
+                **text_config
+            )
 
         # N.B. May set the audio_config below.
         self.audio_model_id = audio_model_id
         if audio_model_id is None:
             self.audio_model_id = None
             audio_config = audio_config or {}
-            self.audio_config = transformers.CONFIG_MAPPING[
-                audio_config.get("model_type", "whisper")
-            ](**audio_config)
+            self.audio_config = transformers.CONFIG_MAPPING[audio_config.get("model_type", "whisper")](**audio_config)
 
         super().__init__(**kwargs)
 

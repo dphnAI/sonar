@@ -12,8 +12,6 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from tests.kernels.helion.utils import skip_if_platform_unsupported
-from tests.kernels.quant_utils import FP8_DTYPE
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import ConfigManager
 from aphrodite.kernels.helion.ops.rms_norm_per_block_quant import (
@@ -24,6 +22,8 @@ from aphrodite.kernels.helion.ops.rms_norm_per_block_quant import (
 )
 from aphrodite.utils.import_utils import has_helion
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.helion.utils import skip_if_platform_unsupported
+from tests.kernels.quant_utils import FP8_DTYPE
 
 if not has_helion():
     pytest.skip(
@@ -32,13 +32,9 @@ if not has_helion():
     )
 
 
-def _generate_fake_input(
-    num_tokens: int, hidden_size: int, group_size: int
-) -> tuple[Any, ...]:
+def _generate_fake_input(num_tokens: int, hidden_size: int, group_size: int) -> tuple[Any, ...]:
     with FakeTensorMode():
-        input = torch.randn(
-            (num_tokens, hidden_size), device="cuda", dtype=torch.bfloat16
-        )
+        input = torch.randn((num_tokens, hidden_size), device="cuda", dtype=torch.bfloat16)
         result = torch.empty(input.shape, device=input.device, dtype=FP8_DTYPE)
         scale = torch.empty(
             (num_tokens, hidden_size // group_size),
@@ -89,9 +85,7 @@ class TestRmsNormPerBlockQuantConfigPicker:
 
         args = _generate_fake_input(16, 4096, 128)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"hidden_size": 4096, "group_size": 128, "num_tokens": 16}
-        )
+        assert selected_key == CaseKey({"hidden_size": 4096, "group_size": 128, "num_tokens": 16})
 
     def test_config_picker_closest_match(self):
         config_keys = [
@@ -107,9 +101,7 @@ class TestRmsNormPerBlockQuantConfigPicker:
 
         args = _generate_fake_input(20, 3000, 70)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"hidden_size": 2048, "group_size": 64, "num_tokens": 32}
-        )
+        assert selected_key == CaseKey({"hidden_size": 2048, "group_size": 64, "num_tokens": 32})
 
     def test_config_picker_no_configs(self):
         config_keys: list[dict] = []
@@ -132,9 +124,7 @@ class TestRmsNormPerBlockQuantConfigPicker:
 
         args = _generate_fake_input(64, 8192, 256)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"hidden_size": 4096, "group_size": 128, "num_tokens": 32}
-        )
+        assert selected_key == CaseKey({"hidden_size": 4096, "group_size": 128, "num_tokens": 32})
 
 
 DTYPES = [torch.bfloat16, torch.float]
@@ -198,15 +188,9 @@ class TestRmsNormPerBlockQuantCorrectness:
 
         scale = 1 / (hidden_size)
         input = torch.randn(num_tokens, hidden_size, dtype=dtype, device="cuda") * scale
-        weight = torch.normal(
-            mean=1.0, std=1.0, size=(hidden_size,), dtype=dtype, device=input.device
-        )
+        weight = torch.normal(mean=1.0, std=1.0, size=(hidden_size,), dtype=dtype, device=input.device)
         residual = torch.randn_like(input) * scale if add_residual else None
-        scale_ub = (
-            torch.mean(input).to(dtype=torch.float32, device="cuda")
-            if has_scale_ub
-            else None
-        )
+        scale_ub = torch.mean(input).to(dtype=torch.float32, device="cuda") if has_scale_ub else None
         groups_per_row = hidden_size // group_size
 
         ref_residual = residual.clone() if residual is not None else None
@@ -222,18 +206,12 @@ class TestRmsNormPerBlockQuantCorrectness:
                     dtype=torch.float32,
                 ).transpose(0, 1)
             else:
-                tma_aligned_m = (
-                    (num_tokens + tma_alignment - 1) // tma_alignment * tma_alignment
-                )
+                tma_aligned_m = (num_tokens + tma_alignment - 1) // tma_alignment * tma_alignment
                 shape = (num_tokens, groups_per_row)
                 stride = (1, tma_aligned_m)
-                ref_scales = torch.empty_strided(
-                    shape, stride, device=input.device, dtype=torch.float32
-                )
+                ref_scales = torch.empty_strided(shape, stride, device=input.device, dtype=torch.float32)
         else:
-            ref_scales = torch.empty(
-                (num_tokens, groups_per_row), device=input.device, dtype=torch.float32
-            )
+            ref_scales = torch.empty((num_tokens, groups_per_row), device=input.device, dtype=torch.float32)
 
         ops_scales = ref_scales.clone()
 
@@ -265,10 +243,7 @@ class TestRmsNormPerBlockQuantCorrectness:
 
         torch.testing.assert_close(ref_scales, ops_scales)
         # allow 1 ULP difference
-        assert (
-            ref_out.view(torch.uint8).to(torch.int16)
-            - ops_out.view(torch.uint8).to(torch.int16)
-        ).abs().max() <= 1
+        assert (ref_out.view(torch.uint8).to(torch.int16) - ops_out.view(torch.uint8).to(torch.int16)).abs().max() <= 1
 
         if add_residual:
             torch.testing.assert_close(ref_residual, ops_residual)

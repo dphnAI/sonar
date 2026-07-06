@@ -46,8 +46,7 @@ TOOLS = [
                 "properties": {
                     "city": {
                         "type": "string",
-                        "description": "The city to find the weather for, e.g. "
-                        "'San Francisco'",
+                        "description": "The city to find the weather for, e.g. 'San Francisco'",
                     },
                     "state": {
                         "type": "string",
@@ -86,8 +85,7 @@ MSGS = [
     {"role": "system", "content": "You are an assistant."},
     {
         "role": "user",
-        "content": "Could you please rewrite the below article? \n\n My English needs "
-        "improving, maybe I make errors.",
+        "content": "Could you please rewrite the below article? \n\n My English needs improving, maybe I make errors.",
     },
     {
         "role": "assistant",
@@ -98,16 +96,14 @@ MSGS = [
                 "type": "function",
                 "function": {
                     "name": "rewrite",
-                    "arguments": '{"text":"My English needs improving, maybe '
-                    'I make errors."}',
+                    "arguments": '{"text":"My English needs improving, maybe I make errors."}',
                 },
             }
         ],
     },
     {
         "role": "tool",
-        "content": '{"action":"rewrite","outcome":"My English needs improving, maybe '
-        'I make errors."}',
+        "content": '{"action":"rewrite","outcome":"My English needs improving, maybe I make errors."}',
         "tool_call_id": "bbc5b7ede",
         "name": "rewrite",
     },
@@ -117,9 +113,7 @@ MSGS = [
     },
     {
         "role": "user",
-        "content": (
-            "Can you tell me what the temperate will be in Dallas, in fahrenheit?"
-        ),
+        "content": ("Can you tell me what the temperate will be in Dallas, in fahrenheit?"),
     },
 ]
 
@@ -165,14 +159,10 @@ def test_models(
 ) -> None:
     # TODO(sang): Sliding window should be tested separately.
     with hf_runner(model, dtype=dtype) as hf_model:
-        hf_outputs = hf_model.generate_greedy_logprobs_limit(
-            example_prompts, max_tokens, num_logprobs
-        )
+        hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
     with aphrodite_runner(model, dtype=dtype, tokenizer_mode="mistral") as aphrodite_model:
-        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(
-            example_prompts, max_tokens, num_logprobs
-        )
+        aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=hf_outputs,
@@ -212,9 +202,7 @@ def test_mistral_format(
         load_format="safetensors",
         config_format="hf",
     ) as hf_format_model:
-        hf_format_outputs = hf_format_model.generate_greedy_logprobs(
-            example_prompts, max_tokens, num_logprobs
-        )
+        hf_format_outputs = hf_format_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
         outputs_0_lst=hf_format_outputs,
@@ -252,9 +240,7 @@ def test_mistral_function_calling(aphrodite_runner, model: str, dtype: str) -> N
         load_format="mistral",
     ) as aphrodite_model:
         msgs = copy.deepcopy(MSGS)
-        outputs = aphrodite_model.llm.chat(
-            msgs, tools=TOOLS, sampling_params=SAMPLING_PARAMS
-        )
+        outputs = aphrodite_model.llm.chat(msgs, tools=TOOLS, sampling_params=SAMPLING_PARAMS)
 
         tokenizer = aphrodite_model.llm.get_tokenizer()
         tool_parser = MistralToolParser(tokenizer)
@@ -268,8 +254,7 @@ def test_mistral_function_calling(aphrodite_runner, model: str, dtype: str) -> N
         assert MistralToolCall.is_valid_id(parsed_message.tool_calls[0].id)
         assert parsed_message.tool_calls[0].function.name == "get_current_weather"
         assert (
-            parsed_message.tool_calls[0].function.arguments
-            == '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}'
+            parsed_message.tool_calls[0].function.arguments == '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}'
         )  # noqa
         assert parsed_message.content is None
 
@@ -331,10 +316,7 @@ def test_mistral_function_call_nested_json():
     names = ["get_current_weather", "get_current_weather_2", "random", "random_2"]
 
     model_output = "".join(
-        [
-            f"{parser.bot_token}{name}{json.dumps(args)}"
-            for name, args in zip(names, multiple_args_dict)
-        ]
+        [f"{parser.bot_token}{name}{json.dumps(args)}" for name, args in zip(names, multiple_args_dict)]
     )
 
     parsed = parser.extract_tool_calls(model_output, None)

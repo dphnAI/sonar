@@ -86,9 +86,7 @@ class GenerateBaseServing(BaseServing, BeamSearchOnlineMixin):
         from aphrodite.entrypoints.serve.utils.fingerprint import get_system_fingerprint
 
         try:
-            self.system_fingerprint: str | None = get_system_fingerprint(
-                engine_client.aphrodite_config
-            )
+            self.system_fingerprint: str | None = get_system_fingerprint(engine_client.aphrodite_config)
         except Exception:
             # Never fail server startup over the fingerprint.
             self.system_fingerprint = None
@@ -119,9 +117,7 @@ class GenerateBaseServing(BaseServing, BeamSearchOnlineMixin):
             )
             raise GenerationError("Internal server error")
 
-    def _convert_generation_error_to_streaming_response(
-        self, e: GenerationError
-    ) -> str:
+    def _convert_generation_error_to_streaming_response(self, e: GenerationError) -> str:
         """Convert GenerationError to streaming error response."""
         return self.create_streaming_error_response(
             str(e),
@@ -206,9 +202,7 @@ class GenerateBaseServing(BaseServing, BeamSearchOnlineMixin):
             return logprob.decoded_token
 
         if tokenizer is None:
-            raise ValueError(
-                "Unable to get tokenizer because `skip_tokenizer_init=True`"
-            )
+            raise ValueError("Unable to get tokenizer because `skip_tokenizer_init=True`")
 
         return tokenizer.decode([token_id])
 
@@ -217,9 +211,7 @@ def format_token_id_placeholder(token_id: int) -> str:
     return f"token_id:{token_id}"
 
 
-def resolve_token_id_placeholder(
-    token: str, tokenizer: TokenizerLike
-) -> tuple[str, list[int] | None]:
+def resolve_token_id_placeholder(token: str, tokenizer: TokenizerLike) -> tuple[str, list[int] | None]:
     """Decode a 'token_id:N' placeholder back to a token string and UTF-8 bytes.
 
     Returns (token, None) unchanged if token is not a placeholder.
@@ -236,8 +228,7 @@ def resolve_token_id_placeholder(
     token_repr = tokenizer.convert_ids_to_tokens([token_id])[0]
     if token_repr is None:
         logger.warning_once(
-            "resolve_token_id_placeholder: token_id %d has no vocab entry; "
-            "substituting empty string",
+            "resolve_token_id_placeholder: token_id %d has no vocab entry; substituting empty string",
             token_id,
         )
         return "", None

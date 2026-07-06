@@ -23,9 +23,7 @@ pytest.importorskip("triton")
 
 device = "cuda"
 
-triton_w4a16_module = importlib.import_module(
-    "aphrodite.model_executor.kernels.linear.mixed_precision.triton_w4a16"
-)
+triton_w4a16_module = importlib.import_module("aphrodite.model_executor.kernels.linear.mixed_precision.triton_w4a16")
 triton_w4a16_gemm = triton_w4a16_module.triton_w4a16_gemm
 TritonW4A16LinearKernel = triton_w4a16_module.TritonW4A16LinearKernel
 
@@ -133,9 +131,7 @@ def test_triton_w4a16_gemm_matches_reference(dtype, M, K, N, G, has_zp):
     w_int4 = torch.randint(0, 16, (K, N), device=device, dtype=torch.int32)
     b_packed = _pack_int4_along_n(w_int4)
 
-    scales = (0.05 * torch.rand((K // G, N), device=device, dtype=torch.float32)).to(
-        dtype
-    )
+    scales = (0.05 * torch.rand((K // G, N), device=device, dtype=torch.float32)).to(dtype)
 
     qzeros = None
     if has_zp:
@@ -200,8 +196,8 @@ def test_triton_w4a16_process_weights_after_loading_repacks_layout():
     )
     from aphrodite.model_executor.parameter import (
         GroupQuantScaleParameter,
-        PackedColumnParameter,
         PackedAphroditeParameter,
+        PackedColumnParameter,
     )
     from aphrodite.scalar_type import scalar_types
 

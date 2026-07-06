@@ -27,8 +27,7 @@ if has_triton_kernels():
         from triton_kernels.matmul_ogs import PrecisionConfig
     except (ImportError, AttributeError) as e:
         logger.error(
-            "Failed to import Triton kernels. Please make sure your triton "
-            "version is compatible. Error: %s",
+            "Failed to import Triton kernels. Please make sure your triton version is compatible. Error: %s",
             e,
         )
 
@@ -262,9 +261,7 @@ class FusedMoEQuantConfig:
     mx_alignment: int = 0
 
     def __post_init__(self):
-        assert not self.per_act_token_quant or self.block_shape is None, (
-            "illegal quantization"
-        )
+        assert not self.per_act_token_quant or self.block_shape is None, "illegal quantization"
 
     #
     # Convenience accessors for various properties.
@@ -407,9 +404,7 @@ class FusedMoEQuantConfig:
             ):
                 self._ocp_mx_scheme = None
             else:
-                ocp_mx_scheme = OCP_MX_Scheme.from_quant_dtype(
-                    self._a1.dtype, self._w1.dtype
-                )
+                ocp_mx_scheme = OCP_MX_Scheme.from_quant_dtype(self._a1.dtype, self._w1.dtype)
 
                 if ocp_mx_scheme is not None:
                     ocp_mx_scheme = ocp_mx_scheme.value
@@ -566,18 +561,12 @@ class FusedMoEQuantConfig:
         if weight_dtype is None:
             weight_dtype = quant_dtype
 
-        a_shape, w_shape = _quant_flags_to_group_shape(
-            quant_dtype, per_act_token_quant, per_out_ch_quant, block_shape
-        )
+        a_shape, w_shape = _quant_flags_to_group_shape(quant_dtype, per_act_token_quant, per_out_ch_quant, block_shape)
         quant_config = FusedMoEQuantConfig(
             _a1=FusedMoEQuantDesc(quant_dtype, a_shape, a1_scale, a1_gscale),
             _a2=FusedMoEQuantDesc(quant_dtype, a_shape, a2_scale, a2_gscale),
-            _w1=FusedMoEQuantDesc(
-                weight_dtype, w_shape, w1_scale, g1_alphas, w1_zp, w1_bias
-            ),
-            _w2=FusedMoEQuantDesc(
-                weight_dtype, w_shape, w2_scale, g2_alphas, w2_zp, w2_bias
-            ),
+            _w1=FusedMoEQuantDesc(weight_dtype, w_shape, w1_scale, g1_alphas, w1_zp, w1_bias),
+            _w2=FusedMoEQuantDesc(weight_dtype, w_shape, w2_scale, g2_alphas, w2_zp, w2_bias),
             is_scale_swizzled=is_scale_swizzled,
             gemm1_alpha=gemm1_alpha,
             gemm1_beta=gemm1_beta,
@@ -1042,10 +1031,7 @@ class FusedMoEParallelConfig:
 
     @property
     def use_deepep_ht_kernels(self):
-        return (
-            self.use_all2all_kernels
-            and self.all2all_backend == "deepep_high_throughput"
-        )
+        return self.use_all2all_kernels and self.all2all_backend == "deepep_high_throughput"
 
     @property
     def use_deepep_ll_kernels(self):
@@ -1054,16 +1040,12 @@ class FusedMoEParallelConfig:
     @property
     def use_fi_nvl_two_sided_kernels(self):
         return self.use_all2all_kernels and (
-            self.all2all_backend == "flashinfer_all2allv"
-            or self.all2all_backend == "flashinfer_nvlink_two_sided"
+            self.all2all_backend == "flashinfer_all2allv" or self.all2all_backend == "flashinfer_nvlink_two_sided"
         )
 
     @property
     def use_fi_nvl_one_sided_kernels(self):
-        return (
-            self.use_all2all_kernels
-            and self.all2all_backend == "flashinfer_nvlink_one_sided"
-        )
+        return self.use_all2all_kernels and self.all2all_backend == "flashinfer_nvlink_one_sided"
 
     @property
     def use_batched_activation_format(self):
@@ -1075,10 +1057,7 @@ class FusedMoEParallelConfig:
 
     @property
     def use_ag_rs_all2all_kernels(self):
-        return (
-            self.use_all2all_kernels
-            and self.all2all_backend == "allgather_reducescatter"
-        )
+        return self.use_all2all_kernels and self.all2all_backend == "allgather_reducescatter"
 
     @property
     def use_mori_kernels(self):
@@ -1187,10 +1166,7 @@ class FusedMoEParallelConfig:
             - Comment: There are 2 engine instances and the experts are split
                 between the 4 devices.
         """
-        use_ep = (
-            dp_size_ * pcp_size_ * tp_size_ > 1
-            and aphrodite_parallel_config.enable_expert_parallel
-        )
+        use_ep = dp_size_ * pcp_size_ * tp_size_ > 1 and aphrodite_parallel_config.enable_expert_parallel
 
         dp_size = dp_size_
         dp_rank = get_dp_group().rank_in_group if dp_size > 1 else 0
@@ -1315,9 +1291,7 @@ class FusedMoEConfig:
         self.intermediate_size_per_partition = self.intermediate_size // tp_size
 
         if self.dp_size > 1:
-            logger.debug_once(
-                "Using FusedMoEConfig::max_num_tokens=%d", self.max_num_tokens
-            )
+            logger.debug_once("Using FusedMoEConfig::max_num_tokens=%d", self.max_num_tokens)
 
         assert self.max_num_tokens > 0
 
@@ -1327,31 +1301,21 @@ class FusedMoEConfig:
         if self.hidden_dim_unpadded is None:
             self.hidden_dim_unpadded = self.hidden_dim
         if self.intermediate_size_per_partition_unpadded is None:
-            self.intermediate_size_per_partition_unpadded = (
-                self.intermediate_size_per_partition
-            )
+            self.intermediate_size_per_partition_unpadded = self.intermediate_size_per_partition
 
         if self.is_act_and_mul:
             self.rocm_aiter_fmoe_enabled = rocm_aiter_ops.is_fused_moe_enabled()
-            self.aiter_fmoe_shared_expert_enabled = (
-                rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-            )
+            self.aiter_fmoe_shared_expert_enabled = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
 
         if self.use_mori_kernels:
-            assert self.rocm_aiter_fmoe_enabled, (
-                "Mori needs to be used with aiter fused_moe for now."
-            )
+            assert self.rocm_aiter_fmoe_enabled, "Mori needs to be used with aiter fused_moe for now."
             assert not self.aiter_fmoe_shared_expert_enabled, (
                 "Mori does not support fusion shared expert now. "
                 "Turn it off by setting APHRODITE_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0"
             )
 
-        if not self.is_act_and_mul and not (
-            current_platform.is_cuda_alike() or current_platform.is_xpu()
-        ):
-            raise NotImplementedError(
-                "is_act_and_mul=False is supported only for CUDA, XPU and ROCm for now"
-            )
+        if not self.is_act_and_mul and not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
+            raise NotImplementedError("is_act_and_mul=False is supported only for CUDA, XPU and ROCm for now")
 
     @property
     def is_act_and_mul(self) -> bool:

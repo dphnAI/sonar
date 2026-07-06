@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig, get_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, get_current_aphrodite_config
 from aphrodite.distributed import (
     get_ep_group,
     get_pp_group,
@@ -118,8 +118,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
 
         if self.tp_size > self.n_routed_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than "
-                f"the number of experts {self.n_routed_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than the number of experts {self.n_routed_experts}."
             )
 
         # Load balancing settings.
@@ -133,9 +132,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
 
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = (
-            self.physical_expert_start + self.n_local_physical_experts
-        )
+        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
 
         self.gate = ReplicatedLinear(
             config.hidden_size,
@@ -145,9 +142,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
             prefix=f"{prefix}.gate",
         )
         if config.use_expert_bias:
-            self.gate.e_score_correction_bias = nn.Parameter(
-                torch.empty(self.n_routed_experts, dtype=torch.float32)
-            )
+            self.gate.e_score_correction_bias = nn.Parameter(torch.empty(self.n_routed_experts, dtype=torch.float32))
         else:
             self.gate.e_score_correction_bias = None
 
@@ -176,9 +171,7 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
 
         # router_logits: (num_tokens, n_experts)
         router_logits, _ = self.gate(hidden_states)
-        final_hidden_states = self.experts(
-            hidden_states=hidden_states, router_logits=router_logits
-        )
+        final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
         return final_hidden_states.view(orig_shape)
 
@@ -426,11 +419,7 @@ class Lfm2MoeModel(nn.Module):
         def get_layer(prefix: str):
             layer_idx = extract_layer_index(prefix)
             is_attn = self.config.layer_types[layer_idx] == "full_attention"
-            layer_class = (
-                Lfm2MoeAttentionDecoderLayer
-                if is_attn
-                else Lfm2MoeShortConvDecoderLayer
-            )
+            layer_class = Lfm2MoeAttentionDecoderLayer if is_attn else Lfm2MoeShortConvDecoderLayer
             return layer_class(
                 config,
                 layer_idx,
@@ -481,9 +470,7 @@ class Lfm2MoeModel(nn.Module):
                 residual=residual,
             )
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
         hidden_states, _ = self.embedding_norm(hidden_states, residual)
         return hidden_states
 
@@ -526,9 +513,7 @@ class Lfm2MoeModel(nn.Module):
                     continue
                 name = name.replace(weight_name + ".", param_name + ".")
                 # Skip loading extra bias for GPTQ models.
-                if (
-                    name.endswith(".bias") or name.endswith("_bias")
-                ) and name not in params_dict:
+                if (name.endswith(".bias") or name.endswith("_bias")) and name not in params_dict:
                     continue
                 # Skip layers on other devices.
                 if is_pp_missing_parameter(name, self):
@@ -551,9 +536,7 @@ class Lfm2MoeModel(nn.Module):
                         continue
 
                     # Skip loading extra bias for GPTQ models.
-                    if (
-                        name.endswith(".bias") or name.endswith("_bias")
-                    ) and name not in params_dict:
+                    if (name.endswith(".bias") or name.endswith("_bias")) and name not in params_dict:
                         continue
                     param = params_dict[name]
 
@@ -568,18 +551,14 @@ class Lfm2MoeModel(nn.Module):
                     break
                 else:
                     # Skip loading extra bias for GPTQ models.
-                    if (
-                        name.endswith(".bias") or name.endswith("_bias")
-                    ) and name not in params_dict:
+                    if (name.endswith(".bias") or name.endswith("_bias")) and name not in params_dict:
                         continue
                     # Skip layers on other devices.
                     if is_pp_missing_parameter(name, self):
                         continue
                     name = maybe_remap_moe_expert_param_name(name, params_dict)
                     param = params_dict[name]
-                    weight_loader = getattr(
-                        param, "weight_loader", default_weight_loader
-                    )
+                    weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
             loaded_params.add(name)
         return loaded_params
@@ -664,15 +643,12 @@ class Lfm2MoeForCausalLM(
 
         if cache_config.mamba_cache_mode == "all":
             raise NotImplementedError(
-                "Lfm2Moe currently does not support 'all' prefix caching, "
-                "please use '--mamba-cache-mode=align' instead"
+                "Lfm2Moe currently does not support 'all' prefix caching, please use '--mamba-cache-mode=align' instead"
             )
 
         super().__init__()
         self.config = config
-        self.model = Lfm2MoeModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Lfm2MoeModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
@@ -687,9 +663,7 @@ class Lfm2MoeForCausalLM(
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
         # Set MoE hyperparameters
 
@@ -699,17 +673,13 @@ class Lfm2MoeForCausalLM(
             if isinstance(layer, PPMissingLayer):
                 continue
 
-            assert isinstance(
-                layer, (Lfm2MoeAttentionDecoderLayer, Lfm2MoeShortConvDecoderLayer)
-            )
+            assert isinstance(layer, (Lfm2MoeAttentionDecoderLayer, Lfm2MoeShortConvDecoderLayer))
             if isinstance(layer.feed_forward, Lfm2MoeSparseMoeBlock):
                 example_layer = layer.feed_forward
                 self.moe_layers.append(layer.feed_forward.experts)
 
         if example_layer is None:
-            raise RuntimeError(
-                "No Lfm2MoeSparseMoeBlock layer found in the model.layers."
-            )
+            raise RuntimeError("No Lfm2MoeSparseMoeBlock layer found in the model.layers.")
 
         self.num_moe_layers = len(self.moe_layers)
         self.num_expert_groups = 1
@@ -748,9 +718,7 @@ class Lfm2MoeForCausalLM(
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:

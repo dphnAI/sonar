@@ -102,10 +102,7 @@ async def test_tokenize_chat_skips_mm_cache_for_renderer_only_path():
     response = await serving.create_tokenize(request, MagicMock(headers={}))
 
     assert response.tokens == [1, 2, 3]
-    assert (
-        serving.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"]
-        is True
-    )
+    assert serving.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"] is True
 
 
 @pytest.mark.asyncio
@@ -117,9 +114,7 @@ async def test_tokenize_completion_skips_mm_cache_for_renderer_only_path():
     mock_engine.renderer = MagicMock()
 
     serving = _build_serving_tokenization(mock_engine)
-    serving.online_renderer.preprocess_completion = AsyncMock(
-        return_value=[{"prompt_token_ids": [1, 2, 3]}]
-    )
+    serving.online_renderer.preprocess_completion = AsyncMock(return_value=[{"prompt_token_ids": [1, 2, 3]}])
 
     request = TokenizeCompletionRequest(
         model=MODEL_NAME,
@@ -129,7 +124,4 @@ async def test_tokenize_completion_skips_mm_cache_for_renderer_only_path():
     response = await serving.create_tokenize(request, MagicMock(headers={}))
 
     assert response.tokens == [1, 2, 3]
-    assert (
-        serving.online_renderer.preprocess_completion.call_args.kwargs["skip_mm_cache"]
-        is True
-    )
+    assert serving.online_renderer.preprocess_completion.call_args.kwargs["skip_mm_cache"] is True

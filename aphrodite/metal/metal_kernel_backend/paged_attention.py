@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Paged attention wrapper and dispatch for native Metal kernels.
 
 The wrapper intercepts mlx_lm attention modules and dispatches to the
@@ -68,9 +69,7 @@ class MetalKernelPagedAttentionWrapper(nn.Module):
         object.__setattr__(self, "_mk_block_size", block_size)
         # For compact caches (hybrid models), cache_idx maps to the
         # per-type cache array.  Defaults to layer_idx for non-hybrid.
-        object.__setattr__(
-            self, "_mk_cache_idx", cache_idx if cache_idx is not None else layer_idx
-        )
+        object.__setattr__(self, "_mk_cache_idx", cache_idx if cache_idx is not None else layer_idx)
 
     def __call__(
         self,
@@ -86,9 +85,7 @@ class MetalKernelPagedAttentionWrapper(nn.Module):
             # Only pass position_ids when provided (mlx_vlm models);
             # mlx_lm models (e.g. Gemma4) use offset via **kwargs instead.
             if position_ids is not None:
-                return self._inner(
-                    x, mask=mask, cache=cache, position_ids=position_ids, **kwargs
-                )
+                return self._inner(x, mask=mask, cache=cache, position_ids=position_ids, **kwargs)
             return self._inner(x, mask=mask, cache=cache, **kwargs)
 
         inner = self._inner
@@ -164,14 +161,8 @@ def patch_model_attention_metal_kernel(
             patched += 1
             continue
 
-        cache_idx = (
-            cache_idx_map[layer_idx]
-            if cache_idx_map is not None and layer_idx in cache_idx_map
-            else layer_idx
-        )
-        wrapper = MetalKernelPagedAttentionWrapper(
-            attn, layer_idx, kv_cache, block_size, cache_idx=cache_idx
-        )
+        cache_idx = cache_idx_map[layer_idx] if cache_idx_map is not None and layer_idx in cache_idx_map else layer_idx
+        wrapper = MetalKernelPagedAttentionWrapper(attn, layer_idx, kv_cache, block_size, cache_idx=cache_idx)
         setattr(layer, attn_attr, wrapper)
         patched += 1
 

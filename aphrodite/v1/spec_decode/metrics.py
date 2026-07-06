@@ -75,9 +75,7 @@ class SpecDecodingLogging:
         self.num_drafts.append(spec_decoding_stats.num_drafts)
         self.num_draft_tokens.append(spec_decoding_stats.num_draft_tokens)
         self.num_accepted_tokens.append(spec_decoding_stats.num_accepted_tokens)
-        self.accepted_tokens_per_pos_lists.append(
-            spec_decoding_stats.num_accepted_tokens_per_pos
-        )
+        self.accepted_tokens_per_pos_lists.append(spec_decoding_stats.num_accepted_tokens_per_pos)
 
     def log(self, log_fn=logger.info):
         if not self.num_drafts:
@@ -104,11 +102,7 @@ class SpecDecodingLogging:
             self.reset()
             return
 
-        draft_acceptance_rate = (
-            num_accepted_tokens / num_draft_tokens * 100
-            if num_draft_tokens > 0
-            else float("nan")
-        )
+        draft_acceptance_rate = num_accepted_tokens / num_draft_tokens * 100 if num_draft_tokens > 0 else float("nan")
 
         # Conventionally, mean acceptance length includes the bonus token
         mean_acceptance_length = 1 + (num_accepted_tokens / num_drafts)
@@ -147,15 +141,9 @@ class SpecDecodingLogging:
         # Each "draft" is one denoising step that re-evaluates the canvas block
         # and finalizes some of its positions.
         mean_committed_per_step = (
-            num_committed_tokens / num_denoising_steps
-            if num_denoising_steps > 0
-            else float("nan")
+            num_committed_tokens / num_denoising_steps if num_denoising_steps > 0 else float("nan")
         )
-        mean_steps_per_canvas = (
-            num_canvas_tokens / num_committed_tokens
-            if num_committed_tokens > 0
-            else float("nan")
-        )
+        mean_steps_per_canvas = num_canvas_tokens / num_committed_tokens if num_committed_tokens > 0 else float("nan")
 
         log_fn(
             "DiffusionDecoding metrics: "
@@ -244,9 +232,7 @@ class SpecDecodingProm:
         self.counter_spec_decode_num_draft_tokens = counters[1]
         self.counter_spec_decode_num_accepted_tokens = counters[2]
 
-        self.counter_spec_decode_num_accepted_tokens_per_pos: dict[
-            int, list[prometheus_client.Counter]
-        ] = {}
+        self.counter_spec_decode_num_accepted_tokens_per_pos: dict[int, list[prometheus_client.Counter]] = {}
         if not is_diffusion:
             assert speculative_config is not None
             num_spec_tokens = speculative_config.num_speculative_tokens
@@ -257,25 +243,15 @@ class SpecDecodingProm:
                 labelnames=pos_labelnames,
             )
             self.counter_spec_decode_num_accepted_tokens_per_pos = {
-                idx: [
-                    base_counter.labels(*lv, str(pos)) for pos in range(num_spec_tokens)
-                ]
+                idx: [base_counter.labels(*lv, str(pos)) for pos in range(num_spec_tokens)]
                 for idx, lv in per_engine_labelvalues.items()
             }
 
     def observe(self, spec_decoding_stats: SpecDecodingStats, engine_idx: int = 0):
         if not self.spec_decoding_enabled:
             return
-        self.counter_spec_decode_num_drafts[engine_idx].inc(
-            spec_decoding_stats.num_drafts
-        )
-        self.counter_spec_decode_num_draft_tokens[engine_idx].inc(
-            spec_decoding_stats.num_draft_tokens
-        )
-        self.counter_spec_decode_num_accepted_tokens[engine_idx].inc(
-            spec_decoding_stats.num_accepted_tokens
-        )
-        for pos, counter in enumerate(
-            self.counter_spec_decode_num_accepted_tokens_per_pos.get(engine_idx, [])
-        ):
+        self.counter_spec_decode_num_drafts[engine_idx].inc(spec_decoding_stats.num_drafts)
+        self.counter_spec_decode_num_draft_tokens[engine_idx].inc(spec_decoding_stats.num_draft_tokens)
+        self.counter_spec_decode_num_accepted_tokens[engine_idx].inc(spec_decoding_stats.num_accepted_tokens)
+        for pos, counter in enumerate(self.counter_spec_decode_num_accepted_tokens_per_pos.get(engine_idx, [])):
             counter.inc(spec_decoding_stats.num_accepted_tokens_per_pos[pos])

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Model-type detection helpers for STT boundary decisions."""
 
 from __future__ import annotations

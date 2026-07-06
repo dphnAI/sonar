@@ -36,13 +36,12 @@ class CustomRoutingRouter(BaseRouter):
         from aphrodite.model_executor.models.llama4 import Llama4MoE
 
         # Cohere (v1) MoE lives in a fork-specific module; recognize its router too.
-        cohere_token_choice_with_bias = None
         try:
             from aphrodite.model_executor.models.cohere_moe import (
                 token_choice_with_bias as cohere_token_choice_with_bias,
             )
         except ImportError:
-            pass
+            cohere_token_choice_with_bias = None
 
         # NOTE: FLASHINFER_TRTLLM support the Llama4 router.
         if self.custom_routing_function == Llama4MoE.custom_routing_function:
@@ -73,6 +72,4 @@ class CustomRoutingRouter(BaseRouter):
             renormalize=self.renormalize,
         )
 
-        return topk_weights.to(torch.float32), topk_ids.to(
-            torch.int32 if indices_type is None else indices_type
-        )
+        return topk_weights.to(torch.float32), topk_ids.to(torch.int32 if indices_type is None else indices_type)

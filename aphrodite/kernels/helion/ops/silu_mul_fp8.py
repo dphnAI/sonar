@@ -12,10 +12,7 @@ from aphrodite.logger import init_logger
 from aphrodite.utils.import_utils import has_helion
 
 if not has_helion():
-    raise ImportError(
-        "silu_mul_fp8 Helion kernel requires helion to be installed. "
-        "Install it with: pip install helion"
-    )
+    raise ImportError("silu_mul_fp8 Helion kernel requires helion to be installed. Install it with: pip install helion")
 
 import helion.language as hl
 
@@ -51,9 +48,7 @@ def generate_silu_mul_fp8_inputs() -> dict[CaseKey, tuple[Any, ...]]:
 _pick_cache: dict[tuple[int, int], CaseKey | None] = {}
 
 
-def pick_silu_mul_fp8_config(
-    args: tuple[Any, ...], config_keys: list[CaseKey]
-) -> CaseKey | None:
+def pick_silu_mul_fp8_config(args: tuple[Any, ...], config_keys: list[CaseKey]) -> CaseKey | None:
     """Pick the best pre-tuned config for the given input shape.
 
     Selection strategy:

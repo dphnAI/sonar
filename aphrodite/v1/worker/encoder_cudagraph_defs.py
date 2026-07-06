@@ -56,9 +56,7 @@ class EncoderCudaGraphConfig:
     """Output hidden dim of the vision encoder.
     Used for DP gather buffer allocation."""
 
-    padding_logics: dict[str, EncoderCudaGraphPaddingLogic] = field(
-        default_factory=dict
-    )
+    padding_logics: dict[str, EncoderCudaGraphPaddingLogic] = field(default_factory=dict)
     """Optional per-buffer replay padding/copy logic.
     If absent for a key, the manager zeros the capture buffer and slice-copies
     the replay buffer into it."""

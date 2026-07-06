@@ -92,9 +92,7 @@ class DeepseekV32DecoderLayer(torch.nn.Module):
                 reduce_results=False,
             )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.routed_scaling_factor = getattr(config, "routed_scaling_factor", 1.0)
 
     def forward(
@@ -110,15 +108,11 @@ class DeepseekV32DecoderLayer(torch.nn.Module):
         else:
             # The previous layer's MLP/MoE output is left un-reduced; fuse its
             # all-reduce into this input_layernorm.
-            hidden_states, residual = fused_allreduce_rms_norm(
-                hidden_states, residual, self.input_layernorm
-            )
+            hidden_states, residual = fused_allreduce_rms_norm(hidden_states, residual, self.input_layernorm)
         # self_attn's o_proj runs reduce_results=False; fuse its all-reduce with
         # the post-attention RMSNorm.
         hidden_states = self.self_attn(positions=positions, hidden_states=hidden_states)
-        hidden_states, residual = fused_allreduce_rms_norm(
-            hidden_states, residual, self.post_attention_layernorm
-        )
+        hidden_states, residual = fused_allreduce_rms_norm(hidden_states, residual, self.post_attention_layernorm)
         # MLP/MoE runs un-reduced; its all-reduce is fused into the next layer's
         # input_layernorm (or the model's final norm).
         hidden_states = self.mlp(hidden_states)
@@ -178,9 +172,7 @@ class DeepseekV32Model(torch.nn.Module):
         )
 
         self.aux_hidden_state_layers = tuple[int, ...]()
-        self.num_redundant_experts = (
-            aphrodite_config.parallel_config.eplb_config.num_redundant_experts
-        )
+        self.num_redundant_experts = aphrodite_config.parallel_config.eplb_config.num_redundant_experts
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
@@ -214,9 +206,7 @@ class DeepseekV32Model(torch.nn.Module):
             hidden_states, residual = layer(positions, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         # Last layer's MoE output is un-reduced; fuse its all-reduce into norm.
         hidden_states, _ = fused_allreduce_rms_norm(hidden_states, residual, self.norm)
@@ -271,9 +261,7 @@ class DeepseekV32Model(torch.nn.Module):
                 if ("mlp.experts." in name) and name not in params_dict:
                     continue
                 name_mapped = name.replace(weight_name, param_name)
-                if (
-                    param_name == "fused_qkv_a_proj"
-                ) and name_mapped not in params_dict:
+                if (param_name == "fused_qkv_a_proj") and name_mapped not in params_dict:
                     continue
                 name = name_mapped
                 if name.endswith(".bias") and name not in params_dict:
@@ -294,9 +282,7 @@ class DeepseekV32Model(torch.nn.Module):
                     if is_pp_missing_parameter(name_mapped, self):
                         continue
                     param = params_dict[name_mapped]
-                    weight_loader = typing.cast(
-                        Callable[..., bool], param.weight_loader
-                    )
+                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                     success = weight_loader(
                         param,
                         loaded_weight,

@@ -143,9 +143,7 @@ class TestResponseInputToHarmonyMessage:
         msg = response_input_to_harmony(
             {
                 "type": "reasoning",
-                "content": [
-                    {"type": "reasoning_text", "text": "I should call get_weather."}
-                ],
+                "content": [{"type": "reasoning_text", "text": "I should call get_weather."}],
             },
             prev_responses=[],
         )

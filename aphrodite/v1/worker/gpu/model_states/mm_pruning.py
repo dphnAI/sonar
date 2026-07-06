@@ -72,9 +72,7 @@ class MultiModalPruner:
             req_idx = req_idx_list[batch_idx]
             prefill_len = prefill_lens_list[batch_idx]
             input_ids = req_states.all_token_ids.gpu[req_idx, :prefill_len]
-            mrope_positions = self.rope_state.read_prefill_positions(
-                req_idx, prefill_len
-            ).long()
+            mrope_positions = self.rope_state.read_prefill_positions(req_idx, prefill_len).long()
             req_cleaned, new_positions, delta = self.model.recompute_mrope_positions(
                 input_ids=input_ids,
                 multimodal_embeddings=req_embeds,
@@ -97,17 +95,13 @@ class MultiModalPruner:
         feature.
         """
         mm_features = self.encoder_cache.mm_features[req_id]
-        lo, hi = get_mm_features_in_window(
-            mm_features, start=query_start, end=query_end
-        )
+        lo, hi = get_mm_features_in_window(mm_features, start=query_start, end=query_end)
         count = 0
         for mm_feature in mm_features[lo:hi]:
             pos_info = mm_feature.mm_position
             start_idx = max(query_start - pos_info.offset, 0)
             end_idx = min(query_end - pos_info.offset, pos_info.length)
-            embeds_start, embeds_end = pos_info.get_embeds_indices_in_range(
-                start_idx, end_idx
-            )
+            embeds_start, embeds_end = pos_info.get_embeds_indices_in_range(start_idx, end_idx)
             if embeds_start != embeds_end:
                 count += 1
         return count
@@ -130,6 +124,4 @@ def maybe_create_mm_pruner(
     ):
         return None
 
-    return MultiModalPruner(
-        model, rope_state, encoder_cache, model_config.get_inputs_embeds_size()
-    )
+    return MultiModalPruner(model, rope_state, encoder_cache, model_config.get_inputs_embeds_size())

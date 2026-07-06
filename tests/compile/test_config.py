@@ -13,11 +13,11 @@ from aphrodite.compilation.passes.utility.fix_functionalization import (
     FixFunctionalizationPass,
 )
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CUDAGraphMode,
     ParallelConfig,
     SchedulerConfig,
-    AphroditeConfig,
 )
 from aphrodite.config.compilation import CompilationMode, PassConfig
 from aphrodite.engine.arg_utils import EngineArgs
@@ -74,10 +74,7 @@ def test_copy_pass():
         copied_inductor_pass.compilation_config.use_inductor_graph_partition
         == aphrodite_config.compilation_config.use_inductor_graph_partition
     )
-    assert (
-        copied_inductor_pass.compilation_config.splitting_ops
-        == aphrodite_config.compilation_config.splitting_ops
-    )
+    assert copied_inductor_pass.compilation_config.splitting_ops == aphrodite_config.compilation_config.splitting_ops
 
 
 def test_custom_op():
@@ -103,9 +100,7 @@ def test_APHRODITE_DISABLE_COMPILE_CACHE(aphrodite_runner, monkeypatch, val):
         "cudagraph_mode": CUDAGraphMode.NONE,  # speed things up a bit
     }
     with (
-        compilation_counter.expect(
-            num_cache_entries_updated=0, num_compiled_artifacts_saved=0
-        ),
+        compilation_counter.expect(num_cache_entries_updated=0, num_compiled_artifacts_saved=0),
         # loading the model causes compilation (if enabled) to happen
         aphrodite_runner(
             "facebook/opt-125m",
@@ -127,9 +122,7 @@ def test_APHRODITE_DISABLE_COMPILE_CACHE(aphrodite_runner, monkeypatch, val):
         (CUDAGraphMode.FULL_AND_PIECEWISE, 14),
     ],
 )
-def test_use_cudagraphs(
-    aphrodite_runner, monkeypatch, cudagraph_mode, num_cudagraph_captured
-):
+def test_use_cudagraphs(aphrodite_runner, monkeypatch, cudagraph_mode, num_cudagraph_captured):
     # Disable multiprocessing so that the counter is in the same process
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
 
@@ -198,9 +191,7 @@ def test_enforce_eager(aphrodite_runner, monkeypatch):
     with (
         compilation_counter.expect(num_graphs_seen=0, stock_torch_compile_count=0),
         # loading the model causes compilation (if enabled) to happen
-        aphrodite_runner(
-            "facebook/opt-125m", enforce_eager=True, gpu_memory_utilization=0.4
-        ) as _,
+        aphrodite_runner("facebook/opt-125m", enforce_eager=True, gpu_memory_utilization=0.4) as _,
     ):
         pass
 
@@ -239,9 +230,7 @@ def test_splitting_ops_dynamic():
     )
     # with inductor partition we use splitting_ops directly for
     # partition rules
-    assert config.compilation_config.splitting_ops == [
-        "aphrodite::unified_attention_with_output"
-    ]
+    assert config.compilation_config.splitting_ops == ["aphrodite::unified_attention_with_output"]
 
     # When attn_fusion pass enabled.
     config = AphroditeConfig(
@@ -462,10 +451,7 @@ def test_cudagraph_sizes_post_init(
         )
         aphrodite_config = engine_args.create_engine_config()
 
-        assert (
-            aphrodite_config.compilation_config.max_cudagraph_capture_size
-            == expected_max_size
-        )
+        assert aphrodite_config.compilation_config.max_cudagraph_capture_size == expected_max_size
 
 
 @pytest.mark.skipif(
@@ -562,27 +548,14 @@ def test_sequence_parallelism_requires_full_graph_compilation(
         aphrodite_config._set_compile_ranges()
         aphrodite_config._set_cudagraph_sizes()
 
-    assert (
-        aphrodite_config.compilation_config.use_inductor_graph_partition
-        == use_inductor_graph_partition
-    )
-    assert (
-        bool(aphrodite_config.compilation_config.splitting_ops) == expected_piecewise_compile
-    )
+    assert aphrodite_config.compilation_config.use_inductor_graph_partition == use_inductor_graph_partition
+    assert bool(aphrodite_config.compilation_config.splitting_ops) == expected_piecewise_compile
     assert aphrodite_config.compilation_config.pass_config.enable_sp == expected_enable_sp
-    assert (
-        aphrodite_config.compilation_config.pass_config.fuse_gemm_comms == expected_enable_sp
-    )
+    assert aphrodite_config.compilation_config.pass_config.fuse_gemm_comms == expected_enable_sp
     assert aphrodite_config.compilation_config.cudagraph_mode == expected_cudagraph_mode
-    assert (
-        aphrodite_config.compilation_config.cudagraph_capture_sizes == expected_capture_sizes
-    )
-    assert (
-        aphrodite_config.compilation_config.max_cudagraph_capture_size == expected_max_size
-    )
-    assert (
-        511 in aphrodite_config.compilation_config.compile_ranges_endpoints
-    ) == expected_enable_sp
+    assert aphrodite_config.compilation_config.cudagraph_capture_sizes == expected_capture_sizes
+    assert aphrodite_config.compilation_config.max_cudagraph_capture_size == expected_max_size
+    assert (511 in aphrodite_config.compilation_config.compile_ranges_endpoints) == expected_enable_sp
 
 
 def test_cached_compilation_config(default_aphrodite_config):
@@ -617,9 +590,7 @@ def test_cached_compilation_config(default_aphrodite_config):
         query_quant = torch.compile(query_quant)
 
         _q_scale = torch.tensor(1.0, dtype=torch.float32, device=DEVICE_TYPE)
-        query = torch.randn(
-            batch_size, num_qo_heads * head_size, dtype=dtype, device=device
-        )
+        query = torch.randn(batch_size, num_qo_heads * head_size, dtype=dtype, device=device)
 
         _, code = run_and_get_code(query_quant, query, _q_scale)
 

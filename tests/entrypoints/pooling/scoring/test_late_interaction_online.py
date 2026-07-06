@@ -5,8 +5,8 @@
 import pytest
 import requests
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
+from tests.utils import RemoteOpenAIServer
 
 from .util import ColBERTScoringHfRunner
 
@@ -44,15 +44,11 @@ def server(request):
 
 @pytest.fixture(scope="module")
 def hf_model():
-    return ColBERTScoringHfRunner(
-        model_name=MODEL_NAME, linear_weights_key=LINEAR_WEIGHTS_KEY
-    )
+    return ColBERTScoringHfRunner(model_name=MODEL_NAME, linear_weights_key=LINEAR_WEIGHTS_KEY)
 
 
 @pytest.mark.asyncio
-async def test_score_api_queries_str_1_documents_str_1(
-    hf_model, server: RemoteOpenAIServer
-):
+async def test_score_api_queries_str_1_documents_str_1(hf_model, server: RemoteOpenAIServer):
     score_response = requests.post(
         server.url_for("score"),
         json={
@@ -76,9 +72,7 @@ async def test_score_api_queries_str_1_documents_str_1(
 
 
 @pytest.mark.asyncio
-async def test_score_api_queries_str_1_documents_str_n(
-    hf_model, server: RemoteOpenAIServer
-):
+async def test_score_api_queries_str_1_documents_str_n(hf_model, server: RemoteOpenAIServer):
     text_pairs = [
         [TEXTS_1[0], TEXTS_2[0]],
         [TEXTS_1[0], TEXTS_2[1]],
@@ -107,9 +101,7 @@ async def test_score_api_queries_str_1_documents_str_n(
 
 
 @pytest.mark.asyncio
-async def test_score_api_queries_str_n_documents_str_n(
-    hf_model, server: RemoteOpenAIServer
-):
+async def test_score_api_queries_str_n_documents_str_n(hf_model, server: RemoteOpenAIServer):
     text_pairs = [
         [TEXTS_1[0], TEXTS_2[0]],
         [TEXTS_1[1], TEXTS_2[1]],

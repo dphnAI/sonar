@@ -6,9 +6,9 @@ import tempfile
 
 import pytest
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.model_executor.model_loader.weight_utils import download_weights_from_hf
 from aphrodite.tokenizers import get_tokenizer
+from tests.utils import RemoteOpenAIServer
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 MODEL_PATH = os.path.join(tempfile.gettempdir(), "qwen3_06b")
@@ -60,10 +60,7 @@ async def test_token_in_token_out_and_logprobs(server):
         )
 
         # Verify all fields are present
-        assert (
-            completion.choices[0].token_ids is not None
-            and 0 < len(completion.choices[0].token_ids) <= 20
-        )
+        assert completion.choices[0].token_ids is not None and 0 < len(completion.choices[0].token_ids) <= 20
         assert completion.choices[0].prompt_token_ids is not None
 
         # Decode prompt tokens

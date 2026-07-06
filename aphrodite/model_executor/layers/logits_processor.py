@@ -117,8 +117,7 @@ class LogitsProcessor(PluggableLayer):
         """
         if self.scale <= 0.0 and self.scale != 1.0:
             raise ValueError(
-                "The local argmax reduction optimization is not supported for "
-                "non-positive logit scaling factors."
+                "The local argmax reduction optimization is not supported for non-positive logit scaling factors."
             )
         tp_size = get_tensor_model_parallel_world_size()
 
@@ -144,9 +143,7 @@ class LogitsProcessor(PluggableLayer):
 
         # All-gather (value, index) pairs, then reduce to global argmax.
         # Use float32 to avoid bf16 precision loss on large vocab indices.
-        local_pair = torch.stack(
-            [local_max_vals.float(), global_indices.float()], dim=-1
-        )
+        local_pair = torch.stack([local_max_vals.float(), global_indices.float()], dim=-1)
         # [batch, 2] -> [batch, 2 * tp_size]
         gathered = tensor_model_parallel_all_gather(local_pair, dim=-1)
         # [batch, tp_size, 2] where [:, :, 0]=values, [:, :, 1]=indices

@@ -52,10 +52,7 @@ class CpuGpuEvent:
         Should only be called by the main thread.
         """
         if self._recorded.is_set():
-            raise RuntimeError(
-                "CpuGpuEvent.record() called before the previous event was "
-                "consumed by wait()"
-            )
+            raise RuntimeError("CpuGpuEvent.record() called before the previous event was consumed by wait()")
         self._event = torch.Event()
         self._event.record(stream)
         self._recorded.set()
@@ -88,12 +85,7 @@ def override_envs_for_eplb(
     # the cooperative launch blocks until enough SMs are freed, causing a
     # deadlock. Limiting NCCL occupancy via NCCL_MAX_CTAS leaves space for
     # the cooperative kernel to launch and complete.
-    if (
-        is_data_parallel
-        and is_eplb_enabled
-        and is_nccl_based_eplb_communicator
-        and is_mega_moe
-    ):
+    if is_data_parallel and is_eplb_enabled and is_nccl_based_eplb_communicator and is_mega_moe:
         current_value_str = os.getenv("NCCL_MAX_CTAS")
 
         if current_value_str and current_value_str.isdigit():

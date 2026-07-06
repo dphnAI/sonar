@@ -5,11 +5,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from aphrodite.tokenizers import TokenizerLike
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,
 )
-from aphrodite.tokenizers import TokenizerLike
 
 
 class TestPhi4MiniToolParser(ToolParserTests):
@@ -34,9 +34,7 @@ class TestPhi4MiniToolParser(ToolParserTests):
             parser_name="phi4_mini_json",
             # Test data
             no_tool_calls_output="This is a regular response without any tool calls.",
-            single_tool_call_output=(
-                'functools[{"name": "get_weather", "arguments": {"city": "Tokyo"}}]'
-            ),
+            single_tool_call_output=('functools[{"name": "get_weather", "arguments": {"city": "Tokyo"}}]'),
             parallel_tool_calls_output="""functools[
   {"name": "get_weather", "arguments": {"city": "Tokyo"}},
   {"name": "get_time", "arguments": {"timezone": "Asia/Tokyo"}}
@@ -87,9 +85,7 @@ Would you like to know more?""",
             # xfail markers
             xfail_streaming={
                 "test_no_tool_calls": "Phi4 Mini streaming not implemented",
-                "test_single_tool_call_simple_args": (
-                    "Phi4 Mini streaming not implemented"
-                ),
+                "test_single_tool_call_simple_args": ("Phi4 Mini streaming not implemented"),
                 "test_parallel_tool_calls": "Phi4 Mini streaming not implemented",
                 "test_various_data_types": "Phi4 Mini streaming not implemented",
                 "test_empty_arguments": "Phi4 Mini streaming not implemented",
@@ -98,13 +94,7 @@ Would you like to know more?""",
                 "test_streaming_reconstruction": "Phi4 Mini streaming not implemented",
             },
             xfail_nonstreaming={
-                "test_various_data_types": (
-                    "Phi4MiniJsonToolParser regex has nesting limitations "
-                    "with nested objects"
-                ),
-                "test_malformed_input": (
-                    "Phi4MiniJsonToolParser incorrectly sets "
-                    "tools_called=True on empty array"
-                ),
+                "test_various_data_types": ("Phi4MiniJsonToolParser regex has nesting limitations with nested objects"),
+                "test_malformed_input": ("Phi4MiniJsonToolParser incorrectly sets tools_called=True on empty array"),
             },
         )

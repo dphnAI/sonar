@@ -151,9 +151,7 @@ def get_fi_ar_workspace(
         # Reuse the quant workspace if it was already created with the same backend
         if _fi_ar_quant_workspace is not None and _fi_ar_quant_workspace.backend == be:
             return _fi_ar_quant_workspace
-        return _create_workspace(
-            be, world_size, rank, max_token_num, hidden_dim, dtype, group
-        )
+        return _create_workspace(be, world_size, rank, max_token_num, hidden_dim, dtype, group)
 
     _fi_ar_workspace = _get_or_create(backend)
     if _fi_ar_workspace is None and allow_trtllm_fallback and backend != "trtllm":
@@ -165,15 +163,9 @@ def get_fi_ar_workspace(
         _fi_ar_workspace = _get_or_create(backend)
 
     if _fi_ar_workspace is not None:
-        logger.info_once(
-            "Initialized FlashInfer Allreduce norm fusion workspace "
-            f"with backend={backend}"
-        )
+        logger.info_once(f"Initialized FlashInfer Allreduce norm fusion workspace with backend={backend}")
     else:
-        logger.warning_once(
-            "Failed to initialize FlashInfer Allreduce norm fusion workspace "
-            f"with backend={backend}"
-        )
+        logger.warning_once(f"Failed to initialize FlashInfer Allreduce norm fusion workspace with backend={backend}")
 
     return _fi_ar_workspace
 
@@ -209,18 +201,12 @@ def get_fi_ar_quant_workspace(
         _fi_ar_quant_workspace = _fi_ar_workspace
         return _fi_ar_quant_workspace
 
-    _fi_ar_quant_workspace = _create_workspace(
-        "trtllm", world_size, rank, max_token_num, hidden_dim, dtype, group
-    )
+    _fi_ar_quant_workspace = _create_workspace("trtllm", world_size, rank, max_token_num, hidden_dim, dtype, group)
     if _fi_ar_quant_workspace is not None:
-        logger.info_once(
-            "Initialized FlashInfer Allreduce norm quantization "
-            "fusion workspace with backend=trtllm"
-        )
+        logger.info_once("Initialized FlashInfer Allreduce norm quantization fusion workspace with backend=trtllm")
     else:
         logger.warning_once(
-            "Failed to initialize FlashInfer Allreduce norm quantization "
-            "fusion workspace with backend=trtllm"
+            "Failed to initialize FlashInfer Allreduce norm quantization fusion workspace with backend=trtllm"
         )
 
     return _fi_ar_quant_workspace
@@ -254,15 +240,11 @@ class FlashInferAllReduce:
         self.disabled = True
 
         if not fi_ar_available:
-            logger.info(
-                "FlashInfer All Reduce is disabled because flashinfer is not available"
-            )
+            logger.info("FlashInfer All Reduce is disabled because flashinfer is not available")
             return
 
         if not current_platform.is_cuda():
-            logger.info(
-                "FlashInfer All Reduce is disabled because it requires CUDA platform"
-            )
+            logger.info("FlashInfer All Reduce is disabled because it requires CUDA platform")
             return
 
         self.group = group
@@ -275,13 +257,10 @@ class FlashInferAllReduce:
         # Use the same threshold as the allreduce-rms fusion pass
         # TODO: tune the threshold
         MiB = 1024 * 1024
-        max_workspace_size = PassConfig.default_fi_allreduce_fusion_max_size_mb().get(
-            self.world_size, None
-        )
+        max_workspace_size = PassConfig.default_fi_allreduce_fusion_max_size_mb().get(self.world_size, None)
         if not max_workspace_size:
             logger.warning(
-                "FlashInfer All Reduce is disabled because it "
-                "is not supported for world_size=%d.",
+                "FlashInfer All Reduce is disabled because it is not supported for world_size=%d.",
                 self.world_size,
             )
             return

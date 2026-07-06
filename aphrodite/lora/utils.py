@@ -59,9 +59,7 @@ def get_captured_lora_counts(max_loras: int, specialize: bool) -> list[int]:
     if not specialize:
         return [max_loras + 1]
 
-    return [
-        n for n in range(1, max_loras + 2) if (n & (n - 1)) == 0 or n == max_loras + 1
-    ]
+    return [n for n in range(1, max_loras + 2) if (n & (n - 1)) == 0 or n == max_loras + 1]
 
 
 _GLOBAL_LORA_ID = 0
@@ -142,9 +140,7 @@ def from_layer_logits_processor(
     return ret
 
 
-def replace_submodule(
-    model: nn.Module, module_name: str, new_module: nn.Module
-) -> nn.Module:
+def replace_submodule(model: nn.Module, module_name: str, new_module: nn.Module) -> nn.Module:
     """Replace a submodule in a model with a new module."""
     parent = model.get_submodule(".".join(module_name.split(".")[:-1]))
     target_name = module_name.split(".")[-1]
@@ -152,9 +148,7 @@ def replace_submodule(
     return new_module
 
 
-def parse_fine_tuned_lora_name(
-    name: str, weights_mapper: "WeightsMapper | None" = None
-) -> tuple[str, bool]:
+def parse_fine_tuned_lora_name(name: str, weights_mapper: "WeightsMapper | None" = None) -> tuple[str, bool]:
     """Parse the name of lora weights.
 
     args:
@@ -192,11 +186,7 @@ def parse_fine_tuned_lora_name(
     start_index = 2 if name.startswith("base_model.model.") else 0
 
     parts = name.split(".")
-    if (
-        parts[-1] == "weight"
-        and len(parts) >= 2
-        and (parts[-2] == "lora_A" or parts[-2] == "lora_B")
-    ):
+    if parts[-1] == "weight" and len(parts) >= 2 and (parts[-2] == "lora_A" or parts[-2] == "lora_B"):
         new_name = ".".join(parts[start_index:-2])
         return new_name, parts[-2] == "lora_A"
 
@@ -368,9 +358,7 @@ def get_adapter_absolute_path(lora_path: str) -> str:
     return local_snapshot_path
 
 
-def process_packed_modules_mapping(
-    model: nn.Module, force_2d_moe: bool = False
-) -> dict[str, list[str]]:
+def process_packed_modules_mapping(model: nn.Module, force_2d_moe: bool = False) -> dict[str, list[str]]:
     if is_moe_model(model):
         # This method generates and returns a dictionary mapping packed module
         # names to lists of their corresponding submodule names. It includes

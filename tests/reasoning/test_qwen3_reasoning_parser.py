@@ -4,13 +4,13 @@
 import pytest
 from transformers import AutoTokenizer
 
+from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 from tests.reasoning.utils import (
     StreamingReasoningReconstructor,
     run_reasoning_extraction,
     run_reasoning_extraction_streaming,
 )
-from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
-from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 
 parser_name = "qwen3"
 start_token = "<think>"
@@ -81,8 +81,7 @@ WITHOUT_THINK_STREAM = {
 # --- <tool_call> without </think> (implicit reasoning end) ---
 
 TOOL_CALL_BODY = (
-    "<tool_call>\n<function=bash>\n<parameter=command>"
-    "\ncat /etc/hosts\n</parameter>\n</function>\n</tool_call>"
+    "<tool_call>\n<function=bash>\n<parameter=command>\ncat /etc/hosts\n</parameter>\n</function>\n</tool_call>"
 )
 
 TOOL_CALL_NO_THINK_END = {
@@ -248,16 +247,10 @@ def test_reasoning(
     qwen3_tokenizer,
 ):
     output = qwen3_tokenizer.tokenize(param_dict["output"])
-    output_tokens: list[str] = [
-        qwen3_tokenizer.convert_tokens_to_string([token]) for token in output
-    ]
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        qwen3_tokenizer
-    )
+    output_tokens: list[str] = [qwen3_tokenizer.convert_tokens_to_string([token]) for token in output]
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(qwen3_tokenizer)
 
-    reasoning, content = run_reasoning_extraction(
-        parser, output_tokens, streaming=streaming
-    )
+    reasoning, content = run_reasoning_extraction(parser, output_tokens, streaming=streaming)
 
     assert reasoning == param_dict["reasoning"]
     assert content == param_dict["content"]
@@ -304,9 +297,7 @@ MULTI_TOKEN_DELTA_CASES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "deltas, expected_reasoning, expected_content", MULTI_TOKEN_DELTA_CASES
-)
+@pytest.mark.parametrize("deltas, expected_reasoning, expected_content", MULTI_TOKEN_DELTA_CASES)
 def test_reasoning_streaming_multi_token_deltas(
     deltas: list[str],
     expected_reasoning: str | None,
@@ -314,13 +305,9 @@ def test_reasoning_streaming_multi_token_deltas(
     qwen3_tokenizer,
 ):
     """Test that multi-token deltas don't leak <think> into reasoning."""
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        qwen3_tokenizer
-    )
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(qwen3_tokenizer)
 
-    reconstructor: StreamingReasoningReconstructor = run_reasoning_extraction_streaming(
-        parser, deltas
-    )
+    reconstructor: StreamingReasoningReconstructor = run_reasoning_extraction_streaming(parser, deltas)
 
     assert reconstructor.reasoning == expected_reasoning
     assert (reconstructor.other_content or None) == expected_content
@@ -351,9 +338,7 @@ THINKING_DISABLED_CASES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "output, expected_reasoning, expected_content", THINKING_DISABLED_CASES
-)
+@pytest.mark.parametrize("output, expected_reasoning, expected_content", THINKING_DISABLED_CASES)
 def test_reasoning_thinking_disabled(
     output: str,
     expected_reasoning: str | None,

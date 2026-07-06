@@ -48,9 +48,7 @@ def _get_audio_output_lengths_from_lengths(
     conv_params: list[tuple[int, int, int]],
 ) -> torch.Tensor:
     for padding, kernel_size, stride in conv_params:
-        audio_lengths = _calculate_conv_output_length(
-            audio_lengths, padding, kernel_size, stride
-        )
+        audio_lengths = _calculate_conv_output_length(audio_lengths, padding, kernel_size, stride)
     return (audio_lengths - merge_factor) // merge_factor + 1
 
 
@@ -60,9 +58,7 @@ def _get_audio_output_lengths_from_mask(
     conv_params: list[tuple[int, int, int]],
 ) -> torch.Tensor:
     audio_lengths = mask.sum(-1)
-    return _get_audio_output_lengths_from_lengths(
-        audio_lengths, merge_factor, conv_params
-    )
+    return _get_audio_output_lengths_from_lengths(audio_lengths, merge_factor, conv_params)
 
 
 def _get_audio_output_lengths_for_tower(
@@ -89,15 +85,11 @@ def _get_audio_output_lengths_for_tower(
     """
     # First, calculate the output length after convolutions
     if hasattr(audio_tower, "_get_feat_extract_output_lengths"):
-        _, conv_output_lengths = audio_tower._get_feat_extract_output_lengths(
-            audio_lengths
-        )
+        _, conv_output_lengths = audio_tower._get_feat_extract_output_lengths(audio_lengths)
     else:
         conv_output_lengths = audio_lengths
         for padding, kernel_size, stride in conv_params:
-            conv_output_lengths = _calculate_conv_output_length(
-                conv_output_lengths, padding, kernel_size, stride
-            )
+            conv_output_lengths = _calculate_conv_output_length(conv_output_lengths, padding, kernel_size, stride)
 
     # Then, apply merge_factor to get final output length
     # Formula: (conv_output_lengths - merge_factor) // merge_factor + 1
@@ -111,9 +103,7 @@ def _flatten_audio_features_by_length(
     num_chunks, max_audio_tokens, embed_dim = audio_features.shape
     audio_output_lengths = audio_output_lengths.unsqueeze(1)
     audio_features_mask = (
-        torch.arange(max_audio_tokens)
-        .expand(num_chunks, max_audio_tokens)
-        .to(audio_output_lengths.device)
+        torch.arange(max_audio_tokens).expand(num_chunks, max_audio_tokens).to(audio_output_lengths.device)
         < audio_output_lengths
     )
     return audio_features[audio_features_mask].view(-1, embed_dim)

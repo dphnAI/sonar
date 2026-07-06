@@ -5,10 +5,6 @@
 import pytest
 import torch
 
-from tests.quantization.utils import (
-    _test_online_quant_peak_mem_impl,
-    is_quant_method_supported,
-)
 from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
 from aphrodite.model_executor.layers.quantization.online.fp8 import (
     Fp8PerBlockOnlineLinearMethod,
@@ -17,6 +13,10 @@ from aphrodite.model_executor.layers.quantization.online.fp8 import (
     Fp8PerTensorOnlineMoEMethod,
 )
 from aphrodite.platforms import current_platform
+from tests.quantization.utils import (
+    _test_online_quant_peak_mem_impl,
+    is_quant_method_supported,
+)
 
 
 @pytest.mark.skipif(
@@ -62,9 +62,7 @@ from aphrodite.platforms import current_platform
         ),
     ],
 )
-@pytest.mark.parametrize(
-    "use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False]
-)
+@pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_online_quantization(
     aphrodite_runner,
     quant_scheme: str,
@@ -154,9 +152,7 @@ def test_online_quant_peak_mem(
     caplog_mp_spawn,
     monkeypatch,
 ) -> None:
-    _test_online_quant_peak_mem_impl(
-        "fp8_per_tensor", aphrodite_runner, caplog_mp_spawn, monkeypatch
-    )
+    _test_online_quant_peak_mem_impl("fp8_per_tensor", aphrodite_runner, caplog_mp_spawn, monkeypatch)
 
 
 @pytest.mark.skipif(

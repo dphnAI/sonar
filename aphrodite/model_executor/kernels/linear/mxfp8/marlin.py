@@ -10,9 +10,7 @@ class MarlinMxfp8LinearKernel(Mxfp8LinearKernel):
     """MXFP8 W8A16 GEMM via Marlin (SM80+)."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp8 import (
             is_fp8_marlin_supported,
         )

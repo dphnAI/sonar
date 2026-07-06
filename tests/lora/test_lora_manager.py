@@ -8,7 +8,7 @@ import torch
 from safetensors.torch import load_file
 from torch import nn
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.config.lora import LoRAConfig
 from aphrodite.lora.layers import (
     ColumnParallelLinearWithLoRA,
@@ -51,9 +51,7 @@ DEFAULT_DTYPE = torch.get_default_dtype()
 def test_from_lora_tensors(qwen3_lora_files, device):
     tensors = load_file(os.path.join(qwen3_lora_files, "adapter_model.safetensors"))
 
-    peft_helper = PEFTHelper.from_local_dir(
-        qwen3_lora_files, max_position_embeddings=4096
-    )
+    peft_helper = PEFTHelper.from_local_dir(qwen3_lora_files, max_position_embeddings=4096)
     lora_model = LoRAModel.from_lora_tensors(
         1,
         tensors,
@@ -68,15 +66,11 @@ def test_from_lora_tensors(qwen3_lora_files, device):
         assert lora.lora_b is not None
         assert lora.lora_a.device == torch.device(device)
         assert lora.lora_b.device == torch.device(device)
-        assert lora.lora_a.shape[0] == lora.lora_b.shape[1], (
-            f"{lora.lora_a.shape=}, {lora.lora_b.shape=}"
-        )
+        assert lora.lora_a.shape[0] == lora.lora_b.shape[1], f"{lora.lora_a.shape=}, {lora.lora_b.shape=}"
         assert lora.lora_a.shape[0] == 8
 
 
-def create_lora(
-    lora_id: int, model: nn.Module, sub_modules: list[str], device: torch.device
-) -> LoRAModel:
+def create_lora(lora_id: int, model: nn.Module, sub_modules: list[str], device: torch.device) -> LoRAModel:
     loras: dict[str, LoRALayerWeights] = {}
     for name in sub_modules:
         w = model.get_submodule(name).weight
@@ -120,17 +114,13 @@ def test_replace_submodules(default_aphrodite_config, dist_init, dummy_model):
         1,
         1,
         1,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
         default_aphrodite_config,
     )
     model = manager.model
     assert isinstance(model.get_submodule("dense1"), ColumnParallelLinearWithLoRA)
-    assert isinstance(
-        model.get_submodule("layer1.dense1"), ColumnParallelLinearWithLoRA
-    )
+    assert isinstance(model.get_submodule("layer1.dense1"), ColumnParallelLinearWithLoRA)
     assert isinstance(model.get_submodule("dense2"), RowParallelLinearWithLoRA)
     assert isinstance(model.get_submodule("layer1.dense2"), RowParallelLinearWithLoRA)
 
@@ -149,16 +139,12 @@ def test_wrap_replicated_linear_subclasses(default_aphrodite_config, dist_init, 
         1,
         1,
         1,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
         default_aphrodite_config,
     )
 
-    assert isinstance(
-        manager.model.get_submodule("custom_gate"), ReplicatedLinearWithLoRA
-    )
+    assert isinstance(manager.model.get_submodule("custom_gate"), ReplicatedLinearWithLoRA)
 
 
 def test_wrap_gate_linear(default_aphrodite_config, dist_init, dummy_model):
@@ -170,16 +156,12 @@ def test_wrap_gate_linear(default_aphrodite_config, dist_init, dummy_model):
         1,
         1,
         1,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
         default_aphrodite_config,
     )
 
-    assert isinstance(
-        manager.model.get_submodule("router_gate"), ReplicatedLinearWithLoRA
-    )
+    assert isinstance(manager.model.get_submodule("router_gate"), ReplicatedLinearWithLoRA)
 
 
 def test_dedup_shared_module_across_paths(default_aphrodite_config, dist_init, dummy_model):
@@ -218,9 +200,7 @@ def test_dedup_shared_module_across_paths(default_aphrodite_config, dist_init, d
         1,
         1,
         1,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
         default_aphrodite_config,
     )
@@ -263,18 +243,14 @@ def test_lm_head_exempt_from_dedup(default_aphrodite_config, dist_init, dummy_mo
         1,
         1,
         1,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
         default_aphrodite_config,
     )
 
     # lm_head's special handling still ran: logits_processor got wrapped
     # and the lm_head entry is tracked under self.modules.
-    assert isinstance(
-        manager.model.get_submodule("logits_processor"), LogitsProcessorWithLoRA
-    )
+    assert isinstance(manager.model.get_submodule("logits_processor"), LogitsProcessorWithLoRA)
     assert "lm_head" in manager.modules
 
 
@@ -294,9 +270,7 @@ def test_skip_unsupported_matched_modules(default_aphrodite_config, dist_init, d
         1,
         1,
         1,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=8, max_loras=8, lora_dtype=DEFAULT_DTYPE),
         torch.device(DEVICES[0]),
         default_aphrodite_config,
     )
@@ -306,9 +280,7 @@ def test_skip_unsupported_matched_modules(default_aphrodite_config, dist_init, d
     assert "unsupported.dense1" not in manager.modules
 
 
-def test_target_modules_fail_closed_on_unsupported_matched_modules(
-    default_aphrodite_config, dist_init, dummy_model
-):
+def test_target_modules_fail_closed_on_unsupported_matched_modules(default_aphrodite_config, dist_init, dummy_model):
     class UnsupportedContainer(nn.Module):
         def __init__(self):
             super().__init__()
@@ -367,9 +339,7 @@ def test_get_dummy_lora_warmup_rank_for_fully_sharded_moe():
 @pytest.mark.parametrize("device", DEVICES)
 def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, device):
     model = dummy_model
-    model_lora1 = create_lora(
-        1, model, ["layer1.dense1", "dense2", "lm_head"], device=device
-    )
+    model_lora1 = create_lora(1, model, ["layer1.dense1", "dense2", "lm_head"], device=device)
     model_lora2 = create_lora(2, model, ["dense1", "dense2", "lm_head"], device=device)
     model_lora3 = create_lora(3, model, ["dense1", "dense2", "lm_head"], device=device)
     manager = LoRAModelManager(
@@ -377,9 +347,7 @@ def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, de
         2,
         2,
         2,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
         aphrodite_config=default_aphrodite_config,
     )
@@ -418,10 +386,7 @@ def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, de
     assert manager.lora_index_to_id[0] == 3
     assert manager.lora_index_to_id[1] == 2
     assert manager.device == device
-    assert (
-        manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY).device
-        == device
-    )
+    assert manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY).device == device
     assert hasattr(manager, "supported_lora_modules")
     assert sorted(manager.supported_lora_modules) == [
         "dense1",
@@ -432,13 +397,9 @@ def test_lora_model_manager(default_aphrodite_config, dist_init, dummy_model, de
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_lora_lru_cache_model_manager(
-    default_aphrodite_config, dist_init, dummy_model, device
-):
+def test_lora_lru_cache_model_manager(default_aphrodite_config, dist_init, dummy_model, device):
     model = dummy_model
-    model_lora1 = create_lora(
-        1, model, ["layer1.dense1", "dense2", "lm_head"], device=device
-    )
+    model_lora1 = create_lora(1, model, ["layer1.dense1", "dense2", "lm_head"], device=device)
     model_lora2 = create_lora(2, model, ["dense1", "dense2", "lm_head"], device=device)
     model_lora3 = create_lora(3, model, ["dense1", "dense2", "lm_head"], device=device)
     manager = LRUCacheLoRAModelManager(
@@ -446,9 +407,7 @@ def test_lora_lru_cache_model_manager(
         2,
         2,
         2,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=3, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
         aphrodite_config=default_aphrodite_config,
     )
@@ -517,10 +476,7 @@ def test_lora_lru_cache_model_manager(
     assert manager.remove_adapter(3)
     with pytest.raises(ValueError):
         assert manager.pin_adapter(3)
-    assert (
-        manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY).device
-        == device
-    )
+    assert manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY).device == device
     assert manager.device == device
 
 
@@ -529,9 +485,7 @@ def test_lru_lora_model_manager(default_aphrodite_config, dist_init, dummy_model
     # This tests just the LRU cache functionality, everything else is
     # tested in test_lora_model_manager
     model = dummy_model
-    model_lora1 = create_lora(
-        1, model, ["layer1.dense1", "dense2", "lm_head"], device=device
-    )
+    model_lora1 = create_lora(1, model, ["layer1.dense1", "dense2", "lm_head"], device=device)
     model_lora2 = create_lora(2, model, ["dense1", "dense2", "lm_head"], device=device)
     model_lora3 = create_lora(3, model, ["dense1", "dense2", "lm_head"], device=device)
     model_lora4 = create_lora(4, model, ["dense1", "dense2", "lm_head"], device=device)
@@ -540,9 +494,7 @@ def test_lru_lora_model_manager(default_aphrodite_config, dist_init, dummy_model
         2,
         2,
         2,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
         aphrodite_config=default_aphrodite_config,
     )
@@ -644,18 +596,13 @@ def test_lru_lora_model_manager(default_aphrodite_config, dist_init, dummy_model
         assert manager.remove_oldest_adapter()
 
     assert set(manager.list_adapters()) == {1}
-    assert (
-        manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY).device
-        == device
-    )
+    assert manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY).device == device
     assert manager.device == device
 
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_lru_cache_worker_adapter_manager(dist_init, dummy_model, device, tmp_path):
-    lora_config = LoRAConfig(
-        max_lora_rank=8, max_cpu_loras=4, max_loras=4, lora_dtype=DEFAULT_DTYPE
-    )
+    lora_config = LoRAConfig(max_lora_rank=8, max_cpu_loras=4, max_loras=4, lora_dtype=DEFAULT_DTYPE)
 
     dummy_lora_files = f"{tmp_path}/lora_adapter"
     os.makedirs(dummy_lora_files, exist_ok=True)
@@ -671,9 +618,7 @@ def test_lru_cache_worker_adapter_manager(dist_init, dummy_model, device, tmp_pa
 
     aphrodite_config.scheduler_config.max_num_seqs = 4
     aphrodite_config.scheduler_config.max_num_batched_tokens = 2
-    worker_adapter_manager = LRUCacheWorkerLoRAManager(
-        aphrodite_config, device, EMBEDDING_MODULES
-    )
+    worker_adapter_manager = LRUCacheWorkerLoRAManager(aphrodite_config, device, EMBEDDING_MODULES)
 
     worker_adapter_manager.max_num_seqs = 4
     worker_adapter_manager.max_num_batched_tokens = 2
@@ -759,18 +704,14 @@ def test_lru_cache_worker_adapter_manager(dist_init, dummy_model, device, tmp_pa
         )
 
     assert worker_adapter_manager.device == device
-    punica_wrapper = worker_adapter_manager._adapter_manager.punica_wrapper_mapping.get(
-        DEFAULT_LANGUAGE_WRAPPER_KEY
-    )
+    punica_wrapper = worker_adapter_manager._adapter_manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY)
     assert punica_wrapper.device == device
 
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_worker_adapter_manager(dist_init, dummy_model_gate_up, device, tmp_path):
     # Should remove every LoRA not specified in the request.
-    lora_config = LoRAConfig(
-        max_lora_rank=8, max_cpu_loras=4, max_loras=4, lora_dtype=DEFAULT_DTYPE
-    )
+    lora_config = LoRAConfig(max_lora_rank=8, max_cpu_loras=4, max_loras=4, lora_dtype=DEFAULT_DTYPE)
 
     model_config = ModelConfig(max_model_len=16)
     aphrodite_config = AphroditeConfig(model_config=model_config, lora_config=lora_config)
@@ -866,9 +807,7 @@ def test_worker_adapter_manager(dist_init, dummy_model_gate_up, device, tmp_path
         )
 
     assert worker_adapter_manager.device == device
-    punica_wrapper = worker_adapter_manager._adapter_manager.punica_wrapper_mapping.get(
-        DEFAULT_LANGUAGE_WRAPPER_KEY
-    )
+    punica_wrapper = worker_adapter_manager._adapter_manager.punica_wrapper_mapping.get(DEFAULT_LANGUAGE_WRAPPER_KEY)
     assert punica_wrapper.device == device
 
 
@@ -896,17 +835,13 @@ def test_packed_loras(default_aphrodite_config, dist_init, dummy_model_gate_up, 
         2,
         2,
         2,
-        LoRAConfig(
-            max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE
-        ),
+        LoRAConfig(max_lora_rank=8, max_cpu_loras=2, max_loras=2, lora_dtype=DEFAULT_DTYPE),
         device=device,
         aphrodite_config=default_aphrodite_config,
     )
     model = manager.model
 
-    assert isinstance(
-        model.get_submodule("gate_up_proj"), MergedColumnParallelLinearWithLoRA
-    )
+    assert isinstance(model.get_submodule("gate_up_proj"), MergedColumnParallelLinearWithLoRA)
     # Verify packed lora is correct
     model_lora_clone = model_lora.clone(1)
     model_lora_clone1 = model_lora1.clone(1)
@@ -919,30 +854,18 @@ def test_packed_loras(default_aphrodite_config, dist_init, dummy_model_gate_up, 
     packed_lora = model_lora.get_lora("gate_up_proj")
     assert packed_lora and isinstance(packed_lora, PackedLoRALayerWeights)
 
-    torch.testing.assert_close(
-        packed_lora.lora_a[0], model_lora_clone.get_lora("gate_proj").lora_a
-    )
-    torch.testing.assert_close(
-        packed_lora.lora_b[0], model_lora_clone.get_lora("gate_proj").lora_b
-    )
-    torch.testing.assert_close(
-        packed_lora.lora_a[1], model_lora_clone.get_lora("up_proj").lora_a
-    )
-    torch.testing.assert_close(
-        packed_lora.lora_b[1], model_lora_clone.get_lora("up_proj").lora_b
-    )
+    torch.testing.assert_close(packed_lora.lora_a[0], model_lora_clone.get_lora("gate_proj").lora_a)
+    torch.testing.assert_close(packed_lora.lora_b[0], model_lora_clone.get_lora("gate_proj").lora_b)
+    torch.testing.assert_close(packed_lora.lora_a[1], model_lora_clone.get_lora("up_proj").lora_a)
+    torch.testing.assert_close(packed_lora.lora_b[1], model_lora_clone.get_lora("up_proj").lora_b)
 
     packed_lora1 = model_lora1.get_lora("gate_up_proj")
     assert packed_lora1 and isinstance(packed_lora1, PackedLoRALayerWeights)
 
     assert packed_lora1.lora_a[0] is None
     assert packed_lora1.lora_b[0] is None
-    torch.testing.assert_close(
-        packed_lora1.lora_a[1], model_lora_clone1.get_lora("up_proj").lora_a
-    )
-    torch.testing.assert_close(
-        packed_lora1.lora_b[1], model_lora_clone1.get_lora("up_proj").lora_b
-    )
+    torch.testing.assert_close(packed_lora1.lora_a[1], model_lora_clone1.get_lora("up_proj").lora_a)
+    torch.testing.assert_close(packed_lora1.lora_b[1], model_lora_clone1.get_lora("up_proj").lora_b)
 
 
 def _test_target_modules(
@@ -1013,9 +936,7 @@ def test_target_modules_multiple(default_aphrodite_config, dist_init, dummy_mode
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_none_uses_all(
-    default_aphrodite_config, dist_init, dummy_model, device
-):
+def test_target_modules_none_uses_all(default_aphrodite_config, dist_init, dummy_model, device):
     """Test that target_modules=None uses all supported modules."""
     _test_target_modules(
         dummy_model,
@@ -1033,9 +954,7 @@ def test_target_modules_none_uses_all(
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_target_modules_match_packed_runtime_modules(
-    default_aphrodite_config, dist_init, dummy_model_gate_up, device
-):
+def test_target_modules_match_packed_runtime_modules(default_aphrodite_config, dist_init, dummy_model_gate_up, device):
     """Packed runtime modules should be selected by their adapter-visible names."""
     _test_target_modules(
         dummy_model_gate_up,

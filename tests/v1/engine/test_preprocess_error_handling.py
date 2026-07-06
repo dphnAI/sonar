@@ -16,14 +16,10 @@ def test_preprocess_error_handling(monkeypatch: pytest.MonkeyPatch):
     """Test that preprocessing errors are handled gracefully."""
 
     if current_platform.is_rocm() or current_platform.is_xpu():
-        pytest.skip(
-            "Skipped on ROCm/XPU: this test only works with 'fork', "
-            "but ROCm/XPU uses 'spawn'."
-        )
+        pytest.skip("Skipped on ROCm/XPU: this test only works with 'fork', but ROCm/XPU uses 'spawn'.")
 
     assert not torch.cuda.is_initialized(), (
-        "fork needs to be used for the engine "
-        "core process and this isn't possible if cuda is already initialized"
+        "fork needs to be used for the engine core process and this isn't possible if cuda is already initialized"
     )
 
     # Store original method to call for non-failing requests
@@ -37,9 +33,7 @@ def test_preprocess_error_handling(monkeypatch: pytest.MonkeyPatch):
             raise ValueError("Simulated preprocessing error!")
         return original_preprocess(self, request)
 
-    monkeypatch.setattr(
-        EngineCore, "preprocess_add_request", conditional_failing_preprocess
-    )
+    monkeypatch.setattr(EngineCore, "preprocess_add_request", conditional_failing_preprocess)
 
     llm = LLM(model=MODEL_NAME)
 

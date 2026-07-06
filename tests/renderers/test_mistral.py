@@ -85,9 +85,7 @@ async def test_async_mistral_tokenizer_does_not_block_event_loop():
 
     # Ensure task completes
     _, prompt = await task
-    assert prompt["prompt_token_ids"] == expected_tokens, (
-        "Mocked blocking tokenizer was not called"
-    )
+    assert prompt["prompt_token_ids"] == expected_tokens, "Mocked blocking tokenizer was not called"
     assert blocked_count == 0, "Event loop blocked during tokenization"
 
 
@@ -118,17 +116,11 @@ def test_apply_mistral_chat_template_thinking_chunk():
         },
         {"role": "user", "content": "Thanks, what is 3+3?"},
     ]
-    mistral_tokenizer = MistralTokenizer.from_pretrained(
-        "mistralai/Magistral-Small-2509"
-    )
+    mistral_tokenizer = MistralTokenizer.from_pretrained("mistralai/Magistral-Small-2509")
 
-    tokens_ids = safe_apply_chat_template(
-        mistral_tokenizer, messages, chat_template=None, tools=None
-    )
+    tokens_ids = safe_apply_chat_template(mistral_tokenizer, messages, chat_template=None, tools=None)
 
-    string_tokens = mistral_tokenizer.mistral.decode(
-        tokens_ids, special_token_policy=SpecialTokenPolicy.KEEP
-    )
+    string_tokens = mistral_tokenizer.mistral.decode(tokens_ids, special_token_policy=SpecialTokenPolicy.KEEP)
 
     expected_tokens = (
         r"<s>[SYSTEM_PROMPT]You are a helpful assistant.[THINK]Only return the"

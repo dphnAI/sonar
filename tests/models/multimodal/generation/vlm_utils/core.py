@@ -11,7 +11,7 @@ from transformers.models.auto.auto_factory import _BaseAutoModelClass
 from aphrodite.config.model import RunnerOption
 from aphrodite.tokenizers import TokenizerLike
 
-from .....conftest import HfRunner, AphroditeRunner
+from .....conftest import AphroditeRunner, HfRunner
 from ....registry import HF_EXAMPLE_MODELS
 from .types import PromptWithMultiModalInput, RunnerOutput
 
@@ -189,19 +189,12 @@ def process_runner_outputs(
 ):
     """Applies the runner processor(s) to the runner outputs, if any."""
     if first_runner_processor is not None:
-        first_runner_outputs = process_outputs(
-            first_runner_processor, model, first_runner_outputs
-        )
+        first_runner_outputs = process_outputs(first_runner_processor, model, first_runner_outputs)
     if second_runner_processor is not None:
-        second_runner_outputs = process_outputs(
-            second_runner_processor, model, second_runner_outputs
-        )
+        second_runner_outputs = process_outputs(second_runner_processor, model, second_runner_outputs)
     return first_runner_outputs, second_runner_outputs
 
 
 def process_outputs(output_processor, model, outputs_per_image):
     """Applies a model specific post-processor function to a runner's output"""
-    return [
-        [output_processor(res, model) for res in outputs]
-        for outputs in outputs_per_image
-    ]
+    return [[output_processor(res, model) for res in outputs] for outputs in outputs_per_image]

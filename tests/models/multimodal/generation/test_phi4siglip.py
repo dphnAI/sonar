@@ -14,9 +14,9 @@ from aphrodite.multimodal.image import rescale_image_size
 
 from ....conftest import (
     IMAGE_ASSETS,
+    AphroditeRunner,
     HfRunner,
     PromptImageInput,
-    AphroditeRunner,
 )
 from ....utils import multi_gpu_test
 from ...utils import check_logprobs_close
@@ -38,18 +38,14 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
         "cherry_blossom": "<|user|>\n<image>\nPlease infer the season with reason in details.<|end|>\n<|assistant|>\n",  # noqa: E501
     }
 )
-HF_MULTIIMAGE_IMAGE_PROMPT = (
-    "<|user|>\n<image>\n<image>\nDescribe these images.<|end|>\n<|assistant|>\n"  # noqa: E501
-)
+HF_MULTIIMAGE_IMAGE_PROMPT = "<|user|>\n<image>\n<image>\nDescribe these images.<|end|>\n<|assistant|>\n"  # noqa: E501
 
 DTYPE = "half"
 MAX_TOKENS = 128
 NUM_LOGPROBS = 10
 
 
-def aphrodite_to_hf_output(
-    aphrodite_output: tuple[list[int], str, SampleLogprobs | None], model: str
-):
+def aphrodite_to_hf_output(aphrodite_output: tuple[list[int], str, SampleLogprobs | None], model: str):
     """Sanitize aphrodite output to be comparable with hf output."""
     _, output_str, out_logprobs = aphrodite_output
 
@@ -94,10 +90,7 @@ def _build_multi_image_inputs(
         all_inputs.append(
             (
                 [HF_MULTIIMAGE_IMAGE_PROMPT for _ in size_factors],
-                [
-                    [rescale_image_size(image, factor) for image in images]
-                    for factor in size_factors
-                ],
+                [[rescale_image_size(image, factor) for image in images] for factor in size_factors],
             )
         )
     return all_inputs

@@ -62,9 +62,7 @@ def kernel_warmup(worker: "Worker"):
     deepseek_v4_mhc_warmup(
         worker.get_model(),
         max_tokens=worker.scheduler_config.max_num_batched_tokens,
-        cudagraph_capture_sizes=(
-            worker.aphrodite_config.compilation_config.cudagraph_capture_sizes or []
-        ),
+        cudagraph_capture_sizes=(worker.aphrodite_config.compilation_config.cudagraph_capture_sizes or []),
     )
 
     # Run next so input-prep kernels JIT against pristine runner state.
@@ -74,9 +72,7 @@ def kernel_warmup(worker: "Worker"):
 
     # Deep GEMM warmup
     do_deep_gemm_warmup = (
-        envs.APHRODITE_USE_DEEP_GEMM
-        and is_deep_gemm_supported()
-        and envs.APHRODITE_DEEP_GEMM_WARMUP != "skip"
+        envs.APHRODITE_USE_DEEP_GEMM and is_deep_gemm_supported() and envs.APHRODITE_DEEP_GEMM_WARMUP != "skip"
     )
     if do_deep_gemm_warmup:
         model = worker.get_model()
@@ -85,9 +81,7 @@ def kernel_warmup(worker: "Worker"):
 
     minimax_m3_msa_warmup(worker)
 
-    enable_flashinfer_autotune = (
-        worker.aphrodite_config.kernel_config.enable_flashinfer_autotune
-    )
+    enable_flashinfer_autotune = worker.aphrodite_config.kernel_config.enable_flashinfer_autotune
     # FlashInfer autotune for Hopper (SM 9.0) and Blackwell (SM 10.0) GPUs
     if enable_flashinfer_autotune is False:
         logger.info("Skipping FlashInfer autotune because it is disabled.")
@@ -109,11 +103,7 @@ def kernel_warmup(worker: "Worker"):
         # NOTE: This should be `any` instead of `all` but other hybrid attention
         # backends don't support this dummy run. Once we remove
         # `build_for_cudagraph_capture`, we can change it to `any`.
-        and all(
-            _is_flashinfer_backend(group.backend)
-            for groups in worker.model_runner.attn_groups
-            for group in groups
-        )
+        and all(_is_flashinfer_backend(group.backend) for groups in worker.model_runner.attn_groups for group in groups)
     ):
         logger.info("Warming up FlashInfer attention.")
         # Warmup with mixed batch containing both prefill and decode tokens
@@ -203,10 +193,7 @@ def flashinfer_autotune(runner: "GPUModelRunner") -> None:
     tune_results = world.broadcast_object(tune_results, src=0)
 
     if tune_results is None:
-        logger.warning(
-            "No FlashInfer autotune cache entries found."
-            "Falling back to default tactics."
-        )
+        logger.warning("No FlashInfer autotune cache entries found.Falling back to default tactics.")
     else:
         write_flashinfer_autotune_cache(cache_path, tune_results)
         world.barrier()

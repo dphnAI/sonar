@@ -71,8 +71,7 @@ class SparseNCCLWeightTransferUpdateInfo(WeightTransferUpdateInfo):
             )
         if len(self.shapes) != num_params:
             raise ValueError(
-                f"`shapes` should be of the same size as `names`: "
-                f"got {len(self.shapes)} and {len(self.names)}"
+                f"`shapes` should be of the same size as `names`: got {len(self.shapes)} and {len(self.names)}"
             )
         if len(self.num_updates_list) == 0:
             raise ValueError("`num_updates_list` cannot be empty for sparse updates")
@@ -112,16 +111,12 @@ class SparseNCCLWeightTransferEngine(
 
     def init_transfer_engine(self, init_info: NCCLWeightTransferInitInfo) -> None:
         """Initialize the NCCL process group with the trainer."""
-        self.model_update_group = worker_init_process_group(
-            init_info, self.parallel_config
-        )
+        self.model_update_group = worker_init_process_group(init_info, self.parallel_config)
 
     def start_weight_update(self) -> None:
         """No-op: sparse patches are applied in place, no layerwise reload."""
         if self.parallel_config.world_size != 1:
-            raise NotImplementedError(
-                "Sparse weight updates currently require TP=1 and PP=1"
-            )
+            raise NotImplementedError("Sparse weight updates currently require TP=1 and PP=1")
 
     def finish_weight_update(self) -> None:
         """No-op: sparse patches are applied in place, no layerwise reload."""
@@ -130,10 +125,7 @@ class SparseNCCLWeightTransferEngine(
     def receive_weights(self, update_info: SparseNCCLWeightTransferUpdateInfo) -> None:
         """Receive sparse flat-index patches from the trainer and apply them."""
         if self.model_update_group is None:
-            raise RuntimeError(
-                "NCCL weight transfer not initialized. "
-                "Call init_transfer_engine() first."
-            )
+            raise RuntimeError("NCCL weight transfer not initialized. Call init_transfer_engine() first.")
 
         # Use the worker's assigned device rather than the ambient current
         # device: the receive path is no longer wrapped in
@@ -149,15 +141,9 @@ class SparseNCCLWeightTransferEngine(
             dtype = getattr(torch, dtype_name)
             indices = torch.empty(num_updates, dtype=torch.int32, device=device)
             values = torch.empty(num_updates, dtype=dtype, device=device)
-            self.model_update_group.broadcast(
-                indices, src=0, stream=torch.cuda.current_stream()
-            )
-            self.model_update_group.broadcast(
-                values, src=0, stream=torch.cuda.current_stream()
-            )
-            self._apply_patch(
-                SparseWeightPatch(name=name, indices=indices, values=values)
-            )
+            self.model_update_group.broadcast(indices, src=0, stream=torch.cuda.current_stream())
+            self.model_update_group.broadcast(values, src=0, stream=torch.cuda.current_stream())
+            self._apply_patch(SparseWeightPatch(name=name, indices=indices, values=values))
             del indices
             del values
 
@@ -165,22 +151,13 @@ class SparseNCCLWeightTransferEngine(
         """Apply a single sparse flat-index patch to an existing model param."""
         param = self.model.get_parameter(patch.name)
         if not param.data.is_contiguous():
-            raise NotImplementedError(
-                "Sparse weight updates currently require contiguous params: "
-                f"{patch.name}"
-            )
+            raise NotImplementedError(f"Sparse weight updates currently require contiguous params: {patch.name}")
         if patch.indices.dtype != torch.int32:
-            raise ValueError(
-                f"Sparse weight updates currently require int32 indices: {patch.name}"
-            )
+            raise ValueError(f"Sparse weight updates currently require int32 indices: {patch.name}")
         if patch.indices.ndim != 1 or patch.values.ndim != 1:
-            raise ValueError(
-                f"Sparse weight patches must be 1D flattened updates: {patch.name}"
-            )
+            raise ValueError(f"Sparse weight patches must be 1D flattened updates: {patch.name}")
         if patch.indices.numel() != patch.values.numel():
-            raise ValueError(
-                f"`indices` and `values` must have matching lengths for {patch.name}"
-            )
+            raise ValueError(f"`indices` and `values` must have matching lengths for {patch.name}")
         if patch.values.dtype != param.dtype:
             raise ValueError(
                 f"Sparse values dtype {patch.values.dtype} does not match "
@@ -210,9 +187,7 @@ class SparseNCCLWeightTransferEngine(
             args = trainer_args
 
         if args.packed:
-            raise ValueError(
-                "Sparse NCCL updates cannot be combined with `packed=True`"
-            )
+            raise ValueError("Sparse NCCL updates cannot be combined with `packed=True`")
 
         stream = args.stream or torch.cuda.current_stream()
         for patch in iterator:

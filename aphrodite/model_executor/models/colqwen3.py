@@ -170,8 +170,7 @@ class ColQwen3Model(Qwen3VLForConditionalGeneration, SupportsLateInteraction):
             hidden_size = config.text_config.hidden_size
         if hidden_size is None:
             raise ValueError(
-                "Unable to determine text hidden size from config. "
-                "Expected 'hidden_size' or 'text_config.hidden_size'."
+                "Unable to determine text hidden size from config. Expected 'hidden_size' or 'text_config.hidden_size'."
             )
         self._proj_hidden_size = hidden_size
 
@@ -254,13 +253,9 @@ class ColQwen3Model(Qwen3VLForConditionalGeneration, SupportsLateInteraction):
         # process them. Only re-prefix if ALL backbone weights are
         # unprefixed (no "vlm." or "model." prefix found).
         has_unprefixed = any(
-            name.startswith("language_model.") or name.startswith("visual.")
-            for name, _ in weights_list
+            name.startswith("language_model.") or name.startswith("visual.") for name, _ in weights_list
         )
-        has_prefixed = any(
-            name.startswith("vlm.") or name.startswith("model.")
-            for name, _ in weights_list
-        )
+        has_prefixed = any(name.startswith("vlm.") or name.startswith("model.") for name, _ in weights_list)
         needs_reprefix = has_unprefixed and not has_prefixed
 
         for name, weight in weights_list:

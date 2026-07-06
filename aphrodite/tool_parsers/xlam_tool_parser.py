@@ -61,9 +61,7 @@ class xLAMToolParser(ToolParser):
             "sent_tools": [],
         }
 
-    def preprocess_model_output(
-        self, model_output: str
-    ) -> tuple[Optional[str], Optional[str]]:
+    def preprocess_model_output(self, model_output: str) -> tuple[Optional[str], Optional[str]]:
         """
         Preprocess the model output to extract content and potential tool calls.
         Returns:
@@ -111,19 +109,13 @@ class xLAMToolParser(ToolParser):
                 return None, model_output
             except json.JSONDecodeError:
                 # Even if it's not valid JSON yet, it might be a tool call in progress
-                if (
-                    "{" in model_output
-                    and "name" in model_output
-                    and "arguments" in model_output
-                ):
+                if "{" in model_output and "name" in model_output and "arguments" in model_output:
                     return None, model_output
 
         # If no tool calls found, return the original output as content
         return model_output, None
 
-    def extract_tool_calls(
-        self, model_output: str, request: ChatCompletionRequest
-    ) -> ExtractedToolCallInformation:
+    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
         """
         Extract tool calls from a complete model output.
         """
@@ -132,9 +124,7 @@ class xLAMToolParser(ToolParser):
             content, potential_tool_calls = self.preprocess_model_output(model_output)
 
             if not potential_tool_calls:
-                return ExtractedToolCallInformation(
-                    tools_called=False, tool_calls=[], content=content
-                )
+                return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=content)
 
             # Parse the potential tool calls as JSON
             tool_calls_data = json.loads(potential_tool_calls)
@@ -151,11 +141,7 @@ class xLAMToolParser(ToolParser):
             tool_calls: list[ToolCall] = []
 
             for idx, call in enumerate(tool_calls_data):
-                if (
-                    not isinstance(call, dict)
-                    or "name" not in call
-                    or "arguments" not in call
-                ):
+                if not isinstance(call, dict) or "name" not in call or "arguments" not in call:
                     logger.debug("Invalid tool call format at index %d", idx)
                     continue
 
@@ -181,9 +167,7 @@ class xLAMToolParser(ToolParser):
 
         except Exception as e:
             logger.exception("Error extracting tool calls: %s", str(e))
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(
         self,
@@ -201,9 +185,7 @@ class xLAMToolParser(ToolParser):
         # First, check for a definitive start of a tool call block.
         # This prevents premature parsing of incomplete output.
         stripped_text = current_text.strip()
-        preprocessed_content, preprocessed_tool_calls = self.preprocess_model_output(
-            current_text
-        )
+        preprocessed_content, preprocessed_tool_calls = self.preprocess_model_output(current_text)
 
         # For JSON code blocks, we need to detect them earlier, even if incomplete
         has_potential_json_block = (
@@ -225,11 +207,7 @@ class xLAMToolParser(ToolParser):
             preprocessed_tool_calls is not None
             or
             # For JSON code blocks, detect early if we see enough structure
-            (
-                has_potential_json_block
-                and '"name"' in current_text
-                and '"arguments"' in current_text
-            )
+            (has_potential_json_block and '"name"' in current_text and '"arguments"' in current_text)
         )
 
         if not is_tool_call_block:
@@ -247,9 +225,7 @@ class xLAMToolParser(ToolParser):
             # Try parsing as JSON to check for complete tool calls
             try:
                 # Use preprocessed tool calls if available
-                tool_calls_text = (
-                    preprocessed_tool_calls if preprocessed_tool_calls else current_text
-                )
+                tool_calls_text = preprocessed_tool_calls if preprocessed_tool_calls else current_text
                 parsed_tools = json.loads(tool_calls_text)
                 if isinstance(parsed_tools, list):
                     # Update our tool array for next time
@@ -265,10 +241,7 @@ class xLAMToolParser(ToolParser):
                 and len(self.current_tools_sent) > 0
             ):
                 # If current_tools_sent is set to [False], it means the test wants us to send the name
-                if (
-                    len(self.current_tools_sent) == 1
-                    and self.current_tools_sent[0] is False
-                ):
+                if len(self.current_tools_sent) == 1 and self.current_tools_sent[0] is False:
                     # Extract the function name using regex
                     name_pattern = r'"name"\s*:\s*"([^"]+)"'
                     name_match = re.search(name_pattern, current_text)
@@ -283,9 +256,7 @@ class xLAMToolParser(ToolParser):
                                     index=0,
                                     type="function",
                                     id=tool_id,
-                                    function=DeltaFunctionCall(
-                                        name=function_name
-                                    ).model_dump(exclude_none=True),  # type: ignore
+                                    function=DeltaFunctionCall(name=function_name).model_dump(exclude_none=True),  # type: ignore
                                 )
                             ]
                         )
@@ -308,16 +279,12 @@ class xLAMToolParser(ToolParser):
 
             # Use regex to identify tool calls in the output
             # Use preprocessed tool calls text for better parsing, but also try to extract from incomplete JSON blocks
-            search_text = (
-                preprocessed_tool_calls if preprocessed_tool_calls else current_text
-            )
+            search_text = preprocessed_tool_calls if preprocessed_tool_calls else current_text
 
             # For JSON code blocks that aren't complete yet, try to extract the JSON content
             if not preprocessed_tool_calls and has_potential_json_block:
                 # Try to extract the JSON array from within the code block
-                json_match = re.search(
-                    r"```(?:json)?\s*([\s\S]*?)(?:```|$)", current_text
-                )
+                json_match = re.search(r"```(?:json)?\s*([\s\S]*?)(?:```|$)", current_text)
                 if json_match:
                     potential_json = json_match.group(1).strip()
                     # Use this as search text even if it's incomplete
@@ -364,10 +331,7 @@ class xLAMToolParser(ToolParser):
                 next_idx = current_idx + 1
 
                 # If tool at next_idx has not been sent yet
-                if (
-                    next_idx < tool_count
-                    and not self.streaming_state["sent_tools"][next_idx]["sent_name"]
-                ):
+                if next_idx < tool_count and not self.streaming_state["sent_tools"][next_idx]["sent_name"]:
                     # Update indexes
                     self.streaming_state["current_tool_index"] = next_idx
                     self.current_tool_id = next_idx  # For backward compatibility
@@ -386,9 +350,7 @@ class xLAMToolParser(ToolParser):
                                 index=current_idx,
                                 type="function",
                                 id=tool_id,
-                                function=DeltaFunctionCall(name=tool_name).model_dump(
-                                    exclude_none=True
-                                ),  # type: ignore
+                                function=DeltaFunctionCall(name=tool_name).model_dump(exclude_none=True),  # type: ignore
                             )
                         ]
                     )
@@ -405,9 +367,7 @@ class xLAMToolParser(ToolParser):
             if current_idx >= 0 and current_idx < tool_count:
                 # Support both regular and empty argument objects
                 # First, check for the empty arguments case: "arguments": {}
-                empty_args_pattern = (
-                    r'"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{\s*\}'
-                )
+                empty_args_pattern = r'"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{\s*\}'
                 empty_args_match = re.search(empty_args_pattern, search_text)
 
                 # Check if this tool has empty arguments
@@ -417,16 +377,10 @@ class xLAMToolParser(ToolParser):
                     for i in range(tool_count):
                         if i == current_idx:
                             # If this is our current tool and it has empty arguments
-                            if not self.streaming_state["sent_tools"][current_idx][
-                                "sent_arguments_prefix"
-                            ]:
+                            if not self.streaming_state["sent_tools"][current_idx]["sent_arguments_prefix"]:
                                 # Send empty object
-                                self.streaming_state["sent_tools"][current_idx][
-                                    "sent_arguments_prefix"
-                                ] = True
-                                self.streaming_state["sent_tools"][current_idx][
-                                    "sent_arguments"
-                                ] = "{}"
+                                self.streaming_state["sent_tools"][current_idx]["sent_arguments_prefix"] = True
+                                self.streaming_state["sent_tools"][current_idx]["sent_arguments"] = "{}"
 
                                 # Update streamed_args for backward compatibility
                                 while len(self.streamed_args) <= current_idx:
@@ -437,9 +391,7 @@ class xLAMToolParser(ToolParser):
                                     tool_calls=[
                                         DeltaToolCall(
                                             index=current_idx,
-                                            function=DeltaFunctionCall(
-                                                arguments="{}"
-                                            ).model_dump(exclude_none=True),  # type: ignore
+                                            function=DeltaFunctionCall(arguments="{}").model_dump(exclude_none=True),  # type: ignore
                                         )
                                     ]
                                 )
@@ -447,9 +399,7 @@ class xLAMToolParser(ToolParser):
                                 # Move to next tool if available
                                 if current_idx < tool_count - 1:
                                     self.streaming_state["current_tool_index"] += 1
-                                    self.current_tool_id = self.streaming_state[
-                                        "current_tool_index"
-                                    ]
+                                    self.current_tool_id = self.streaming_state["current_tool_index"]
 
                                 return delta
 
@@ -468,14 +418,10 @@ class xLAMToolParser(ToolParser):
                         # Parse the entire JSON structure to properly extract arguments for each tool
                         try:
                             parsed_tools = json.loads(search_text)
-                            if isinstance(parsed_tools, list) and current_idx < len(
-                                parsed_tools
-                            ):
+                            if isinstance(parsed_tools, list) and current_idx < len(parsed_tools):
                                 current_tool = parsed_tools[current_idx]
                                 if isinstance(current_tool.get("arguments"), dict):
-                                    args_text = json.dumps(
-                                        current_tool["arguments"], ensure_ascii=False
-                                    )
+                                    args_text = json.dumps(current_tool["arguments"], ensure_ascii=False)
                                 else:
                                     args_text = str(current_tool.get("arguments", "{}"))
                         except (json.JSONDecodeError, KeyError, IndexError):
@@ -483,20 +429,14 @@ class xLAMToolParser(ToolParser):
                             pass
 
                     # If arguments haven't been sent yet
-                    sent_args = self.streaming_state["sent_tools"][current_idx][
-                        "sent_arguments"
-                    ]
+                    sent_args = self.streaming_state["sent_tools"][current_idx]["sent_arguments"]
 
                     # If we haven't sent the opening bracket yet
                     if not self.streaming_state["sent_tools"][current_idx][
                         "sent_arguments_prefix"
                     ] and args_text.startswith("{"):
-                        self.streaming_state["sent_tools"][current_idx][
-                            "sent_arguments_prefix"
-                        ] = True
-                        self.streaming_state["sent_tools"][current_idx][
-                            "sent_arguments"
-                        ] = "{"
+                        self.streaming_state["sent_tools"][current_idx]["sent_arguments_prefix"] = True
+                        self.streaming_state["sent_tools"][current_idx]["sent_arguments"] = "{"
 
                         # Update streamed_args for backward compatibility
                         while len(self.streamed_args) <= current_idx:
@@ -507,9 +447,7 @@ class xLAMToolParser(ToolParser):
                             tool_calls=[
                                 DeltaToolCall(
                                     index=current_idx,
-                                    function=DeltaFunctionCall(
-                                        arguments="{"
-                                    ).model_dump(exclude_none=True),  # type: ignore
+                                    function=DeltaFunctionCall(arguments="{").model_dump(exclude_none=True),  # type: ignore
                                 )
                             ]
                         )
@@ -522,9 +460,7 @@ class xLAMToolParser(ToolParser):
 
                         if args_diff:
                             # Update our state
-                            self.streaming_state["sent_tools"][current_idx][
-                                "sent_arguments"
-                            ] = args_text
+                            self.streaming_state["sent_tools"][current_idx]["sent_arguments"] = args_text
 
                             # Update streamed_args for backward compatibility
                             while len(self.streamed_args) <= current_idx:
@@ -535,9 +471,7 @@ class xLAMToolParser(ToolParser):
                                 tool_calls=[
                                     DeltaToolCall(
                                         index=current_idx,
-                                        function=DeltaFunctionCall(
-                                            arguments=args_diff
-                                        ).model_dump(exclude_none=True),  # type: ignore
+                                        function=DeltaFunctionCall(arguments=args_diff).model_dump(exclude_none=True),  # type: ignore
                                     )
                                 ]
                             )
@@ -548,9 +482,7 @@ class xLAMToolParser(ToolParser):
                         # This tool is complete, move to the next one in the next iteration
                         if current_idx < tool_count - 1:
                             self.streaming_state["current_tool_index"] += 1
-                            self.current_tool_id = self.streaming_state[
-                                "current_tool_index"
-                            ]  # For compatibility
+                            self.current_tool_id = self.streaming_state["current_tool_index"]  # For compatibility
 
             # If we got here, we couldn't determine what to stream next
             return None

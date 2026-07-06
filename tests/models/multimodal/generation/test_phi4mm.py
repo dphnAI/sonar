@@ -17,10 +17,10 @@ from aphrodite.multimodal.media.audio import load_audio
 
 from ....conftest import (
     IMAGE_ASSETS,
+    AphroditeRunner,
     HfRunner,
     PromptAudioInput,
     PromptImageInput,
-    AphroditeRunner,
 )
 from ....utils import large_gpu_test
 from ...utils import check_logprobs_close
@@ -31,23 +31,17 @@ HF_IMAGE_PROMPTS = IMAGE_ASSETS.prompts(
         "cherry_blossom": "<|user|>\n<|image_1|>\nPlease infer the season with reason in details.<|end|>\n<|assistant|>\n",  # noqa: E501
     }
 )
-HF_MULTIIMAGE_IMAGE_PROMPT = (
-    "<|user|>\n<|image_1|>\n<|image_2|>\nDescribe these images.<|end|>\n<|assistant|>\n"  # noqa: E501
-)
+HF_MULTIIMAGE_IMAGE_PROMPT = "<|user|>\n<|image_1|>\n<|image_2|>\nDescribe these images.<|end|>\n<|assistant|>\n"  # noqa: E501
 
 model_path = snapshot_download("microsoft/Phi-4-multimodal-instruct")
 # Since the vision-lora and speech-lora co-exist with the base model,
 # we have to manually specify the path of the lora weights.
 vision_lora_path = os.path.join(model_path, "vision-lora")
-speech_question = os.path.join(
-    model_path, "examples", "what_is_shown_in_this_image.wav"
-)
+speech_question = os.path.join(model_path, "examples", "what_is_shown_in_this_image.wav")
 models = [model_path]
 
 
-def aphrodite_to_hf_output(
-    aphrodite_output: tuple[list[int], str, SampleLogprobs | None], model: str
-):
+def aphrodite_to_hf_output(aphrodite_output: tuple[list[int], str, SampleLogprobs | None], model: str):
     """Sanitize aphrodite output to be comparable with hf output."""
     _, output_str, out_logprobs = aphrodite_output
 
@@ -132,15 +126,11 @@ def run_test(
         hf_processor = hf_model.processor
         eos_token_id = hf_processor.tokenizer.eos_token_id
 
-        def patch_hf_processor(
-            *args, text="", images=None, audio=None, sampling_rate=None, **kwargs
-        ):
+        def patch_hf_processor(*args, text="", images=None, audio=None, sampling_rate=None, **kwargs):
             audios = None
             if audio is not None and sampling_rate is not None:
                 audios = [(audio, sampling_rate)]
-            return hf_processor(
-                *args, text=text, images=images, audios=audios, **kwargs
-            )
+            return hf_processor(*args, text=text, images=images, audios=audios, **kwargs)
 
         hf_model.processor = patch_hf_processor
 
@@ -253,10 +243,7 @@ def test_multi_images_models(
     inputs_per_case = [
         (
             [HF_MULTIIMAGE_IMAGE_PROMPT for _ in size_factors],
-            [
-                [rescale_image_size(image, factor) for image in images]
-                for factor in size_factors
-            ],
+            [[rescale_image_size(image, factor) for image in images] for factor in size_factors],
             None,
         ),
     ]

@@ -18,10 +18,7 @@ _NATIVE_KV_CACHE_DTYPES = {"auto", "float16", "bfloat16", "float32", "half", "fl
 
 
 def _is_supported_kv_cache_dtype(kv_cache_dtype: str) -> bool:
-    if not (
-        kv_cache_dtype in _NATIVE_KV_CACHE_DTYPES
-        or is_quantized_kv_cache(kv_cache_dtype)
-    ):
+    if not (kv_cache_dtype in _NATIVE_KV_CACHE_DTYPES or is_quantized_kv_cache(kv_cache_dtype)):
         return False
     if kv_cache_dtype.startswith("fp8"):
         return current_platform.has_device_capability(89) or current_platform.is_xpu()
@@ -77,12 +74,7 @@ def reshape_and_cache_kernel_flash(
         cur_head = tile_pos // head_size
         cur_dim = tile_pos % head_size
         # Value addressing (4D): [Block, Head, Dim, Slot]
-        tgt_idx_v = (
-            block_idx * block_stride
-            + cur_head * head_stride
-            + cur_dim * dim_stride_v
-            + block_offset * 1
-        )
+        tgt_idx_v = block_idx * block_stride + cur_head * head_stride + cur_dim * dim_stride_v + block_offset * 1
         # Key addressing (5D): [Block, Head, Dim//8, Slot, 8]
         tgt_idx_k = (
             block_idx * block_stride
@@ -94,18 +86,11 @@ def reshape_and_cache_kernel_flash(
     else:
         cur_head = tile_pos // head_size
         cur_dim = tile_pos % head_size
-        tgt_idx_k = (
-            block_idx * block_stride
-            + block_offset * page_stride
-            + cur_head * head_stride
-            + cur_dim
-        )
+        tgt_idx_k = block_idx * block_stride + block_offset * page_stride + cur_head * head_stride + cur_dim
         tgt_idx_v = tgt_idx_k
 
     # [TILE_SIZE]
-    key_load = tl.load(
-        key_ptr + src_key_idx + tile_pos, mask=tile_pos < (num_heads * head_size)
-    )
+    key_load = tl.load(key_ptr + src_key_idx + tile_pos, mask=tile_pos < (num_heads * head_size))
     if FP8_KV_CACHE:
         # tl.store will do the correct implicit cast to fp8,
         # based on the key_cache_ptr.dtype.element_ty
@@ -114,9 +99,7 @@ def reshape_and_cache_kernel_flash(
         key_tile = key_load
 
     # [TILE_SIZE]
-    value_load = tl.load(
-        value_ptr + src_value_idx + tile_pos, mask=tile_pos < (num_heads * head_size)
-    )
+    value_load = tl.load(value_ptr + src_value_idx + tile_pos, mask=tile_pos < (num_heads * head_size))
     if FP8_KV_CACHE:
         if value_load.dtype.is_fp8():
             value_tile = value_load
@@ -206,10 +189,7 @@ def _reshape_cache_per_token_head(
 
     k_scale = tl.maximum(tl.max(tl.abs(k_h)) / QUANT_MAX, 1e-6)
     tl.store(
-        k_scale_cache_ptr
-        + blk * stride_ks_blk
-        + slot_in_blk * stride_ks_slot
-        + head * stride_ks_head,
+        k_scale_cache_ptr + blk * stride_ks_blk + slot_in_blk * stride_ks_slot + head * stride_ks_head,
         k_scale,
     )
 
@@ -219,11 +199,7 @@ def _reshape_cache_per_token_head(
         k_q = tl.where(k_q >= 0, k_q + 0.5, k_q - 0.5)
     k_q = tl.clamp(k_q, QUANT_MIN, QUANT_MAX)
     tl.store(
-        key_cache_ptr
-        + blk * stride_kc_blk
-        + slot_in_blk * stride_kc_slot
-        + head * stride_kc_head
-        + dim_offs,
+        key_cache_ptr + blk * stride_kc_blk + slot_in_blk * stride_kc_slot + head * stride_kc_head + dim_offs,
         k_q,
         mask=k_mask,
     )
@@ -238,10 +214,7 @@ def _reshape_cache_per_token_head(
 
     v_scale = tl.maximum(tl.max(tl.abs(v_h)) / QUANT_MAX, 1e-6)
     tl.store(
-        v_scale_cache_ptr
-        + blk * stride_vs_blk
-        + slot_in_blk * stride_vs_slot
-        + head * stride_vs_head,
+        v_scale_cache_ptr + blk * stride_vs_blk + slot_in_blk * stride_vs_slot + head * stride_vs_head,
         v_scale,
     )
 
@@ -251,11 +224,7 @@ def _reshape_cache_per_token_head(
         v_q = tl.where(v_q >= 0, v_q + 0.5, v_q - 0.5)
     v_q = tl.clamp(v_q, QUANT_MIN, QUANT_MAX)
     tl.store(
-        value_cache_ptr
-        + blk * stride_vc_blk
-        + slot_in_blk * stride_vc_slot
-        + head * stride_vc_head
-        + dim_offs,
+        value_cache_ptr + blk * stride_vc_blk + slot_in_blk * stride_vc_slot + head * stride_vc_head + dim_offs,
         v_q,
         mask=v_mask,
     )
@@ -399,15 +368,9 @@ def triton_reshape_and_cache_flash(
         f"on this device: an FP8 KV cache needs native fp8e4nv (SM89+). Use "
         f"--kv-cache-dtype bfloat16 (or float16 on SM75)."
     )
-    kv_cache_torch_dtype = (
-        current_platform.fp8_dtype()
-        if is_quantized_kv_cache(kv_cache_dtype)
-        else key_cache.dtype
-    )
+    kv_cache_torch_dtype = current_platform.fp8_dtype() if is_quantized_kv_cache(kv_cache_dtype) else key_cache.dtype
 
-    if key_cache.dtype != kv_cache_torch_dtype and is_quantized_kv_cache(
-        kv_cache_dtype
-    ):
+    if key_cache.dtype != kv_cache_torch_dtype and is_quantized_kv_cache(kv_cache_dtype):
         # to avoid erounous implicit cast in triton kernel (tl.store to uint8)
         # (e.g. explicit cast to fp8e4m3fnuz is not supported in triton 3.4)
         key_cache = key_cache.view(kv_cache_torch_dtype)
@@ -497,11 +460,7 @@ def reshape_and_cache_kernel_flash_diffkv(
     src_key_idx = token_idx * key_stride + tile_i * head_size_k
     src_value_idx = token_idx * value_stride + tile_i * head_size_v
 
-    tgt_idx = (
-        block_idx * block_stride
-        + block_offset * page_stride
-        + tile_i * (head_size_k + head_size_v)
-    )
+    tgt_idx = block_idx * block_stride + block_offset * page_stride + tile_i * (head_size_k + head_size_v)
 
     # [TILE_SIZE]
     key_load = tl.load(key_ptr + src_key_idx + tile_offs, mask=tile_offs < head_size_k)
@@ -513,9 +472,7 @@ def reshape_and_cache_kernel_flash_diffkv(
         key_tile = key_load
 
     # [TILE_SIZE]
-    value_load = tl.load(
-        value_ptr + src_value_idx + tile_offs, mask=tile_offs < head_size_v
-    )
+    value_load = tl.load(value_ptr + src_value_idx + tile_offs, mask=tile_offs < head_size_v)
     if FP8_KV_CACHE:
         if value_load.dtype.is_fp8():
             value_tile = value_load
@@ -559,11 +516,7 @@ def triton_reshape_and_cache_flash_diffkv(
     block_stride = kv_cache.stride()[0]
     page_stride = kv_cache.stride()[1]
 
-    kv_cache_torch_dtype = (
-        current_platform.fp8_dtype()
-        if is_quantized_kv_cache(kv_cache_dtype)
-        else kv_cache.dtype
-    )
+    kv_cache_torch_dtype = current_platform.fp8_dtype() if is_quantized_kv_cache(kv_cache_dtype) else kv_cache.dtype
 
     if kv_cache.dtype != kv_cache_torch_dtype and is_quantized_kv_cache(kv_cache_dtype):
         # to avoid erounous implicit cast in triton kernel (tl.store to uint8)

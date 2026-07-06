@@ -75,9 +75,7 @@ def assert_close(
         return
     assert not torch.isnan(ref).any(), f"{name}: NaN detected in ref"
     assert not torch.isnan(tri).any(), f"{name}: NaN detected in tri"
-    assert rel_err < ratio, (
-        f"{name}: max abs err {abs_err:.6f}, rmse ratio {rel_err:.6f} >= {ratio}"
-    )
+    assert rel_err < ratio, f"{name}: max abs err {abs_err:.6f}, rmse ratio {rel_err:.6f} >= {ratio}"
 
 
 @pytest.mark.parametrize(
@@ -115,9 +113,7 @@ def test_chunk_kda(
     q = torch.rand(B, T, H, D, dtype=dtype, device=DEVICE)
     k = torch.rand(B, T, H, D, dtype=dtype, device=DEVICE)
     v = torch.rand(B, T, H, D, dtype=dtype, device=DEVICE)
-    g = F.logsigmoid(torch.randn(B, T, H, D, dtype=torch.float32, device=DEVICE)).to(
-        dtype
-    )
+    g = F.logsigmoid(torch.randn(B, T, H, D, dtype=torch.float32, device=DEVICE)).to(dtype)
     beta = torch.rand(B, T, H, dtype=dtype, device=DEVICE).sigmoid()
     h0 = torch.randn(N, H, D, D, dtype=torch.float32, device=DEVICE)
 
@@ -185,9 +181,7 @@ def test_chunk_kda_fused_gate_cumsum_matches_unfused(
     raw_g = torch.randn(1, T, H, D, dtype=dtype, device=DEVICE)
     beta = torch.rand(1, T, H, dtype=dtype, device=DEVICE).sigmoid()
     A_log = (torch.randn(H, dtype=torch.float32, device=DEVICE) * 0.5).contiguous()
-    dt_bias = (
-        torch.randn(H * D, dtype=torch.float32, device=DEVICE) * 0.1
-    ).contiguous()
+    dt_bias = (torch.randn(H * D, dtype=torch.float32, device=DEVICE) * 0.1).contiguous()
     h0 = torch.randn(N, H, D, D, dtype=torch.float32, device=DEVICE)
     initial_state = h0.transpose(-1, -2).contiguous()
 

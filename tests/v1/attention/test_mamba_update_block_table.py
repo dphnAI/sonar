@@ -16,10 +16,10 @@ from types import SimpleNamespace
 
 import torch
 
-from tests.v1.attention.utils import MockMambaBuilder
 from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.v1.attention.backends.mamba_attn import BaseMambaAttentionMetadata
 from aphrodite.v1.kv_cache_interface import MambaSpec
+from tests.v1.attention.utils import MockMambaBuilder
 
 
 def _make_aphrodite_config(
@@ -94,10 +94,7 @@ def test_update_block_table_copies_block_idx_to_persistent_buffers():
     builder_b = MockMambaBuilder(spec, ["layer1"], aphrodite_config, device)
 
     # Sanity: each builder has its own persistent buffer.
-    assert (
-        builder_a.block_idx_last_scheduled_token.data_ptr()
-        != builder_b.block_idx_last_scheduled_token.data_ptr()
-    )
+    assert builder_a.block_idx_last_scheduled_token.data_ptr() != builder_b.block_idx_last_scheduled_token.data_ptr()
 
     # Construct decode-only metadata as if builder_a.build() produced it.
     max_blocks = max_model_len // block_size
@@ -120,31 +117,23 @@ def test_update_block_table_copies_block_idx_to_persistent_buffers():
         query_start_loc_d=None,
         num_accepted_tokens=None,
         state_indices_tensor_d=builder_a.state_indices_tensor_d[:num_reqs],
-        block_idx_last_scheduled_token=(
-            builder_a.block_idx_last_scheduled_token[:num_reqs]
-        ),
+        block_idx_last_scheduled_token=(builder_a.block_idx_last_scheduled_token[:num_reqs]),
         block_idx_first_scheduled_token_p=None,
-        block_idx_last_computed_token=(
-            builder_a.block_idx_last_computed_token[:num_reqs]
-        ),
+        block_idx_last_computed_token=(builder_a.block_idx_last_computed_token[:num_reqs]),
         block_idx_last_scheduled_token_prev_step=None,
         seq_lens=seq_lens,
     )
 
     # Call update_block_table on builder_b (simulates the metadata caching
     # optimization reusing metadata from builder_a's group).
-    blk_table = torch.randint(
-        0, 100, (num_reqs, max_blocks), dtype=torch.int32, device=device
-    )
+    blk_table = torch.randint(0, 100, (num_reqs, max_blocks), dtype=torch.int32, device=device)
     slot_mapping = torch.zeros(num_reqs, dtype=torch.int64, device=device)
 
     metadata_b = builder_b.update_block_table(metadata_a, blk_table, slot_mapping)
 
     # block_idx tensors must live in builder_b's persistent buffers.
     def shares_storage(tensor, buffer):
-        return (
-            tensor.untyped_storage().data_ptr() == buffer.untyped_storage().data_ptr()
-        )
+        return tensor.untyped_storage().data_ptr() == buffer.untyped_storage().data_ptr()
 
     assert shares_storage(
         metadata_b.block_idx_last_scheduled_token,
@@ -249,9 +238,7 @@ def test_block_idx_cudagraph_capture_padded_by_num_reqs():
         dtype=torch.int32,
         device=device,
     )
-    query_start_loc_d = torch.arange(
-        num_decodes + 1, dtype=torch.int32, device=device
-    ) * (1 + num_speculative_tokens)
+    query_start_loc_d = torch.arange(num_decodes + 1, dtype=torch.int32, device=device) * (1 + num_speculative_tokens)
     num_accepted_tokens = torch.ones(num_decodes, dtype=torch.int32, device=device)
 
     metadata = BaseMambaAttentionMetadata(
@@ -278,12 +265,8 @@ def test_block_idx_cudagraph_capture_padded_by_num_reqs():
 
     assert out.block_idx_last_scheduled_token.shape == (num_reqs,)
     assert out.block_idx_last_computed_token.shape == (num_reqs,)
-    torch.testing.assert_close(
-        out.block_idx_last_scheduled_token[:num_decodes], block_idx_vals
-    )
-    torch.testing.assert_close(
-        out.block_idx_last_computed_token[:num_decodes], block_idx_vals
-    )
+    torch.testing.assert_close(out.block_idx_last_scheduled_token[:num_decodes], block_idx_vals)
+    torch.testing.assert_close(out.block_idx_last_computed_token[:num_decodes], block_idx_vals)
     assert torch.all(out.block_idx_last_scheduled_token[num_decodes:] == 0)
     assert torch.all(out.block_idx_last_computed_token[num_decodes:] == 0)
 
@@ -327,9 +310,7 @@ def test_block_idx_prev_step_persistent_buffer_skipped_without_spec_decode():
     max_num_seqs = 8
     device = torch.device("cpu")
 
-    aphrodite_config = _make_aphrodite_config(
-        max_model_len, max_num_seqs, num_speculative_tokens=0
-    )
+    aphrodite_config = _make_aphrodite_config(max_model_len, max_num_seqs, num_speculative_tokens=0)
     spec = MambaSpec(
         block_size=block_size,
         shapes=((1,), (1,)),
@@ -380,9 +361,7 @@ def test_block_idx_prev_step_cudagraph_capture_uses_persistent_buffer():
         dtype=torch.int32,
         device=device,
     )
-    query_start_loc_d = torch.arange(
-        num_decodes + 1, dtype=torch.int32, device=device
-    ) * (1 + num_speculative_tokens)
+    query_start_loc_d = torch.arange(num_decodes + 1, dtype=torch.int32, device=device) * (1 + num_speculative_tokens)
     num_accepted_tokens = torch.ones(num_decodes, dtype=torch.int32, device=device)
 
     metadata = BaseMambaAttentionMetadata(
@@ -412,10 +391,7 @@ def test_block_idx_prev_step_cudagraph_capture_uses_persistent_buffer():
     assert (
         out.block_idx_last_scheduled_token_prev_step.untyped_storage().data_ptr()
         == builder.block_idx_last_scheduled_token_prev_step.untyped_storage().data_ptr()
-    ), (
-        "prev-step buffer must live in the builder's persistent buffer, not "
-        "in the caller-provided tensor"
-    )
+    ), "prev-step buffer must live in the builder's persistent buffer, not in the caller-provided tensor"
 
     # Padded by num_reqs (not num_decode_tokens) — same fix as bug 2 for the
     # other block_idx_* fields.

@@ -24,8 +24,8 @@ from aphrodite.utils.torch_utils import (
     direct_register_custom_op,
 )
 
-from ..inductor_pass import enable_fake_mode
 from ..aphrodite_inductor_pass import AphroditeInductorPass, AphroditePatternMatcherPass
+from ..inductor_pass import enable_fake_mode
 from .matcher_utils import (
     MatcherRotaryEmbedding,
 )
@@ -155,9 +155,7 @@ class RopeStaticQQuantKVCachePattern:
             q_view = q_fp8.view(-1, self.num_heads, self.head_size)
             k_view = k.view(-1, self.num_kv_heads, self.head_size)
             v_view = v.view(-1, self.num_kv_heads, self.head_size_v)
-            kv_cache_dummy = torch.ops.aphrodite.unified_kv_cache_update(
-                k_view, v_view, layer_name
-            )
+            kv_cache_dummy = torch.ops.aphrodite.unified_kv_cache_update(k_view, v_view, layer_name)
             return kv_cache_dummy, q_view, k_view, v_view
 
         def replacement(qkv, positions, cos_sin_cache, q_scale, layer_name):
@@ -179,9 +177,7 @@ class RopeStaticQQuantKVCachePattern:
             q_after = rope_kv_results[1]
             k_after = rope_kv_results[2]
             q_after_flat = q_after.view(-1, self.q_size)
-            q_fp8 = torch.empty(
-                q_after_flat.shape, device=q_after_flat.device, dtype=FP8_DTYPE
-            )
+            q_fp8 = torch.empty(q_after_flat.shape, device=q_after_flat.device, dtype=FP8_DTYPE)
             _, q_fp8 = auto_functionalized(
                 torch.ops._C.static_scaled_fp8_quant.default,
                 result=q_fp8,
@@ -235,9 +231,7 @@ class RopeStaticQQuantKVCachePattern:
             q_after = rope_kv_results[1]
             k_after = rope_kv_results[2]
             q_after_flat = q_after.view(-1, self.q_size)
-            q_fp8 = torch.empty(
-                q_after_flat.shape, device=q_after_flat.device, dtype=FP8_DTYPE
-            )
+            q_fp8 = torch.empty(q_after_flat.shape, device=q_after_flat.device, dtype=FP8_DTYPE)
             _, q_fp8 = auto_functionalized(
                 torch.ops._C.static_scaled_fp8_quant.default,
                 result=q_fp8,
@@ -426,9 +420,7 @@ class RopeKVCacheFusionPass(AphroditePatternMatcherPass):
     def __init__(self, config: AphroditeConfig) -> None:
         super().__init__(config)
 
-        self.patterns: PatternMatcherPass = PatternMatcherPass(
-            pass_name="rope_kv_cache_fusion_pass"
-        )
+        self.patterns: PatternMatcherPass = PatternMatcherPass(pass_name="rope_kv_cache_fusion_pass")
 
         cc = config.compilation_config
         self.max_token_num = cc.pass_config.rope_kvcache_fusion_max_token_num
@@ -465,6 +457,4 @@ class RopeKVCacheFusionPass(AphroditePatternMatcherPass):
         return compile_range.end <= self.max_token_num
 
     def uuid(self) -> str:
-        return AphroditeInductorPass.hash_source(
-            self, RopeStaticQQuantKVCachePattern, RopeReshapeKVCachePattern
-        )
+        return AphroditeInductorPass.hash_source(self, RopeStaticQQuantKVCachePattern, RopeReshapeKVCachePattern)

@@ -160,19 +160,14 @@ class NixlPromMetrics(KVConnectorPromMetrics):
             buckets=buckets[1:],
             labelnames=labelnames,
         )
-        self.nixl_histogram_xfer_time = create_metric_per_engine(
-            nixl_histogram_xfer_time, self.per_engine_labelvalues
-        )
+        self.nixl_histogram_xfer_time = create_metric_per_engine(nixl_histogram_xfer_time, self.per_engine_labelvalues)
         nixl_histogram_post_time = self._histogram_cls(
             name="aphrodite:nixl_post_time_seconds",
-            documentation="Histogram of transfer post time for NIXL KV"
-            " Cache transfers.",
+            documentation="Histogram of transfer post time for NIXL KV Cache transfers.",
             buckets=buckets,
             labelnames=labelnames,
         )
-        self.nixl_histogram_post_time = create_metric_per_engine(
-            nixl_histogram_post_time, self.per_engine_labelvalues
-        )
+        self.nixl_histogram_post_time = create_metric_per_engine(nixl_histogram_post_time, self.per_engine_labelvalues)
         # uniform 2kb to 16gb range
         buckets = [2 ** (10 + i) for i in range(1, 25, 2)]
         nixl_histogram_bytes_transferred = self._histogram_cls(
@@ -202,8 +197,7 @@ class NixlPromMetrics(KVConnectorPromMetrics):
         ]
         nixl_histogram_num_descriptors = self._histogram_cls(
             name="aphrodite:nixl_num_descriptors",
-            documentation="Histogram of number of descriptors per NIXL"
-            "  KV Cache transfers.",
+            documentation="Histogram of number of descriptors per NIXL  KV Cache transfers.",
             buckets=buckets,
             labelnames=labelnames,
         )

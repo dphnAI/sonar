@@ -95,10 +95,7 @@ def _get_vision_feature_select_strategy(
     try:
         return _POOLING_TYPE_TO_STRATEGY[pooling_type]
     except KeyError:
-        raise ValueError(
-            f"No feature selection strategy is defined for "
-            f"pooling_type: {pooling_type!r}"
-        ) from None
+        raise ValueError(f"No feature selection strategy is defined for pooling_type: {pooling_type!r}") from None
 
 
 class SiglipProcessingInfo(BaseProcessingInfo):
@@ -141,9 +138,7 @@ class SiglipProcessingInfo(BaseProcessingInfo):
     def get_max_image_tokens(self) -> int:
         target_width, target_height = self.get_image_size_with_most_features()
 
-        return self.get_num_image_tokens(
-            image_width=target_width, image_height=target_height
-        )
+        return self.get_num_image_tokens(image_width=target_width, image_height=target_height)
 
 
 class SiglipDummyInputsBuilder(BaseDummyInputsBuilder[SiglipProcessingInfo]):
@@ -177,9 +172,7 @@ class SiglipMultiModalProcessor(BaseMultiModalProcessor[SiglipProcessingInfo]):
     def image_token_id(self) -> int:
         tokenizer = self.info.get_tokenizer()
         dummy_token_id = next(
-            token_id
-            for token_id in range(tokenizer.vocab_size)
-            if token_id not in tokenizer.all_special_ids
+            token_id for token_id in range(tokenizer.vocab_size) if token_id not in tokenizer.all_special_ids
         )
 
         return dummy_token_id
@@ -303,9 +296,7 @@ class SiglipVisionEmbeddings(nn.Module):
             persistent=False,
         )
 
-    def interpolate_pos_encoding(
-        self, embeddings: torch.Tensor, height: int, width: int
-    ) -> torch.Tensor:
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         num_patches = embeddings.shape[1]
         num_positions = self.position_embedding.weight.shape[1]
         if num_patches == num_positions and height == width:
@@ -319,9 +310,7 @@ class SiglipVisionEmbeddings(nn.Module):
         new_width = width // self.patch_size
 
         sqrt_num_positions = int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(
-            1, sqrt_num_positions, sqrt_num_positions, dim
-        )
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
@@ -334,14 +323,10 @@ class SiglipVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def forward(
-        self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(
-            pixel_values.to(dtype=target_dtype)
-        )  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         if interpolate_pos_encoding:
@@ -393,9 +378,7 @@ class SiglipAttention(nn.Module):
             disable_tp=use_data_parallel,
         )
 
-        self.tp_size = (
-            1 if use_data_parallel else get_tensor_model_parallel_world_size()
-        )
+        self.tp_size = 1 if use_data_parallel else get_tensor_model_parallel_world_size()
         self.num_heads_per_partition = divide(self.num_heads, self.tp_size)
 
         if attn_cls == MMEncoderAttention:
@@ -445,9 +428,7 @@ class SiglipMLP(nn.Module):
         else:
             # For other quantization, we require the hidden size to be a
             # multiple of 64
-            quantizable = (
-                config.hidden_size % 64 == 0 and config.intermediate_size % 64 == 0
-            )
+            quantizable = config.hidden_size % 64 == 0 and config.intermediate_size % 64 == 0
 
         self.fc1 = ColumnParallelLinear(
             config.hidden_size,
@@ -610,9 +591,7 @@ class SiglipTextTransformer(nn.Module):
     ) -> torch.Tensor:
         hidden_states = self.embeddings(input_ids, position_ids, inputs_embeds)
 
-        last_hidden_state = self.encoder(
-            inputs_embeds=hidden_states, return_all_hidden_states=False
-        )
+        last_hidden_state = self.encoder(inputs_embeds=hidden_states, return_all_hidden_states=False)
 
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
@@ -636,9 +615,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
 
         self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         # TODO(ChristopherCho): Implement Aphrodite version of MultiheadAttention
-        self.attention = torch.nn.MultiheadAttention(
-            config.hidden_size, config.num_attention_heads, batch_first=True
-        )
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(
             config=config,
@@ -719,11 +696,7 @@ class SiglipVisionTransformer(nn.Module):
         if isinstance(use_head, bool):
             self.use_head = use_head
         else:
-            self.use_head = (
-                True
-                if not hasattr(config, "vision_use_head")
-                else config.vision_use_head
-            )
+            self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
 
         # Only create and load the head weights if we actually need them
         self.head = (
@@ -780,9 +753,7 @@ class SiglipVisionTransformer(nn.Module):
 
         return encoder_outputs
 
-    def maybe_layer_norm_and_apply_head(
-        self, encoder_outputs: torch.Tensor
-    ) -> torch.Tensor:
+    def maybe_layer_norm_and_apply_head(self, encoder_outputs: torch.Tensor) -> torch.Tensor:
         """Apply the post layer norm and head if they are enabled,
         given the last hidden states tensor.
 
@@ -808,9 +779,7 @@ class SiglipVisionTransformer(nn.Module):
         def _filter(ws):
             for name, w in ws:
                 # omit layers when num_hidden_layers_override is set
-                if name.startswith("encoder.layers.") and (
-                    int(name.split(".")[2]) >= layer_count
-                ):
+                if name.startswith("encoder.layers.") and (int(name.split(".")[2]) >= layer_count):
                     continue
                 yield name, w
 
@@ -872,13 +841,9 @@ class SiglipTextEmbeddings(nn.Module):
         super().__init__()
         self.config = config
 
-        self.token_embedding = VocabParallelEmbedding(
-            config.vocab_size, config.hidden_size
-        )
+        self.token_embedding = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
 
-        self.position_embedding = VocabParallelEmbedding(
-            config.max_position_embeddings, config.hidden_size
-        )
+        self.position_embedding = VocabParallelEmbedding(config.max_position_embeddings, config.hidden_size)
 
         self.register_buffer(
             "position_ids",
@@ -975,9 +940,7 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
 
         # SigLIP uses reversed position_ids;
         # flip sequences to move EOS token to first position
-        text_features = self._flip_sequences_by_position_ids(
-            text_features, position_ids
-        )
+        text_features = self._flip_sequences_by_position_ids(text_features, position_ids)
 
         return text_features
 
@@ -1012,9 +975,7 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         ends = boundary_indices[1:]
 
         # Assign sequence ID to each element
-        sequence_ids = torch.arange(
-            len(lengths), device=features.device
-        ).repeat_interleave(lengths)
+        sequence_ids = torch.arange(len(lengths), device=features.device).repeat_interleave(lengths)
 
         # Calculate flipped indices for all positions at once
         current_positions = torch.arange(len(features), device=features.device)
@@ -1028,9 +989,7 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         feature_select_strategy: VisionFeatureSelectStrategy | None = None,
     ) -> torch.Tensor:
         if feature_select_strategy is None:
-            feature_select_strategy = _get_vision_feature_select_strategy(
-                self.pooler_config.seq_pooling_type
-            )
+            feature_select_strategy = _get_vision_feature_select_strategy(self.pooler_config.seq_pooling_type)
 
         pooled_output = self.vision_model(
             pixel_values=pixel_values,
@@ -1040,9 +999,7 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
 
         return pooled_output
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> SiglipImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> SiglipImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         if pixel_values is None:
             return None
@@ -1099,9 +1056,7 @@ class SiglipEmbeddingModel(nn.Module, SupportsMultiModal, SupportsQuant):
         *,
         is_multimodal: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        self._is_text_input = (
-            multimodal_embeddings is None or len(multimodal_embeddings) == 0
-        )
+        self._is_text_input = multimodal_embeddings is None or len(multimodal_embeddings) == 0
 
         if multimodal_embeddings is None or is_multimodal is None:
             return super().embed_input_ids(input_ids)

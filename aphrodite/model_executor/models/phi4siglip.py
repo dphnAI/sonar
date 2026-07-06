@@ -108,9 +108,7 @@ class Phi4SiglipProcessingInfo(BaseProcessingInfo):
         side = int(math.sqrt(max_patches)) * patch_size
         return ImageSize(width=side, height=side)
 
-    def get_mm_max_tokens_per_item(
-        self, seq_len: int, mm_counts: Mapping[str, int]
-    ) -> Mapping[str, int]:
+    def get_mm_max_tokens_per_item(self, seq_len: int, mm_counts: Mapping[str, int]) -> Mapping[str, int]:
         return {"image": self._get_max_num_patches()}
 
 
@@ -314,9 +312,7 @@ class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
                 architectures=["Phi3ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
         self.configure_mm_token_handling(
             vocab_size=config.vocab_size,  # type: ignore[attr-defined]
@@ -346,9 +342,7 @@ class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
             max_seqlen,
         )
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> Phi4SiglipImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> Phi4SiglipImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         pixel_attention_mask = kwargs.pop("pixel_attention_mask", None)
         spatial_shapes = kwargs.pop("spatial_shapes", None)
@@ -362,9 +356,7 @@ class Phi4ForCausalLMV(nn.Module, SupportsMultiModal, SupportsPP):
             spatial_shapes=spatial_shapes,
         )
 
-    def _process_image_input(
-        self, image_input: Phi4SiglipImagePixelInputs
-    ) -> MultiModalEmbeddings:
+    def _process_image_input(self, image_input: Phi4SiglipImagePixelInputs) -> MultiModalEmbeddings:
         pixel_values = image_input["pixel_values"]
         pixel_attention_mask = image_input["pixel_attention_mask"]
         spatial_shapes = image_input["spatial_shapes"]

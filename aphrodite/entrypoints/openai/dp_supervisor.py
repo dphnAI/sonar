@@ -47,26 +47,16 @@ def infer_multi_port_external_lb_start_rank(args: argparse.Namespace) -> int:
 
 def validate_multi_port_external_lb_args(args: argparse.Namespace) -> None:
     if getattr(args, "grpc", False):
-        raise ValueError(
-            "Error: --data-parallel-multi-port-external-lb does not support --grpc"
-        )
+        raise ValueError("Error: --data-parallel-multi-port-external-lb does not support --grpc")
     if args.uds is not None:
-        raise ValueError(
-            "Error: --data-parallel-multi-port-external-lb does not support --uds"
-        )
+        raise ValueError("Error: --data-parallel-multi-port-external-lb does not support --uds")
     if bool(args.ssl_keyfile) != bool(args.ssl_certfile):
-        raise ValueError(
-            "Error: --ssl-keyfile and --ssl-certfile must be provided together"
-        )
+        raise ValueError("Error: --ssl-keyfile and --ssl-certfile must be provided together")
     if args.api_server_count not in (None, 1):
-        raise ValueError(
-            "Error: --data-parallel-multi-port-external-lb currently requires "
-            "--api-server-count=1"
-        )
+        raise ValueError("Error: --data-parallel-multi-port-external-lb currently requires --api-server-count=1")
     if args.data_parallel_rank is not None:
         raise ValueError(
-            "Error: --data-parallel-multi-port-external-lb manages child "
-            "--data-parallel-rank values internally"
+            "Error: --data-parallel-multi-port-external-lb manages child --data-parallel-rank values internally"
         )
     if args.data_parallel_external_lb or args.data_parallel_hybrid_lb:
         raise ValueError(
@@ -74,32 +64,19 @@ def validate_multi_port_external_lb_args(args: argparse.Namespace) -> None:
             "--data-parallel-external-lb or --data-parallel-hybrid-lb"
         )
     if args.data_parallel_size < 2:
-        raise ValueError(
-            "Error: --data-parallel-multi-port-external-lb requires "
-            "--data-parallel-size > 1"
-        )
+        raise ValueError("Error: --data-parallel-multi-port-external-lb requires --data-parallel-size > 1")
 
     local_size = args.data_parallel_size_local
     if local_size is None or local_size < 2:
-        raise ValueError(
-            "Error: --data-parallel-multi-port-external-lb requires "
-            "--data-parallel-size-local >= 2"
-        )
+        raise ValueError("Error: --data-parallel-multi-port-external-lb requires --data-parallel-size-local >= 2")
     if local_size > args.data_parallel_size:
-        raise ValueError(
-            "Error: --data-parallel-size-local cannot exceed --data-parallel-size"
-        )
+        raise ValueError("Error: --data-parallel-size-local cannot exceed --data-parallel-size")
     if args.data_parallel_size % local_size != 0:
-        raise ValueError(
-            "Error: --data-parallel-size must be divisible by "
-            "--data-parallel-size-local"
-        )
+        raise ValueError("Error: --data-parallel-size must be divisible by --data-parallel-size-local")
 
     start_rank = infer_multi_port_external_lb_start_rank(args)
     if start_rank + local_size > args.data_parallel_size:
-        raise ValueError(
-            "Error: multi-port supervised ranks would exceed --data-parallel-size"
-        )
+        raise ValueError("Error: multi-port supervised ranks would exceed --data-parallel-size")
 
     supervisor_port = args.data_parallel_supervisor_port
     child_port_min = args.port
@@ -111,14 +88,10 @@ def validate_multi_port_external_lb_args(args: argparse.Namespace) -> None:
         )
 
 
-def _build_aphrodite_dp_server_args(
-    args: argparse.Namespace, local_rank: int
-) -> argparse.Namespace:
+def _build_aphrodite_dp_server_args(args: argparse.Namespace, local_rank: int) -> argparse.Namespace:
     child_args = copy.copy(args)
     child_args.port = args.port + local_rank
-    child_args.data_parallel_rank = (
-        infer_multi_port_external_lb_start_rank(args) + local_rank
-    )
+    child_args.data_parallel_rank = infer_multi_port_external_lb_start_rank(args) + local_rank
     child_args.data_parallel_start_rank = None
     child_args.data_parallel_size_local = 1
     child_args.data_parallel_external_lb = True
@@ -144,8 +117,7 @@ def _build_device_ids(args: argparse.Namespace, local_rank: int) -> list[int | s
     if device_ids is not None:
         if stop > len(device_ids):
             raise ValueError(
-                f"--device-ids has {len(device_ids)} entries, but DP rank "
-                f"{local_rank} needs devices [{start}, {stop})"
+                f"--device-ids has {len(device_ids)} entries, but DP rank {local_rank} needs devices [{start}, {stop})"
             )
         return device_ids[start:stop]
     return list(range(start, stop))
@@ -191,9 +163,7 @@ async def _probe_endpoint(
                 # certificate verification to avoid SAN/hostname mismatches for
                 # localhost/127.0.0.1 deployments.
                 probe_ssl = False
-            async with session.get(
-                _child_base_url(args, port) + path, ssl=probe_ssl
-            ) as response:
+            async with session.get(_child_base_url(args, port) + path, ssl=probe_ssl) as response:
                 # Aphrodite returns 503 on EngineDeadError, so we should return
                 # immediately if Aphrodite responds with a non-200 status code.
                 return response.status == HTTPStatus.OK
@@ -218,9 +188,7 @@ def _build_dp_supervisor_app(supervisor: DPSupervisor) -> FastAPI:
     app.state.supervisor = supervisor
 
     def _status_response(ok: bool) -> Response:
-        return Response(
-            status_code=(HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE)
-        )
+        return Response(status_code=(HTTPStatus.OK if ok else HTTPStatus.SERVICE_UNAVAILABLE))
 
     @app.get("/health", include_in_schema=False)
     async def health() -> Response:
@@ -268,10 +236,7 @@ class DPSupervisor:
         validate_multi_port_external_lb_args(args)
         self.args = args
         self.supervisor_port = args.data_parallel_supervisor_port
-        self.child_ports = [
-            args.port + local_rank
-            for local_rank in range(args.data_parallel_size_local)
-        ]
+        self.child_ports = [args.port + local_rank for local_rank in range(args.data_parallel_size_local)]
         self._is_ready = False
         self._processes: list[BaseProcess] = []
         self._shutdown_event = asyncio.Event()
@@ -308,9 +273,7 @@ class DPSupervisor:
             supervisor_server.serve(),
             name="dp-supervisor",
         )
-        supervisor_server_task.add_done_callback(
-            lambda _task: self._shutdown_event.set()
-        )
+        supervisor_server_task.add_done_callback(lambda _task: self._shutdown_event.set())
 
         # Ensure DPSupervisor task starts on the event loop.
         while not supervisor_server.started:
@@ -379,11 +342,7 @@ class DPSupervisor:
         timeout = aiohttp.ClientTimeout(total=self.args.dp_supervisor_probe_timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             while not self._shutdown_event.is_set():
-                threshold = (
-                    self.args.dp_supervisor_probe_failure_threshold
-                    if self._is_ready
-                    else 1
-                )
+                threshold = self.args.dp_supervisor_probe_failure_threshold if self._is_ready else 1
                 results = await asyncio.gather(
                     *(
                         _probe_endpoint(
@@ -439,9 +398,7 @@ class DPSupervisor:
         - if the pid is dead, we will shut down
         - if the probe fails, we will shut down
         """
-        probe_task = asyncio.create_task(
-            self._probe_all_children(), name="dp-health-probe"
-        )
+        probe_task = asyncio.create_task(self._probe_all_children(), name="dp-health-probe")
 
         try:
             while not self._shutdown_event.is_set():
@@ -493,9 +450,7 @@ class DPSupervisor:
                     os.kill(pid, self._shutdown_signal)
 
             try:
-                await asyncio.to_thread(
-                    _join_processes_with_timeout, self._processes, timeout
-                )
+                await asyncio.to_thread(_join_processes_with_timeout, self._processes, timeout)
             except asyncio.CancelledError:
                 logger.warning("Shutdown await cancelled")
                 raise

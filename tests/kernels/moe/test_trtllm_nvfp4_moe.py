@@ -13,15 +13,8 @@ import pytest
 import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
-from tests.kernels.moe.utils import make_test_quant_config
-from tests.kernels.quantization.nvfp4_utils import (
-    FLOAT4_E2M1_MAX,
-    FLOAT8_E4M3_MAX,
-    dequantize_nvfp4_to_dtype,
-)
-from tests.kernels.utils import torch_moe
 from aphrodite import _custom_ops as ops
-from aphrodite.config import ParallelConfig, AphroditeConfig, set_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
 from aphrodite.model_executor.custom_op import CustomOp, op_registry
 from aphrodite.model_executor.layers.activation import SiluAndMulWithClamp
 from aphrodite.model_executor.layers.fused_moe import fused_topk
@@ -41,11 +34,15 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
 from aphrodite.utils.math_utils import next_power_of_2
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.moe.utils import make_test_quant_config
+from tests.kernels.quantization.nvfp4_utils import (
+    FLOAT4_E2M1_MAX,
+    FLOAT8_E4M3_MAX,
+    dequantize_nvfp4_to_dtype,
+)
+from tests.kernels.utils import torch_moe
 
-if pytest and (
-    not has_flashinfer_trtllm_fused_moe()
-    or not current_platform.has_device_capability(100)
-):
+if pytest and (not has_flashinfer_trtllm_fused_moe() or not current_platform.has_device_capability(100)):
     pytest.skip(
         "Requires flashinfer TRTLLM fused MoE and NvFP4 (SM100)",
         allow_module_level=True,
@@ -125,9 +122,7 @@ def test_trtllm_fp4_moe_no_graph(
         )
 
     set_random_seed(7)
-    with set_current_aphrodite_config(
-        AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))
-    ):
+    with set_current_aphrodite_config(AphroditeConfig(parallel_config=ParallelConfig(pipeline_parallel_size=1))):
         a = torch.randn((m, k), device="cuda", dtype=dtype) / 10
 
         quant_blocksize = 16
@@ -175,9 +170,7 @@ def test_trtllm_fp4_moe_no_graph(
             max_num_tokens=next_power_of_2(m),
         )
 
-        trtllm_inner = TrtLlmNvFp4ExpertsModular(
-            moe_config=moe_config, quant_config=quant_config
-        )
+        trtllm_inner = TrtLlmNvFp4ExpertsModular(moe_config=moe_config, quant_config=quant_config)
         # Mimic the production weight-loader path so per-expert tensors that
         # are normally precomputed in process_weights_after_loading (g1_scale_c
         # and the rescaled gemm1_clamp_limit) get materialized. The test's
@@ -217,9 +210,7 @@ def test_trtllm_fp4_moe_no_graph(
         # Reference: round-trip activations and weights through FP4
         # quant/dequant so the comparison isolates kernel/activation behavior
         # from quantization error.
-        a_global_scale = ((FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / a.abs().max()).to(
-            torch.float32
-        )
+        a_global_scale = ((FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX) / a.abs().max()).to(torch.float32)
         a_fp4, a_scale_interleaved = ops.scaled_fp4_quant(a, a_global_scale)
         a_in_dtype = dequantize_nvfp4_to_dtype(
             a_fp4,
@@ -230,9 +221,7 @@ def test_trtllm_fp4_moe_no_graph(
             block_size=quant_blocksize,
         )
 
-        w1_d = torch.empty(
-            (e, (2 if is_gated_act else 1) * n, k), device="cuda", dtype=dtype
-        )
+        w1_d = torch.empty((e, (2 if is_gated_act else 1) * n, k), device="cuda", dtype=dtype)
         w2_d = torch.empty((e, k, n), device="cuda", dtype=dtype)
         for idx in range(e):
             w1_d[idx] = dequantize_nvfp4_to_dtype(
@@ -252,9 +241,7 @@ def test_trtllm_fp4_moe_no_graph(
                 block_size=quant_blocksize,
             )
 
-        torch_output = torch_moe(
-            a_in_dtype, w1_d, w2_d, score, topk, activation=torch_activation
-        )
+        torch_output = torch_moe(a_in_dtype, w1_d, w2_d, score, topk, activation=torch_activation)
 
         torch.testing.assert_close(torch_output, trtllm_output, atol=2e-1, rtol=2e-1)
 

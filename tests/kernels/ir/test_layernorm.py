@@ -5,6 +5,8 @@ import torch
 
 # This registers op implementations
 import aphrodite.kernels  # noqa: F401
+from aphrodite import ir
+from aphrodite.platforms import current_platform
 from tests.ir.ir_test_utils import (
     COMMON_HIDDEN_SIZES,
     NUM_TOKENS,
@@ -13,8 +15,6 @@ from tests.ir.ir_test_utils import (
     supported_providers,
 )
 from tests.kernels.allclose_default import get_default_rtol
-from aphrodite import ir
-from aphrodite.platforms import current_platform
 
 rms_norm_native = ir.ops.rms_norm.impls["native"].impl_fn
 
@@ -34,9 +34,7 @@ def test_rms_norm_registration():
         "xpu_kernels": current_platform.is_xpu(),
     }
 
-    actual = {
-        provider: impl.supported for provider, impl in ir.ops.rms_norm.impls.items()
-    }
+    actual = {provider: impl.supported for provider, impl in ir.ops.rms_norm.impls.items()}
 
     assert actual == expected
 
@@ -55,9 +53,7 @@ class TestRMSNorm:
         torch.set_default_device(current_platform.device_type)
 
     def test_native_semantics(self, dtype, n_tokens, hidden_size, epsilon):
-        x, weight, epsilon = ir.ops.rms_norm.generate_inputs(
-            num_tokens=4, hidden_size=8, dtype=dtype, epsilon=epsilon
-        )
+        x, weight, epsilon = ir.ops.rms_norm.generate_inputs(num_tokens=4, hidden_size=8, dtype=dtype, epsilon=epsilon)
         out = rms_norm_native(x, weight, epsilon=epsilon)
 
         # Check shape, dtype, device
@@ -73,9 +69,7 @@ class TestRMSNorm:
         combined_norm = out.float() / weight.float()
         variance = combined_norm.pow(2).mean(dim=-1)
         # After RMS normalization, variance should be close to 1
-        torch.testing.assert_close(
-            variance, torch.ones_like(variance), rtol=1e-2, atol=1e-2
-        )
+        torch.testing.assert_close(variance, torch.ones_like(variance), rtol=1e-2, atol=1e-2)
 
         # Check behavior with and without weight
         weight1 = torch.ones_like(weight)
@@ -135,9 +129,7 @@ def test_aiter_rejects_unsupported_dtypes():
     torch.set_default_device(current_platform.device_type)
     impl = ir.ops.rms_norm.impls["aiter"]
     for dtype in [torch.float32, torch.float64]:
-        args = ir.ops.rms_norm.generate_inputs(
-            num_tokens=8, hidden_size=4096, dtype=dtype, epsilon=1e-5
-        )
+        args = ir.ops.rms_norm.generate_inputs(num_tokens=8, hidden_size=4096, dtype=dtype, epsilon=1e-5)
         assert not impl.supports_args(*args), f"aiter should reject dtype={dtype}"
 
 
@@ -182,10 +174,7 @@ def test_fused_add_rms_norm_registration():
         "xpu_kernels": current_platform.is_xpu(),
     }
 
-    actual = {
-        provider: impl.supported
-        for provider, impl in ir.ops.fused_add_rms_norm.impls.items()
-    }
+    actual = {provider: impl.supported for provider, impl in ir.ops.fused_add_rms_norm.impls.items()}
 
     assert actual == expected
 
@@ -247,9 +236,7 @@ class TestFusedAddRMSNorm:
 
         # Check that residual_out = x + x_residual
         expected_residual = (x.float() + x_residual.float()).to(dtype)
-        torch.testing.assert_close(
-            residual_out, expected_residual, rtol=1e-3, atol=1e-3
-        )
+        torch.testing.assert_close(residual_out, expected_residual, rtol=1e-3, atol=1e-3)
 
         # Verify that the output is RMS normalized version of (x + x_residual)
         expected_out = rms_norm_native(expected_residual, weight, epsilon)
@@ -260,12 +247,8 @@ class TestFusedAddRMSNorm:
         )
 
         # Check the scaling property of rms norm
-        out1, _ = fused_add_rms_norm_native(
-            x, torch.zeros_like(x), weight, epsilon=epsilon
-        )
-        out2, _ = fused_add_rms_norm_native(
-            x * 2.0, torch.zeros_like(x), weight, epsilon=epsilon
-        )
+        out1, _ = fused_add_rms_norm_native(x, torch.zeros_like(x), weight, epsilon=epsilon)
+        out2, _ = fused_add_rms_norm_native(x * 2.0, torch.zeros_like(x), weight, epsilon=epsilon)
         torch.testing.assert_close(out2, out1, rtol=get_default_rtol(out), atol=1e-3)
 
         # Check behavior with and without weight
@@ -295,25 +278,19 @@ class TestFusedAddRMSNorm:
             out_dispatched, residual_dispatched = ir.ops.fused_add_rms_norm(*args[:4])
         out_direct, residual_direct = impl.impl_fn(*clone_args(args))
         torch.testing.assert_close(out_dispatched, out_direct, rtol=0.0, atol=0.0)
-        torch.testing.assert_close(
-            residual_dispatched, residual_direct, rtol=0.0, atol=0.0
-        )
+        torch.testing.assert_close(residual_dispatched, residual_direct, rtol=0.0, atol=0.0)
 
         # none of these support variance_size override
         assert not impl.supports_args(x, x_residual, weight, epsilon, 4)
         assert not impl.supports_args(x, x_residual, weight, epsilon, variance_size=4)
 
         # test weight=None behavior
-        out_no_weight, residual_no_weight = impl.impl_fn(
-            x.clone(), x_residual.clone(), None, epsilon
-        )
+        out_no_weight, residual_no_weight = impl.impl_fn(x.clone(), x_residual.clone(), None, epsilon)
         out_unit_weight, residual_unit_weight = impl.impl_fn(
             x.clone(), x_residual.clone(), torch.ones_like(weight), epsilon
         )
         assert_close(ir.ops.fused_add_rms_norm, out_no_weight, out_unit_weight)
-        assert_close(
-            ir.ops.fused_add_rms_norm, residual_no_weight, residual_unit_weight
-        )
+        assert_close(ir.ops.fused_add_rms_norm, residual_no_weight, residual_unit_weight)
 
     @pytest.mark.parametrize("provider", ["aphrodite_c"])
     def test_inplace_semantics(self, dtype, n_tokens, hidden_size, epsilon, provider):
@@ -334,9 +311,7 @@ class TestFusedAddRMSNorm:
         x_residual_default_ptr = x_residual_default.data_ptr()
 
         with ir.ops.fused_add_rms_norm.set_priority([provider, "native"]):
-            out_default, residual_default = ir.ops.fused_add_rms_norm(
-                x_default, x_residual_default, weight, eps
-            )
+            out_default, residual_default = ir.ops.fused_add_rms_norm(x_default, x_residual_default, weight, eps)
 
         # Default should NOT be inplace (even with inplace implementation)
         assert out_default.data_ptr() != x_default_ptr
@@ -361,9 +336,7 @@ class TestFusedAddRMSNorm:
 
         # Both should produce same results
         torch.testing.assert_close(out_default, out_inplace, atol=0.0, rtol=0.0)
-        torch.testing.assert_close(
-            residual_default, residual_inplace, atol=0.0, rtol=0.0
-        )
+        torch.testing.assert_close(residual_default, residual_inplace, atol=0.0, rtol=0.0)
 
     @pytest.mark.parametrize("provider", supported_providers(ir.ops.fused_add_rms_norm))
     def test_torch_opcheck(self, dtype, n_tokens, hidden_size, epsilon, provider):
@@ -381,6 +354,4 @@ class TestFusedAddRMSNorm:
             # We break this invariant, but we also convert maybe_inplace to the default
             # overload during compilation, so maybe_inplace never reaches Inductor.
             if not ir.ops.fused_add_rms_norm.impls[provider].inplace:
-                torch.library.opcheck(
-                    torch.ops.aphrodite_ir.fused_add_rms_norm.maybe_inplace, args
-                )
+                torch.library.opcheck(torch.ops.aphrodite_ir.fused_add_rms_norm.maybe_inplace, args)

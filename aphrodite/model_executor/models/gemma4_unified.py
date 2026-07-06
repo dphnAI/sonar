@@ -96,9 +96,7 @@ class Gemma4UnifiedVisionEmbedder(nn.Module):
         )
         self.patch_ln2 = nn.LayerNorm(mm_embed_dim)
 
-        self.pos_embedding = nn.Parameter(
-            torch.zeros(config.mm_posemb_size, 2, mm_embed_dim)
-        )
+        self.pos_embedding = nn.Parameter(torch.zeros(config.mm_posemb_size, 2, mm_embed_dim))
         self.pos_norm = nn.LayerNorm(mm_embed_dim)
 
     def _factorized_posemb(self, positions_xy: torch.Tensor) -> torch.Tensor:
@@ -157,9 +155,7 @@ class Gemma4UnifiedProcessingInfo(Gemma4ProcessingInfo):
             **kwargs,
         )
 
-    def get_mm_max_tokens_per_item(
-        self, seq_len: int, mm_counts: Mapping[str, int]
-    ) -> Mapping[str, int] | None:
+    def get_mm_max_tokens_per_item(self, seq_len: int, mm_counts: Mapping[str, int]) -> Mapping[str, int] | None:
         config = self.get_hf_config()
         # Unified field is `num_soft_tokens`.  Tower-based parent uses
         # `default_output_length`, hence the override.
@@ -175,10 +171,7 @@ class Gemma4UnifiedProcessingInfo(Gemma4ProcessingInfo):
         num_frames = _VIDEO_MAX_FRAMES
         mm_config = self.ctx.model_config.get_multimodal_config()
         video_opts = mm_config.limit_per_prompt.get("video")
-        if (
-            isinstance(video_opts, VideoDummyOptions)
-            and video_opts.num_frames is not None
-        ):
+        if isinstance(video_opts, VideoDummyOptions) and video_opts.num_frames is not None:
             num_frames = min(num_frames, video_opts.num_frames)
         tokens["video"] = num_frames * (_VIDEO_MAX_SOFT_TOKENS + 2 + 6)
         return tokens
@@ -320,9 +313,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             else:
                 self.per_layer_embeddings = None
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
         # --- Precompute full-attention layer indices for bidi clearing ---
         self._full_attn_layer_idxs: frozenset[int] = frozenset()

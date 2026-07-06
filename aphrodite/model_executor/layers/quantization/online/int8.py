@@ -102,9 +102,7 @@ class Int8OnlineMoEMethod(OnlineMoEMethodBase):
             routing_tables=layer._expert_routing_tables(),
         )
 
-    def get_fused_moe_quant_config(
-        self, layer: torch.nn.Module
-    ) -> "FusedMoEQuantConfig | None":
+    def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> "FusedMoEQuantConfig | None":
         return make_int8_moe_quant_config(
             w1_scale=layer.w13_scale,
             w2_scale=layer.w2_scale,

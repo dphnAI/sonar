@@ -84,13 +84,9 @@ def test_accuracy():
 
     print(f"Measured accuracy value: {measured_value}\n")
     if expected_value is None:
-        print(
-            f"Warning: No expected value found for {MODEL_NAME}. "
-            "Skipping accuracy check."
-        )
+        print(f"Warning: No expected value found for {MODEL_NAME}. Skipping accuracy check.")
         return
 
-    assert (
-        measured_value - RTOL < expected_value
-        and measured_value + RTOL > expected_value
-    ), f"Expected: {expected_value} | Measured: {measured_value}"
+    assert measured_value - RTOL < expected_value and measured_value + RTOL > expected_value, (
+        f"Expected: {expected_value} | Measured: {measured_value}"
+    )

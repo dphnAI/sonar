@@ -60,20 +60,14 @@ class VideoMediaIO(MediaIO[tuple[npt.NDArray, dict[str, Any]]]):
         # This enables users to specify a different backend than the
         # global APHRODITE_VIDEO_LOADER_BACKEND env var, e.g.:
         #   --media-io-kwargs '{"video": {"video_backend": "torchcodec"}}'
-        video_loader_backend = (
-            kwargs.pop("video_backend", None) or envs.APHRODITE_VIDEO_LOADER_BACKEND
-        )
+        video_loader_backend = kwargs.pop("video_backend", None) or envs.APHRODITE_VIDEO_LOADER_BACKEND
         self.kwargs = kwargs
         self.video_loader = VIDEO_LOADER_REGISTRY.load(video_loader_backend)
 
     def load_bytes(self, data: bytes) -> tuple[npt.NDArray, dict[str, Any]]:
-        return self.video_loader.load_bytes(
-            data, num_frames=self.num_frames, **self.kwargs
-        )
+        return self.video_loader.load_bytes(data, num_frames=self.num_frames, **self.kwargs)
 
-    def load_base64(
-        self, media_type: str, data: str
-    ) -> tuple[npt.NDArray, dict[str, Any]]:
+    def load_base64(self, media_type: str, data: str) -> tuple[npt.NDArray, dict[str, Any]]:
         if media_type.lower() == "video/jpeg":
             load_frame = partial(
                 self.image_io.load_base64,
@@ -87,24 +81,18 @@ class VideoMediaIO(MediaIO[tuple[npt.NDArray, dict[str, Any]]]):
             else:
                 frame_parts = data.split(",")
 
-            frames = np.stack(
-                [np.asarray(load_frame(frame_data)) for frame_data in frame_parts]
-            )
+            frames = np.stack([np.asarray(load_frame(frame_data)) for frame_data in frame_parts])
             total = int(frames.shape[0])
             fps = float(self.kwargs.get("fps", 1))
 
             # validate and extract frames_indices
             frames_indices = self.kwargs.get("frames_indices")
             if frames_indices is not None:
-                if not (
-                    isinstance(frames_indices, list)
-                    and all(isinstance(i, int) for i in frames_indices)
-                ):
+                if not (isinstance(frames_indices, list) and all(isinstance(i, int) for i in frames_indices)):
                     raise ValueError("frames_indices must be a list of integers")
                 if len(frames_indices) != total:
                     raise ValueError(
-                        f"frames_indices length ({len(frames_indices)}) must "
-                        f"match number of frames sent ({total})"
+                        f"frames_indices length ({len(frames_indices)}) must match number of frames sent ({total})"
                     )
             else:
                 frames_indices = list(range(total))
@@ -114,10 +102,7 @@ class VideoMediaIO(MediaIO[tuple[npt.NDArray, dict[str, Any]]]):
             if not isinstance(total_num_frames, int) or total_num_frames < 1:
                 raise ValueError("total_num_frames must be a positive integer")
             if total_num_frames < total:
-                raise ValueError(
-                    f"total_num_frames ({total_num_frames}) must be >= "
-                    f"number of frames sent ({total})"
-                )
+                raise ValueError(f"total_num_frames ({total_num_frames}) must be >= number of frames sent ({total})")
 
             # validate and extract duration
             duration = self.kwargs.get("duration")

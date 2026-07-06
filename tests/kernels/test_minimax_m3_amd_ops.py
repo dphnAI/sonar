@@ -64,8 +64,7 @@ def _gcn_arch() -> str:
 # to the BF16 emulation path instead) — so those tests are gfx950-only.
 requires_gfx950 = pytest.mark.skipif(
     "gfx95" not in _gcn_arch(),
-    reason="native MXFP8 dot_scaled is a CDNA4 (gfx95x) feature; "
-    "gfx942 uses the BF16 emulation path instead.",
+    reason="native MXFP8 dot_scaled is a CDNA4 (gfx95x) feature; gfx942 uses the BF16 emulation path instead.",
 )
 
 
@@ -238,9 +237,7 @@ def _ref_moe(x, w13, w2, topk_weights, topk_ids, alpha, beta, limit):
 
 
 @requires_gfx950
-@pytest.mark.parametrize(
-    "T,H,inter,E,top_k", [(8, 256, 512, 8, 2), (1, 512, 256, 16, 4)]
-)
+@pytest.mark.parametrize("T,H,inter,E,top_k", [(8, 256, 512, 8, 2), (1, 512, 256, 16, 4)])
 @torch.inference_mode()
 def test_mxfp8_native_moe(T, H, inter, E, top_k):
     from aphrodite.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
@@ -251,9 +248,7 @@ def test_mxfp8_native_moe(T, H, inter, E, top_k):
     alpha, beta, limit = 1.702, 1.0, 7.0
     w13_bf16 = torch.randn(E, 2 * inter, H, device=DEVICE, dtype=torch.bfloat16) * 0.1
     w2_bf16 = torch.randn(E, H, inter, device=DEVICE, dtype=torch.bfloat16) * 0.1
-    w13_fp8, w13_scale = _mxfp8_e4m3_quantize_torch(
-        w13_bf16, is_sf_swizzled_layout=False
-    )
+    w13_fp8, w13_scale = _mxfp8_e4m3_quantize_torch(w13_bf16, is_sf_swizzled_layout=False)
     w2_fp8, w2_scale = _mxfp8_e4m3_quantize_torch(w2_bf16, is_sf_swizzled_layout=False)
 
     x = torch.randn(T, H, device=DEVICE, dtype=torch.bfloat16) * 0.5
@@ -291,9 +286,7 @@ def test_mxfp8_native_moe(T, H, inter, E, top_k):
 @pytest.mark.parametrize("act_dtype", [torch.bfloat16, torch.float16])
 @pytest.mark.parametrize("dequant_at_load", [True, False])
 @torch.inference_mode()
-def test_mxfp8_linear_emulation_bf16_at_load(
-    shape, act_dtype, dequant_at_load, monkeypatch
-):
+def test_mxfp8_linear_emulation_bf16_at_load(shape, act_dtype, dequant_at_load, monkeypatch):
     """EmulationMxfp8LinearKernel load-time BF16 dequant (default) and the
     ``APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD=0`` per-step fallback must produce the
     same result; the dtype-match (BF16/FP16 activations) must also hold."""
@@ -304,9 +297,7 @@ def test_mxfp8_linear_emulation_bf16_at_load(
         Mxfp8LinearLayerConfig,
     )
 
-    monkeypatch.setenv(
-        "APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD", "1" if dequant_at_load else "0"
-    )
+    monkeypatch.setenv("APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD", "1" if dequant_at_load else "0")
     N, K = shape
     torch.manual_seed(0)
     w_bf16 = torch.randn(N, K, device=DEVICE, dtype=torch.bfloat16)

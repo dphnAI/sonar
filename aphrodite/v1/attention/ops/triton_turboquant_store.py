@@ -42,17 +42,13 @@ def _store_quantized_value(
     val_cache_offset = KPS
 
     if VQB == 3:
-        val_vec = tl.load(Value_ptr + base + d_offs, mask=d_mask, other=0.0).to(
-            tl.float32
-        )
+        val_vec = tl.load(Value_ptr + base + d_offs, mask=d_mask, other=0.0).to(tl.float32)
         val_min = tl.min(tl.where(d_mask, val_vec, float("inf")), axis=0)
         val_max = tl.max(tl.where(d_mask, val_vec, -float("inf")), axis=0)
         v_scale = (val_max - val_min) / 7.0
         v_scale = tl.where(v_scale > 1e-8, v_scale, 1e-8)
 
-        q_vals = tl.minimum(
-            tl.maximum(((val_vec - val_min) / v_scale + 0.5).to(tl.int32), 0), 7
-        )
+        q_vals = tl.minimum(tl.maximum(((val_vec - val_min) / v_scale + 0.5).to(tl.int32), 0), 7)
 
         grp_offs = tl.arange(0, BLOCK_GRP)
         grp_mask = grp_offs < (D // 8)
@@ -95,18 +91,14 @@ def _store_quantized_value(
         )
 
     else:  # VQB == 4
-        val_vec = tl.load(Value_ptr + base + d_offs, mask=d_mask, other=0.0).to(
-            tl.float32
-        )
+        val_vec = tl.load(Value_ptr + base + d_offs, mask=d_mask, other=0.0).to(tl.float32)
         val_min = tl.min(tl.where(d_mask, val_vec, float("inf")), axis=0)
         val_max = tl.max(tl.where(d_mask, val_vec, -float("inf")), axis=0)
         v_scale = (val_max - val_min) / 15.0
         v_scale = tl.where(v_scale > 1e-8, v_scale, 1e-8)
 
         # Quantize all D elements from register (no re-load)
-        q_all = tl.minimum(
-            tl.maximum(((val_vec - val_min) / v_scale + 0.5).to(tl.int32), 0), 15
-        )
+        q_all = tl.minimum(tl.maximum(((val_vec - val_min) / v_scale + 0.5).to(tl.int32), 0), 15)
         # Reshape to pairs and pack two 4-bit values per byte
         q_pairs = tl.reshape(q_all, [BLOCK_D // 2, 2])
         shifts_4 = tl.arange(0, 2) * 4
@@ -177,11 +169,7 @@ def _tq_fused_store_fp8(
     blk = (slot // BLOCK_SIZE).to(tl.int64)
     off = (slot % BLOCK_SIZE).to(tl.int64)
     head_idx_i64 = tl.cast(head_idx, tl.int64)
-    slot_base = (
-        blk * stride_cache_block
-        + off * stride_cache_pos
-        + head_idx_i64 * stride_cache_head
-    )
+    slot_base = blk * stride_cache_block + off * stride_cache_pos + head_idx_i64 * stride_cache_head
 
     base = pid * D
 
@@ -265,11 +253,7 @@ def _tq_fused_store_mse(
     blk = (slot // BLOCK_SIZE).to(tl.int64)
     off = (slot % BLOCK_SIZE).to(tl.int64)
     head_idx_i64 = tl.cast(head_idx, tl.int64)
-    slot_base = (
-        blk * stride_cache_block
-        + off * stride_cache_pos
-        + head_idx_i64 * stride_cache_head
-    )
+    slot_base = blk * stride_cache_block + off * stride_cache_pos + head_idx_i64 * stride_cache_head
 
     base = pid * D
     d_offs = tl.arange(0, BLOCK_D)
@@ -320,9 +304,7 @@ def _tq_fused_store_mse(
     vn_f16 = tl.load(Norms_ptr + pid).to(tl.float16)
     vn_u16 = vn_f16.to(tl.uint16, bitcast=True)
     tl.store(KV_cache_ptr + slot_base + norm_offset, (vn_u16 & 0xFF).to(tl.uint8))
-    tl.store(
-        KV_cache_ptr + slot_base + norm_offset + 1, ((vn_u16 >> 8) & 0xFF).to(tl.uint8)
-    )
+    tl.store(KV_cache_ptr + slot_base + norm_offset + 1, ((vn_u16 >> 8) & 0xFF).to(tl.uint8))
 
     # ── 4. VALUE QUANTIZE + PACK ──────────────────────────────────────
     _store_quantized_value(

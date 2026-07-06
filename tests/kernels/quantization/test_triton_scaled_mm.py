@@ -56,9 +56,7 @@ def get_8bit_types():
 @pytest.mark.parametrize("max_tokens", [32])
 @pytest.mark.parametrize("num_logprobs", [10])
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Should only run on ROCm")
-def test_rocm_compressed_tensors_w8a8(
-    aphrodite_runner, example_prompts, model_path, max_tokens, num_logprobs
-):
+def test_rocm_compressed_tensors_w8a8(aphrodite_runner, example_prompts, model_path, max_tokens, num_logprobs):
     dtype = "bfloat16"
 
     with aphrodite_runner(model_path, dtype=dtype) as aphrodite_model:
@@ -81,9 +79,7 @@ MNK_FACTORS = [
 @pytest.mark.parametrize("use_scalar_scale_a", [True, False])
 @pytest.mark.parametrize("use_scalar_scale_b", [True, False])
 @pytest.mark.parametrize("use_bias", [True, False])
-def test_scaled_mm(
-    M, N, K, in_dtype, out_dtype, use_scalar_scale_a, use_scalar_scale_b, use_bias
-):
+def test_scaled_mm(M, N, K, in_dtype, out_dtype, use_scalar_scale_a, use_scalar_scale_b, use_bias):
     is_floating_point_type = lambda t: torch.tensor([1, 1], dtype=t).is_floating_point()
 
     set_random_seed(0)

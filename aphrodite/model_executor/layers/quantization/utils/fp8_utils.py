@@ -48,9 +48,7 @@ def _triton_per_token_group_quant_fp8_impl(
     x: torch.Tensor,
     group_size: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    return per_token_group_quant_fp8(
-        x, group_size, column_major_scales=False, use_ue8m0=False
-    )
+    return per_token_group_quant_fp8(x, group_size, column_major_scales=False, use_ue8m0=False)
 
 
 def _triton_per_token_group_quant_fp8_fake(
@@ -77,9 +75,7 @@ direct_register_custom_op(
 )
 
 
-def input_to_float8(
-    x: torch.Tensor, dtype: torch.dtype | None = None
-) -> tuple[torch.Tensor, torch.Tensor]:
+def input_to_float8(x: torch.Tensor, dtype: torch.dtype | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     """This function quantizes input values to float8 values "
     "with tensor-wise quantization."""
     dtype = current_platform.fp8_dtype() if dtype is None else dtype
@@ -122,9 +118,7 @@ def _per_token_group_quant_fp8(
     row_g_id = g_id % groups_per_row
 
     # Ensure offset calculations use int64 to prevent overflow
-    y_ptr_offset = (row.to(tl.int64) * y_row_stride) + (
-        row_g_id.to(tl.int64) * group_size
-    )
+    y_ptr_offset = (row.to(tl.int64) * y_row_stride) + (row_g_id.to(tl.int64) * group_size)
     y_ptr += y_ptr_offset
 
     y_q_ptr_offset = g_id.to(tl.int64) * group_size
@@ -200,18 +194,12 @@ def _silu_mul_quant_fp8_packed_kernel(
             other=0.0,
         )
         up_flat = tl.load(
-            input_ptr
-            + input_row_start
-            + hidden_size
-            + col_start
-            + col_offsets[None, :],
+            input_ptr + input_row_start + hidden_size + col_start + col_offsets[None, :],
             mask=row_mask[:, None] & col_mask[None, :],
             other=0.0,
         )
 
-        gate = tl.reshape(gate_flat, (BLOCK_M, groups_per_cta, GROUP_SIZE)).to(
-            tl.float32
-        )
+        gate = tl.reshape(gate_flat, (BLOCK_M, groups_per_cta, GROUP_SIZE)).to(tl.float32)
         up = tl.reshape(up_flat, (BLOCK_M, groups_per_cta, GROUP_SIZE)).to(tl.float32)
 
         if HAS_CLAMP:
@@ -245,11 +233,7 @@ def _silu_mul_quant_fp8_packed_kernel(
         packed_scale = tl.sum(scale_bytes << shifts[None, None, :], axis=2)
 
         scale_pack = pack_tile * PACKS_PER_CTA + pack_offsets
-        scale_ptrs = (
-            output_scale_ptr
-            + scale_pack[None, :] * output_scale_stride_k
-            + rows[:, None]
-        )
+        scale_ptrs = output_scale_ptr + scale_pack[None, :] * output_scale_stride_k + rows[:, None]
         tl.store(
             scale_ptrs,
             packed_scale,
@@ -388,12 +372,8 @@ def _silu_mul_per_token_group_quant_fp8_colmajor(
     # input dtype, run silu in fp32 then narrow, and do the mul at input
     # precision so HAS_CLAMP True/False share the same multiplication path.
     if HAS_CLAMP:
-        act_in = tl.minimum(act_in.to(tl.float32), clamp_limit).to(
-            y_ptr.dtype.element_ty
-        )
-        mul_in = tl.clamp(mul_in.to(tl.float32), -clamp_limit, clamp_limit).to(
-            y_ptr.dtype.element_ty
-        )
+        act_in = tl.minimum(act_in.to(tl.float32), clamp_limit).to(y_ptr.dtype.element_ty)
+        mul_in = tl.clamp(mul_in.to(tl.float32), -clamp_limit, clamp_limit).to(y_ptr.dtype.element_ty)
     # Unified gated activation: silu == swigluoai with alpha=1, beta=0.
     #   glu = gate * sigmoid(alpha * gate); y = (up + beta) * glu
     # Keep glu/up at input precision (narrow before the mul) so the alpha=1,
@@ -454,9 +434,7 @@ def silu_mul_per_token_group_quant_fp8_colmajor(
     if output is None:
         output = torch.empty((M, N_2), dtype=fp8_dtype, device=input.device)
 
-    output_scales = torch.empty(
-        ((N_2 // GROUP_SIZE), M), dtype=torch.float32, device=input.device
-    ).transpose(0, 1)
+    output_scales = torch.empty(((N_2 // GROUP_SIZE), M), dtype=torch.float32, device=input.device).transpose(0, 1)
 
     BLOCK_M = 8
     BLOCK_N = GROUP_SIZE
@@ -532,9 +510,7 @@ def _per_token_group_quant_fp8_colmajor(
     row_g_id = g_id % groups_per_row
 
     # Ensure offset calculations use int64 to prevent overflow
-    y_ptr_offset = (row.to(tl.int64) * y_row_stride) + (
-        row_g_id.to(tl.int64) * group_size
-    )
+    y_ptr_offset = (row.to(tl.int64) * y_row_stride) + (row_g_id.to(tl.int64) * group_size)
     y_ptr += y_ptr_offset
 
     y_q_ptr_offset = g_id.to(tl.int64) * group_size
@@ -593,8 +569,7 @@ def per_token_group_quant_fp8(
         use_ue8m0 = is_deep_gemm_e8m0_used()
     dtype = current_platform.fp8_dtype() if dtype is None else dtype
     assert x.shape[-1] % group_size == 0, (
-        f"the last dimension of `x` {x.shape[-1]} must be divisible "
-        f"by `group_size` {group_size}"
+        f"the last dimension of `x` {x.shape[-1]} must be divisible by `group_size` {group_size}"
     )
     assert x.stride(-1) == 1, "`x` groups must be contiguous"
 
@@ -612,28 +587,18 @@ def per_token_group_quant_fp8(
             sf_k = x.shape[-1] // group_size
             tma_aligned_m = get_tma_aligned_size(m, 4)
             shape = x.shape[:-2] + (m, sf_k)
-            stride = (
-                (1, tma_aligned_m)
-                if x.dim() == 2
-                else (tma_aligned_m * sf_k, 1, tma_aligned_m)
-            )
-            x_s = torch.empty_strided(
-                shape, stride, device=x.device, dtype=torch.float32
-            )
+            stride = (1, tma_aligned_m) if x.dim() == 2 else (tma_aligned_m * sf_k, 1, tma_aligned_m)
+            x_s = torch.empty_strided(shape, stride, device=x.device, dtype=torch.float32)
         else:
             shape = x.shape[:-2] + (x.shape[-1] // group_size, x.shape[-2])
-            x_s = torch.empty(shape, device=x.device, dtype=torch.float32).permute(
-                -1, -2
-            )
+            x_s = torch.empty(shape, device=x.device, dtype=torch.float32).permute(-1, -2)
     else:
         shape = x.shape[:-1] + (x.shape[-1] // group_size,)
         x_s = torch.empty(shape, device=x.device, dtype=torch.float32)
 
     # prefer CUDA/XPU kernel if available
     # TODO(bnell): this causes some fp8 moe test to fail.
-    if (
-        current_platform.is_cuda_alike() or current_platform.is_xpu()
-    ) and x.is_contiguous():
+    if (current_platform.is_cuda_alike() or current_platform.is_xpu()) and x.is_contiguous():
         torch.ops._C.per_token_group_fp8_quant(
             x,
             x_q,
@@ -711,14 +676,11 @@ def per_token_group_quant_fp8_packed_for_deepgemm(
     if use_ue8m0 is None:
         use_ue8m0 = is_deep_gemm_e8m0_used()
     # for DeepGEMM UE8M0-packed layout we *require* UE8M0 scales.
-    assert use_ue8m0, (
-        "per_token_group_quant_fp8_packed_for_deepgemm requires UE8M0 scales."
-    )
+    assert use_ue8m0, "per_token_group_quant_fp8_packed_for_deepgemm requires UE8M0 scales."
 
     dtype = current_platform.fp8_dtype()
     assert x.shape[-1] % group_size == 0, (
-        f"the last dimension of `x` {x.shape[-1]} must be divisible "
-        f"by `group_size` {group_size}"
+        f"the last dimension of `x` {x.shape[-1]} must be divisible by `group_size` {group_size}"
     )
     assert x.stride(-1) == 1, "`x` groups must be contiguous"
 
@@ -851,9 +813,7 @@ def _w8a8_triton_block_scaled_mm(
 
 
 @functools.lru_cache
-def get_w8a8_block_fp8_configs(
-    N: int, K: int, block_n: int, block_k: int
-) -> dict[int, Any] | None:
+def get_w8a8_block_fp8_configs(N: int, K: int, block_n: int, block_k: int) -> dict[int, Any] | None:
     """
     Return optimized configurations for the w8a8 block fp8 kernel.
     The return value will be a dictionary that maps an irregular grid of
@@ -867,9 +827,7 @@ def get_w8a8_block_fp8_configs(
     device_name = current_platform.get_device_name().replace(" ", "_")
     json_file_name = f"N={N},K={K},device_name={device_name},dtype=fp8_w8a8,block_shape=[{block_n},{block_k}].json"  # noqa: E501
 
-    config_file_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "configs", json_file_name
-    )
+    config_file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "configs", json_file_name)
     if os.path.exists(config_file_path):
         with open(config_file_path) as f:
             logger.info(
@@ -882,8 +840,7 @@ def get_w8a8_block_fp8_configs(
     # If no optimized configuration is available, we will use the default
     # configuration
     logger.warning(
-        "Using default W8A8 Block FP8 kernel config. Performance might "
-        "be sub-optimal! Config file not found at %s",
+        "Using default W8A8 Block FP8 kernel config. Performance might be sub-optimal! Config file not found at %s",
         config_file_path,
     )
     return None
@@ -955,9 +912,7 @@ def w8a8_triton_block_scaled_mm(
         }
 
     def grid(META):
-        return (
-            triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
-        )
+        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
 
     _w8a8_triton_block_scaled_mm[grid](
         A,
@@ -1006,9 +961,7 @@ def requant_weight_ue8m0_inplace(
         return
 
     if weight.dtype != torch.float8_e4m3fn:
-        raise ValueError(
-            f"Expected *weight* to be torch.float8_e4m3fn, got {weight.dtype} instead."
-        )
+        raise ValueError(f"Expected *weight* to be torch.float8_e4m3fn, got {weight.dtype} instead.")
 
     from aphrodite.utils.deep_gemm import per_block_cast_to_fp8
 
@@ -1037,9 +990,7 @@ def requant_weight_ue8m0_inplace(
         s_exp = s_exp[:m_cur, :k_cur]
         w_dq = w_q.to(torch.float32) * s_exp
         # Re-quantise using power-of-two scaling (UE8M0).
-        w_requant, s_requant = per_block_cast_to_fp8(
-            w_dq, [block_m, block_k], use_ue8m0=True
-        )
+        w_requant, s_requant = per_block_cast_to_fp8(w_dq, [block_m, block_k], use_ue8m0=True)
 
         # Write back the results in-place.
         w_q.copy_(w_requant)
@@ -1095,8 +1046,7 @@ def deepgemm_post_process_fp8_weight_block(
     bmm_batch_size: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     assert wq.dtype == torch.float8_e4m3fn, (
-        "Expected quantized tensor dtype "
-        f"to be torch.float8_e4m3fn, got {wq.dtype} instead."
+        f"Expected quantized tensor dtype to be torch.float8_e4m3fn, got {wq.dtype} instead."
     )
 
     if ws.dtype in (torch.float8_e8m0fnu, torch.uint8):
@@ -1205,8 +1155,7 @@ def validate_fp8_block_shape(
 
     if getattr(layer, "allow_fp8_block_shape_mismatch", False):
         logger.debug(
-            "Skipping FP8 block shape validation for layer %s due to detected"
-            " mismatch allowance.",
+            "Skipping FP8 block shape validation for layer %s due to detected mismatch allowance.",
             getattr(layer, "prefix", "<unknown>"),
         )
         return
@@ -1215,11 +1164,7 @@ def validate_fp8_block_shape(
     block_n, block_k = block_size[0], block_size[1]
 
     # Required by row parallel
-    if (
-        tp_size > 1
-        and input_size // input_size_per_partition == tp_size
-        and input_size_per_partition % block_k != 0
-    ):
+    if tp_size > 1 and input_size // input_size_per_partition == tp_size and input_size_per_partition % block_k != 0:
         raise ValueError(
             f"Weight input_size_per_partition = {input_size_per_partition} "
             f"is not divisible by weight quantization block_k = {block_k}."
@@ -1307,9 +1252,7 @@ def create_fp8_scale_parameter(
     return scale
 
 
-def create_fp8_input_scale(
-    output_partition_sizes: list[int], weight_loader: Callable | None
-) -> torch.nn.Parameter:
+def create_fp8_input_scale(output_partition_sizes: list[int], weight_loader: Callable | None) -> torch.nn.Parameter:
     """Create input scale parameter for static activation quantization."""
     from aphrodite.model_executor.parameter import PerTensorScaleParameter
 
@@ -1389,16 +1332,9 @@ def process_fp8_weight_block_strategy(
             weight_as_int8[weight_as_int8 == ROCM_FP8_NAN_AS_INT] = 0
             weight = weight_as_int8.view(torch.float8_e4m3fnuz)
             exp_bytes = weight_scale.view(torch.uint8)
-            weight_scale = (
-                (exp_bytes.to(torch.int16) + 1)
-                .clamp(max=254)
-                .to(torch.uint8)
-                .view(torch.float8_e8m0fnu)
-            )
+            weight_scale = (exp_bytes.to(torch.int16) + 1).clamp(max=254).to(torch.uint8).view(torch.float8_e8m0fnu)
         else:
-            weight, weight_scale, _ = normalize_e4m3fn_to_e4m3fnuz(
-                weight=weight, weight_scale=weight_scale
-            )
+            weight, weight_scale, _ = normalize_e4m3fn_to_e4m3fnuz(weight=weight, weight_scale=weight_scale)
 
     weight = _maybe_pad_fp8_weight(weight)
     return weight, weight_scale
@@ -1430,9 +1366,7 @@ def process_fp8_weight_tensor_strategy_moe(
                 weight[expert_id][start : start + shard_size, :],
                 weight_scales[expert_id][shard_id],
             )
-            weight[expert_id][start : start + shard_size, :], _ = ops.scaled_fp8_quant(
-                dq_weight, max_scales[expert_id]
-            )
+            weight[expert_id][start : start + shard_size, :], _ = ops.scaled_fp8_quant(dq_weight, max_scales[expert_id])
             start += shard_size
     return weight, max_scales
 
@@ -1445,9 +1379,7 @@ def process_fp8_input_tensor_strategy_moe(
 
     if not all_close_1d(w13_input_scale) or not all_close_1d(w2_input_scale):
         logger.info_once(
-            "Found input_scales that are not equal for "
-            "fp8 MoE layer. Using the maximum across experts "
-            "for each layer."
+            "Found input_scales that are not equal for fp8 MoE layer. Using the maximum across experts for each layer."
         )
 
     return w13_input_scale.max(), w2_input_scale.max()

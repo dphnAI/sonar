@@ -63,9 +63,7 @@ def create_chunked_local_attention_backend(
             metadata.make_virtual_batches_block_table = make_virtual_batches_block_table
             return metadata
 
-        def update_block_table(
-            self, metadata, blk_table: torch.Tensor, slot_mapping: torch.Tensor
-        ):
+        def update_block_table(self, metadata, blk_table: torch.Tensor, slot_mapping: torch.Tensor):
             blk_table = metadata.make_virtual_batches_block_table(blk_table)
             return super().update_block_table(metadata, blk_table, slot_mapping)
 
@@ -100,9 +98,7 @@ class ChunkedLocalAttention(Attention):
             kv_cache_dtype = "auto"
 
         underlying_attn_backend = get_attn_backend(head_size, dtype, kv_cache_dtype)
-        attn_backend = create_chunked_local_attention_backend(
-            underlying_attn_backend, attention_chunk_size
-        )
+        attn_backend = create_chunked_local_attention_backend(underlying_attn_backend, attention_chunk_size)
 
         super().__init__(
             num_heads=num_heads,

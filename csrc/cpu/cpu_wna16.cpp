@@ -9,7 +9,7 @@
 #endif
 #include "cpu/micro_gemm/cpu_micro_gemm_vec.hpp"
 
-#define APHRODITE_DISPATCH_CASE_16B_TYPES(...)                 \
+#define APHRODITE_DISPATCH_CASE_16B_TYPES(...)            \
   AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
   AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)
 

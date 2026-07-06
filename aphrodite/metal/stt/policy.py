@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """STT-specific scheduler policy at the platform boundary."""
 
 from __future__ import annotations
@@ -19,16 +20,14 @@ STT_SCHED_NOMINAL_HEAD_SIZE = 64
 
 class _ModelConfigLike(Protocol):
     model: str
-    tokenizer: str | None
+    tokenizer: str
 
 
 class _SchedulerConfigLike(Protocol):
-    async_scheduling: bool
+    async_scheduling: bool | None
 
 
-def apply_stt_scheduler_policy(
-    model_config: _ModelConfigLike, scheduler_config: _SchedulerConfigLike
-) -> None:
+def apply_stt_scheduler_policy(model_config: _ModelConfigLike, scheduler_config: _SchedulerConfigLike) -> None:
     """Apply STT scheduler compatibility policy for Metal runtime.
 
     STT requests are processed as one-shot execute calls, so async scheduling

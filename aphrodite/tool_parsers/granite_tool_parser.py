@@ -52,25 +52,14 @@ class GraniteToolParser(ToolParser):
         # for granite 3.1, the string `<tool_call>`
         self.bot_string = "<tool_call>"
 
-    def extract_tool_calls(
-        self, model_output: str, request: ChatCompletionRequest
-    ) -> ExtractedToolCallInformation:
-        stripped = (
-            model_output.strip()
-            .removeprefix(self.bot_token)
-            .removeprefix(self.bot_string)
-            .lstrip()
-        )
+    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+        stripped = model_output.strip().removeprefix(self.bot_token).removeprefix(self.bot_string).lstrip()
         if not stripped or stripped[0] != "[":
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
         try:
             raw_function_calls = json.loads(stripped)
             if not isinstance(raw_function_calls, list):
-                raise Exception(
-                    f"Expected dict or list, got {type(raw_function_calls)}"
-                )
+                raise Exception(f"Expected dict or list, got {type(raw_function_calls)}")
 
             logger.debug("Extracted %d tool calls", len(raw_function_calls))
             tool_calls = [
@@ -79,9 +68,7 @@ class GraniteToolParser(ToolParser):
                     function=FunctionCall(
                         name=function_call["name"],
                         # function call args are JSON but as a string
-                        arguments=json.dumps(
-                            function_call["arguments"], ensure_ascii=False
-                        ),
+                        arguments=json.dumps(function_call["arguments"], ensure_ascii=False),
                     ),
                 )
                 for function_call in raw_function_calls
@@ -95,9 +82,7 @@ class GraniteToolParser(ToolParser):
 
         except Exception as e:
             logger.error("Error in extracting tool call from response %s", e)
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(
         self,
@@ -114,11 +99,7 @@ class GraniteToolParser(ToolParser):
             start_idx = consume_space(start_idx + len(self.bot_token), current_text)
         if current_text[start_idx:].startswith(self.bot_string):
             start_idx = consume_space(start_idx + len(self.bot_string), current_text)
-        if (
-            not current_text
-            or start_idx >= len(current_text)
-            or current_text[start_idx] != "["
-        ):
+        if not current_text or start_idx >= len(current_text) or current_text[start_idx] != "[":
             return DeltaMessage(content=delta_text)
 
         # bit mask flags for partial JSON parsing. If the name hasn't been
@@ -130,9 +111,7 @@ class GraniteToolParser(ToolParser):
             tool_call_arr = None
             is_complete = None
             try:
-                tool_calls, end_idx = partial_json_loads(
-                    current_text[start_idx:], flags
-                )
+                tool_calls, end_idx = partial_json_loads(current_text[start_idx:], flags)
                 if type(tool_calls) is list:
                     tool_call_arr = tool_calls
                 else:
@@ -173,15 +152,11 @@ class GraniteToolParser(ToolParser):
                             tool_calls=[
                                 DeltaToolCall(
                                     index=self.current_tool_id,
-                                    function=DeltaFunctionCall(
-                                        arguments=argument_diff
-                                    ).model_dump(exclude_none=True),
+                                    function=DeltaFunctionCall(arguments=argument_diff).model_dump(exclude_none=True),
                                 )
                             ]
                         )
-                        self.streamed_args_for_tool[self.current_tool_id] += (
-                            argument_diff
-                        )
+                        self.streamed_args_for_tool[self.current_tool_id] += argument_diff
 
                 # re-set stuff pertaining to progress in the current tool
                 self.current_tool_id = len(tool_call_arr) - 1
@@ -201,9 +176,7 @@ class GraniteToolParser(ToolParser):
                                 index=self.current_tool_id,
                                 type="function",
                                 id=make_tool_call_id(),
-                                function=DeltaFunctionCall(
-                                    name=function_name
-                                ).model_dump(exclude_none=True),
+                                function=DeltaFunctionCall(name=function_name).model_dump(exclude_none=True),
                             )
                         ]
                     )
@@ -217,9 +190,7 @@ class GraniteToolParser(ToolParser):
                 if cur_arguments:
                     sent = len(self.streamed_args_for_tool[self.current_tool_id])
                     cur_args_json = json.dumps(cur_arguments, ensure_ascii=False)
-                    prev_arguments = self.prev_tool_call_arr[self.current_tool_id].get(
-                        "arguments"
-                    )
+                    prev_arguments = self.prev_tool_call_arr[self.current_tool_id].get("arguments")
 
                     argument_diff = None
                     if is_complete[self.current_tool_id]:
@@ -235,22 +206,16 @@ class GraniteToolParser(ToolParser):
                             tool_calls=[
                                 DeltaToolCall(
                                     index=self.current_tool_id,
-                                    function=DeltaFunctionCall(
-                                        arguments=argument_diff
-                                    ).model_dump(exclude_none=True),
+                                    function=DeltaFunctionCall(arguments=argument_diff).model_dump(exclude_none=True),
                                 )
                             ]
                         )
-                        self.streamed_args_for_tool[self.current_tool_id] += (
-                            argument_diff
-                        )
+                        self.streamed_args_for_tool[self.current_tool_id] += argument_diff
 
             self.prev_tool_call_arr = tool_call_arr
             return delta
 
         except Exception as e:
             logger.error("Error trying to handle streaming tool call: %s", e)
-            logger.debug(
-                "Skipping chunk as a result of tool streaming extraction error"
-            )
+            logger.debug("Skipping chunk as a result of tool streaming extraction error")
             return None

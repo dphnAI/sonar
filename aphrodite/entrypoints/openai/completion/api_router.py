@@ -44,9 +44,7 @@ def completion(request: Request) -> OpenAIServingCompletion | None:
 @with_cancellation
 @load_aware_call
 async def create_completion(request: CompletionRequest, raw_request: Request):
-    metrics_header_format = raw_request.headers.get(
-        ENDPOINT_LOAD_METRICS_FORMAT_HEADER_LABEL, ""
-    )
+    metrics_header_format = raw_request.headers.get(ENDPOINT_LOAD_METRICS_FORMAT_HEADER_LABEL, "")
     handler = completion(raw_request)
     if handler is None:
         raise NotImplementedError("The model does not support Completions API")
@@ -54,9 +52,7 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
     generator = await handler.create_completion(request, raw_request)
 
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(
-            content=generator.model_dump(), status_code=generator.error.code
-        )
+        return JSONResponse(content=generator.model_dump(), status_code=generator.error.code)
     elif isinstance(generator, CompletionResponse):
         return JSONResponse(
             content=generator.model_dump(),

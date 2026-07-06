@@ -68,50 +68,36 @@ class Olmo3PythonicToolParser(ToolParser):
     def current_tool_index(self, value: int) -> None:
         self.current_tool_id = value
 
-    def extract_tool_calls(
-        self, model_output: str, request: ChatCompletionRequest
-    ) -> ExtractedToolCallInformation:
+    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
         """
         Extract the tool calls from a complete model response.
         """
         original_model_output = model_output
         # Remove xml tags.
-        match = re.search(
-            r"<function_calls>(.*?)</function_calls>", model_output, re.DOTALL
-        )
+        match = re.search(r"<function_calls>(.*?)</function_calls>", model_output, re.DOTALL)
         if match:
             model_output = match.group(1).strip()
         # Make the newline separated function calls into a list.
-        model_output = ", ".join(
-            [line.strip() for line in model_output.splitlines() if line.strip()]
-        )
+        model_output = ", ".join([line.strip() for line in model_output.splitlines() if line.strip()])
         model_output = f"[{model_output}]"
 
         is_tool_call_pattern = False
         try:
             is_tool_call_pattern = (
-                self.TOOL_CALL_REGEX.match(
-                    model_output, timeout=envs.APHRODITE_TOOL_PARSE_REGEX_TIMEOUT_SECONDS
-                )
+                self.TOOL_CALL_REGEX.match(model_output, timeout=envs.APHRODITE_TOOL_PARSE_REGEX_TIMEOUT_SECONDS)
                 is not None
             )
         except TimeoutError:
             logger.warning("Regex timeout occurred when matching tool call pattern.")
-            logger.debug(
-                "Regex timeout occurred when matching user input: %s", model_output
-            )
+            logger.debug("Regex timeout occurred when matching user input: %s", model_output)
 
         if not is_tool_call_pattern:
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=original_model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=original_model_output)
 
         try:
             module = ast.parse(model_output)
             parsed = getattr(module.body[0], "value", None)
-            if isinstance(parsed, ast.List) and all(
-                isinstance(e, ast.Call) for e in parsed.elts
-            ):
+            if isinstance(parsed, ast.List) and all(isinstance(e, ast.Call) for e in parsed.elts):
                 return ExtractedToolCallInformation(
                     tools_called=True,
                     tool_calls=[
@@ -125,9 +111,7 @@ class Olmo3PythonicToolParser(ToolParser):
         except Exception:
             logger.exception("Error in extracting tool call from response.")
             # Treat as regular text
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=original_model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=original_model_output)
 
     def extract_tool_calls_streaming(
         self,
@@ -157,18 +141,12 @@ class Olmo3PythonicToolParser(ToolParser):
             valid_text, added_text = valid_and_added_text
 
             # Make the newline separated function calls into a list.
-            valid_text = ", ".join(
-                [line.strip() for line in valid_text.splitlines() if line.strip()]
-            )
+            valid_text = ", ".join([line.strip() for line in valid_text.splitlines() if line.strip()])
             valid_text = f"[{valid_text}]"
             module = ast.parse(valid_text)
             parsed = getattr(module.body[0], "value", None)
-            if not isinstance(parsed, ast.List) or not all(
-                isinstance(e, ast.Call) for e in parsed.elts
-            ):
-                raise UnexpectedAstError(
-                    "Tool output must be a sequence of newline-separated calls"
-                )
+            if not isinstance(parsed, ast.List) or not all(isinstance(e, ast.Call) for e in parsed.elts):
+                raise UnexpectedAstError("Tool output must be a sequence of newline-separated calls")
             tool_calls = [
                 handle_single_tool(e)  # type: ignore
                 for e in parsed.elts
@@ -194,16 +172,11 @@ class Olmo3PythonicToolParser(ToolParser):
                 # Strings get single quotes in the model-produced string.
                 # JSON requires double quotes.
                 withheld_suffix = withheld_suffix.replace("'", '"')
-                delta = compute_tool_delta(
-                    self.streamed_args_for_tool[index], new_call, index, withheld_suffix
-                )
+                delta = compute_tool_delta(self.streamed_args_for_tool[index], new_call, index, withheld_suffix)
 
                 if delta is not None:
                     tool_deltas.append(delta)
-                    if (
-                        delta.function is not None
-                        and delta.function.arguments is not None
-                    ):
+                    if delta.function is not None and delta.function.arguments is not None:
                         self.streamed_args_for_tool[index] += delta.function.arguments
 
             # HACK: serving_chat.py inspects the internal state of tool parsers
@@ -224,7 +197,5 @@ class Olmo3PythonicToolParser(ToolParser):
                 return None
         except Exception:
             logger.exception("Error trying to handle streaming tool call.")
-            logger.debug(
-                "Skipping chunk as a result of tool streaming extraction error"
-            )
+            logger.debug("Skipping chunk as a result of tool streaming extraction error")
             return None

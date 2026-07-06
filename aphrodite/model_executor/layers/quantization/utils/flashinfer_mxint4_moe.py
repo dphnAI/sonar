@@ -69,18 +69,10 @@ def prepare_static_weights_for_trtllm_mxint4_moe(
     )
 
     device = gemm1_weights.device
-    assert gemm1_weights.ndim == 3, (
-        f"Expected a 3D gemm1_weights tensor, got {gemm1_weights.shape}"
-    )
-    assert gemm1_scales.ndim == 3, (
-        f"Expected a 3D gemm1_scales tensor, got {gemm1_scales.shape}"
-    )
-    assert gemm2_weights.ndim == 3, (
-        f"Expected a 3D gemm2_weights tensor, got {gemm2_weights.shape}"
-    )
-    assert gemm2_scales.ndim == 3, (
-        f"Expected a 3D gemm2_scales tensor, got {gemm2_scales.shape}"
-    )
+    assert gemm1_weights.ndim == 3, f"Expected a 3D gemm1_weights tensor, got {gemm1_weights.shape}"
+    assert gemm1_scales.ndim == 3, f"Expected a 3D gemm1_scales tensor, got {gemm1_scales.shape}"
+    assert gemm2_weights.ndim == 3, f"Expected a 3D gemm2_weights tensor, got {gemm2_weights.shape}"
+    assert gemm2_scales.ndim == 3, f"Expected a 3D gemm2_scales tensor, got {gemm2_scales.shape}"
 
     # Convert checkpoint format (uint4b8 in int32) to signed int4
     # Checkpoint stores INT4 as unsigned [0, 15], kernel expects signed [-8, 7]
@@ -88,9 +80,7 @@ def prepare_static_weights_for_trtllm_mxint4_moe(
         convert_packed_uint4b8_to_signed_int4_inplace(gemm1_weights)
         convert_packed_uint4b8_to_signed_int4_inplace(gemm2_weights)
 
-    gemm1_weights, gemm1_scales = reorder_w1w3_to_w3w1(
-        gemm1_weights, gemm1_scales, dim=-2
-    )
+    gemm1_weights, gemm1_scales = reorder_w1w3_to_w3w1(gemm1_weights, gemm1_scales, dim=-2)
 
     _cache_permute_indices: dict[torch.Size, torch.Tensor] = {}
     num_experts = gemm1_weights.shape[0]
@@ -117,27 +107,21 @@ def prepare_static_weights_for_trtllm_mxint4_moe(
             gemm1_weights_mxint4[i],
             epilogue_tile_m,
         )
-        gemm1_weights_shuffled = gemm1_weights_mxint4[i][
-            permute_indices.to(gemm1_weights.device)
-        ].contiguous()
+        gemm1_weights_shuffled = gemm1_weights_mxint4[i][permute_indices.to(gemm1_weights.device)].contiguous()
         permute_sf_indices = _maybe_get_cached_w3_w1_permute_indices(
             _cache_permute_indices,
             gemm1_scales[i],
             epilogue_tile_m,
             num_elts_per_sf=32,
         ).to(device)
-        gemm1_scales_shuffled.append(
-            block_scale_interleave(gemm1_scales[i][permute_sf_indices].contiguous())
-        )
+        gemm1_scales_shuffled.append(block_scale_interleave(gemm1_scales[i][permute_sf_indices].contiguous()))
 
         permute_indices = get_w2_permute_indices_with_cache(
             _cache_permute_indices,
             gemm2_weights_mxint4[i],
             epilogue_tile_m,
         )
-        gemm2_weights_shuffled = gemm2_weights_mxint4[i][
-            permute_indices.to(gemm2_weights.device)
-        ].contiguous()
+        gemm2_weights_shuffled = gemm2_weights_mxint4[i][permute_indices.to(gemm2_weights.device)].contiguous()
 
         permute_sf_indices = get_w2_permute_indices_with_cache(
             _cache_permute_indices,
@@ -146,18 +130,12 @@ def prepare_static_weights_for_trtllm_mxint4_moe(
             num_elts_per_sf=16,
         )
         gemm2_scales_shuffled.append(
-            block_scale_interleave(
-                gemm2_scales[i][permute_sf_indices.to(gemm2_scales.device)].contiguous()
-            )
+            block_scale_interleave(gemm2_scales[i][permute_sf_indices.to(gemm2_scales.device)].contiguous())
         )
 
         block_k = 128
-        gemm1_weights_shuffled = convert_to_block_layout(
-            gemm1_weights_shuffled.view(torch.uint8), block_k
-        )
-        gemm2_weights_shuffled = convert_to_block_layout(
-            gemm2_weights_shuffled.view(torch.uint8), block_k
-        )
+        gemm1_weights_shuffled = convert_to_block_layout(gemm1_weights_shuffled.view(torch.uint8), block_k)
+        gemm2_weights_shuffled = convert_to_block_layout(gemm2_weights_shuffled.view(torch.uint8), block_k)
 
         gemm1_weights_mxint4_shuffled.append(gemm1_weights_shuffled)
         gemm2_weights_mxint4_shuffled.append(gemm2_weights_shuffled)
@@ -224,9 +202,7 @@ def flashinfer_trtllm_mxint4_moe(
     assert w13_weight_scale.dtype == torch.bfloat16, (
         f"w13_weight_scale dtype must be bfloat16, got {w13_weight_scale.dtype}"
     )
-    assert w2_weight_packed.dtype == torch.uint8, (
-        f"w2_weight_packed dtype must be uint8, got {w2_weight_packed.dtype}"
-    )
+    assert w2_weight_packed.dtype == torch.uint8, f"w2_weight_packed dtype must be uint8, got {w2_weight_packed.dtype}"
     assert w2_weight_scale.dtype == torch.bfloat16, (
         f"w2_weight_scale dtype must be bfloat16, got {w2_weight_scale.dtype}"
     )

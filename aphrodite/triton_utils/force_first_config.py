@@ -43,9 +43,7 @@ def install() -> None:
         kernel_name = getattr(self.base_fn, "__name__", repr(self.fn))
 
         cached_idx = _picked_cache.get(cache_key)
-        candidate_indices = (
-            [cached_idx] if cached_idx is not None else list(range(len(self.configs)))
-        )
+        candidate_indices = [cached_idx] if cached_idx is not None else list(range(len(self.configs)))
 
         last_exc: Exception | None = None
         for idx in candidate_indices:
@@ -74,8 +72,7 @@ def install() -> None:
                 if kernel_name not in seen_kernels:
                     seen_kernels.add(kernel_name)
                     logger.info(
-                        "[triton-autotune-disabled] kernel=%s configs=%d "
-                        "picked_index=%d picked=%s",
+                        "[triton-autotune-disabled] kernel=%s configs=%d picked_index=%d picked=%s",
                         kernel_name,
                         len(self.configs),
                         idx,
@@ -84,8 +81,7 @@ def install() -> None:
             return result
 
         raise RuntimeError(
-            f"No valid config for kernel "
-            f"{kernel_name} key={key_vals} (tried {len(self.configs)} configs)"
+            f"No valid config for kernel {kernel_name} key={key_vals} (tried {len(self.configs)} configs)"
         ) from last_exc
 
     Autotuner.run = _run_first_valid_config

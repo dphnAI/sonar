@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite.config import ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.inputs.preprocess import InputPreprocessor
 
 pytestmark = pytest.mark.cpu_test

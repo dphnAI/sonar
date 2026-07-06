@@ -49,9 +49,7 @@ logger = init_logger(__name__)
 # Gemma4 argument parser
 # ---------------------------------------------------------------------------
 
-_PARTIAL_DELIM_SUFFIXES = tuple(
-    STRING_DELIM[:k] for k in range(len(STRING_DELIM), 0, -1)
-)
+_PARTIAL_DELIM_SUFFIXES = tuple(STRING_DELIM[:k] for k in range(len(STRING_DELIM), 0, -1))
 
 
 def _strip_partial_delim(value: str) -> str:
@@ -186,8 +184,7 @@ def _parse_gemma4_args(args_str: str, *, partial: bool = False) -> dict:
                 break
             if i == val_start:
                 logger.warning(
-                    "Gemma4 args parser made no progress at position %d; "
-                    "aborting on malformed input.",
+                    "Gemma4 args parser made no progress at position %d; aborting on malformed input.",
                     i,
                 )
                 break
@@ -269,8 +266,7 @@ def _parse_gemma4_array(arr_str: str, *, partial: bool = False) -> list:
                 break
             if i == val_start:
                 logger.warning(
-                    "Gemma4 array parser made no progress at position %d; "
-                    "aborting on malformed input.",
+                    "Gemma4 array parser made no progress at position %d; aborting on malformed input.",
                     i,
                 )
                 break

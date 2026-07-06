@@ -51,9 +51,7 @@ class PunicaWrapperXPU(PunicaWrapperBase):
         self.max_loras = self.lora_config.max_loras
 
         # Compute captured LoRA counts for cudagraph specialization.
-        captured_lora_counts = get_captured_lora_counts(
-            self.max_loras, self.lora_config.specialize_active_lora
-        )
+        captured_lora_counts = get_captured_lora_counts(self.max_loras, self.lora_config.specialize_active_lora)
 
         self.token_mapping_meta = LoRAKernelMeta.make(
             self.max_loras,
@@ -118,9 +116,7 @@ class PunicaWrapperXPU(PunicaWrapperBase):
         rank = w_t_all.size(-1)
         if x.size(1) != rank:
             x = x[:, :rank].contiguous()
-        bgmv_expand_slice(
-            x, w_t_all, y, token_lora_indices, y_offset, y_slice_size, add_inputs
-        )
+        bgmv_expand_slice(x, w_t_all, y, token_lora_indices, y_offset, y_slice_size, add_inputs)
 
     def add_shrink(
         self,
@@ -252,8 +248,7 @@ class PunicaWrapperXPU(PunicaWrapperBase):
         assert len(lora_a_stacked) == len(lora_b_stacked) == len(output_slices)
 
         assert buffer is None, (
-            "To minimize overhead, the buffer should be created by "
-            ".add_lora_linear() instead of being passed in."
+            "To minimize overhead, the buffer should be created by .add_lora_linear() instead of being passed in."
         )
         r = lora_b_stacked[0].size(-1)
         buffer = torch.zeros(  # type: ignore
@@ -317,8 +312,7 @@ class PunicaWrapperXPU(PunicaWrapperBase):
         r = lora_b_stacked.size(-1)
 
         assert buffer is None, (
-            "To minimize overhead, the buffer should be created by "
-            ".add_lora_linear() instead of being passed in."
+            "To minimize overhead, the buffer should be created by .add_lora_linear() instead of being passed in."
         )
         buffer = torch.zeros((x.size(0), r), dtype=x.dtype, device=x.device)
         sampler_indices = torch.narrow(self._sampler_indices, 0, 0, x.size(0))
@@ -355,9 +349,7 @@ class PunicaWrapperXPU(PunicaWrapperBase):
             lora_ids,
             _,
             _,
-        ) = self.token_mapping_meta.meta_args(
-            num_tokens, self.lora_config.specialize_active_lora
-        )
+        ) = self.token_mapping_meta.meta_args(num_tokens, self.lora_config.specialize_active_lora)
         if token_lora_mapping is None:
             token_lora_mapping = token_lora_mapping_meta
         # Under EP the caller passes local_num_experts but topk_ids carries
@@ -366,17 +358,13 @@ class PunicaWrapperXPU(PunicaWrapperBase):
         # so global topk_ids don't overflow. expert_map inside the kernel
         # then translates global→local so the output expert_ids are local
         # (mirrors the non-LoRA moe_align_block_size behavior).
-        kernel_num_experts = (
-            expert_map.numel() if expert_map is not None else num_experts
-        )
+        kernel_num_experts = expert_map.numel() if expert_map is not None else num_experts
         if naive_block_assignment:
             expert_ids = topk_ids.reshape(-1)
             sorted_ids = None
             num_tokens_post_pad = None
         else:
-            max_num_tokens_padded = topk_ids.numel() + kernel_num_experts * (
-                block_size - 1
-            )
+            max_num_tokens_padded = topk_ids.numel() + kernel_num_experts * (block_size - 1)
             if pad_sorted_ids:
                 max_num_tokens_padded = round_up(max_num_tokens_padded, block_size)
             if topk_ids.numel() < kernel_num_experts:
@@ -396,9 +384,7 @@ class PunicaWrapperXPU(PunicaWrapperBase):
                 dtype=torch.int32,
                 device=topk_ids.device,
             )
-            num_tokens_post_pad = torch.empty(
-                (max_loras), dtype=torch.int32, device=topk_ids.device
-            )
+            num_tokens_post_pad = torch.empty((max_loras), dtype=torch.int32, device=topk_ids.device)
 
             ops.moe_lora_align_block_size(
                 topk_ids,
@@ -450,9 +436,7 @@ class PunicaWrapperXPU(PunicaWrapperBase):
             lora_ids,
             _,
             num_active_loras,
-        ) = self.token_mapping_meta.meta_args(
-            x.size(0), self.lora_config.specialize_active_lora
-        )
+        ) = self.token_mapping_meta.meta_args(x.size(0), self.lora_config.specialize_active_lora)
         if token_lora_mapping is None:
             token_lora_mapping = token_lora_mapping_meta
         fused_moe_lora(

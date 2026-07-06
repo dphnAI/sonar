@@ -44,9 +44,7 @@ class CompressedTensorsW4A8Fp8MoEMethod(CompressedTensorsMoEMethod):
         self.num_bits = self.weight_quant.num_bits
         self.packed_factor = 32 // self.num_bits
 
-        assert self.weight_quant.symmetric, (
-            "Only symmetric quantization is supported for W4A8 MoE"
-        )
+        assert self.weight_quant.symmetric, "Only symmetric quantization is supported for W4A8 MoE"
         assert self.weight_quant.actorder != "group"
         assert self.group_size == 128, "Only group size 128 supported for W4A8 MoE"
 
@@ -126,21 +124,15 @@ class CompressedTensorsW4A8Fp8MoEMethod(CompressedTensorsMoEMethod):
         )
         layer.register_parameter("w2_weight_scale", w2_weight_scale)
         # Add PER-GROUP quantization for RoutedExperts.weight_loader.
-        extra_weight_attrs.update(
-            {"quant_method": FusedMoeWeightScaleSupported.GROUP.value}
-        )
+        extra_weight_attrs.update({"quant_method": FusedMoeWeightScaleSupported.GROUP.value})
         set_weight_attrs(w13_weight_scale, extra_weight_attrs)
         set_weight_attrs(w2_weight_scale, extra_weight_attrs)
 
         # weight shapes
-        w2_weight_shape = torch.nn.Parameter(
-            torch.empty(num_experts, 2), requires_grad=False
-        )
+        w2_weight_shape = torch.nn.Parameter(torch.empty(num_experts, 2), requires_grad=False)
         layer.register_parameter("w2_weight_shape", w2_weight_shape)
         set_weight_attrs(w2_weight_shape, extra_weight_attrs)
-        w13_weight_shape = torch.nn.Parameter(
-            torch.empty(num_experts, 2), requires_grad=False
-        )
+        w13_weight_shape = torch.nn.Parameter(torch.empty(num_experts, 2), requires_grad=False)
         layer.register_parameter("w13_weight_shape", w13_weight_shape)
         set_weight_attrs(w13_weight_shape, extra_weight_attrs)
 

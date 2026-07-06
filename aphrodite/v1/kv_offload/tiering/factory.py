@@ -47,10 +47,7 @@ class SecondaryTierFactory:
         if not tier_type:
             raise ValueError("Secondary tier configuration must include 'type'")
         if tier_type not in cls._registry:
-            raise ValueError(
-                f"Unknown secondary tier type: {tier_type!r}. "
-                f"Supported types: {list(cls._registry)}"
-            )
+            raise ValueError(f"Unknown secondary tier type: {tier_type!r}. Supported types: {list(cls._registry)}")
         return cls._registry[tier_type]()
 
 

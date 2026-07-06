@@ -29,9 +29,7 @@ class TorchFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
     """
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not (current_platform.is_cuda_alike() or current_platform.is_cpu()):
             return False, "requires ROCm, CUDA or CPU."
 
@@ -58,9 +56,7 @@ class TorchFP8ScaledMMLinearKernel(FP8ScaledMMLinearKernel):
 class PerTensorTorchFP8ScaledMMLinearKernel(TorchFP8ScaledMMLinearKernel):
     @classmethod
     def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
-        per_tensor_activation_scales = (
-            c.activation_quant_key.scale.group_shape.is_per_tensor()
-        )
+        per_tensor_activation_scales = c.activation_quant_key.scale.group_shape.is_per_tensor()
         per_tensor_weight_scales = c.weight_quant_key.scale.group_shape.is_per_tensor()
 
         if not (per_tensor_activation_scales and per_tensor_weight_scales):
@@ -84,9 +80,7 @@ class PerTensorTorchFP8ScaledMMLinearKernel(TorchFP8ScaledMMLinearKernel):
         if Bs.dim() == 0:
             Bs = Bs.view(1)
 
-        output = torch._scaled_mm(
-            A, B, out_dtype=out_dtype, scale_a=As, scale_b=Bs, bias=bias
-        )
+        output = torch._scaled_mm(A, B, out_dtype=out_dtype, scale_a=As, scale_b=Bs, bias=bias)
         # A fix for discrepancy in scaled_mm which returns tuple
         # for torch < 2.5 and a single value in torch >= 2.5
         if type(output) is tuple and len(output) == 2:
@@ -98,9 +92,7 @@ class PerTensorTorchFP8ScaledMMLinearKernel(TorchFP8ScaledMMLinearKernel):
 
 class RowWiseTorchFP8ScaledMMLinearKernel(TorchFP8ScaledMMLinearKernel):
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         if not current_platform.is_rocm():
             return False, "requires ROCm."
 
@@ -116,9 +108,7 @@ class RowWiseTorchFP8ScaledMMLinearKernel(TorchFP8ScaledMMLinearKernel):
 
     @classmethod
     def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
-        per_tensor_activation_scales = (
-            c.activation_quant_key.scale.group_shape.is_per_tensor()
-        )
+        per_tensor_activation_scales = c.activation_quant_key.scale.group_shape.is_per_tensor()
         per_tensor_weight_scales = c.weight_quant_key.scale.group_shape.is_per_tensor()
 
         if c.out_dtype == torch.float16:
@@ -175,9 +165,7 @@ class RowWiseTorchFP8ScaledMMLinearKernel(TorchFP8ScaledMMLinearKernel):
 class ChannelWiseTorchFP8ScaledMMLinearKernel(TorchFP8ScaledMMLinearKernel):
     @classmethod
     def can_implement(cls, c: FP8ScaledMMLinearLayerConfig) -> tuple[bool, str | None]:
-        per_tensor_activation_scales = (
-            c.activation_quant_key.scale.group_shape.is_per_tensor()
-        )
+        per_tensor_activation_scales = c.activation_quant_key.scale.group_shape.is_per_tensor()
         per_tensor_weight_scales = c.weight_quant_key.scale.group_shape.is_per_tensor()
 
         if per_tensor_activation_scales and per_tensor_weight_scales:

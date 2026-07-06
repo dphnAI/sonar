@@ -116,25 +116,16 @@ def _build_worker_with_dict_store(aphrodite_config, kv_cache_config, store):
                 ".store.worker.get_tensor_model_parallel_world_size",
                 return_value=1,
             ),
+            patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_pcp_group") as mock_pcp,
+            patch("aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_dcp_group") as mock_dcp,
             patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake"
-                ".store.worker.get_pcp_group"
-            ) as mock_pcp,
-            patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake"
-                ".store.worker.get_dcp_group"
-            ) as mock_dcp,
-            patch(
-                "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake"
-                ".store.worker.get_ip",
+                "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker.get_ip",
                 return_value="127.0.0.1",
             ),
         ):
             mock_pcp.return_value.world_size = 1
             mock_dcp.return_value.world_size = 1
-            worker = mooncake_store_worker.MooncakeStoreWorker(
-                aphrodite_config, kv_cache_config=kv_cache_config
-            )
+            worker = mooncake_store_worker.MooncakeStoreWorker(aphrodite_config, kv_cache_config=kv_cache_config)
     return worker
 
 
@@ -286,9 +277,7 @@ def test_recv_skips_swa_blocks_before_window():
             return [0] * len(keys)
 
     ready = threading.Event()
-    coord = MooncakeStoreCoordinator(
-        groups, scheduler_block_size=16, hash_block_size=16
-    )
+    coord = MooncakeStoreCoordinator(groups, scheduler_block_size=16, hash_block_size=16)
     recv = KVCacheStoreRecvingThread(
         store=_CapturingStore(),
         token_databases=[db_full, db_swa],
@@ -304,9 +293,7 @@ def test_recv_skips_swa_blocks_before_window():
         token_len_chunk=64,
         block_ids=([0, 1, 2, 3], [0, 1, 2, 3]),
         block_hashes=hs,
-        load_spec=LoadSpec(
-            aphrodite_cached_tokens=0, kvpool_cached_tokens=64, can_load=True, token_len=64
-        ),
+        load_spec=LoadSpec(aphrodite_cached_tokens=0, kvpool_cached_tokens=64, can_load=True, token_len=64),
     )
     recv.request_queue.put(req)
     recv._handle_request(recv.request_queue.get())

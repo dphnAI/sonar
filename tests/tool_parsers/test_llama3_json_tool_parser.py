@@ -24,10 +24,7 @@ def parser(llama_tokenizer):
 
 def test_extract_tool_calls_simple(parser):
     # Test with a simple tool call
-    model_output = (
-        'Here is the result: {"name": "getOpenIncidentsTool", '
-        '"parameters": {}} Would you like to know more?'
-    )
+    model_output = 'Here is the result: {"name": "getOpenIncidentsTool", "parameters": {}} Would you like to know more?'
     result = parser.extract_tool_calls(model_output, None)
 
     assert isinstance(result, ExtractedToolCallInformation)
@@ -41,9 +38,7 @@ def test_extract_tool_calls_simple(parser):
 
 def test_extract_tool_calls_with_arguments(parser):
     # Test with a tool call that has arguments
-    model_output = (
-        '{"name": "searchTool", "parameters": {"query": "test query", "limit": 10}}'
-    )
+    model_output = '{"name": "searchTool", "parameters": {"query": "test query", "limit": 10}}'
     result = parser.extract_tool_calls(model_output, None)
 
     assert result.tools_called is True
@@ -146,14 +141,7 @@ def test_extract_tool_calls_multiple_json_with_surrounding_text(parser):
 def test_extract_tool_calls_deeply_nested_json(parser):
     # Test with deeply nested JSON parameters (5 levels)
     model_output = (
-        '{"name": "complexTool", '
-        '"parameters": {'
-        '"level1": {'
-        '"level2": {'
-        '"level3": {'
-        '"level4": {'
-        '"value": "deep"'
-        "}}}}}}"
+        '{"name": "complexTool", "parameters": {"level1": {"level2": {"level3": {"level4": {"value": "deep"}}}}}}'
     )
     result = parser.extract_tool_calls(model_output, None)
 
@@ -216,9 +204,7 @@ def test_extract_tool_calls_with_quotes_and_brackets_in_string(parser):
 
 def test_extract_tool_calls_with_escaped_quotes_in_nested_json(parser):
     # Test with escaped quotes in deeply nested JSON
-    model_output = (
-        '{"name": "parserTool", "parameters": {"text": "He said \\"Hello {world}\\""}}'
-    )
+    model_output = '{"name": "parserTool", "parameters": {"text": "He said \\"Hello {world}\\""}}'
     result = parser.extract_tool_calls(model_output, None)
 
     assert result.tools_called is True

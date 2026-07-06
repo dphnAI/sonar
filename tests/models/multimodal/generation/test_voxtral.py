@@ -32,15 +32,10 @@ def _get_prompt(audio_assets: AudioTestAssets, question: str) -> list[int]:
     """Build a token-ID prompt via mistral_common for Aphrodite offline inference."""
     tokenizer = MistralTokenizer.from_pretrained(MODEL_NAME)
 
-    audios = [
-        Audio.from_file(str(asset.get_local_path()), strict=False)
-        for asset in audio_assets
-    ]
+    audios = [Audio.from_file(str(asset.get_local_path()), strict=False) for asset in audio_assets]
     audio_chunks = [AudioChunk.from_audio(audio) for audio in audios]
 
-    messages = [
-        UserMessage(content=[*audio_chunks, TextChunk(text=question)]).to_openai()
-    ]
+    messages = [UserMessage(content=[*audio_chunks, TextChunk(text=question)]).to_openai()]
     return tokenizer.apply_chat_template(messages=messages)
 
 
@@ -199,11 +194,7 @@ def test_hf_reference(hf_runner, aphrodite_runner, audio_assets: AudioTestAssets
         )
     assert hf_outputs[0][1], "HF Transformers produced empty output"
 
-    print(
-        f"HF Reference Comparison\n"
-        f"  Aphrodite: {aphrodite_outputs[0][1]!r}\n"
-        f"  HF:   {hf_outputs[0][1]!r}"
-    )
+    print(f"HF Reference Comparison\n  Aphrodite: {aphrodite_outputs[0][1]!r}\n  HF:   {hf_outputs[0][1]!r}")
     check_logprobs_close(
         outputs_0_lst=aphrodite_outputs,
         outputs_1_lst=hf_outputs,

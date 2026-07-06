@@ -93,9 +93,7 @@ def iter_fa4_mla_prefill_compile_specs(
 ) -> Iterator[FlashAttentionCuTeDSLCompileSpec]:
     """Yield compile-only FA4 MLA prefill requests for this fixed setup."""
 
-    arch_family = _fa4_architecture_family_from_compute_capability(
-        *torch.cuda.get_device_capability()
-    )
+    arch_family = _fa4_architecture_family_from_compute_capability(*torch.cuda.get_device_capability())
     if not _supports_fa4_mla_prefill(ctx, arch_family):
         return
 
@@ -183,11 +181,7 @@ def _supports_fa4_mla_prefill(
     ctx: FA4MLAPrefillCompileContext,
     arch_family: FA4ArchitectureFamily,
 ) -> bool:
-    return (
-        ctx.dtype in FA4_STANDARD_DTYPES
-        and ctx.num_heads > 0
-        and (arch_family != "sm120" or ctx.num_splits == 1)
-    )
+    return ctx.dtype in FA4_STANDARD_DTYPES and ctx.num_heads > 0 and (arch_family != "sm120" or ctx.num_splits == 1)
 
 
 # Map CUDA capability to the FA4 arch family used by warmup checks.

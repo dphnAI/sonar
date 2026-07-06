@@ -130,11 +130,7 @@ def test_mistral_edge_case(tokenizer, truth):
 @pytest.fixture
 def skip_special_tokens(request, tokenizer_name) -> Generator[bool, Any, None]:
     if "mistral" in tokenizer_name:
-        yield (
-            True
-            if request.param
-            else pytest.skip("mistral doesn't support skip_special_tokens=False")
-        )
+        yield (True if request.param else pytest.skip("mistral doesn't support skip_special_tokens=False"))
     else:
         yield bool(request.param)
 
@@ -164,9 +160,7 @@ def test_decode_streaming(
         tokenizer.add_special_tokens(
             {
                 "additional_special_tokens": [
-                    at
-                    for at in tokenizer._tokenizer.get_added_tokens_decoder().values()
-                    if at.special
+                    at for at in tokenizer._tokenizer.get_added_tokens_decoder().values() if at.special
                 ]
             }
         )
@@ -182,14 +176,10 @@ def test_decode_streaming(
         truth_tokens.insert(0, tokenizer.bos_token_id)
     truth_tokens.append(tokenizer.eos_token_id)
 
-    new_truth = tokenizer.decode(
-        truth_tokens, skip_special_tokens=skip_special_tokens, **extra_decode_args
-    )
+    new_truth = tokenizer.decode(truth_tokens, skip_special_tokens=skip_special_tokens, **extra_decode_args)
 
     if with_prompt:
-        num_prompt_tokens = len(
-            tokenizer(truth[: len(truth) // 2], add_special_tokens=False).input_ids
-        )
+        num_prompt_tokens = len(tokenizer(truth[: len(truth) // 2], add_special_tokens=False).input_ids)
         if tokenizer.bos_token_id is not None:
             num_prompt_tokens += 1
 

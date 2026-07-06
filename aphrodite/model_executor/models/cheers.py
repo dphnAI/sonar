@@ -388,9 +388,9 @@ class CheersUndProjector(nn.Module):
         height = width = int(x.size(1) ** 0.5)
         x = x.permute(0, 2, 1).unflatten(-1, (height, width))
         batch_size, dim, height, width = x.shape
-        unfolded = x.unfold(
-            2, self.compression_factor[0], self.compression_factor[0]
-        ).unfold(3, self.compression_factor[1], self.compression_factor[1])
+        unfolded = x.unfold(2, self.compression_factor[0], self.compression_factor[0]).unfold(
+            3, self.compression_factor[1], self.compression_factor[1]
+        )
         unfolded = unfolded.contiguous().view(
             batch_size,
             dim,
@@ -524,9 +524,7 @@ class CheersMultiModalProcessor(BaseMultiModalProcessor[CheersProcessingInfo]):
         tokenizer = self.info.get_tokenizer()
         image_token_id = tokenizer.get_vocab().get("<|image_pad|>")
         if image_token_id is None:
-            raise ValueError(
-                "Image token '<|image_pad|>' not found in tokenizer vocabulary"
-            )
+            raise ValueError("Image token '<|image_pad|>' not found in tokenizer vocabulary")
 
         def get_replacement_cheers(item_idx: int):
             num_patches = (image_size // patch_size) ** 2
@@ -556,9 +554,7 @@ class CheersMultiModalProcessor(BaseMultiModalProcessor[CheersProcessingInfo]):
     info=CheersProcessingInfo,
     dummy_inputs=CheersDummyInputsBuilder,
 )
-class CheersForConditionalGeneration(
-    nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP
-):
+class CheersForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP):
     """
     Cheers: A unified multimodal model for image understanding and generation.
 
@@ -593,9 +589,7 @@ class CheersForConditionalGeneration(
         multimodal_config = aphrodite_config.model_config.multimodal_config
 
         if type(config).__name__ not in ("CheersConfig", "UMMConfig"):
-            raise ValueError(
-                f"Expected CheersConfig or UMMConfig, got {type(config).__name__}."
-            )
+            raise ValueError(f"Expected CheersConfig or UMMConfig, got {type(config).__name__}.")
 
         self.config = config
         self.multimodal_config = multimodal_config
@@ -656,13 +650,9 @@ class CheersForConditionalGeneration(
                 prefix=maybe_prefix(prefix, "und_projector"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> CheersImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> CheersImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         if pixel_values is None:
             return None
@@ -671,9 +661,7 @@ class CheersForConditionalGeneration(
             pixel_values=pixel_values,
         )
 
-    def _process_image_input(
-        self, image_input: CheersImageInputs
-    ) -> tuple[torch.Tensor, ...]:
+    def _process_image_input(self, image_input: CheersImageInputs) -> tuple[torch.Tensor, ...]:
         """Process image inputs through VAE → SigLIP → projector pipeline.
 
         HF native path: pixel_values → VAE.encode(t=1.0) → vae_decoder_projector
@@ -683,9 +671,7 @@ class CheersForConditionalGeneration(
 
         if pixel_values.ndim == 5:
             batch_size, num_images, channels, height, width = pixel_values.shape
-            pixel_values = pixel_values.reshape(
-                batch_size * num_images, channels, height, width
-            )
+            pixel_values = pixel_values.reshape(batch_size * num_images, channels, height, width)
 
         with torch.no_grad():
             vae_dtype = next(self.vae_model.parameters()).dtype

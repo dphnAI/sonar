@@ -5,8 +5,6 @@ import pytest
 import torch
 
 import aphrodite.config
-from tests.compile.backend import TestBackend
-from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
 from aphrodite.compilation.passes.fusion.mla_rope_kvcache_cat_fusion import (
     MLARoPEKVCacheCatFusionPass,
@@ -17,12 +15,12 @@ from aphrodite.compilation.passes.utility.fix_functionalization import (
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     CacheConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
 )
 from aphrodite.forward_context import get_forward_context, set_forward_context
 from aphrodite.model_executor.layers.attention import MLAAttention
@@ -39,6 +37,8 @@ from aphrodite.v1.attention.backend import (
 )
 from aphrodite.v1.attention.backends.fa_utils import flash_attn_supports_mla
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from tests.compile.backend import TestBackend
+from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 INDEX_SELECT_OP = torch.ops.aten.index.Tensor
 APHRODITE_UNIFIED_MLA_KV_CACHE_UPDATE_OP = torch.ops.aphrodite.unified_mla_kv_cache_update
@@ -142,9 +142,7 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
 
         # Keep both the string dtype (for ops) and torch dtype (for tensors)
         self.kv_cache_dtype_str = aphrodite_config.cache_config.cache_dtype
-        self.kv_cache_dtype = (
-            FP8_DTYPE if self.kv_cache_dtype_str.startswith("fp8") else self.dtype
-        )
+        self.kv_cache_dtype = FP8_DTYPE if self.kv_cache_dtype_str.startswith("fp8") else self.dtype
 
         # Initialize attn MetadataBuilder
         self.builder = self.attn_backend.get_builder_cls()(
@@ -175,9 +173,7 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
             kv_cache_stride_order = tuple(range(len(kv_cache_shape)))
 
         kv_cache_shape = tuple(kv_cache_shape[i] for i in kv_cache_stride_order)
-        inv_order = [
-            kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))
-        ]
+        inv_order = [kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))]
 
         raw_tensor = torch.zeros(
             num_blocks * self.block_size * self.num_kv_heads * self.head_size,
@@ -190,9 +186,7 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
         self.mla_attn.kv_cache = kv_cache
 
         # Build attn metadata
-        attn_metadata = self.builder.build(
-            common_prefix_len=0, common_attn_metadata=common_attn_metadata
-        )
+        attn_metadata = self.builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
         return attn_metadata
 
@@ -210,9 +204,7 @@ class MLARoPEKVCacheCatTestModel(torch.nn.Module):
         q = q.view(-1, self.num_heads, self.qk_head_dim)
         k_pe = k_pe.unsqueeze(1)
 
-        q[..., self.qk_nope_head_dim :], k_pe = self.rotary_emb(
-            positions, q[..., self.qk_nope_head_dim :], k_pe
-        )
+        q[..., self.qk_nope_head_dim :], k_pe = self.rotary_emb(positions, q[..., self.qk_nope_head_dim :], k_pe)
 
         dummy = torch.ops.aphrodite.unified_mla_kv_cache_update(
             kv_c,
@@ -366,12 +358,8 @@ def test_mla_rope_kvcache_cat_fusion(
         with set_forward_context(None, aphrodite_config):
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
-            forward_context.slot_mapping = {
-                model.layer_name: attn_metadata.slot_mapping
-            }
-            q_unfused, kv_c_unfused, k_pe_unfused, dummy = model(
-                qkv_unfused, pos_unfused
-            )
+            forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
+            q_unfused, kv_c_unfused, k_pe_unfused, dummy = model(qkv_unfused, pos_unfused)
             attn_layer = forward_context.no_compile_layers[model.layer_name]
             kv_cache_unfused = attn_layer.kv_cache.clone()
         del dummy
@@ -383,9 +371,7 @@ def test_mla_rope_kvcache_cat_fusion(
             model_fused = torch.compile(model, backend=backend)
             forward_context = get_forward_context()
             attn_metadata = model.build_attn_metadata(T)
-            forward_context.slot_mapping = {
-                model.layer_name: attn_metadata.slot_mapping
-            }
+            forward_context.slot_mapping = {model.layer_name: attn_metadata.slot_mapping}
             q_fused, kv_c_fused, k_pe_fused, dummy = model_fused(qkv_lora, pos)
             attn_layer = forward_context.no_compile_layers[model.layer_name]
             kv_cache_fused = attn_layer.kv_cache

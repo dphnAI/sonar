@@ -162,9 +162,7 @@ def _make_int4_moe_weights(
         for i in range(2 * N):
             for j in range(K):
                 group_idx = 0 if group_size == -1 else (j // group_size)
-                w13_ref[e, i, j] = (
-                    w13_int4[e, i, j].float() * w13_scales[e, i, group_idx].float()
-                )
+                w13_ref[e, i, j] = w13_int4[e, i, j].float() * w13_scales[e, i, group_idx].float()
                 if has_bias and w13_bias is not None:
                     w13_ref[e, i, j] += w13_bias[e, i].float()
 
@@ -172,9 +170,7 @@ def _make_int4_moe_weights(
         for i in range(K):
             for j in range(N):
                 group_idx = 0 if group_size == -1 else (j // group_size)
-                w2_ref[e, i, j] = (
-                    w2_int4[e, i, j].float() * w2_scales[e, i, group_idx].float()
-                )
+                w2_ref[e, i, j] = w2_int4[e, i, j].float() * w2_scales[e, i, group_idx].float()
                 if has_bias and w2_bias is not None:
                     w2_ref[e, i, j] += w2_bias[e, i].float()
 
@@ -214,11 +210,7 @@ def ref_int4_moe(
             # w2: [K, N], hidden: [B, N] -> output: [B, K]
             out[mask] = torch.matmul(hidden, w2_ref[i].transpose(0, 1))
 
-    return (
-        (out.view(B, -1, w2_ref.shape[1]) * topk_weight_flat.view(B, -1, 1))
-        .sum(dim=1)
-        .to(a.dtype)
-    )
+    return (out.view(B, -1, w2_ref.shape[1]) * topk_weight_flat.view(B, -1, 1)).sum(dim=1).to(a.dtype)
 
 
 NUM_TOKENS = [1, 2, 64, 128]

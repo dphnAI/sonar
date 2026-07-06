@@ -49,9 +49,7 @@ class TestResponsePreviousInputToHarmony:
         assert len(messages) == 1
         assert messages[0].author.role == Role.TOOL
         assert messages[0].author.name == "functions.get_weather"
-        assert (
-            messages[0].content[0].text == "The weather in San Francisco is sunny, 72°F"
-        )
+        assert messages[0].content[0].text == "The weather in San Francisco is sunny, 72°F"
         assert messages[0].channel == "commentary"
 
     def test_tool_message_with_array_content(self):
@@ -104,15 +102,11 @@ class TestHarmonyToResponseOutput:
         unlike analysis channel content which is hidden reasoning.
         See: https://cookbook.openai.com/articles/openai-harmony
         """
-        message = Message.from_role_and_content(
-            Role.ASSISTANT, "I will now search for the weather information."
-        )
+        message = Message.from_role_and_content(Role.ASSISTANT, "I will now search for the weather information.")
         message = message.with_channel("commentary")
         # recipient is None by default, representing a preamble
 
-        output_items = harmony_to_response_output(
-            message, frozenset(), incomplete=incomplete
-        )
+        output_items = harmony_to_response_output(message, frozenset(), incomplete=incomplete)
 
         assert len(output_items) == 1
         assert isinstance(output_items[0], ResponseOutputMessage)
@@ -121,10 +115,7 @@ class TestHarmonyToResponseOutput:
         assert output_items[0].status == ("incomplete" if incomplete else "completed")
         assert len(output_items[0].content) == 1
         assert output_items[0].content[0].type == "output_text"
-        assert (
-            output_items[0].content[0].text
-            == "I will now search for the weather information."
-        )
+        assert output_items[0].content[0].text == "I will now search for the weather information."
 
     @pytest.mark.parametrize("channel", ["commentary", "comment", "analysis", "final"])
     @pytest.mark.parametrize(
@@ -136,9 +127,7 @@ class TestHarmonyToResponseOutput:
         ],
     )
     @pytest.mark.parametrize("incomplete", [False, True])
-    def test_function_recipient_creates_function_call(
-        self, channel, recipient, fn_names, expected_name, incomplete
-    ):
+    def test_function_recipient_creates_function_call(self, channel, recipient, fn_names, expected_name, incomplete):
         """Function recipients create function calls across channels."""
         content = '{"location": "San Francisco"}'
         if recipient == "math.sum":
@@ -148,9 +137,7 @@ class TestHarmonyToResponseOutput:
         message = message.with_channel(channel)
         message = message.with_recipient(recipient)
 
-        output_items = harmony_to_response_output(
-            message, fn_names, incomplete=incomplete
-        )
+        output_items = harmony_to_response_output(message, fn_names, incomplete=incomplete)
 
         assert len(output_items) == 1
         assert isinstance(output_items[0], ResponseFunctionToolCall)
@@ -171,17 +158,13 @@ class TestHarmonyToResponseOutput:
         ],
     )
     @pytest.mark.parametrize("incomplete", [False, True])
-    def test_builtin_recipient_creates_reasoning(
-        self, channel, recipient, content, incomplete
-    ):
+    def test_builtin_recipient_creates_reasoning(self, channel, recipient, content, incomplete):
         """Built-in recipients create reasoning items."""
         message = Message.from_role_and_content(Role.ASSISTANT, content)
         message = message.with_channel(channel)
         message = message.with_recipient(recipient)
 
-        output_items = harmony_to_response_output(
-            message, frozenset(), incomplete=incomplete
-        )
+        output_items = harmony_to_response_output(message, frozenset(), incomplete=incomplete)
 
         assert len(output_items) == 1
         assert isinstance(output_items[0], ResponseReasoningItem)
@@ -226,9 +209,7 @@ class TestHarmonyToResponseOutput:
         message = message.with_channel(channel)
         message = message.with_recipient(recipient)
 
-        output_items = harmony_to_response_output(
-            message, fn_names, incomplete=incomplete
-        )
+        output_items = harmony_to_response_output(message, fn_names, incomplete=incomplete)
 
         assert len(output_items) == 1
         assert isinstance(output_items[0], McpCall)
@@ -241,15 +222,11 @@ class TestHarmonyToResponseOutput:
     @pytest.mark.parametrize("incomplete", [False, True])
     def test_browser_search_recipient_respects_incomplete(self, incomplete):
         """browser.search emits a web search call unless the item is incomplete."""
-        message = Message.from_role_and_content(
-            Role.ASSISTANT, '{"query": "weather in San Francisco"}'
-        )
+        message = Message.from_role_and_content(Role.ASSISTANT, '{"query": "weather in San Francisco"}')
         message = message.with_channel("commentary")
         message = message.with_recipient("browser.search")
 
-        output_items = harmony_to_response_output(
-            message, frozenset(), incomplete=incomplete
-        )
+        output_items = harmony_to_response_output(message, frozenset(), incomplete=incomplete)
 
         if incomplete:
             assert output_items == []
@@ -313,9 +290,7 @@ class TestHarmonyToResponseOutput:
 
     def test_analysis_channel_creates_reasoning(self):
         """Test that analysis channel creates reasoning items."""
-        message = Message.from_role_and_content(
-            Role.ASSISTANT, "Analyzing the problem step by step..."
-        )
+        message = Message.from_role_and_content(Role.ASSISTANT, "Analyzing the problem step by step...")
         message = message.with_channel("analysis")
 
         output_items = harmony_to_response_output(message, frozenset())
@@ -323,9 +298,7 @@ class TestHarmonyToResponseOutput:
         assert len(output_items) == 1
         assert isinstance(output_items[0], ResponseReasoningItem)
         assert output_items[0].type == "reasoning"
-        assert (
-            output_items[0].content[0].text == "Analyzing the problem step by step..."
-        )
+        assert output_items[0].content[0].text == "Analyzing the problem step by step..."
 
     def test_non_assistant_message_returns_empty(self):
         """Test that non-assistant messages return empty list.

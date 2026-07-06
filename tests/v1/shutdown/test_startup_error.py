@@ -6,17 +6,17 @@ import inspect
 
 import pytest
 
-from tests.utils import wait_for_gpu_memory_to_clear
-from tests.v1.shutdown.utils import (
-    SHUTDOWN_TEST_THRESHOLD_BYTES,
-    SHUTDOWN_TEST_TIMEOUT_SEC,
-)
 from aphrodite import LLM
 from aphrodite.distributed import get_tensor_model_parallel_rank
 from aphrodite.engine.arg_utils import AsyncEngineArgs
 from aphrodite.model_executor.models.llama import LlamaForCausalLM
 from aphrodite.platforms import current_platform
 from aphrodite.v1.engine.async_llm import AsyncLLM
+from tests.utils import wait_for_gpu_memory_to_clear
+from tests.v1.shutdown.utils import (
+    SHUTDOWN_TEST_THRESHOLD_BYTES,
+    SHUTDOWN_TEST_TIMEOUT_SEC,
+)
 
 MODELS = ["hmellor/tiny-random-LlamaForCausalLM"]
 
@@ -63,9 +63,7 @@ def test_async_llm_startup_error(
     # Monkeypatch an error in the model.
     monkeypatch.setattr(LlamaForCausalLM, failing_method, evil_method)
 
-    engine_args = AsyncEngineArgs(
-        model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size
-    )
+    engine_args = AsyncEngineArgs(model=model, enforce_eager=True, tensor_parallel_size=tensor_parallel_size)
 
     # Confirm we get an exception.
     with pytest.raises(Exception, match=r"initialization fail(ed|ure)"):
@@ -111,9 +109,7 @@ def test_llm_startup_error(
 
         with pytest.raises(
             Exception,
-            match=r"initialization fail(ed|ure)"
-            if enable_multiprocessing
-            else "Simulated Error in startup!",
+            match=r"initialization fail(ed|ure)" if enable_multiprocessing else "Simulated Error in startup!",
         ):
             _ = LLM(
                 model=model,

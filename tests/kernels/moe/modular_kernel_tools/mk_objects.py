@@ -74,9 +74,7 @@ class ExpertInfo:
     needs_aiter: bool = False
 
 
-PREPARE_FINALIZE_INFO: dict[
-    mk.FusedMoEPrepareAndFinalizeModular, PrepareFinalizeInfo
-] = {}
+PREPARE_FINALIZE_INFO: dict[mk.FusedMoEPrepareAndFinalizeModular, PrepareFinalizeInfo] = {}
 EXPERT_INFO: dict[mk.FusedMoEExpertsModular, ExpertInfo] = {}
 MK_ALL_PREPARE_FINALIZE_TYPES: list[mk.FusedMoEPrepareAndFinalizeModular] = []
 MK_MULTI_GPU_PREPARE_FINALIZE_TYPES: list[mk.FusedMoEPrepareAndFinalizeModular] = []
@@ -471,10 +469,7 @@ def make_fused_experts(
     num_dispatchers: int,
     N: int,
 ) -> mk.FusedMoEExpertsModular:
-    if (
-        fused_experts_type.activation_format()
-        == mk.FusedMoEActivationFormat.BatchedExperts
-    ):
+    if fused_experts_type.activation_format() == mk.FusedMoEActivationFormat.BatchedExperts:
         kwargs = {
             "moe_config": moe,
             "quant_config": quant_config,

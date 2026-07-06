@@ -6,9 +6,9 @@ import os
 
 import pytest
 
-from tests.models.utils import check_logprobs_close
 from aphrodite import LLM, SamplingParams
 from aphrodite.platforms import current_platform
+from tests.models.utils import check_logprobs_close
 
 if not current_platform.is_cpu():
     pytest.skip("skipping CPU-only tests", allow_module_level=True)
@@ -48,10 +48,7 @@ def _make_llm(**overrides) -> LLM:
 
 def _tuples(outputs) -> list[tuple[list[int], str, object]]:
     """(token_ids, text, sample_logprobs) per request, for check_logprobs_close."""
-    return [
-        (list(o.outputs[0].token_ids), o.outputs[0].text, o.outputs[0].logprobs)
-        for o in outputs
-    ]
+    return [(list(o.outputs[0].token_ids), o.outputs[0].text, o.outputs[0].logprobs) for o in outputs]
 
 
 @pytest.fixture(scope="module")
@@ -101,8 +98,7 @@ def test_prefix_cache_hit_matches_cold_cache(full_prefill_refs):
     del llm
 
     assert warm_out.num_cached_tokens > 0, (
-        "expected a prefix-cache hit but num_cached_tokens=0; "
-        "PREFIX_PROMPT may be shorter than one cache block"
+        "expected a prefix-cache hit but num_cached_tokens=0; PREFIX_PROMPT may be shorter than one cache block"
     )
     check_logprobs_close(
         outputs_0_lst=[ref],

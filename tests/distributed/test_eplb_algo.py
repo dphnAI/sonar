@@ -25,9 +25,7 @@ def test_basic_rebalance():
     num_nodes = 2
     num_gpus = 8
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     log2phy, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Verify output shapes
@@ -35,21 +33,15 @@ def test_basic_rebalance():
         2,
         16,
     ), f"Expected `phy2log` shape (2, 16), got {phy2log.shape}"
-    assert log2phy.shape[0] == 2, (
-        f"Expected `log2phy` first dimension 2, got {log2phy.shape[0]}"
-    )
-    assert log2phy.shape[1] == 12, (
-        f"Expected `log2phy` second dimension 12, got {log2phy.shape[1]}"
-    )
+    assert log2phy.shape[0] == 2, f"Expected `log2phy` first dimension 2, got {log2phy.shape[0]}"
+    assert log2phy.shape[1] == 12, f"Expected `log2phy` second dimension 12, got {log2phy.shape[1]}"
     assert logcnt.shape == (
         2,
         12,
     ), f"Expected `logcnt` shape (2, 12), got {logcnt.shape}"
 
     # Verify physical to logical expert mapping range is correct
-    assert torch.all(phy2log >= 0) and torch.all(phy2log < 12), (
-        "Physical to logical mapping should be in range [0, 12)"
-    )
+    assert torch.all(phy2log >= 0) and torch.all(phy2log < 12), "Physical to logical mapping should be in range [0, 12)"
 
     # Verify expert count reasonableness
     assert torch.all(logcnt >= 1), "Each logical expert should have at least 1 replica"
@@ -66,9 +58,7 @@ def test_basic_rebalance():
     )
     assert torch.all(phy2log == expected_phy2log)
 
-    expected_logcnt = torch.tensor(
-        [[1, 2, 1, 1, 2, 2, 1, 1, 1, 1, 2, 1], [1, 2, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1]]
-    )
+    expected_logcnt = torch.tensor([[1, 2, 1, 1, 2, 2, 1, 1, 1, 1, 2, 1], [1, 2, 1, 1, 1, 2, 2, 1, 2, 1, 1, 1]])
     assert torch.all(logcnt == expected_logcnt)
 
 
@@ -80,9 +70,7 @@ def test_single_gpu_case():
     num_nodes = 1
     num_gpus = 1
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     log2phy, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Verify shapes
@@ -103,9 +91,7 @@ def test_equal_weights():
     num_nodes = 2
     num_gpus = 4
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     _, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Verify shapes
@@ -113,10 +99,7 @@ def test_equal_weights():
     assert logcnt.shape == (1, 8)
 
     # With equal weights, each expert should have exactly one replica
-    assert torch.all(logcnt == 1), (
-        "With equal weights and no replication, "
-        "each expert should have exactly 1 replica"
-    )
+    assert torch.all(logcnt == 1), "With equal weights and no replication, each expert should have exactly 1 replica"
 
 
 def test_extreme_weight_imbalance():
@@ -127,9 +110,7 @@ def test_extreme_weight_imbalance():
     num_nodes = 2
     num_gpus = 4
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     _, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Verify shapes
@@ -137,9 +118,7 @@ def test_extreme_weight_imbalance():
     assert logcnt.shape == (1, 8)
 
     # Expert with highest weight (index 0) should have more replicas
-    assert logcnt[0, 0] > logcnt[0, 1], (
-        "Expert with highest weight should have more replicas"
-    )
+    assert logcnt[0, 0] > logcnt[0, 1], "Expert with highest weight should have more replicas"
 
 
 def test_multiple_layers():
@@ -156,9 +135,7 @@ def test_multiple_layers():
     num_nodes = 2
     num_gpus = 4
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     _, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Verify shapes
@@ -170,9 +147,7 @@ def test_multiple_layers():
         assert torch.all(phy2log[layer] >= 0) and torch.all(phy2log[layer] < 6), (
             f"Layer {layer} physical to logical mappingshould be in range [0, 6)"
         )
-        assert torch.sum(logcnt[layer]) == num_replicas, (
-            f"Layer {layer} total replicas should be {num_replicas}"
-        )
+        assert torch.sum(logcnt[layer]) == num_replicas, f"Layer {layer} total replicas should be {num_replicas}"
 
 
 def test_parameter_validation():
@@ -205,9 +180,7 @@ def test_small_scale_hierarchical():
     num_nodes = 2  # 2 nodes
     num_gpus = 4  # 4 GPUs
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     _, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Verify basic constraints
@@ -218,9 +191,7 @@ def test_small_scale_hierarchical():
 
     # Expert with highest weight should have more replicas
     max_weight_expert = torch.argmax(weight[0])
-    assert logcnt[0, max_weight_expert] >= 2, (
-        "Highest weight expert should have multiple replicas"
-    )
+    assert logcnt[0, max_weight_expert] >= 2, "Highest weight expert should have multiple replicas"
 
 
 def test_global_load_balance_fallback():
@@ -233,9 +204,7 @@ def test_global_load_balance_fallback():
     num_nodes = 2
     num_gpus = 4
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     _, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Should work normally, just using global load balancing strategy
@@ -256,9 +225,7 @@ def test_device_compatibility(device):
     num_nodes = 1
     num_gpus = 2
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     _, logcnt = compute_logical_maps(phy2log, weight.shape[-1])
 
     # Function will convert to CPU internally, but should handle different
@@ -271,9 +238,7 @@ def test_additional_cases():
     """Test more edge cases and different parameter combinations"""
 
     # Test case 1: Large-scale distributed setup
-    weight1 = torch.tensor(
-        [[50, 100, 75, 120, 90, 60, 80, 110, 40, 70, 95, 85, 65, 55, 45, 35]]
-    )
+    weight1 = torch.tensor([[50, 100, 75, 120, 90, 60, 80, 110, 40, 70, 95, 85, 65, 55, 45, 35]])
     phy2log1 = DefaultEplbPolicy.rebalance_experts(weight1, 24, 8, 4, 8)
     _, logcnt1 = compute_logical_maps(phy2log1, weight1.shape[-1])
 
@@ -322,13 +287,9 @@ def test_compute_logical_maps_with_negative_indices():
     assert log2phy.shape == (num_layers, num_logical_experts, 1)
 
     expected_logcnt = torch.ones(num_layers, num_logical_experts, dtype=phy2log.dtype)
-    assert torch.all(logcnt == expected_logcnt), (
-        f"Expected that all replica counts == 1, got {logcnt}"
-    )
+    assert torch.all(logcnt == expected_logcnt), f"Expected that all replica counts == 1, got {logcnt}"
 
-    assert torch.all(log2phy >= 0), (
-        "log2phy should only contain valid physical indices, not -1"
-    )
+    assert torch.all(log2phy >= 0), "log2phy should only contain valid physical indices, not -1"
 
     assert log2phy[0, 0, 0] == 0
     assert log2phy[0, 1, 0] == 1
@@ -349,9 +310,7 @@ if __name__ == "__main__":
     num_nodes = 2
     num_gpus = 8
 
-    phy2log = DefaultEplbPolicy.rebalance_experts(
-        weight, num_replicas, num_groups, num_nodes, num_gpus
-    )
+    phy2log = DefaultEplbPolicy.rebalance_experts(weight, num_replicas, num_groups, num_nodes, num_gpus)
     print(phy2log)
 
     test_basic_rebalance()
@@ -410,14 +369,11 @@ def _validate_intragpu_rearrangement(
             new_ranks_for_expert.setdefault(v, []).append(r)
         for expert in remained:
             old_pos = old_list.index(expert)
-            assert post_list[old_pos] == expert, (
-                f"Expert {expert} on GPU {gpu_idx} should stay at old slot {old_pos}"
-            )
+            assert post_list[old_pos] == expert, f"Expert {expert} on GPU {gpu_idx} should stay at old slot {old_pos}"
             # Rank at preserved slot must be one of the ranks
             # the expert has in new mapping
             assert post_rnk.tolist()[old_pos] in new_ranks_for_expert[expert], (
-                f"Rank for expert {expert} at preserved slot on GPU {gpu_idx} "
-                "must come from new mapping"
+                f"Rank for expert {expert} at preserved slot on GPU {gpu_idx} must come from new mapping"
             )
 
 
@@ -478,9 +434,7 @@ def test_preserve_intragpu_slots(
     """Experts that stay on a GPU keep their old slots; incoming not lost."""
     phy_replicas_idx = _make_phy_replicas_idx_from_phy2log(new_phy2log)
 
-    post_phy2log = DefaultEplbPolicy.preserve_intragpu_slots(
-        new_phy2log, num_ranks, old_phy2log
-    )
+    post_phy2log = DefaultEplbPolicy.preserve_intragpu_slots(new_phy2log, num_ranks, old_phy2log)
     post_phy_replicas_idx = _make_phy_replicas_idx_from_phy2log(post_phy2log)
 
     # Shapes preserved

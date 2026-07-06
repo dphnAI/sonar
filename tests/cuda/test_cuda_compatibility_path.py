@@ -28,10 +28,7 @@ class TestCudaCompatibilityEnvParsing:
         monkeypatch.delenv("APHRODITE_ENABLE_CUDA_COMPATIBILITY", raising=False)
         monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
         _maybe_set_cuda_compatibility_path()
-        assert (
-            "LD_LIBRARY_PATH" not in os.environ
-            or os.environ.get("LD_LIBRARY_PATH", "") == ""
-        )
+        assert "LD_LIBRARY_PATH" not in os.environ or os.environ.get("LD_LIBRARY_PATH", "") == ""
 
     @pytest.mark.parametrize("value", ["0", "false", "False", "no", ""])
     def test_disabled_values(self, monkeypatch, value):
@@ -105,8 +102,7 @@ class TestCudaCompatibilityPathDetection:
             patch("aphrodite.env_override._get_torch_cuda_version", return_value="12.8"),
             patch(
                 "aphrodite.env_override.os.path.isdir",
-                side_effect=lambda p: p == "/usr/local/cuda-12.8/compat"
-                or os.path.isdir(p),
+                side_effect=lambda p: p == "/usr/local/cuda-12.8/compat" or os.path.isdir(p),
             ),
         ):
             _maybe_set_cuda_compatibility_path()

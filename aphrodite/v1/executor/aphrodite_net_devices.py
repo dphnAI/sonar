@@ -55,9 +55,7 @@ def normalize_pci(addr: str) -> tuple[int, int, int, int]:
         bus = int(parts[1], 16)
         device = int(parts[2], 16)
     else:
-        raise ValueError(
-            f"invalid PCI BDF (want domain:bus:dev.fn or bus:dev.fn): {addr!r}"
-        )
+        raise ValueError(f"invalid PCI BDF (want domain:bus:dev.fn or bus:dev.fn): {addr!r}")
 
     if bus > 0xFF or device > 0x1F:
         raise ValueError(f"PCI bus or device out of range: {addr!r}")
@@ -112,9 +110,7 @@ def rdma_name_for_nic_pci(nic_pci: tuple[int, int, int, int]) -> str:
                 return name
         except ValueError:
             continue
-    raise RuntimeError(
-        f"No /sys/class/infiniband device for NIC PCI {nic_pci}; have entries: {names}"
-    )
+    raise RuntimeError(f"No /sys/class/infiniband device for NIC PCI {nic_pci}; have entries: {names}")
 
 
 def parse_nic_selection_vars(raw: str) -> list[tuple[str, str]]:
@@ -160,10 +156,7 @@ def set_worker_gpu_nic_mapping(local_rank: int) -> None:
     gpu_bdf = pci_by_index[physical_id]
     gpu_key = normalize_pci(gpu_bdf)
     if gpu_key not in mapping:
-        keys_fmt = ", ".join(
-            f"{d:04x}:{b:02x}:{dev:02x}.{fn}"
-            for d, b, dev, fn in sorted(mapping.keys())
-        )
+        keys_fmt = ", ".join(f"{d:04x}:{b:02x}:{dev:02x}.{fn}" for d, b, dev, fn in sorted(mapping.keys()))
         raise RuntimeError(
             f"No APHRODITE_GPU_NIC_PCIE_MAPPING entry for GPU PCI {gpu_bdf} "
             f"(worker local_rank={local_rank}); mapped GPUs: {keys_fmt}"
@@ -227,13 +220,11 @@ def set_worker_net_device(local_rank: int, aphrodite_config: AphroditeConfig) ->
     has_selection_vars = bool(envs.APHRODITE_NIC_SELECTION_VARS.strip())
     if has_pcie_mapping and not has_selection_vars:
         raise RuntimeError(
-            "APHRODITE_GPU_NIC_PCIE_MAPPING is set but APHRODITE_NIC_SELECTION_VARS "
-            "is not; both must be set together."
+            "APHRODITE_GPU_NIC_PCIE_MAPPING is set but APHRODITE_NIC_SELECTION_VARS is not; both must be set together."
         )
     if has_selection_vars and not has_pcie_mapping:
         raise RuntimeError(
-            "APHRODITE_NIC_SELECTION_VARS is set but APHRODITE_GPU_NIC_PCIE_MAPPING "
-            "is not; both must be set together."
+            "APHRODITE_NIC_SELECTION_VARS is set but APHRODITE_GPU_NIC_PCIE_MAPPING is not; both must be set together."
         )
     # No-op when neither env var is present.
     if not has_pcie_mapping and not has_selection_vars:

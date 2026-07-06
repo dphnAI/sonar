@@ -116,8 +116,7 @@ def transfer_run_periodically(
                 torch.distributed.all_reduce(flag, group=eplb_cpu_group)
                 if int(flag.item()) != eplb_cpu_group.size():
                     logger.warning(
-                        "async worker (rank=%d): layer %d coordinated stop "
-                        "(flag_sum=%d, group_size=%d)",
+                        "async worker (rank=%d): layer %d coordinated stop (flag_sum=%d, group_size=%d)",
                         ep_rank,
                         layer_idx,
                         int(flag.item()),

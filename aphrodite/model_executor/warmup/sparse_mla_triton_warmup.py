@@ -123,9 +123,7 @@ def _warm_sparse_swa_prefill_metadata_kernel(
                 dtype=torch.int32,
                 device=device,
             )
-            prefill_gather_lens = torch.empty(
-                num_prefills, dtype=torch.int32, device=device
-            )
+            prefill_gather_lens = torch.empty(num_prefills, dtype=torch.int32, device=device)
             _compute_prefill_metadata_kernel[(1,)](
                 prefill_gather_lens,
                 seq_lens,
@@ -145,16 +143,11 @@ def _warm_prefill_chunk_metadata_kernel(
     from aphrodite.v1.attention.backends.mla.indexer import build_prefill_chunk_metadata
 
     num_reqs = 2
-    query_start_loc_cpu = torch.arange(
-        0, (num_reqs + 1) * query_len, query_len, dtype=torch.int32
-    )
+    query_start_loc_cpu = torch.arange(0, (num_reqs + 1) * query_len, query_len, dtype=torch.int32)
     query_start_loc = query_start_loc_cpu.to(device=device)
 
     uncompressed_seq_lens_cpu = torch.tensor(
-        [
-            compress_ratio * multiplier + query_len
-            for multiplier in _PREFILL_CHUNK_METADATA_SEQ_LEN_MULTIPLIERS
-        ],
+        [compress_ratio * multiplier + query_len for multiplier in _PREFILL_CHUNK_METADATA_SEQ_LEN_MULTIPLIERS],
         dtype=torch.int32,
     )
     compressed_seq_lens_cpu = uncompressed_seq_lens_cpu // compress_ratio
@@ -166,13 +159,10 @@ def _warm_prefill_chunk_metadata_kernel(
         device=device,
     )
 
-    offset_uncompressed_seq_lens = torch.empty(
-        num_reqs + 1, dtype=torch.int32, device=device
-    )[1:]
+    offset_uncompressed_seq_lens = torch.empty(num_reqs + 1, dtype=torch.int32, device=device)[1:]
     offset_uncompressed_seq_lens.copy_(uncompressed_seq_lens)
     query_slices = tuple(
-        slice(start, num_reqs * query_len + stop)
-        for start, stop in _PREFILL_CHUNK_METADATA_QUERY_SLICE_OFFSETS
+        slice(start, num_reqs * query_len + stop) for start, stop in _PREFILL_CHUNK_METADATA_QUERY_SLICE_OFFSETS
     )
     for warmup_uncompressed_seq_lens in (
         uncompressed_seq_lens,
@@ -217,9 +207,7 @@ def _warm_combine_topk_swa_indices_kernel(
             )
             topk_indices = topk_storage[1:].reshape(num_tokens, topk_width)
         else:
-            topk_indices = torch.full(
-                (num_tokens, topk_width), -1, dtype=torch.int32, device=device
-            )
+            topk_indices = torch.full((num_tokens, topk_width), -1, dtype=torch.int32, device=device)
         if topk > 0:
             topk_indices.copy_(
                 torch.arange(num_tokens * topk_width, dtype=torch.int32, device=device)
@@ -229,9 +217,7 @@ def _warm_combine_topk_swa_indices_kernel(
         return topk_indices
 
     query_start_loc = torch.tensor([0, num_tokens], dtype=torch.int32, device=device)
-    seq_lens = torch.tensor(
-        [window_size + num_tokens], dtype=torch.int32, device=device
-    )
+    seq_lens = torch.tensor([window_size + num_tokens], dtype=torch.int32, device=device)
     gather_lens = torch.tensor(
         [min(window_size + num_tokens, window_size + num_tokens - 1)],
         dtype=torch.int32,
@@ -250,9 +236,7 @@ def _warm_combine_topk_swa_indices_kernel(
         offset_gather,
     ) in _COMBINE_TOPK_SWA_INPUT_VARIANTS:
         warmup_topk_indices = _make_topk_indices(offset=offset_topk)
-        warmup_query_start_loc = (
-            offset_query_start_loc if offset_query_and_seq else query_start_loc
-        )
+        warmup_query_start_loc = offset_query_start_loc if offset_query_and_seq else query_start_loc
         warmup_seq_lens = offset_seq_lens if offset_query_and_seq else seq_lens
         warmup_gather_lens = offset_gather_lens if offset_gather else gather_lens
         n_values = (n,) if n == 1 else (n, n + 1)

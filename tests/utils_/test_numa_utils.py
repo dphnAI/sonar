@@ -217,9 +217,7 @@ def test_get_numactl_args_engine_core_baseline_single_node_shard():
     """Baseline (no PCT): single-NUMA shard -> single-node bind."""
     aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0, 1])
     assert (
-        numa_utils._get_numactl_enginecore_args(
-            aphrodite_config.parallel_config, local_rank=0
-        )
+        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
         == "--cpunodebind=0 --membind=0"
     )
 
@@ -232,9 +230,7 @@ def test_get_numactl_args_engine_core_baseline_spans_shard_numa_nodes():
         tensor_parallel_size=4,
     )
     assert (
-        numa_utils._get_numactl_enginecore_args(
-            aphrodite_config.parallel_config, local_rank=0
-        )
+        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
         == "--cpunodebind=0,1 --membind=0,1"
     )
 
@@ -254,12 +250,8 @@ def test_get_numactl_args_engine_core_pct_spans_shard_numa_nodes(monkeypatch):
         numa_bind_nodes=[0, 0, 1, 1],
         tensor_parallel_size=4,
     )
-    assert numa_utils._get_numactl_enginecore_args(
-        aphrodite_config.parallel_config, local_rank=0
-    ) == (
-        "--physcpubind="
-        "0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209"
-        " --membind=0,1"
+    assert numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0) == (
+        "--physcpubind=0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209 --membind=0,1"
     )
 
 
@@ -279,9 +271,7 @@ def test_get_numactl_args_engine_core_pct_dp_shard_picks_local_nodes(monkeypatch
     )
     # Shard 1 owns gpu_indices 2 and 3 -> nodes [1, 1] -> {1}.
     assert (
-        numa_utils._get_numactl_enginecore_args(
-            aphrodite_config.parallel_config, local_rank=0
-        )
+        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
         == "--physcpubind=64,65,80,81,192,193,208,209 --membind=1"
     )
 
@@ -305,12 +295,8 @@ def test_get_numactl_args_engine_core_pct_external_launcher_spans_local_nodes(
         distributed_executor_backend="external_launcher",
         tensor_parallel_size=8,
     )
-    assert numa_utils._get_numactl_enginecore_args(
-        aphrodite_config.parallel_config, local_rank=0
-    ) == (
-        "--physcpubind="
-        "0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209"
-        " --membind=0,1"
+    assert numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0) == (
+        "--physcpubind=0,1,16,17,64,65,80,81,128,129,144,145,192,193,208,209 --membind=0,1"
     )
 
 
@@ -324,9 +310,7 @@ def test_get_numactl_args_engine_core_baseline_multi_node_within_dp_spans_locals
         tensor_parallel_size=8,
     )
     assert (
-        numa_utils._get_numactl_enginecore_args(
-            aphrodite_config.parallel_config, local_rank=0
-        )
+        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
         == "--cpunodebind=0,1 --membind=0,1"
     )
 
@@ -348,9 +332,7 @@ def test_get_numactl_args_engine_core_skips_user_cpu_list(monkeypatch):
         tensor_parallel_size=4,
     )
     assert (
-        numa_utils._get_numactl_enginecore_args(
-            aphrodite_config.parallel_config, local_rank=0
-        )
+        numa_utils._get_numactl_enginecore_args(aphrodite_config.parallel_config, local_rank=0)
         == "--cpunodebind=0,1 --membind=0,1"
     )
 
@@ -396,9 +378,7 @@ def test_configure_subprocess_rejects_unknown_process_kind():
     aphrodite_config = _make_config(numa_bind=True, numa_bind_nodes=[0])
     with (
         pytest.raises(ValueError, match="process_kind"),
-        numa_utils.configure_subprocess(
-            aphrodite_config, local_rank=0, process_kind="bogus"
-        ),
+        numa_utils.configure_subprocess(aphrodite_config, local_rank=0, process_kind="bogus"),
     ):
         pass
 
@@ -413,9 +393,7 @@ def test_log_numactl_show(monkeypatch):
     monkeypatch.setattr(
         numa_utils.subprocess,
         "run",
-        lambda *args, **kwargs: SimpleNamespace(
-            stdout="policy: bind\nphyscpubind: 0 1 2 3\n", returncode=0
-        ),
+        lambda *args, **kwargs: SimpleNamespace(stdout="policy: bind\nphyscpubind: 0 1 2 3\n", returncode=0),
     )
 
     assert numa_utils._log_numactl_show("Worker_0") is True

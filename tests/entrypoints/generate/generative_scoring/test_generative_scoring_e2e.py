@@ -63,9 +63,7 @@ class TestGenerativeScoringAPI:
         usage = data["usage"]
         assert usage["prompt_tokens"] > 0
         assert usage["completion_tokens"] > 0
-        assert (
-            usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"]
-        )
+        assert usage["total_tokens"] == usage["prompt_tokens"] + usage["completion_tokens"]
 
     @pytest.mark.asyncio
     async def test_multiple_items(self, server: RemoteOpenAIServer):
@@ -119,9 +117,7 @@ class TestGenerativeScoringAPI:
         ],
         ids=["invalid_token_ids"],
     )
-    async def test_validation_errors(
-        self, server: RemoteOpenAIServer, label_token_ids, expected_status
-    ):
+    async def test_validation_errors(self, server: RemoteOpenAIServer, label_token_ids, expected_status):
         """Test validation errors for various invalid inputs."""
         response = requests.post(
             server.url_for("generative_scoring"),

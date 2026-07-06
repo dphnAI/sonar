@@ -4,12 +4,12 @@
 import pytest
 import requests
 
+from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
 from tests.entrypoints.pooling.scoring.util import (
     make_base64_image,
     make_image_mm_param,
 )
 from tests.utils import RemoteOpenAIServer
-from aphrodite.entrypoints.pooling.scoring.protocol import RerankResponse, ScoreResponse
 
 MODEL_NAME = "vidore/colpali-v1.3-hf"
 

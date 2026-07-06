@@ -49,9 +49,7 @@ def test_lowering_rms_norm(rms_provider, default_aphrodite_config):
         ir.enable_torch_wrap(True),
     ):
         compiled_model = torch.compile(model, backend=backend, fullgraph=True)
-        compiled_unlowered_model = torch.compile(
-            model, backend=backend_unlowered, fullgraph=True
-        )
+        compiled_unlowered_model = torch.compile(model, backend=backend_unlowered, fullgraph=True)
         output = compiled_model(x)
         output_unlowered = compiled_unlowered_model(x)
 

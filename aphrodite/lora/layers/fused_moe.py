@@ -40,9 +40,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
 
         routed_experts = self.base_layer.routed_experts
         routed_experts.lora_base_layer_prefix = "base_layer."
-        assert not routed_experts.quant_method.is_monolithic, (
-            "Monolithic kernels are not supported for Fused MoE LoRA."
-        )
+        assert not routed_experts.quant_method.is_monolithic, "Monolithic kernels are not supported for Fused MoE LoRA."
 
         # Use the MoE-aware TP rank/size: when EP is active, FusedMoE collapses
         # moe_parallel_config.tp_size to 1 (experts are sharded across the
@@ -65,9 +63,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         routed_experts._ensure_moe_quant_config_init()
         if getattr(routed_experts.quant_method, "supports_internal_mk", False):
             moe_kernel = routed_experts.quant_method.moe_kernel
-            assert moe_kernel is not None, (
-                "Fused MoE quant method must provide a moe_kernel."
-            )
+            assert moe_kernel is not None, "Fused MoE quant method must provide a moe_kernel."
             # Don't let the kernel own shared experts so the runner can
             # overlap them with routed experts via a separate CUDA stream.
             assert isinstance(moe_kernel.impl, FusedMoEKernelModularImpl)
@@ -76,9 +72,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
             prepare_finalize = MoEPrepareAndFinalizeNoDPEPModular()
             moe_kernel = FusedMoEKernel(
                 prepare_finalize,
-                routed_experts.quant_method.select_gemm_impl(
-                    prepare_finalize, routed_experts
-                ),
+                routed_experts.quant_method.select_gemm_impl(prepare_finalize, routed_experts),
             )
         assert moe_kernel.supports_lora(), (
             f"{type(moe_kernel.fused_experts).__name__} does not support LoRA. "
@@ -88,9 +82,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
             "and consume self._lora_context in apply()."
         )
         self._moe_kernel = moe_kernel
-        self.base_layer._replace_quant_method(
-            FusedMoEModularMethod(self.base_layer._quant_method, moe_kernel)
-        )
+        self.base_layer._replace_quant_method(FusedMoEModularMethod(self.base_layer._quant_method, moe_kernel))
 
     @property
     def hidden_size(self) -> int:
@@ -130,11 +122,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         self._events = tuple(torch.Event() for _ in range(4))
 
     def _build_lora_context(self):
-        use_dual_stream = (
-            self._enable_aux_cuda_stream
-            and not self.fully_sharded
-            and self._lora_stream is not None
-        )
+        use_dual_stream = self._enable_aux_cuda_stream and not self.fully_sharded and self._lora_stream is not None
         return MoELoRAContext(
             w13_lora_a_stacked=self.w13_lora_a_stacked,
             w13_lora_b_stacked=self.w13_lora_b_stacked,
@@ -206,9 +194,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                 (
                     max_loras,
                     self.local_num_experts,
-                    self.hidden_size
-                    if not self.fully_sharded
-                    else divide(self.hidden_size, self.tp_size),
+                    self.hidden_size if not self.fully_sharded else divide(self.hidden_size, self.tp_size),
                     lora_config.max_lora_rank,
                 ),
                 dtype=lora_config.lora_dtype,
@@ -248,9 +234,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         self.max_loras = lora_config.max_loras
         self.fully_sharded = lora_config.fully_sharded_loras
 
-        self.adapter_enabled = torch.tensor(
-            [0] * (max_loras + 1), dtype=torch.int, device=self.device
-        )
+        self.adapter_enabled = torch.tensor([0] * (max_loras + 1), dtype=torch.int, device=self.device)
 
         self._create_lora_a_weights(max_loras, lora_config)
         self._create_lora_b_weights(max_loras, lora_config)
@@ -263,28 +247,16 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
             for experts_id in range(self.local_num_experts):
                 # For gated MoE: gate_proj (w1), down_proj (w2), up_proj (w3)
                 # For non-gated MoE: up_proj (w1), down_proj (w2)
-                self.lora_a_stacked.append(
-                    self.w13_lora_a_stacked[0][lora_id][experts_id]
-                )
-                self.lora_a_stacked.append(
-                    self.w2_lora_a_stacked[0][lora_id][experts_id]
-                )
+                self.lora_a_stacked.append(self.w13_lora_a_stacked[0][lora_id][experts_id])
+                self.lora_a_stacked.append(self.w2_lora_a_stacked[0][lora_id][experts_id])
 
-                self.lora_b_stacked.append(
-                    self.w13_lora_b_stacked[0][lora_id][experts_id]
-                )
-                self.lora_b_stacked.append(
-                    self.w2_lora_b_stacked[0][lora_id][experts_id]
-                )
+                self.lora_b_stacked.append(self.w13_lora_b_stacked[0][lora_id][experts_id])
+                self.lora_b_stacked.append(self.w2_lora_b_stacked[0][lora_id][experts_id])
 
                 # Only add w3 (up_proj) for gated MoE (_w13_slices == 2)
                 if self._w13_slices == 2:
-                    self.lora_a_stacked.append(
-                        self.w13_lora_a_stacked[1][lora_id][experts_id]
-                    )
-                    self.lora_b_stacked.append(
-                        self.w13_lora_b_stacked[1][lora_id][experts_id]
-                    )
+                    self.lora_a_stacked.append(self.w13_lora_a_stacked[1][lora_id][experts_id])
+                    self.lora_b_stacked.append(self.w13_lora_b_stacked[1][lora_id][experts_id])
 
     def _slice_w13_a(self, w13_lora_a: torch.Tensor) -> torch.Tensor:
         """
@@ -374,12 +346,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         # EP slicing is done once at add time in
         # LoRAModelManager._slice_moe_lora_ep, so by here the cached
         # tensors already match the local-expert dim of the stacked buffers.
-        assert (
-            num_experts
-            == w1_lora_a.shape[0]
-            == w2_lora_a.shape[0]
-            == w3_lora_a.shape[0]
-        )
+        assert num_experts == w1_lora_a.shape[0] == w2_lora_a.shape[0] == w3_lora_a.shape[0]
 
         slliced_w1_lora_a = self._slice_w13_a(w1_lora_a)
         slliced_w1_lora_b = self._slice_w13_b(w1_lora_b)
@@ -387,34 +354,34 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         sliced_w2_lora_a = self._slice_w2_a(w2_lora_a)
         sliced_w2_lora_b = self._slice_w2_b(w2_lora_b)
 
-        self.w13_lora_a_stacked[0][
-            index, :, : slliced_w1_lora_a.shape[1], : slliced_w1_lora_a.shape[2]
-        ].copy_(slliced_w1_lora_a, non_blocking=True)
+        self.w13_lora_a_stacked[0][index, :, : slliced_w1_lora_a.shape[1], : slliced_w1_lora_a.shape[2]].copy_(
+            slliced_w1_lora_a, non_blocking=True
+        )
 
-        self.w13_lora_b_stacked[0][
-            index, :, : slliced_w1_lora_b.shape[1], : slliced_w1_lora_b.shape[2]
-        ].copy_(slliced_w1_lora_b, non_blocking=True)
+        self.w13_lora_b_stacked[0][index, :, : slliced_w1_lora_b.shape[1], : slliced_w1_lora_b.shape[2]].copy_(
+            slliced_w1_lora_b, non_blocking=True
+        )
 
         # Only copy w3 (up_proj) for gated MoE (_w13_slices == 2)
         if self._w13_slices == 2:
             slliced_w3_lora_a = self._slice_w13_a(w3_lora_a)
             slliced_w3_lora_b = self._slice_w13_b(w3_lora_b)
 
-            self.w13_lora_a_stacked[1][
-                index, :, : slliced_w3_lora_a.shape[1], : slliced_w3_lora_a.shape[2]
-            ].copy_(slliced_w3_lora_a, non_blocking=True)
+            self.w13_lora_a_stacked[1][index, :, : slliced_w3_lora_a.shape[1], : slliced_w3_lora_a.shape[2]].copy_(
+                slliced_w3_lora_a, non_blocking=True
+            )
 
-            self.w13_lora_b_stacked[1][
-                index, :, : slliced_w3_lora_b.shape[1], : slliced_w3_lora_b.shape[2]
-            ].copy_(slliced_w3_lora_b, non_blocking=True)
+            self.w13_lora_b_stacked[1][index, :, : slliced_w3_lora_b.shape[1], : slliced_w3_lora_b.shape[2]].copy_(
+                slliced_w3_lora_b, non_blocking=True
+            )
 
-        self.w2_lora_a_stacked[0][
-            index, :, : sliced_w2_lora_a.shape[1], : sliced_w2_lora_a.shape[2]
-        ].copy_(sliced_w2_lora_a, non_blocking=True)
+        self.w2_lora_a_stacked[0][index, :, : sliced_w2_lora_a.shape[1], : sliced_w2_lora_a.shape[2]].copy_(
+            sliced_w2_lora_a, non_blocking=True
+        )
 
-        self.w2_lora_b_stacked[0][
-            index, :, : sliced_w2_lora_b.shape[1], : sliced_w2_lora_b.shape[2]
-        ].copy_(sliced_w2_lora_b, non_blocking=True)
+        self.w2_lora_b_stacked[0][index, :, : sliced_w2_lora_b.shape[1], : sliced_w2_lora_b.shape[2]].copy_(
+            sliced_w2_lora_b, non_blocking=True
+        )
 
     def set_mapping(self, punica_wrapper):
         super().set_mapping(punica_wrapper)
@@ -482,9 +449,7 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
                 (
                     max_loras,
                     self.local_num_experts,
-                    self.hidden_size
-                    if not self.fully_sharded
-                    else divide(self.hidden_size, self.tp_size),
+                    self.hidden_size if not self.fully_sharded else divide(self.hidden_size, self.tp_size),
                     lora_config.max_lora_rank,
                 ),
                 dtype=lora_config.lora_dtype,
@@ -510,9 +475,7 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
         self.max_loras = lora_config.max_loras
         self.fully_sharded = lora_config.fully_sharded_loras
 
-        self.adapter_enabled = torch.tensor(
-            [0] * (max_loras + 1), dtype=torch.int, device=self.device
-        )
+        self.adapter_enabled = torch.tensor([0] * (max_loras + 1), dtype=torch.int, device=self.device)
 
         self._create_lora_a_weights(max_loras, lora_config)
         self._create_lora_b_weights(max_loras, lora_config)
@@ -534,9 +497,7 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
             sliced_w1_lora_b = w1_lora_b[:, start_idx:end_idx, :]
             sliced_w3_lora_b = w3_lora_b[:, start_idx:end_idx, :]
 
-            return torch.stack([sliced_w1_lora_b, sliced_w3_lora_b], dim=2).flatten(
-                1, 2
-            )
+            return torch.stack([sliced_w1_lora_b, sliced_w3_lora_b], dim=2).flatten(1, 2)
         else:
             slice_size = w13_lora_b.shape[1] // 2
             w1_lora_b = w13_lora_b[:, :slice_size, :]
@@ -570,19 +531,19 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
         sliced_w2_lora_a = self._slice_w2_a(w2_lora_a)
         sliced_w2_lora_b = self._slice_w2_b(w2_lora_b)
 
-        self.w13_lora_a_stacked[0][
-            index, :, : sliced_w13_lora_a.shape[1], : sliced_w13_lora_a.shape[2]
-        ].copy_(sliced_w13_lora_a, non_blocking=True)
-        self.w2_lora_a_stacked[0][
-            index, :, : sliced_w2_lora_a.shape[1], : sliced_w2_lora_a.shape[2]
-        ].copy_(sliced_w2_lora_a, non_blocking=True)
+        self.w13_lora_a_stacked[0][index, :, : sliced_w13_lora_a.shape[1], : sliced_w13_lora_a.shape[2]].copy_(
+            sliced_w13_lora_a, non_blocking=True
+        )
+        self.w2_lora_a_stacked[0][index, :, : sliced_w2_lora_a.shape[1], : sliced_w2_lora_a.shape[2]].copy_(
+            sliced_w2_lora_a, non_blocking=True
+        )
 
-        self.w13_lora_b_stacked[0][
-            index, :, : sliced_w13_lora_b.shape[1], : sliced_w13_lora_b.shape[2]
-        ].copy_(sliced_w13_lora_b, non_blocking=True)
-        self.w2_lora_b_stacked[0][
-            index, :, : sliced_w2_lora_b.shape[1], : sliced_w2_lora_b.shape[2]
-        ].copy_(sliced_w2_lora_b, non_blocking=True)
+        self.w13_lora_b_stacked[0][index, :, : sliced_w13_lora_b.shape[1], : sliced_w13_lora_b.shape[2]].copy_(
+            sliced_w13_lora_b, non_blocking=True
+        )
+        self.w2_lora_b_stacked[0][index, :, : sliced_w2_lora_b.shape[1], : sliced_w2_lora_b.shape[2]].copy_(
+            sliced_w2_lora_b, non_blocking=True
+        )
 
     @property
     def w13_input_size(self):

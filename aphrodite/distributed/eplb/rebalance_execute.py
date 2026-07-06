@@ -110,9 +110,7 @@ def get_ep_ranks_with_experts_batch(
         sorted_ranks = old_relevant_ranks[sort_order]
 
         # Find boundaries where expert changes
-        expert_boundaries = np.concatenate(
-            [[0], np.where(np.diff(sorted_experts) != 0)[0] + 1, [len(sorted_experts)]]
-        )
+        expert_boundaries = np.concatenate([[0], np.where(np.diff(sorted_experts) != 0)[0] + 1, [len(sorted_experts)]])
 
         # For each expert, extract unique ranks in order of first appearance
         for i in range(len(expert_boundaries) - 1):
@@ -137,9 +135,7 @@ def get_ep_ranks_with_experts_batch(
         sorted_ranks = new_relevant_ranks[sort_order]
 
         # Find boundaries where expert changes
-        expert_boundaries = np.concatenate(
-            [[0], np.where(np.diff(sorted_experts) != 0)[0] + 1, [len(sorted_experts)]]
-        )
+        expert_boundaries = np.concatenate([[0], np.where(np.diff(sorted_experts) != 0)[0] + 1, [len(sorted_experts)]])
 
         # For each expert, extract unique ranks and exclude local copies
         for i in range(len(expert_boundaries) - 1):
@@ -153,9 +149,7 @@ def get_ep_ranks_with_experts_batch(
 
             # Remove ranks that have local copies (in send map)
             send_ranks_set = set(ranks_to_send_map.get(expert, []))
-            recv_ranks_actual = [
-                int(r) for r in unique_ranks if r not in send_ranks_set
-            ]
+            recv_ranks_actual = [int(r) for r in unique_ranks if r not in send_ranks_set]
             ranks_to_recv_map[expert] = recv_ranks_actual
 
     # Handle experts that only appear in old (send only) or new (recv only)
@@ -218,20 +212,14 @@ def move_to_buffer(
 
     # Local receive eligibility
     new_valid = new_local_expert_ids != -1
-    can_recv_local = np.isin(
-        new_local_expert_ids, old_local_expert_ids, assume_unique=False
-    )
-    is_received_locally = np.logical_or(
-        is_unchanged, np.logical_and(new_valid, can_recv_local)
-    )
+    can_recv_local = np.isin(new_local_expert_ids, old_local_expert_ids, assume_unique=False)
+    is_received_locally = np.logical_or(is_unchanged, np.logical_and(new_valid, can_recv_local))
 
     # Send map: first src row per unique expert present locally in old mapping
     send_count = 0
     valid_old = old_local_expert_ids != -1
     if np.any(valid_old):
-        uniq_experts, first_idx = np.unique(
-            old_local_expert_ids[valid_old], return_index=True
-        )
+        uniq_experts, first_idx = np.unique(old_local_expert_ids[valid_old], return_index=True)
         filtered_rows = local_rows[valid_old]
         src_rows = filtered_rows[first_idx]
         send_count = int(uniq_experts.shape[0])
@@ -256,9 +244,7 @@ def move_to_buffer(
     # 1. Local moves into tmp buffers
     if bool(eligible_local_buffer_mask.any()) and send_count > 0:
         dest_indices = np.nonzero(eligible_local_buffer_mask)[0].tolist()
-        expert_to_src_map = dict(
-            zip(send_expert_ids[:send_count], send_src_rows[:send_count])
-        )
+        expert_to_src_map = dict(zip(send_expert_ids[:send_count], send_src_rows[:send_count]))
         for dst in dest_indices:
             expert = new_local_expert_ids[dst]
             src_local = expert_to_src_map.get(expert, -1)
@@ -410,8 +396,7 @@ def move_from_buffer(
     pos = np.searchsorted(prim_experts_sorted, dup_experts)
     valid = np.logical_and(
         pos < prim_experts_sorted.shape[0],
-        prim_experts_sorted[np.minimum(pos, prim_experts_sorted.shape[0] - 1)]
-        == dup_experts,
+        prim_experts_sorted[np.minimum(pos, prim_experts_sorted.shape[0] - 1)] == dup_experts,
     )
     if not bool(valid.any()):
         return
@@ -575,9 +560,7 @@ def rearrange_expert_weights_inplace(
             # Reserve NCCL communication buffers via a dummy all_gather.
             # Backends that pre-allocate their own transfer buffers
             # skip this to avoid the extra memory spike during profiling.
-            profile_buffer: list[torch.Tensor] = [
-                torch.empty_like(w) for w in first_layer_weights
-            ]
+            profile_buffer: list[torch.Tensor] = [torch.empty_like(w) for w in first_layer_weights]
             for weight, buffer in zip(expert_weights[0], profile_buffer):
                 dummy_recv_buffer = [buffer for _ in range(ep_size)]
                 torch.distributed.barrier()
@@ -659,9 +642,9 @@ def _map_old_expert_indices_with_rank_mapping(
             new_start_idx = new_rank * num_local_physical_experts
             new_end_idx = (new_rank + 1) * num_local_physical_experts
 
-            mapped_expert_indices[:, new_start_idx:new_end_idx] = (
-                old_global_expert_indices[:, old_start_idx:old_end_idx]
-            )
+            mapped_expert_indices[:, new_start_idx:new_end_idx] = old_global_expert_indices[
+                :, old_start_idx:old_end_idx
+            ]
         # If new_rank is None or >= new_ep_size, the experts remain -1
         # (scale down case)
 
@@ -696,9 +679,9 @@ def _map_new_expert_indices_with_rank_mapping(
             new_start_idx = new_rank * num_local_physical_experts
             new_end_idx = (new_rank + 1) * num_local_physical_experts
 
-            mapped_expert_indices[:, old_start_idx:old_end_idx] = (
-                new_global_expert_indices[:, new_start_idx:new_end_idx]
-            )
+            mapped_expert_indices[:, old_start_idx:old_end_idx] = new_global_expert_indices[
+                :, new_start_idx:new_end_idx
+            ]
 
     return mapped_expert_indices
 

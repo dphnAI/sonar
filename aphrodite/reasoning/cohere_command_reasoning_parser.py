@@ -121,9 +121,7 @@ def collect_tool_schema(tool_schema: list[CohereNormalizedTool]) -> str:
                             }}"""
         tool_grammar = str(xgr.Grammar.from_json_schema(json_schema))
         for match in re.findall(r"\b(\w+)\s*::=", tool_grammar):
-            tool_grammar = re.sub(
-                rf"\b{re.escape(match)}\b", tool_name + match, tool_grammar
-            )
+            tool_grammar = re.sub(rf"\b{re.escape(match)}\b", tool_name + match, tool_grammar)
         tool_dictionary[tool_name] = f"{tool_name} ::= {tool_name}root\n{tool_grammar}"
     # Emitted grammar shape:
     #   root  ::= tools
@@ -245,8 +243,7 @@ def convert_schema_to_structural_tags(
         tool_schema_list = _tool_definitions_to_schema_list(tools)
         if not tool_schema_list:
             raise ValueError(
-                "No valid tool definitions could be parsed from the request for "
-                "structural tag conversion."
+                "No valid tool definitions could be parsed from the request for structural tag conversion."
             )
         tool_grammar = collect_tool_schema(tool_schema_list)
         _add_tag(style.tools, {"type": "grammar", "grammar": tool_grammar})
@@ -352,11 +349,7 @@ def _schema_dict_from_chat_response_format(
         return {"type": "object"}
     if rf_type != "json_schema":
         return None
-    js_wr = (
-        rf.get("json_schema")
-        if isinstance(rf, dict)
-        else getattr(rf, "json_schema", None)
-    )
+    js_wr = rf.get("json_schema") if isinstance(rf, dict) else getattr(rf, "json_schema", None)
     return _schema_from_json_schema_field(js_wr)
 
 
@@ -380,9 +373,7 @@ def _schema_dict_from_structured_outputs(
     if hasattr(raw, "model_dump"):
         out = _schema_from_json_schema_field(raw)
         if out is None:
-            raise ValueError(
-                "structured_outputs.json model has no extractable JSON Schema."
-            )
+            raise ValueError("structured_outputs.json model has no extractable JSON Schema.")
         return out
 
     if isinstance(raw, str):
@@ -399,9 +390,7 @@ def _schema_dict_from_structured_outputs(
         body = raw if isinstance(raw, dict) else dict(raw)
         return _schema_from_json_schema_field(body) or body
 
-    raise ValueError(
-        f"structured_outputs.json has unsupported type {type(raw).__name__}."
-    )
+    raise ValueError(f"structured_outputs.json has unsupported type {type(raw).__name__}.")
 
 
 class BaseCohereCommandReasoningParser(ReasoningParser):
@@ -505,16 +494,10 @@ class BaseCohereCommandReasoningParser(ReasoningParser):
         # Schema: prefer ``response_format`` (OpenAI Chat Completions), then
         # ``structured_outputs.json`` / ``json_object`` (Aphrodite direct). Tools stay
         # on ``request.tools``.
-        rf = (
-            request.response_format
-            if isinstance(request, ChatCompletionRequest)
-            else None
-        )
+        rf = request.response_format if isinstance(request, ChatCompletionRequest) else None
         if rf is not None and _response_format_type(rf) == "structural_tag":
             return request
-        model_architecture = (
-            self._model_config.architecture if self._model_config is not None else None
-        )
+        model_architecture = self._model_config.architecture if self._model_config is not None else None
         tools = request.tools
         # ``response_format`` wins if both it and ``structured_outputs`` supply JSON.
         schema = _schema_dict_from_chat_response_format(rf)
@@ -538,7 +521,7 @@ class BaseCohereCommandReasoningParser(ReasoningParser):
                 "command structural tags, or the schema cannot be expressed in "
                 "that format."
             )
-        request.structured_outputs = StructuredOutputsParams(structural_tag=result)
+        request.structured_outputs = StructuredOutputsParams(structural_tag=result)  # type: ignore[call-arg]
         # Folded JSON constraints into ``structural_tag``; drop ``response_format``
         # when it was the source so ``to_sampling_params`` does not also set ``json`` /
         # ``json_object`` (mutually exclusive in ``StructuredOutputsParams``).

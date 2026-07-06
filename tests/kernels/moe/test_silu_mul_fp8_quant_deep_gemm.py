@@ -53,9 +53,7 @@ CASES = [
 
 
 def as_uint8(x) -> torch.Tensor:
-    return (
-        torch.empty(x.shape, dtype=x.dtype, device=x.device).copy_(x).view(torch.uint8)
-    )
+    return torch.empty(x.shape, dtype=x.dtype, device=x.device).copy_(x).view(torch.uint8)
 
 
 def silu(x: torch.Tensor) -> torch.Tensor:
@@ -90,15 +88,11 @@ def do_quant(x: torch.Tensor, group_size: int, ceil_ue8m0: bool):
         s = amax * fp8_max_inv
 
         if ceil_ue8m0:
-            s = torch.exp2(
-                torch.ceil(torch.log2(s).to(torch.bfloat16)).to(torch.bfloat16)
-            ).to(torch.bfloat16)
+            s = torch.exp2(torch.ceil(torch.log2(s).to(torch.bfloat16)).to(torch.bfloat16)).to(torch.bfloat16)
 
         inv_s = one_bf16 / s
         inv_s = inv_s.view((num_groups, 1))
-        xq = torch.clamp(
-            x * inv_s, min=fp8_min_bf16.item(), max=fp8_max_bf16.item()
-        ).to(fp8_dtype)
+        xq = torch.clamp(x * inv_s, min=fp8_min_bf16.item(), max=fp8_max_bf16.item()).to(fp8_dtype)
     else:
         # Triton fallback computes in f32. Use multiply-by-reciprocal
         # to match Triton's constexpr evaluation of 1.0/fp8_max.
@@ -169,26 +163,20 @@ def ref_with_scale_fmt(
     match closely with the kernel implementation so we compare more
     accurately.
     """
-    scale_dtype = (
-        torch.int32 if scale_fmt == DeepGemmQuantScaleFMT.UE8M0 else torch.float32
-    )
+    scale_dtype = torch.int32 if scale_fmt == DeepGemmQuantScaleFMT.UE8M0 else torch.float32
     ceil_ue8m0 = scale_fmt in [
         DeepGemmQuantScaleFMT.UE8M0,
         DeepGemmQuantScaleFMT.FLOAT32_CEIL_UE8M0,
     ]
 
     ref_q = torch.empty((E, T, H), dtype=fp8_dtype, device="cuda")
-    ref_s_f32 = torch.empty(
-        (E, T, cdiv(H, group_size)), dtype=torch.float32, device="cuda"
-    )
+    ref_s_f32 = torch.empty((E, T, cdiv(H, group_size)), dtype=torch.float32, device="cuda")
 
     for e in range(E):
         nt = tokens_per_expert[e].item()
         if nt == 0:
             continue
-        ref_q[e, :nt], ref_s_f32[e, :nt] = silu_mul_quant(
-            gate[e, :nt], up[e, :nt], group_size, ceil_ue8m0=ceil_ue8m0
-        )
+        ref_q[e, :nt], ref_s_f32[e, :nt] = silu_mul_quant(gate[e, :nt], up[e, :nt], group_size, ceil_ue8m0=ceil_ue8m0)
 
     if scale_dtype == torch.float32:
         return ref_q, ref_s_f32
@@ -249,17 +237,11 @@ def test_silu_mul_fp8_quant_deep_gemm(E: int, T: int, H: int, fp8_type: torch.dt
             quant_scale_fmt=scale_fmt,
         )
 
-        ref_y_q, ref_y_s = ref_with_scale_fmt(
-            E, T, H, group_size, tokens_per_expert, gate, up, scale_fmt=scale_fmt
-        )
+        ref_y_q, ref_y_s = ref_with_scale_fmt(E, T, H, group_size, tokens_per_expert, gate, up, scale_fmt=scale_fmt)
 
         # deepgemm scales transform
         dg_scales = None
-        if (
-            has_deep_gemm()
-            and current_platform.has_device_capability(100)
-            and scale_fmt == DeepGemmQuantScaleFMT.UE8M0
-        ):
+        if has_deep_gemm() and current_platform.has_device_capability(100) and scale_fmt == DeepGemmQuantScaleFMT.UE8M0:
             _q, _s = ref_with_scale_fmt(
                 E,
                 T,
@@ -279,9 +261,7 @@ def test_silu_mul_fp8_quant_deep_gemm(E: int, T: int, H: int, fp8_type: torch.dt
                 is_sfa=True,
             )
 
-        expected_scale_dtype = (
-            torch.int32 if scale_fmt == DeepGemmQuantScaleFMT.UE8M0 else torch.float32
-        )
+        expected_scale_dtype = torch.int32 if scale_fmt == DeepGemmQuantScaleFMT.UE8M0 else torch.float32
         assert y_s.dtype == expected_scale_dtype
         assert ref_y_s.dtype == expected_scale_dtype
 

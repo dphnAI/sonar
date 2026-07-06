@@ -42,9 +42,7 @@ def _make_writeable(arr: np.ndarray) -> np.ndarray:
 
 def extract_image_pil(image: Image.Image) -> torch.Tensor:
     if image.width * image.height > MAX_PIXELS:
-        raise ValueError(
-            f"Image (w={image.width}, h={image.height}) > MAX=`{MAX_PIXELS}`"
-        )
+        raise ValueError(f"Image (w={image.width}, h={image.height}) > MAX=`{MAX_PIXELS}`")
     img = image if image.mode == "RGB" else image.convert("RGB")
     arr = np.asarray(img)
     arr = _make_writeable(arr)
@@ -109,24 +107,16 @@ def get_image_size_for_max_num_patches(
         scale_min, scale_max = 1.0, 100.0
         while (scale_max - scale_min) >= eps:
             scale = (scale_min + scale_max) / 2
-            target_height = get_scaled_image_size(
-                scale, image_height, patch_size, pixel_shuffle_scale
-            )
-            target_width = get_scaled_image_size(
-                scale, image_width, patch_size, pixel_shuffle_scale
-            )
+            target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
+            target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
             num_patches = (target_height / patch_size) * (target_width / patch_size)
             if num_patches >= min_num_patches:
                 scale_max = scale
             else:
                 scale_min = scale
         scale = scale_max
-        target_height = get_scaled_image_size(
-            scale, image_height, patch_size, pixel_shuffle_scale
-        )
-        target_width = get_scaled_image_size(
-            scale, image_width, patch_size, pixel_shuffle_scale
-        )
+        target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
+        target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
         return target_height, target_width
     elif num_patches <= max_num_patches:
         return adjusted_height, adjusted_width
@@ -135,24 +125,16 @@ def get_image_size_for_max_num_patches(
         scale_min, scale_max = eps / 10, 1.0
         while (scale_max - scale_min) >= eps:
             scale = (scale_min + scale_max) / 2
-            target_height = get_scaled_image_size(
-                scale, image_height, patch_size, pixel_shuffle_scale
-            )
-            target_width = get_scaled_image_size(
-                scale, image_width, patch_size, pixel_shuffle_scale
-            )
+            target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
+            target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
             num_patches = (target_height / patch_size) * (target_width / patch_size)
             if num_patches <= max_num_patches:
                 scale_min = scale
             else:
                 scale_max = scale
         scale = scale_min
-        target_height = get_scaled_image_size(
-            scale, image_height, patch_size, pixel_shuffle_scale
-        )
-        target_width = get_scaled_image_size(
-            scale, image_width, patch_size, pixel_shuffle_scale
-        )
+        target_height = get_scaled_image_size(scale, image_height, patch_size, pixel_shuffle_scale)
+        target_width = get_scaled_image_size(scale, image_width, patch_size, pixel_shuffle_scale)
         return target_height, target_width
 
 
@@ -207,10 +189,7 @@ def patchify_vision(image: torch.Tensor, patch_size: int) -> torch.Tensor:
     """
     num_images, height, width, channels = image.shape
     if height % patch_size or width % patch_size:
-        raise ValueError(
-            "Dimensions of images "
-            f"{image.shape} are not divisible by patch_size={patch_size}."
-        )
+        raise ValueError(f"Dimensions of images {image.shape} are not divisible by patch_size={patch_size}.")
     patches = image.reshape(
         num_images,
         height // patch_size,
@@ -356,15 +335,9 @@ class IsaacImageProcessor:
             patches, dims_virtual = process_vision_for_patches(
                 image_tensor,
                 patch_size=kwargs.get("patch_size", self.patch_size),
-                max_num_patches=kwargs.get(
-                    "max_num_patches", self.vision_max_num_patches
-                ),
-                min_num_patches=kwargs.get(
-                    "min_num_patches", self.vision_min_num_patches
-                ),
-                pixel_shuffle_scale=kwargs.get(
-                    "pixel_shuffle_scale", self.pixel_shuffle_scale
-                ),
+                max_num_patches=kwargs.get("max_num_patches", self.vision_max_num_patches),
+                min_num_patches=kwargs.get("min_num_patches", self.vision_min_num_patches),
+                pixel_shuffle_scale=kwargs.get("pixel_shuffle_scale", self.pixel_shuffle_scale),
             )
 
             # Isaac packs a dummy temporal dim for images
@@ -426,9 +399,7 @@ class IsaacProcessor(ProcessorMixin):
         )
 
         if images is not None:
-            image_inputs = self.image_processor(
-                images, **output_kwargs["images_kwargs"]
-            )
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
         else:
             image_inputs = {}
@@ -445,9 +416,7 @@ class IsaacProcessor(ProcessorMixin):
                 for i in range(len(text)):
                     while self.image_token in text[i]:
                         num_image_tokens = image_grid_thw[index].prod() // merge_length
-                        text[i] = text[i].replace(
-                            self.image_token, "<|placeholder|>" * num_image_tokens, 1
-                        )
+                        text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
                         index += 1
                     text[i] = text[i].replace("<|placeholder|>", "<|image_pad|>")
 

@@ -45,9 +45,7 @@ def _dequant_gather_kernel(
 
     packed_idx = col // PACK_FACTOR
     shift = (col % PACK_FACTOR) * NUM_BITS
-    packed = tl.load(
-        packed_ptr + tid * packed_cols + packed_idx, mask=col_mask, other=0
-    )
+    packed = tl.load(packed_ptr + tid * packed_cols + packed_idx, mask=col_mask, other=0)
     q = ((packed >> shift) & ((1 << NUM_BITS) - 1)) - (1 << (NUM_BITS - 1))
 
     if GROUP_SIZE == 0:  # channel: one scale per row
@@ -57,9 +55,7 @@ def _dequant_gather_kernel(
         scale = tl.load(scale_ptr + tid * num_groups + grp, mask=col_mask, other=0.0)
 
     out = q.to(tl.float32) * scale.to(tl.float32)
-    tl.store(
-        out_ptr + row * hidden + col, out.to(out_ptr.dtype.element_ty), mask=col_mask
-    )
+    tl.store(out_ptr + row * hidden + col, out.to(out_ptr.dtype.element_ty), mask=col_mask)
 
 
 def _dequant_gather_triton(
@@ -97,10 +93,7 @@ class CompressedTensorsEmbeddingWNA16Int(QuantizeMethodBase):
         self.pack_factor = 32 // self.num_bits
         self.strategy = weight_quant.strategy
         self.group_size = weight_quant.group_size
-        self.is_group = (
-            self.strategy == QuantizationStrategy.GROUP.value
-            and self.group_size is not None
-        )
+        self.is_group = self.strategy == QuantizationStrategy.GROUP.value and self.group_size is not None
 
     def create_weights(
         self,
@@ -134,9 +127,7 @@ class CompressedTensorsEmbeddingWNA16Int(QuantizeMethodBase):
                 output_dim=0,
                 input_dim=1,
                 weight_loader=weight_loader,
-                data=torch.empty(
-                    vocab_pp, hidden // self.group_size, dtype=params_dtype
-                ),
+                data=torch.empty(vocab_pp, hidden // self.group_size, dtype=params_dtype),
             )
         else:
             weight_scale = ChannelQuantScaleParameter(
@@ -145,9 +136,7 @@ class CompressedTensorsEmbeddingWNA16Int(QuantizeMethodBase):
                 data=torch.empty(vocab_pp, 1, dtype=params_dtype),
             )
 
-        weight_shape = BaseAphroditeParameter(
-            data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader
-        )
+        weight_shape = BaseAphroditeParameter(data=torch.empty(2, dtype=torch.int64), weight_loader=weight_loader)
 
         layer.register_parameter("weight_packed", weight_packed)
         layer.register_parameter("weight_scale", weight_scale)
@@ -159,12 +148,8 @@ class CompressedTensorsEmbeddingWNA16Int(QuantizeMethodBase):
     def embedding(self, layer: torch.nn.Module, input_: torch.Tensor) -> torch.Tensor:
         ids = input_.reshape(-1).contiguous()
         hidden = layer.hidden_size
-        deq = _dequant_gather_triton(
-            ids, layer.weight_packed, layer.weight_scale, hidden, self.num_bits
-        )
+        deq = _dequant_gather_triton(ids, layer.weight_packed, layer.weight_scale, hidden, self.num_bits)
         return deq.reshape(*input_.shape, hidden)
 
     def apply(self, layer: torch.nn.Module, *args, **kwargs) -> torch.Tensor:
-        raise NotImplementedError(
-            "CompressedTensorsEmbeddingWNA16Int supports embedding lookup only"
-        )
+        raise NotImplementedError("CompressedTensorsEmbeddingWNA16Int supports embedding lookup only")

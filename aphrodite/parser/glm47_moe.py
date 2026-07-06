@@ -185,9 +185,7 @@ class Glm47MoeParser(ParserEngine):
         thinking = chat_kwargs.get("thinking", None)
         enable_thinking = chat_kwargs.get("enable_thinking", None)
         self.thinking_enabled = (
-            True
-            if thinking is None and enable_thinking is None
-            else bool(thinking) or bool(enable_thinking)
+            True if thinking is None and enable_thinking is None else bool(thinking) or bool(enable_thinking)
         )
         kwargs.setdefault(
             "parser_engine_config",

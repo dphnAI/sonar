@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Aphrodite Metal runtime - high-performance LLM inference on Apple Silicon.
 
 This runtime enables Aphrodite to run on Apple Silicon Macs using MLX as the
@@ -104,7 +105,6 @@ def _register() -> str | None:
     # Register our env vars with Aphrodite's registry so validate_environ()
     # does not warn about unknown APHRODITE_METAL_* / APHRODITE_MLX_* variables.
     import aphrodite.envs
-
     from aphrodite.metal.envs import environment_variables as metal_env_vars
 
     aphrodite.envs.environment_variables.update(metal_env_vars)

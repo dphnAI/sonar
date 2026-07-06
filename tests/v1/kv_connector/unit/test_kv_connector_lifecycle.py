@@ -41,9 +41,7 @@ def test_kv_connector_mixin_clears_metadata():
         kv_connector_extra_config={"name": "unit"},
     )
 
-    kv_cache_config = KVCacheConfig(
-        num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[]
-    )
+    kv_cache_config = KVCacheConfig(num_blocks=0, kv_cache_tensors=[], kv_cache_groups=[])
     # Initialize the global connector instance.
     # kv_transfer init now syncs engine_id across TP, so unit tests need
     # a minimal mocked TP group.
@@ -62,9 +60,7 @@ def test_kv_connector_mixin_clears_metadata():
         scheduler_output = _make_empty_scheduler_output()
 
         # Invoke the no-forward path which uses the mixin context manager
-        KVConnectorModelRunnerMixin.kv_connector_no_forward(
-            scheduler_output, aphrodite_config
-        )
+        KVConnectorModelRunnerMixin.kv_connector_no_forward(scheduler_output, aphrodite_config)
 
         # Verify clear_connector_metadata was called on the connector
         connector = get_kv_transfer_group()

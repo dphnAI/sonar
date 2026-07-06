@@ -54,8 +54,7 @@ class _TokenizerRegistry:
     def register(self, tokenizer_mode: str, module: str, class_name: str) -> None:
         if tokenizer_mode in self.tokenizers:
             logger.warning(
-                "%s.%s is already registered for tokenizer_mode=%r. "
-                "It is overwritten by the new one.",
+                "%s.%s is already registered for tokenizer_mode=%r. It is overwritten by the new one.",
                 module,
                 class_name,
                 tokenizer_mode,
@@ -138,9 +137,7 @@ def resolve_tokenizer_args(
     # Try to use official Mistral tokenizer if possible
     if (
         tokenizer_mode == "auto"
-        and is_mistral_model_repo(
-            model_name_or_path=str(tokenizer_name), revision=revision
-        )
+        and is_mistral_model_repo(model_name_or_path=str(tokenizer_name), revision=revision)
         and any_pattern_in_repo_files(
             model_name_or_path=str(tokenizer_name),
             allow_patterns=["tekken.json", "tokenizer.model.v*"],
@@ -235,8 +232,7 @@ def get_tokenizer(
         tokenizer = get_cached_tokenizer(tokenizer)
     if not tokenizer.is_fast:
         logger.warning(
-            "Using a slow tokenizer. This might cause a significant "
-            "slowdown. Consider using a fast tokenizer instead."
+            "Using a slow tokenizer. This might cause a significant slowdown. Consider using a fast tokenizer instead."
         )
 
     return tokenizer  # type: ignore

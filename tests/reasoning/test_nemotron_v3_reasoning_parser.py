@@ -6,11 +6,11 @@ from typing import TypedDict
 import pytest
 import regex as re
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.parser.abstract_parser import DelegatingParser
 from aphrodite.parser.engine.registered_adapters import NemotronV3ParserReasoningAdapter
 from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "nemotron_v3"
 
@@ -100,13 +100,9 @@ def test_nemotron_v3_reasoning(
 ):
     output = tokenizer.tokenize(param_dict["output"])
     model_output = [tokenizer.convert_tokens_to_string([token]) for token in output]
-    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(
-        tokenizer
-    )
+    parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser(parser_name)(tokenizer)
 
-    reasoning, content = run_reasoning_extraction(
-        parser, model_output, streaming=streaming
-    )
+    reasoning, content = run_reasoning_extraction(parser, model_output, streaming=streaming)
 
     assert reasoning == param_dict["reasoning"]
     assert content == param_dict["content"]
@@ -269,9 +265,7 @@ def test_nemotron_v3_streaming_no_promotion_with_real_content(
     )
     parser = _make_reasoning_parser(tokenizer)
 
-    reasoning, content = _run_parse_delta(
-        parser, tokenizer, "<think>reason</think>real answer", request
-    )
+    reasoning, content = _run_parse_delta(parser, tokenizer, "<think>reason</think>real answer", request)
 
     # Real content followed </think>, so nothing is duplicated.
     assert reasoning == "reason"

@@ -50,10 +50,7 @@ MODEL_OUTPUT = (
 
 PLAIN_TEXT = "The weather in Dallas is sunny and 75°F."
 
-TOOL_CALL_ONLY = (
-    '<tool_call>\n{"name": "get_weather", '
-    '"arguments": {"city": "Dallas"}}\n</tool_call>'
-)
+TOOL_CALL_ONLY = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Dallas"}}\n</tool_call>'
 
 TOOL_ARGUMENTS = '{"city": "Dallas"}'
 
@@ -171,9 +168,7 @@ def test_parse_plain_text_with_reasoning_parser(tokenizer, reasoning, tool):
 def test_parse_both_parsers(tokenizer):
     parser = make_parser(tokenizer, reasoning=True, tool=True)
     request = make_request(tools=TOOLS)
-    reasoning, content, tool_calls = parser.parse(
-        MODEL_OUTPUT, request, enable_auto_tools=True
-    )
+    reasoning, content, tool_calls = parser.parse(MODEL_OUTPUT, request, enable_auto_tools=True)
 
     assert reasoning is not None
     assert "let me think about this" in reasoning
@@ -201,9 +196,7 @@ def test_parse_reasoning_only(tokenizer):
 def test_parse_tool_only(tokenizer):
     parser = make_parser(tokenizer, reasoning=False, tool=True)
     request = make_request(tools=TOOLS)
-    reasoning, content, tool_calls = parser.parse(
-        MODEL_OUTPUT, request, enable_auto_tools=True
-    )
+    reasoning, content, tool_calls = parser.parse(MODEL_OUTPUT, request, enable_auto_tools=True)
 
     assert reasoning is None
     assert tool_calls is not None
@@ -221,9 +214,7 @@ def test_parse_named_tool_choice(tokenizer):
             "function": {"name": "get_weather"},
         },
     )
-    reasoning, content, tool_calls = parser.parse(
-        TOOL_ARGUMENTS, request, enable_auto_tools=True
-    )
+    reasoning, content, tool_calls = parser.parse(TOOL_ARGUMENTS, request, enable_auto_tools=True)
 
     assert reasoning is None
     assert content is None
@@ -243,9 +234,7 @@ def test_parse_named_tool_choice_with_reasoning(tokenizer):
             "function": {"name": "get_weather"},
         },
     )
-    reasoning, content, tool_calls = parser.parse(
-        model_output, request, enable_auto_tools=True
-    )
+    reasoning, content, tool_calls = parser.parse(model_output, request, enable_auto_tools=True)
 
     assert reasoning is not None
     assert "thinking" in reasoning
@@ -264,9 +253,7 @@ def test_parse_required_tool_choice(tokenizer):
         ]
     )
     request = make_request(tools=TOOLS, tool_choice="required")
-    reasoning, content, tool_calls = parser.parse(
-        functions_json, request, enable_auto_tools=True
-    )
+    reasoning, content, tool_calls = parser.parse(functions_json, request, enable_auto_tools=True)
 
     assert reasoning is None
     assert content is None
@@ -279,9 +266,7 @@ def test_parse_required_tool_choice(tokenizer):
 
 
 def test_parse_required_tool_choice_kimi_k2_ids(tokenizer):
-    parser = make_parser(
-        tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG
-    )
+    parser = make_parser(tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG)
     functions_json = json.dumps(
         [
             {"name": "get_current_weather", "parameters": {"city": "Dallas"}},
@@ -289,9 +274,7 @@ def test_parse_required_tool_choice_kimi_k2_ids(tokenizer):
         ]
     )
     request = make_request(tools=TOOLS, tool_choice="required")
-    _, content, tool_calls = parser.parse(
-        functions_json, request, enable_auto_tools=True
-    )
+    _, content, tool_calls = parser.parse(functions_json, request, enable_auto_tools=True)
 
     assert content is None
     assert tool_calls is not None
@@ -302,12 +285,8 @@ def test_parse_required_tool_choice_kimi_k2_ids(tokenizer):
 
 
 def test_parse_required_tool_choice_kimi_k2_ids_after_history(tokenizer):
-    parser = make_parser(
-        tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG
-    )
-    functions_json = json.dumps(
-        [{"name": "get_current_weather", "parameters": {"city": "Dallas"}}]
-    )
+    parser = make_parser(tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG)
+    functions_json = json.dumps([{"name": "get_current_weather", "parameters": {"city": "Dallas"}}])
     request = make_request(
         messages=HISTORY_MESSAGES,
         tools=TOOLS,
@@ -345,9 +324,7 @@ def test_count_history_tool_calls_responses_request():
 
 def test_parse_required_tool_choice_random_ids_deferred(tokenizer):
     parser = make_parser(tokenizer, reasoning=False, tool=True)
-    functions_json = json.dumps(
-        [{"name": "get_current_weather", "parameters": {"city": "Dallas"}}]
-    )
+    functions_json = json.dumps([{"name": "get_current_weather", "parameters": {"city": "Dallas"}}])
     request = make_request(
         messages=HISTORY_MESSAGES,
         tools=TOOLS,
@@ -360,9 +337,7 @@ def test_parse_required_tool_choice_random_ids_deferred(tokenizer):
 
 
 def test_parse_named_tool_choice_kimi_k2_id(tokenizer):
-    parser = make_parser(
-        tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG
-    )
+    parser = make_parser(tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG)
     request = make_request(
         tools=TOOLS,
         tool_choice={
@@ -370,9 +345,7 @@ def test_parse_named_tool_choice_kimi_k2_id(tokenizer):
             "function": {"name": "get_weather"},
         },
     )
-    _, content, tool_calls = parser.parse(
-        TOOL_ARGUMENTS, request, enable_auto_tools=True
-    )
+    _, content, tool_calls = parser.parse(TOOL_ARGUMENTS, request, enable_auto_tools=True)
 
     assert content is None
     assert tool_calls is not None
@@ -407,9 +380,7 @@ def test_parse_required_tool_choice_content_none(tokenizer):
 def test_parse_auto_tools_no_parser(tokenizer):
     parser = make_parser(tokenizer, reasoning=False, tool=False)
     request = make_request()
-    reasoning, content, tool_calls = parser.parse(
-        TOOL_CALL_ONLY, request, enable_auto_tools=True
-    )
+    reasoning, content, tool_calls = parser.parse(TOOL_CALL_ONLY, request, enable_auto_tools=True)
 
     assert reasoning is None
     assert content == TOOL_CALL_ONLY
@@ -420,9 +391,7 @@ def test_parse_auto_tools_no_parser(tokenizer):
 def test_parse_auto_tools_no_calls_returns_none(tokenizer):
     parser = make_parser(tokenizer, reasoning=False, tool=True)
     request = make_request(tools=TOOLS)
-    reasoning, content, tool_calls = parser.parse(
-        PLAIN_TEXT, request, enable_auto_tools=True
-    )
+    reasoning, content, tool_calls = parser.parse(PLAIN_TEXT, request, enable_auto_tools=True)
 
     assert reasoning is None
     assert content == PLAIN_TEXT

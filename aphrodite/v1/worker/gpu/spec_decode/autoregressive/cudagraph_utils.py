@@ -36,9 +36,7 @@ class PrefillSpeculatorCudaGraphManager(CudaGraphManager):
             num_tokens = desc.num_tokens
             num_reqs = desc.num_reqs or min(num_tokens, self.max_num_reqs)
             num_tokens_across_dp = (
-                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu")
-                if self.dp_size > 1
-                else None
+                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu") if self.dp_size > 1 else None
             )
             attn_state_pair = attn_states[desc]
             attn_state = attn_state_pair.warmup if warmup else attn_state_pair.captured
@@ -76,9 +74,7 @@ class DecodeSpeculatorCudaGraphManager(CudaGraphManager):
             num_tokens = desc.num_tokens
             num_reqs = desc.num_reqs or min(num_tokens, self.max_num_reqs)
             num_tokens_across_dp = (
-                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu")
-                if self.dp_size > 1
-                else None
+                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu") if self.dp_size > 1 else None
             )
             attn_state = prepare_inputs_to_capture(
                 num_reqs,

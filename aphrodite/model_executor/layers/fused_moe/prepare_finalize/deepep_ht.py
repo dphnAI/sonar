@@ -280,9 +280,7 @@ class DeepEPHTPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         if apply_router_weight_on_input:
             topk = topk_ids.size(1)
             # TODO: this only works for topK=1, will need to update for topK>1
-            assert topk == 1, (
-                "apply_router_weight_on_input is only implemented for topk=1"
-            )
+            assert topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
             a1 = a1 * topk_weights.to(a1.dtype)
 
         # * DeepEP only supports fp8 block scales so quantize
@@ -304,11 +302,7 @@ class DeepEPHTPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         else:
             a1q = a1
             a1q_scale = None
-            a1_post_scale = (
-                quant_config.a1_gscale
-                if quant_config.quant_dtype == "nvfp4"
-                else quant_config.a1_scale
-            )
+            a1_post_scale = quant_config.a1_gscale if quant_config.quant_dtype == "nvfp4" else quant_config.a1_scale
 
         return self._do_dispatch(
             tokens=a1q,

@@ -115,8 +115,7 @@ tools2 = [
                 "type": "object",
                 "properties": {
                     "ticker": {
-                        "description": "The stock ticker symbol, e.g."
-                        " AAPL for Apple Inc.",
+                        "description": "The stock ticker symbol, e.g. AAPL for Apple Inc.",
                         "type": "string",
                     }
                 },
@@ -146,8 +145,7 @@ messages = [
         "role": "system",
     },
     {
-        "content": "What are the transaction IDs that ran in the"
-        " ACME region A9345 over the last two months?",
+        "content": "What are the transaction IDs that ran in the ACME region A9345 over the last two months?",
         "role": "user",
     },
     {
@@ -175,9 +173,7 @@ def get_args(client: openai.OpenAI, _tools, _messages, _stop):
     return response.choices[0].message.tool_calls[0].function.arguments
 
 
-async def get_args_streaming(
-    async_client: openai.AsyncOpenAI, _tools, _messages, _stop
-):
+async def get_args_streaming(async_client: openai.AsyncOpenAI, _tools, _messages, _stop):
     stream = await async_client.chat.completions.create(
         model=MODEL,
         messages=_messages,
@@ -199,9 +195,7 @@ async def get_args_streaming(
 async def run_scenario(server: RemoteOpenAIServer, _tools, _messages, _stop):
     non_streaming = get_args(server.get_client(), _tools, _messages, _stop)
     json.loads(non_streaming)  # verify that it is json loadable
-    streaming = await get_args_streaming(
-        server.get_async_client(), _tools, _messages, _stop
-    )
+    streaming = await get_args_streaming(server.get_async_client(), _tools, _messages, _stop)
     json.loads(streaming)
     assert non_streaming == streaming, f"{non_streaming=}, {streaming=}"
 
@@ -212,9 +206,7 @@ async def test_stop_sequence_interference(server: RemoteOpenAIServer):
     await run_scenario(server, tools, messages, "veroniqueprattyushveroniqueprattyush")
 
     print("Testing scenario 2")
-    await run_scenario(
-        server, tools2, messages2, "veroniqueprattyushveroniqueprattyush"
-    )
+    await run_scenario(server, tools2, messages2, "veroniqueprattyushveroniqueprattyush")
 
     print("Testing scenario 3")
     await run_scenario(server, tools2, messages3, "prattyush")

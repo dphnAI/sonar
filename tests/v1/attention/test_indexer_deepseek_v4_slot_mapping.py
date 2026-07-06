@@ -4,10 +4,10 @@
 import pytest
 import torch
 
-from tests.v1.attention.utils import create_aphrodite_config
 from aphrodite.v1.attention.backend import CommonAttentionMetadata
 from aphrodite.v1.attention.backends.mla.indexer import DeepseekV32IndexerMetadataBuilder
 from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+from tests.v1.attention.utils import create_aphrodite_config
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")

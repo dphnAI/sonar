@@ -21,8 +21,8 @@ import time
 import pytest
 
 from aphrodite.env_override import (
-    _patch_inductor_fallback_allow_list,
     _AphroditeFallbackAllowList,
+    _patch_inductor_fallback_allow_list,
 )
 
 
@@ -192,9 +192,7 @@ class TestInductorFallbackFastPath:
     def test_non_aphrodite_ops_still_hit_slow_path(self):
         # Without the patch this is also what would happen; with the patch
         # the behaviour for non-aphrodite namespaces must be unchanged.
-        slow = self._simulate_graph_lowering(
-            ["my_user_ns::custom_op", "fancy_ns::something_else"]
-        )
+        slow = self._simulate_graph_lowering(["my_user_ns::custom_op", "fancy_ns::something_else"])
         assert "my_user_ns::custom_op" in slow
         assert "fancy_ns::something_else" in slow
 
@@ -230,8 +228,7 @@ class TestInductorFallbackFastPath:
         # complete in well under a second even on a slow runner. The
         # pre-patch slow path took many minutes per op on Kimi-K2.6 TP=8.
         assert elapsed_s < 1.0, (
-            f"FALLBACK_ALLOW_LIST membership check is unexpectedly slow: "
-            f"{elapsed_s:.3f}s for {len(op_stream)} ops"
+            f"FALLBACK_ALLOW_LIST membership check is unexpectedly slow: {elapsed_s:.3f}s for {len(op_stream)} ops"
         )
 
     def test_inner_set_membership_still_works_for_standard_ops(self):
@@ -244,7 +241,4 @@ class TestInductorFallbackFastPath:
         # FALLBACK_ALLOW_LIST since the original Inductor implementation.
         # If the proxy ever broke pass-through, this would regress.
         if "torchvision::roi_align" not in allow_list:
-            pytest.skip(
-                "Upstream FALLBACK_ALLOW_LIST no longer ships "
-                "torchvision::roi_align; nothing to verify."
-            )
+            pytest.skip("Upstream FALLBACK_ALLOW_LIST no longer ships torchvision::roi_align; nothing to verify.")

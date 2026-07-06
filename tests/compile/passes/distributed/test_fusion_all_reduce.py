@@ -6,8 +6,6 @@ import pytest
 import torch
 
 import aphrodite.envs as envs
-from tests.compile.backend import TestBackend
-from tests.utils import TestFP8Layer, has_module_attribute, multi_gpu_test
 from aphrodite._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
 from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
 from aphrodite.compilation.passes.fusion.allreduce_rms_fusion import (
@@ -21,12 +19,12 @@ from aphrodite.compilation.passes.utility.fix_functionalization import (
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     DeviceConfig,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.distributed import tensor_model_parallel_all_reduce
@@ -41,6 +39,8 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 from aphrodite.platforms import current_platform
 from aphrodite.utils.system_utils import update_environment_variables
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.compile.backend import TestBackend
+from tests.utils import TestFP8Layer, has_module_attribute, multi_gpu_test
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -138,9 +138,7 @@ class TestAllReduceGemmaRMSNormModel(torch.nn.Module):
 class TestAllReduceRMSNormStaticQuantFP8Model(torch.nn.Module):
     quant_key = kFp8StaticTensorSym
 
-    def __init__(
-        self, hidden_size=16, token_num=16, eps=1e-6, dtype: torch.dtype = torch.float16
-    ):
+    def __init__(self, hidden_size=16, token_num=16, eps=1e-6, dtype: torch.dtype = torch.float16):
         super().__init__()
         self.hidden_size = hidden_size
         self.eps = eps
@@ -232,22 +230,14 @@ class TestAiterAllReduceRMSNormGroupQuantFP8Model(torch.nn.Module):
         )
         self.norm = [RMSNorm(hidden_size, eps) for _ in range(4)]
         self.w = [torch.rand(hidden_size, hidden_size, dtype=dtype) for _ in range(3)]
-        self.indexer_w = [
-            torch.rand(self.indexer_out_dim, hidden_size, dtype=dtype) for _ in range(2)
-        ]
+        self.indexer_w = [torch.rand(self.indexer_out_dim, hidden_size, dtype=dtype) for _ in range(2)]
 
     def _group_quant(self, rms: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.use_triton_quant:
-            return torch.ops.aphrodite.triton_per_token_group_quant_fp8(
-                rms, self.quant_group_size
-            )
-        return torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(
-            rms, self.quant_group_size
-        )
+            return torch.ops.aphrodite.triton_per_token_group_quant_fp8(rms, self.quant_group_size)
+        return torch.ops.aphrodite.rocm_aiter_group_fp8_quant.default(rms, self.quant_group_size)
 
-    def _dequantize_to_bf16(
-        self, q: torch.Tensor, s: torch.Tensor, ref: torch.Tensor
-    ) -> torch.Tensor:
+    def _dequantize_to_bf16(self, q: torch.Tensor, s: torch.Tensor, ref: torch.Tensor) -> torch.Tensor:
         # Broadcast the per-group scale across each group of `quant_group_size`
         # so we can chain the FP8 output back into a bf16 matmul. This avoids
         # depending on a real FP8 block-scaled GEMM kernel in the test.
@@ -302,9 +292,7 @@ class TestAiterAllReduceRMSNormGroupQuantFP8Model(torch.nn.Module):
 
 
 class TestAllReduceFusedAddRMSNormStaticQuantFP4Model(torch.nn.Module):
-    def __init__(
-        self, hidden_size=16, token_num=16, eps=1e-6, dtype: torch.dtype = torch.float16
-    ):
+    def __init__(self, hidden_size=16, token_num=16, eps=1e-6, dtype: torch.dtype = torch.float16):
         super().__init__()
         self.hidden_size = hidden_size
         self.eps = eps
@@ -315,9 +303,7 @@ class TestAllReduceFusedAddRMSNormStaticQuantFP4Model(torch.nn.Module):
         wgscale = [torch.rand(1, dtype=torch.float32) for _ in range(3)]
         self.alpha = [1 / (w * a) for w, a in zip(wgscale, self.agscale)]
 
-        wq_gen, wscale_gen = zip(
-            *(scaled_fp4_quant(w, wg) for w, wg in zip(self.w, wgscale))
-        )
+        wq_gen, wscale_gen = zip(*(scaled_fp4_quant(w, wg) for w, wg in zip(self.w, wgscale)))
         self.wq, self.wscale = list(wq_gen), list(wscale_gen)
 
     def forward(self, hidden_states):
@@ -327,25 +313,19 @@ class TestAllReduceFusedAddRMSNormStaticQuantFP4Model(torch.nn.Module):
         y = self.norm[0](x)
 
         yq, y_scale = scaled_fp4_quant(y, self.agscale[0])
-        z2 = cutlass_scaled_fp4_mm(
-            yq, self.wq[0], y_scale, self.wscale[0], self.alpha[0], out_dtype=y.dtype
-        )
+        z2 = cutlass_scaled_fp4_mm(yq, self.wq[0], y_scale, self.wscale[0], self.alpha[0], out_dtype=y.dtype)
 
         x2 = tensor_model_parallel_all_reduce(z2)
         y2, resid = self.norm[1](x2, resid)
 
         yq2, y_scale2 = scaled_fp4_quant(y2, self.agscale[1])
-        z3 = cutlass_scaled_fp4_mm(
-            yq2, self.wq[1], y_scale2, self.wscale[1], self.alpha[1], out_dtype=y2.dtype
-        )
+        z3 = cutlass_scaled_fp4_mm(yq2, self.wq[1], y_scale2, self.wscale[1], self.alpha[1], out_dtype=y2.dtype)
 
         x3 = tensor_model_parallel_all_reduce(z3)
         y3, resid = self.norm[2](x3, resid)  # use resid here
 
         yq3, y_scale3 = scaled_fp4_quant(y3, self.agscale[2])
-        z4 = cutlass_scaled_fp4_mm(
-            yq3, self.wq[2], y_scale3, self.wscale[2], self.alpha[2], out_dtype=y3.dtype
-        )
+        z4 = cutlass_scaled_fp4_mm(yq3, self.wq[2], y_scale3, self.wscale[2], self.alpha[2], out_dtype=y3.dtype)
         x4 = tensor_model_parallel_all_reduce(z4)
         y4, resid = self.norm[3](x4, resid)  # use resid here
         return y4
@@ -419,12 +399,9 @@ class TestAllReduceFusedAddRMSNormStaticQuantFP4Model(torch.nn.Module):
     and (
         not find_spec("flashinfer")
         or not has_module_attribute("flashinfer.comm", "allreduce_fusion")
-        or not has_module_attribute(
-            "flashinfer.comm", "create_allreduce_fusion_workspace"
-        )
+        or not has_module_attribute("flashinfer.comm", "create_allreduce_fusion_workspace")
     ),
-    reason="flashinfer is not found or flashinfer "
-    "is not compiled with allreduce_fusion",
+    reason="flashinfer is not found or flashinfer is not compiled with allreduce_fusion",
 )
 def test_all_reduce_fusion_pass_replace(
     test_model: torch.nn.Module,
@@ -444,14 +421,10 @@ def test_all_reduce_fusion_pass_replace(
             rocm_aiter_ops.refresh_env_variables()
 
     num_processes = 2
-    if (
-        test_model == TestAllReduceFusedAddRMSNormStaticQuantFP4Model
-        and not current_platform.has_device_capability(100)
+    if test_model == TestAllReduceFusedAddRMSNormStaticQuantFP4Model and not current_platform.has_device_capability(
+        100
     ):
-        pytest.skip(
-            "Skip as nvfp4 is only supported on "
-            "devices with compute capability 10.0 (Blackwell)"
-        )
+        pytest.skip("Skip as nvfp4 is only supported on devices with compute capability 10.0 (Blackwell)")
 
     def run_torch_spawn(fn, nprocs):
         torch.multiprocessing.spawn(
@@ -516,42 +489,30 @@ def all_reduce_fusion_pass_on_test_model(
         custom_ops.append("+quant_fp8")
 
     aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops
-        )
+        compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops)
     )
-    aphrodite_config.compilation_config.pass_config = PassConfig(
-        fuse_allreduce_rms=True, eliminate_noops=True
-    )
+    aphrodite_config.compilation_config.pass_config = PassConfig(fuse_allreduce_rms=True, eliminate_noops=True)
     aphrodite_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
     aphrodite_config.parallel_config.rank = local_rank  # Setup rank for debug path
 
     # this is a fake model name to construct the model config
     # in the aphrodite_config, it's not really used.
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    aphrodite_config.model_config = ModelConfig(
-        model=model_name, trust_remote_code=True, dtype=dtype, seed=42
-    )
+    aphrodite_config.model_config = ModelConfig(model=model_name, trust_remote_code=True, dtype=dtype, seed=42)
     with set_current_aphrodite_config(aphrodite_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
         all_reduce_fusion_pass = (
-            RocmAiterAllReduceFusionPass(aphrodite_config)
-            if use_aiter
-            else AllReduceFusionPass(aphrodite_config)
+            RocmAiterAllReduceFusionPass(aphrodite_config) if use_aiter else AllReduceFusionPass(aphrodite_config)
         )
         noop_pass = NoOpEliminationPass(aphrodite_config)
         func_pass = FixFunctionalizationPass(aphrodite_config)
         cleanup_pass = PostCleanupPass(aphrodite_config)
 
-        backend = TestBackend(
-            noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass
-        )
+        backend = TestBackend(noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass)
 
         token_num = batch_size * seq_len
         if test_model_cls is TestAllReduceRMSNormModel:
-            model = test_model_cls(
-                hidden_size, token_num, dtype=dtype, use_aiter=use_aiter
-            )
+            model = test_model_cls(hidden_size, token_num, dtype=dtype, use_aiter=use_aiter)
         else:
             model = test_model_cls(hidden_size, token_num, dtype=dtype)
 
@@ -564,9 +525,7 @@ def all_reduce_fusion_pass_on_test_model(
         results_fused = compiled_model(hidden_states)
         torch.testing.assert_close(results_unfused, results_fused, atol=1e-2, rtol=1e-2)
 
-        assert all_reduce_fusion_pass.matched_count == 4, (
-            f"{all_reduce_fusion_pass.matched_count=}"
-        )
+        assert all_reduce_fusion_pass.matched_count == 4, f"{all_reduce_fusion_pass.matched_count=}"
         backend.check_before_ops(model.ops_in_model_before(), fully_replaced=False)
         backend.check_after_ops(model.ops_in_model_after())
         if test_model_cls is TestAllReduceGemmaRMSNormModel:
@@ -688,20 +647,14 @@ def rocm_aiter_group_quant_fusion_pass_on_test_model(
     custom_ops.append("+quant_fp8")
 
     aphrodite_config = AphroditeConfig(
-        compilation_config=CompilationConfig(
-            mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops
-        )
+        compilation_config=CompilationConfig(mode=CompilationMode.APHRODITE_COMPILE, custom_ops=custom_ops)
     )
-    aphrodite_config.compilation_config.pass_config = PassConfig(
-        fuse_allreduce_rms=True, eliminate_noops=True
-    )
+    aphrodite_config.compilation_config.pass_config = PassConfig(fuse_allreduce_rms=True, eliminate_noops=True)
     aphrodite_config.device_config = DeviceConfig(device=torch.device(DEVICE_TYPE))
     aphrodite_config.parallel_config.rank = local_rank
 
     model_name = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
-    aphrodite_config.model_config = ModelConfig(
-        model=model_name, trust_remote_code=True, dtype=dtype, seed=42
-    )
+    aphrodite_config.model_config = ModelConfig(model=model_name, trust_remote_code=True, dtype=dtype, seed=42)
     with set_current_aphrodite_config(aphrodite_config):
         initialize_model_parallel(tensor_model_parallel_size=world_size)
         all_reduce_fusion_pass = RocmAiterAllReduceFusionPass(aphrodite_config)
@@ -709,14 +662,10 @@ def rocm_aiter_group_quant_fusion_pass_on_test_model(
         func_pass = FixFunctionalizationPass(aphrodite_config)
         cleanup_pass = PostCleanupPass(aphrodite_config)
 
-        backend = TestBackend(
-            noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass
-        )
+        backend = TestBackend(noop_pass, all_reduce_fusion_pass, func_pass, cleanup_pass)
 
         token_num = batch_size * seq_len
-        model = test_model_cls(
-            hidden_size, token_num, dtype=dtype, use_triton_quant=use_triton_quant
-        )
+        model = test_model_cls(hidden_size, token_num, dtype=dtype, use_triton_quant=use_triton_quant)
 
         hidden_states = torch.randn((token_num, hidden_size), requires_grad=False)
 
@@ -733,9 +682,7 @@ def rocm_aiter_group_quant_fusion_pass_on_test_model(
 
         # Four pattern firings: norm[0] (no-add quant), norm[1] (add quant,
         # single ``rms`` consumer), norm[2..3] (add quant + indexer fan-out).
-        assert all_reduce_fusion_pass.matched_count == 4, (
-            f"{all_reduce_fusion_pass.matched_count=}"
-        )
+        assert all_reduce_fusion_pass.matched_count == 4, f"{all_reduce_fusion_pass.matched_count=}"
         backend.check_before_ops(model.ops_in_model_before(), fully_replaced=False)
         backend.check_after_ops(model.ops_in_model_after())
         del all_reduce_fusion_pass

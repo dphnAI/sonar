@@ -122,9 +122,7 @@ def test_moss_audio_hf_aphrodite_accuracy(
 @pytest.mark.parametrize("parallel_kwargs", PARALLEL_SMOKE_CASES)
 def test_moss_audio_parallel_smoke(aphrodite_runner, parallel_kwargs) -> None:
     model = "OpenMOSS-Team/MOSS-Audio-4B-Instruct"
-    required_gpus = parallel_kwargs.get(
-        "tensor_parallel_size", 1
-    ) * parallel_kwargs.get("pipeline_parallel_size", 1)
+    required_gpus = parallel_kwargs.get("tensor_parallel_size", 1) * parallel_kwargs.get("pipeline_parallel_size", 1)
     if current_platform.device_count() < required_gpus:
         # TP/PP integration smoke runs on local or multi-GPU CI only.
         pytest.skip(f"Requires at least {required_gpus} GPUs")

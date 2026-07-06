@@ -63,12 +63,8 @@ class _SinusoidsPositionEmbedding(nn.Module):
             raise ValueError("SinusoidsPositionEmbedding needs even channels input")
 
         log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
-        inv_timescales = torch.exp(
-            -log_timescale_increment * torch.arange(channels // 2).float()
-        )
-        scaled_time = (
-            torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
-        )
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
+        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
         self.register_buffer(
             "positional_embedding",
             torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
@@ -172,9 +168,7 @@ class FunAudioChatAudioAttention(nn.Module):
         seq_length, _ = hidden_states.size()
 
         qkv, _ = self.qkv_proj(hidden_states)
-        query_states, key_states, value_states = qkv.split(
-            [self.q_size, self.kv_size, self.kv_size], dim=-1
-        )
+        query_states, key_states, value_states = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
 
         max_seqlen: torch.Tensor | None = None
         if cu_seqlens is not None:
@@ -225,13 +219,9 @@ class FunAudioChatAudioEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.activation_dropout, training=self.training
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         return (hidden_states,)
@@ -252,18 +242,11 @@ class FunAudioChatAudioEncoder(nn.Module):
 
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
-        self.layers = nn.ModuleList(
-            [
-                FunAudioChatAudioEncoderLayer(config)
-                for _ in range(int(config.encoder_layers))
-            ]
-        )
+        self.layers = nn.ModuleList([FunAudioChatAudioEncoderLayer(config) for _ in range(int(config.encoder_layers))])
         self.ln_post = nn.LayerNorm(embed_dim)
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
         self.proj = nn.Linear(embed_dim, int(config.output_dim))
-        self.positional_embedding = _SinusoidsPositionEmbedding(
-            self.max_source_positions, embed_dim
-        )
+        self.positional_embedding = _SinusoidsPositionEmbedding(self.max_source_positions, embed_dim)
 
         # Present in HF weights even if unused during S2T.
         self.audio_bos_eos_token = nn.Embedding(2, int(config.output_dim))
@@ -272,9 +255,7 @@ class FunAudioChatAudioEncoder(nn.Module):
     def dtype(self) -> torch.dtype:
         return self.conv1.weight.dtype
 
-    def _prepare_attention_mask(
-        self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor
-    ) -> torch.Tensor | None:
+    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor | None:
         if getattr(self.config, "_attn_implementation", "eager") == "flash_attention_2":
             return None
 
@@ -310,9 +291,7 @@ class FunAudioChatAudioEncoder(nn.Module):
                     "for the continuous audio tower, but `flash_attn` is not "
                     "installed in the runtime environment."
                 )
-            if not getattr(
-                self.layers[0].self_attn.attn, "is_flash_attn_backend", False
-            ):
+            if not getattr(self.layers[0].self_attn.attn, "is_flash_attn_backend", False):
                 raise RuntimeError(
                     "FunAudioChat long audio (~300s) requires FlashAttention for the "
                     "continuous audio tower, but the selected MM encoder attention "
@@ -357,15 +336,11 @@ class FunAudioChatAudioEncoder(nn.Module):
                 last_chunk_len = full_chunk_len
             chunk_lengths_list.append(last_chunk_len)
 
-        chunk_lengths = torch.tensor(
-            chunk_lengths_list, dtype=torch.long, device=device
-        )
+        chunk_lengths = torch.tensor(chunk_lengths_list, dtype=torch.long, device=device)
 
         chunk_list = valid_input_features.split(chunk_lengths.tolist(), dim=1)
-        padded_feature, padded_mask, padded_mask_after_cnn = (
-            self.padded_and_mask_function(
-                chunk_list, chunk_lengths, padding_value=0, padding_side="right"
-            )
+        padded_feature, padded_mask, padded_mask_after_cnn = self.padded_and_mask_function(
+            chunk_list, chunk_lengths, padding_value=0, padding_side="right"
         )
 
         padded_embed = nn.functional.gelu(self.conv1(padded_feature)) * padded_mask
@@ -397,9 +372,9 @@ class FunAudioChatAudioEncoder(nn.Module):
         for each_audio_states in hidden_states_list:
             seq_len = int(each_audio_states.shape[0])
             if seq_len >= 2:
-                pooled = nn.functional.avg_pool1d(
-                    each_audio_states.transpose(0, 1), kernel_size=2, stride=2
-                ).transpose(0, 1)
+                pooled = nn.functional.avg_pool1d(each_audio_states.transpose(0, 1), kernel_size=2, stride=2).transpose(
+                    0, 1
+                )
             else:
                 pooled = each_audio_states
             pooled_list.append(pooled)
@@ -409,16 +384,10 @@ class FunAudioChatAudioEncoder(nn.Module):
         processed_concat = self.proj(self.ln_post(pooled_concat))
         processed_audio_list = list(processed_concat.split(pooled_lengths, dim=0))
 
-        output_dim = (
-            int(processed_audio_list[0].shape[-1])
-            if processed_audio_list
-            else int(self.proj.out_features)
-        )
+        output_dim = int(processed_audio_list[0].shape[-1]) if processed_audio_list else int(self.proj.out_features)
         output_hidden_states = torch.zeros(
             (original_batch_size, speech_maxlen, output_dim),
-            dtype=processed_audio_list[0].dtype
-            if processed_audio_list
-            else self.proj.weight.dtype,
+            dtype=processed_audio_list[0].dtype if processed_audio_list else self.proj.weight.dtype,
             device=device,
         )
 
@@ -444,9 +413,7 @@ class FunAudioChatAudioEncoder(nn.Module):
             device=tensor_list[0].device,
         )
 
-        batch_mask = torch.zeros(
-            (len(tensor_len), max_len), dtype=torch.long, device=padded_tensor.device
-        )
+        batch_mask = torch.zeros((len(tensor_len), max_len), dtype=torch.long, device=padded_tensor.device)
         for i, length in enumerate(tensor_len):
             length_val = int(length.item())
             batch_mask[i, :length_val] = 1
@@ -488,16 +455,10 @@ class FunAudioChatDiscreteEncoder(nn.Module):
         self.padding_idx = int(config.pad_token_id)
         self.group_size = int(config.group_size)
         self.hidden_size = int(config.output_dim)
-        self.continuous_features_mode = getattr(
-            config, "continuous_features_mode", "add"
-        )
-        self.embed_tokens = nn.Embedding(
-            int(config.codebook_size), self.hidden_size, self.padding_idx
-        )
+        self.continuous_features_mode = getattr(config, "continuous_features_mode", "add")
+        self.embed_tokens = nn.Embedding(int(config.codebook_size), self.hidden_size, self.padding_idx)
         self.output_matching = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.continual_output_matching = nn.Linear(
-            self.hidden_size, self.hidden_size, bias=False
-        )
+        self.continual_output_matching = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
     def forward(
         self,
@@ -509,12 +470,8 @@ class FunAudioChatDiscreteEncoder(nn.Module):
         del continuous_audio_output_lengths
 
         inputs_embeds = self.embed_tokens(audio_ids)
-        hidden_states = inputs_embeds.reshape(
-            inputs_embeds.shape[0], -1, self.group_size * self.hidden_size
-        )
-        hidden_states = hidden_states.reshape(
-            hidden_states.shape[0], -1, self.group_size, self.hidden_size
-        ).mean(dim=2)
+        hidden_states = inputs_embeds.reshape(inputs_embeds.shape[0], -1, self.group_size * self.hidden_size)
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], -1, self.group_size, self.hidden_size).mean(dim=2)
         hidden_states = self.output_matching(hidden_states)
 
         if continuous_audio_features is not None:
@@ -524,9 +481,7 @@ class FunAudioChatDiscreteEncoder(nn.Module):
                 self.group_size,
                 self.hidden_size,
             ).mean(dim=2)
-            continuous_audio_hidden_states = self.continual_output_matching(
-                continuous_audio_features
-            )
+            continuous_audio_hidden_states = self.continual_output_matching(continuous_audio_features)
 
             if feature_exist_mask is None:
                 feature_exist_mask = torch.ones(
@@ -557,9 +512,7 @@ class FunAudioChatProcessingInfo(BaseProcessingInfo):
 
     @cached_property
     def speech_tokenizer(self) -> PreTrainedTokenizerFast:
-        return PreTrainedTokenizerFast.from_pretrained(
-            self.model_id, subfolder="speech_tokenizer"
-        )
+        return PreTrainedTokenizerFast.from_pretrained(self.model_id, subfolder="speech_tokenizer")
 
     def get_feature_extractor(self) -> WhisperFeatureExtractor:
         return self.feature_extractor
@@ -598,9 +551,7 @@ class FunAudioChatProcessingInfo(BaseProcessingInfo):
         return int(getattr(audio_cfg, "group_size", 5))
 
 
-class FunAudioChatDummyInputsBuilder(
-    BaseDummyInputsBuilder[FunAudioChatProcessingInfo]
-):
+class FunAudioChatDummyInputsBuilder(BaseDummyInputsBuilder[FunAudioChatProcessingInfo]):
     def get_dummy_text(self, mm_counts: Mapping[str, int]) -> str:
         num_audios = mm_counts.get("audio", 0)
         return "<|audio_bos|><|AUDIO|><|audio_eos|>" * int(num_audios)
@@ -638,9 +589,7 @@ class FunAudioChatDummyInputsBuilder(
         }
 
 
-class FunAudioChatMultiModalProcessor(
-    BaseMultiModalProcessor[FunAudioChatProcessingInfo]
-):
+class FunAudioChatMultiModalProcessor(BaseMultiModalProcessor[FunAudioChatProcessingInfo]):
     def _call_hf_processor(
         self,
         prompt: str,
@@ -670,14 +619,10 @@ class FunAudioChatMultiModalProcessor(
             audio_np = np.asarray(audio, dtype=np.float32)
 
             if min_samples > 0 and audio_np.shape[0] < min_samples:
-                audio_np = np.pad(
-                    audio_np, (0, min_samples - audio_np.shape[0]), mode="constant"
-                )
+                audio_np = np.pad(audio_np, (0, min_samples - audio_np.shape[0]), mode="constant")
 
             wavs.append(audio_np)
-            num_frames = int(
-                (float(audio_np.shape[0]) / float(sr)) * float(self.info.token_fps)
-            )
+            num_frames = int((float(audio_np.shape[0]) / float(sr)) * float(self.info.token_fps))
             speech_strs.append(pad_token * max(1, int(num_frames)))
 
         audio_group_size = self.info.get_audio_group_size()
@@ -750,21 +695,14 @@ class FunAudioChatMultiModalProcessor(
             assert isinstance(speech_attention_mask, torch.Tensor)
             speech_lengths = speech_attention_mask.sum(-1)
             group_size = self.info.get_audio_group_size()
-            audio_output_lengths = (
-                (speech_lengths + group_size - 1) // group_size
-            ).tolist()
+            audio_output_lengths = ((speech_lengths + group_size - 1) // group_size).tolist()
 
         def get_replacement_funaudiochat(item_idx: int):
-            num_features = (
-                int(audio_output_lengths[item_idx]) if audio_output_lengths else 1
-            )
+            num_features = int(audio_output_lengths[item_idx]) if audio_output_lengths else 1
             if num_features <= 0:
                 audios = mm_items.get_items("audio", AudioProcessorItems)
                 audio_len = audios.get_audio_length(item_idx)
-                raise ValueError(
-                    f"The audio (len={audio_len}) is too short to be "
-                    "represented inside the model"
-                )
+                raise ValueError(f"The audio (len={audio_len}) is too short to be represented inside the model")
 
             audio_tokens = [audio_token_id] * num_features
             return PromptUpdateDetails.select_token_id(
@@ -815,9 +753,7 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
                 architectures=["Qwen3ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     def _get_continuous_audio_features(
         self,
@@ -826,24 +762,17 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
         speech_maxlen: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Align mask and features to avoid indexing errors when padding differs.
-        if (
-            input_features.dim() == 3
-            and feature_attention_mask.shape[1] != input_features.shape[-1]
-        ):
-            min_len = min(
-                int(feature_attention_mask.shape[1]), int(input_features.shape[-1])
-            )
+        if input_features.dim() == 3 and feature_attention_mask.shape[1] != input_features.shape[-1]:
+            min_len = min(int(feature_attention_mask.shape[1]), int(input_features.shape[-1]))
             feature_attention_mask = feature_attention_mask[:, :min_len]
             input_features = input_features[:, :, :min_len]
 
         feature_lens = torch.sum(feature_attention_mask, dim=1)
 
-        flat_features = input_features.permute(0, 2, 1)[
-            feature_attention_mask.bool()
-        ].permute(1, 0)
+        flat_features = input_features.permute(0, 2, 1)[feature_attention_mask.bool()].permute(1, 0)
 
-        audio_feat_lengths, audio_output_lengths = (
-            self.continuous_audio_tower._get_feat_extract_output_lengths(feature_lens)
+        audio_feat_lengths, audio_output_lengths = self.continuous_audio_tower._get_feat_extract_output_lengths(
+            feature_lens
         )
 
         audio_outputs = self.continuous_audio_tower(
@@ -878,8 +807,7 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
                         t = t.squeeze(0)
                     if t.dim() != 1:
                         raise TypeError(
-                            "FunAudioChat speech_ids must be a 1D tensor per item "
-                            f"(got shape={tuple(t.shape)})"
+                            f"FunAudioChat speech_ids must be a 1D tensor per item (got shape={tuple(t.shape)})"
                         )
                     speech_ids_tensors.append(t)
                 speech_ids = nn.utils.rnn.pad_sequence(
@@ -889,8 +817,7 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
                 )
             else:
                 raise TypeError(
-                    "FunAudioChat speech_ids must be a Tensor or a sequence of Tensors "
-                    f"(got {type(speech_ids)})"
+                    f"FunAudioChat speech_ids must be a Tensor or a sequence of Tensors (got {type(speech_ids)})"
                 )
 
         if speech_attention_mask is None:
@@ -932,9 +859,7 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
             pad_id = int(self.audio_tower.padding_idx)
             pad_len = target_len - speech_maxlen
             speech_ids = nn.functional.pad(speech_ids, (0, pad_len), value=pad_id)
-            speech_attention_mask = nn.functional.pad(
-                speech_attention_mask, (0, pad_len), value=0
-            )
+            speech_attention_mask = nn.functional.pad(speech_attention_mask, (0, pad_len), value=0)
             speech_maxlen = int(speech_ids.shape[-1])
 
         continuous_audio_features = None
@@ -942,18 +867,14 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
         if input_features is not None and feature_attention_mask is not None:
             assert isinstance(input_features, torch.Tensor)
             assert isinstance(feature_attention_mask, torch.Tensor)
-            continuous_audio_features, continuous_audio_output_lengths = (
-                self._get_continuous_audio_features(
-                    input_features=input_features,
-                    feature_attention_mask=feature_attention_mask,
-                    speech_maxlen=speech_maxlen,
-                )
+            continuous_audio_features, continuous_audio_output_lengths = self._get_continuous_audio_features(
+                input_features=input_features,
+                feature_attention_mask=feature_attention_mask,
+                speech_maxlen=speech_maxlen,
             )
 
         if feature_exist_mask is None:
-            feature_exist_mask = torch.ones(
-                (speech_ids.shape[0],), dtype=torch.bool, device=speech_ids.device
-            )
+            feature_exist_mask = torch.ones((speech_ids.shape[0],), dtype=torch.bool, device=speech_ids.device)
         assert isinstance(feature_exist_mask, torch.Tensor)
 
         audio_features = self.audio_tower(
@@ -963,14 +884,10 @@ class FunAudioChatForConditionalGeneration(nn.Module, SupportsMultiModal, Suppor
             feature_exist_mask=feature_exist_mask,
         )
 
-        _, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
-            speech_attention_mask.sum(-1)
-        )
+        _, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(speech_attention_mask.sum(-1))
         lengths = audio_output_lengths.tolist()
 
-        embeds = tuple(
-            audio_features[i, : int(length)] for i, length in enumerate(lengths)
-        )
+        embeds = tuple(audio_features[i, : int(length)] for i, length in enumerate(lengths))
         return embeds
 
     def forward(

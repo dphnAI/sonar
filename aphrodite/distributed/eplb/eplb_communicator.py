@@ -260,9 +260,7 @@ class NixlEplbCommunicator(EplbCommunicator):
                 where ranks join asynchronously and cannot participate
                 in collectives at construction time.
         """
-        assert all_expert_weights, (
-            "NixlEplbCommunicator requires non-empty all_expert_weights."
-        )
+        assert all_expert_weights, "NixlEplbCommunicator requires non-empty all_expert_weights."
         assert expert_buffer, "NixlEplbCommunicator requires non-empty expert_buffer."
         nixl_wrapper_cls = nixl_utils.NixlWrapper
         if nixl_wrapper_cls is None:
@@ -279,17 +277,13 @@ class NixlEplbCommunicator(EplbCommunicator):
 
         for layer_tensors in all_expert_weights:
             for tensor in layer_tensors:
-                assert is_weak_contiguous(tensor), (
-                    "Expert weight tensors must be contiguous in memory"
-                )
+                assert is_weak_contiguous(tensor), "Expert weight tensors must be contiguous in memory"
                 assert tensor.device == self._device, (
                     "All local EPLB tensors are expected to be on the same "
                     f"device: expected={self._device}, got={tensor.device}"
                 )
         for tensor in expert_buffer:
-            assert is_weak_contiguous(tensor), (
-                "expert_buffer tensors must be contiguous in memory"
-            )
+            assert is_weak_contiguous(tensor), "expert_buffer tensors must be contiguous in memory"
 
         # (local_dlist, remote_dlist, xfer_handle) for in-flight READs;
         # accumulated by add_recv, drained by execute.
@@ -299,20 +293,14 @@ class NixlEplbCommunicator(EplbCommunicator):
         self._layer_idx: int | None = None
 
         nixl_agent_config = nixl_utils.nixl_agent_config
-        config = (
-            nixl_agent_config(capture_telemetry=False)
-            if nixl_agent_config is not None
-            else None
-        )
+        config = nixl_agent_config(capture_telemetry=False) if nixl_agent_config is not None else None
         self._nixl_wrapper = nixl_wrapper_cls(self._make_agent_name(), config)
         self._nixl_memory_type = "VRAM"
         # NIXL registration handles; deregistered in __del__.
         self._registered_descs: list[object] = []
         self._remote_agents: dict[int, str] = {}
         # peer -> (layer, tensor) -> (base_ptr, bytes_per_expert, dev_id).
-        self._remote_send_meta: dict[
-            int, dict[tuple[int, int], tuple[int, int, int]]
-        ] = {}
+        self._remote_send_meta: dict[int, dict[tuple[int, int], tuple[int, int, int]]] = {}
 
         self._cuda_device_id = int(self._device.index or 0)
         self._remote_state_initialized = False
@@ -380,10 +368,7 @@ class NixlEplbCommunicator(EplbCommunicator):
         self._layer_idx = layer_idx
         n = self._num_local_experts
         rank_experts = old_indices[: self._world_size * n].reshape(self._world_size, n)
-        self._expert_to_src_row = [
-            {int(eid): i for i, eid in enumerate(row) if eid != -1}
-            for row in rank_experts
-        ]
+        self._expert_to_src_row = [{int(eid): i for i, eid in enumerate(row) if eid != -1} for row in rank_experts]
 
     def add_recv(
         self,
@@ -403,12 +388,8 @@ class NixlEplbCommunicator(EplbCommunicator):
         local_descs: list[tuple[int, int, int]] = []
         remote_descs: list[tuple[int, int, int]] = []
         for t_idx, t in enumerate(tensors):
-            send_base, send_stride, remote_dev = self._remote_send_meta[src_rank][
-                (layer_idx, t_idx)
-            ]
-            assert t.nbytes == send_stride, (
-                f"tensor {t_idx} size {t.nbytes} != remote stride {send_stride}"
-            )
+            send_base, send_stride, remote_dev = self._remote_send_meta[src_rank][(layer_idx, t_idx)]
+            assert t.nbytes == send_stride, f"tensor {t_idx} size {t.nbytes} != remote stride {send_stride}"
             local_descs.append(
                 (
                     t.data_ptr(),
@@ -424,26 +405,20 @@ class NixlEplbCommunicator(EplbCommunicator):
                 )
             )
 
-        local_h, remote_h, xfer_h = self._create_peer_xfer(
-            src_rank, local_descs, remote_descs
-        )
+        local_h, remote_h, xfer_h = self._create_peer_xfer(src_rank, local_descs, remote_descs)
         self._nixl_wrapper.transfer(xfer_h)
         self._xfer_entries.append((local_h, remote_h, xfer_h))
 
     def _init_remote_agents(self) -> None:
         local_metadata = self._nixl_wrapper.get_agent_metadata()
         gathered_metadata: list[bytes | None] = [None] * self._world_size
-        torch.distributed.all_gather_object(
-            gathered_metadata, local_metadata, group=self._cpu_group
-        )
+        torch.distributed.all_gather_object(gathered_metadata, local_metadata, group=self._cpu_group)
         for peer in range(self._world_size):
             if peer == self._rank:
                 continue
             peer_metadata = gathered_metadata[peer]
             assert peer_metadata is not None
-            self._remote_agents[peer] = self._nixl_wrapper.add_remote_agent(
-                peer_metadata
-            )
+            self._remote_agents[peer] = self._nixl_wrapper.add_remote_agent(peer_metadata)
 
     def _init_registered_buffers(self) -> None:
         all_tensors: list[torch.Tensor] = []
@@ -471,12 +446,8 @@ class NixlEplbCommunicator(EplbCommunicator):
         # Per-rank map: (layer_idx, tensor_idx) -> (base_ptr, bytes_per_expert, dev_id).
         # add_recv uses base_ptr + src_row * bytes_per_expert to compute
         # the remote RDMA address for each expert.
-        gathered_meta: list[dict[tuple[int, int], tuple[int, int, int]] | None] = [
-            None
-        ] * self._world_size
-        torch.distributed.all_gather_object(
-            gathered_meta, local_meta, group=self._cpu_group
-        )
+        gathered_meta: list[dict[tuple[int, int], tuple[int, int, int]] | None] = [None] * self._world_size
+        torch.distributed.all_gather_object(gathered_meta, local_meta, group=self._cpu_group)
 
         local_keys = set(local_meta.keys())
         for peer in self._remote_agents:
@@ -528,17 +499,13 @@ class NixlEplbCommunicator(EplbCommunicator):
 
         Returns ``(local_dlist, remote_dlist, xfer_handle)``.
         """
-        local_desc = self._nixl_wrapper.get_xfer_descs(
-            local_descs, self._nixl_memory_type
-        )
+        local_desc = self._nixl_wrapper.get_xfer_descs(local_descs, self._nixl_memory_type)
         local_handle = self._nixl_wrapper.prep_xfer_dlist(
             "NIXL_INIT_AGENT",
             local_desc,
         )
 
-        remote_desc = self._nixl_wrapper.get_xfer_descs(
-            remote_descs, self._nixl_memory_type
-        )
+        remote_desc = self._nixl_wrapper.get_xfer_descs(remote_descs, self._nixl_memory_type)
         remote_handle = self._nixl_wrapper.prep_xfer_dlist(
             self._remote_agents[src],
             remote_desc,
@@ -564,15 +531,12 @@ class NixlEplbCommunicator(EplbCommunicator):
         equivalent timeout detection.
         """
         _dummy = torch.zeros(1, dtype=torch.int32)
-        work = torch.distributed.all_reduce(
-            _dummy, group=self._cpu_group, async_op=True
-        )
+        work = torch.distributed.all_reduce(_dummy, group=self._cpu_group, async_op=True)
         work.wait(timeout=timedelta(minutes=5))
 
     def execute(self) -> None:
         assert self._layer_idx is not None or not self._xfer_entries, (
-            "set_transfer_context() must be called before execute() "
-            "if any add_recv() calls were made"
+            "set_transfer_context() must be called before execute() if any add_recv() calls were made"
         )
         try:
             self._wait_for_all_transfers([x[2] for x in self._xfer_entries])
@@ -684,24 +648,15 @@ def create_eplb_communicator(
     """
     first_layer = expert_weights[0] if expert_weights else []
     tensor_device_type = first_layer[0].device.type if first_layer else "cpu"
-    torch_group = (
-        group_coordinator.cpu_group
-        if tensor_device_type == "cpu"
-        else group_coordinator.device_group
-    )
+    torch_group = group_coordinator.cpu_group if tensor_device_type == "cpu" else group_coordinator.device_group
 
     def _create_pynccl() -> EplbCommunicator:
         if tensor_device_type == "cpu":
             raise RuntimeError(
-                "EPLB communicator 'pynccl' supports only cuda-like devices "
-                f"(got {tensor_device_type})."
+                f"EPLB communicator 'pynccl' supports only cuda-like devices (got {tensor_device_type})."
             )
         unsupported_dtypes = sorted(
-            {
-                tensor.dtype
-                for tensor in first_layer
-                if not ncclDataTypeEnum.supports_torch_dtype(tensor.dtype)
-            },
+            {tensor.dtype for tensor in first_layer if not ncclDataTypeEnum.supports_torch_dtype(tensor.dtype)},
             key=str,
         )
         if unsupported_dtypes:
@@ -712,19 +667,13 @@ def create_eplb_communicator(
             )
 
         device_comm = group_coordinator.device_communicator
-        pynccl_comm = (
-            getattr(device_comm, "pynccl_comm", None)
-            if device_comm is not None
-            else None
-        )
+        pynccl_comm = getattr(device_comm, "pynccl_comm", None) if device_comm is not None else None
         if pynccl_comm is None or pynccl_comm.disabled or not pynccl_comm.available:
             raise RuntimeError("EPLB communicator 'pynccl' requested but unavailable.")
         try:
             return PyNcclEplbCommunicator(pynccl_comm=pynccl_comm)
         except Exception as exc:
-            raise RuntimeError(
-                f"Failed to initialize PyNcclEplbCommunicator ({exc})."
-            ) from exc
+            raise RuntimeError(f"Failed to initialize PyNcclEplbCommunicator ({exc}).") from exc
 
     is_stateless = isinstance(group_coordinator, StatelessGroupCoordinator)
     if is_stateless:
@@ -732,28 +681,19 @@ def create_eplb_communicator(
             pass  # handled below with defer_remote_setup=True
         elif backend not in ("torch_nccl", "pynccl"):
             raise ValueError(
-                f"Elastic EP requires 'torch_nccl', 'pynccl', or 'nixl' "
-                f"EPLB communicator (got '{backend}')."
+                f"Elastic EP requires 'torch_nccl', 'pynccl', or 'nixl' EPLB communicator (got '{backend}')."
             )
         else:
             if backend == "torch_nccl":
-                logger.warning(
-                    "Stateless elastic EP requires PyNCCL backend. "
-                    "Forcing EPLB communicator to 'pynccl'."
-                )
+                logger.warning("Stateless elastic EP requires PyNCCL backend. Forcing EPLB communicator to 'pynccl'.")
                 backend = "pynccl"
             return _create_pynccl()
 
     if backend == "nixl":
         if not has_nixl():
-            raise RuntimeError(
-                "EPLB communicator 'nixl' requested but NIXL is unavailable."
-            )
+            raise RuntimeError("EPLB communicator 'nixl' requested but NIXL is unavailable.")
         if not (current_platform.is_cuda_alike() and tensor_device_type != "cpu"):
-            raise RuntimeError(
-                "EPLB communicator 'nixl' supports only cuda-like devices "
-                f"(got {tensor_device_type})."
-            )
+            raise RuntimeError(f"EPLB communicator 'nixl' supports only cuda-like devices (got {tensor_device_type}).")
         try:
             return NixlEplbCommunicator(
                 cpu_group=group_coordinator.cpu_group,
@@ -762,9 +702,7 @@ def create_eplb_communicator(
                 defer_remote_setup=is_stateless,
             )
         except Exception as exc:
-            raise RuntimeError(
-                f"Failed to initialize NixlEplbCommunicator ({exc})."
-            ) from exc
+            raise RuntimeError(f"Failed to initialize NixlEplbCommunicator ({exc}).") from exc
     elif backend == "torch_gloo":
         return TorchDistGlooStagedEplbCommunicator(
             cpu_group=group_coordinator.cpu_group,

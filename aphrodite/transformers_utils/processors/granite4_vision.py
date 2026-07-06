@@ -72,7 +72,5 @@ class Granite4VisionProcessor(LlavaNextProcessor):
             scale_height,
             scale_width,
         )
-        base_features = (
-            patches_height * patches_width + self.num_additional_image_tokens
-        )
+        base_features = patches_height * patches_width + self.num_additional_image_tokens
         return unpadded_features + newline_features + base_features

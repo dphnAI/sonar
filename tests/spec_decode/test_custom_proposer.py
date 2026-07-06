@@ -30,9 +30,7 @@ class DummyDraftProposer:
         Args:
             aphrodite_config: Aphrodite configuration containing model and speculative settings.
         """
-        self.num_speculative_tokens = (
-            aphrodite_config.speculative_config.num_speculative_tokens
-        )
+        self.num_speculative_tokens = aphrodite_config.speculative_config.num_speculative_tokens
         self.max_model_len = aphrodite_config.model_config.max_model_len
         print(
             f"[DummyDraftProposer.__init__] num_speculative_tokens="
@@ -112,9 +110,7 @@ if __name__ == "__main__":
         print("-" * 60)
 
     # Verify the custom proposer's propose() was actually called across processes
-    assert os.path.exists("proposer_called.flag"), (
-        "The custom proposer's propose() method was never called!"
-    )
+    assert os.path.exists("proposer_called.flag"), "The custom proposer's propose() method was never called!"
     os.remove("proposer_called.flag")
 
     print("✓ Custom proposer was actively used during generation!")

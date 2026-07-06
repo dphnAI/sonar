@@ -68,9 +68,7 @@ def _fused_mtp_input_rmsnorm_kernel(
         # regardless of weight, matching torch.where(pos==0, 0, x) + RMSNorm.
         pos = tl.load(positions_ptr + token_idx)
         keep = pos != 0
-        x = tl.load(
-            inputs_embeds_ptr + token_idx * HIDDEN + block, mask=mask, other=0.0
-        )
+        x = tl.load(inputs_embeds_ptr + token_idx * HIDDEN + block, mask=mask, other=0.0)
         x = tl.where(keep, x, 0.0)
         _rmsnorm_row(
             x,
@@ -168,15 +166,8 @@ def fused_mtp_input_rmsnorm(
     assert inputs_embeds.ndim == 2
     assert previous_hidden_states.ndim == 3
     assert previous_hidden_states.shape[1] == hc_mult
-    assert inputs_embeds.shape[0] == previous_hidden_states.shape[0], (
-        "token dim mismatch"
-    )
-    assert (
-        inputs_embeds.shape[1]
-        == previous_hidden_states.shape[2]
-        == enorm_weight.shape[0]
-        == hnorm_weight.shape[0]
-    )
+    assert inputs_embeds.shape[0] == previous_hidden_states.shape[0], "token dim mismatch"
+    assert inputs_embeds.shape[1] == previous_hidden_states.shape[2] == enorm_weight.shape[0] == hnorm_weight.shape[0]
     assert inputs_embeds.is_contiguous() and previous_hidden_states.is_contiguous()
     assert enorm_weight.is_contiguous() and hnorm_weight.is_contiguous()
 

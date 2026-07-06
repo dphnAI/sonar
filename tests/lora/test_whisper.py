@@ -31,9 +31,7 @@ def use_spawn_for_whisper(monkeypatch):
     monkeypatch.setenv("APHRODITE_WORKER_MULTIPROC_METHOD", "spawn")
 
 
-def create_whisper_llm(
-    enable_lora: bool = True, max_loras: int = 2, attn_backend: str | None = None
-):
+def create_whisper_llm(enable_lora: bool = True, max_loras: int = 2, attn_backend: str | None = None):
     """Create a Whisper LLM instance with optional LoRA support."""
     return aphrodite.LLM(
         model=WHISPER_MODEL,
@@ -129,6 +127,5 @@ def test_whisper_multi_lora(whisper_lora_files):
 
     # Same adapter with different IDs should produce same output
     assert outputs_lora1 == outputs_lora2, (
-        f"Expected same outputs for same adapter with different IDs. "
-        f"Got: {outputs_lora1} vs {outputs_lora2}"
+        f"Expected same outputs for same adapter with different IDs. Got: {outputs_lora1} vs {outputs_lora2}"
     )

@@ -560,7 +560,8 @@ void launchFusedMiniMaxM3(
 }  // namespace aphrodite
 
 #define CALL_FUSED_MINIMAX_M3(_RAW_T, CACHE_T, KV_DTYPE)                       \
-  aphrodite::minimax_m3_fused_ops::launchFusedMiniMaxM3<st, CACHE_T, KV_DTYPE>(     \
+  aphrodite::minimax_m3_fused_ops::launchFusedMiniMaxM3<st, CACHE_T,           \
+                                                        KV_DTYPE>(             \
       reinterpret_cast<st*>(qkv.data_ptr()),                                   \
       q_out.has_value() ? reinterpret_cast<st*>(q_out->data_ptr()) : nullptr,  \
       index_q_out.has_value()                                                  \

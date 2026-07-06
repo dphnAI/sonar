@@ -19,9 +19,7 @@ MODEL_NAME_ROBERTA = os.environ.get("MODEL_NAME", "intfloat/multilingual-e5-base
 REVISION_ROBERTA = os.environ.get("REVISION", "main")
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
 def test_model_loading_with_params(aphrodite_runner, monkeypatch):
     """
     Test parameter weight loading with tp>1.
@@ -34,9 +32,7 @@ def test_model_loading_with_params(aphrodite_runner, monkeypatch):
         dtype="float16",
         max_model_len=MAX_MODEL_LEN,
     ) as aphrodite_model:
-        output = aphrodite_model.embed(
-            "Write a short story about a robot that dreams for the first time.\n"
-        )
+        output = aphrodite_model.embed("Write a short story about a robot that dreams for the first time.\n")
 
         model_config = aphrodite_model.llm.llm_engine.model_config
         model_tokenizer = aphrodite_model.llm.llm_engine.tokenizer
@@ -64,9 +60,7 @@ def test_model_loading_with_params(aphrodite_runner, monkeypatch):
         assert output
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
 def test_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
     """
     Test parameter weight loading with tp>1.
@@ -79,9 +73,7 @@ def test_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
         dtype="float16",
         max_model_len=MAX_MODEL_LEN,
     ) as aphrodite_model:
-        output = aphrodite_model.embed(
-            "Write a short story about a robot that dreams for the first time.\n"
-        )
+        output = aphrodite_model.embed("Write a short story about a robot that dreams for the first time.\n")
 
         model_config = aphrodite_model.llm.llm_engine.model_config
         model_tokenizer = aphrodite_model.llm.llm_engine.tokenizer
@@ -109,9 +101,7 @@ def test_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
         assert output
 
 
-@pytest.mark.skipif(
-    current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm."
-)
+@pytest.mark.skipif(current_platform.is_rocm(), reason="Xformers backend is not supported on ROCm.")
 def test_facebook_roberta_model_loading_with_params(aphrodite_runner, monkeypatch):
     """
     Test loading roberta-base model with no lm_head.
@@ -119,12 +109,8 @@ def test_facebook_roberta_model_loading_with_params(aphrodite_runner, monkeypatc
     # to use apply_model
     monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
     model_name = "FacebookAI/roberta-base"
-    with aphrodite_runner(
-        model_name=model_name, dtype="float16", max_model_len=MAX_MODEL_LEN
-    ) as aphrodite_model:
-        output = aphrodite_model.embed(
-            "Write a short story about a robot that dreams for the first time.\n"
-        )
+    with aphrodite_runner(model_name=model_name, dtype="float16", max_model_len=MAX_MODEL_LEN) as aphrodite_model:
+        output = aphrodite_model.embed("Write a short story about a robot that dreams for the first time.\n")
 
         assert aphrodite_model.llm.llm_engine.model_config.tokenizer == model_name
 

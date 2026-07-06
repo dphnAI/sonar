@@ -4,8 +4,8 @@
 import pytest
 from transformers import AutoTokenizer
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
+from tests.reasoning.utils import run_reasoning_extraction
 
 parser_name = "olmo3"
 START_REASONING = "<think>"
@@ -149,9 +149,7 @@ def test_reasoning(
     output = tokenizer.tokenize(param_dict["output"])
 
     # decode everything to tokens
-    model_output: list[str] = [
-        tokenizer.convert_tokens_to_string([token]) for token in output
-    ]
+    model_output: list[str] = [tokenizer.convert_tokens_to_string([token]) for token in output]
     parser_cls = ReasoningParserManager.get_reasoning_parser(parser_name)
     parser: ReasoningParser = parser_cls(tokenizer)
 

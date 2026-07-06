@@ -19,9 +19,7 @@ class ServerConfig(TypedDict, total=False):
     extended: bool | None  # tests do not run in CI automatically
 
 
-def patch_system_prompt(
-    messages: list[dict[str, Any]], system_prompt: str
-) -> list[dict[str, Any]]:
+def patch_system_prompt(messages: list[dict[str, Any]], system_prompt: str) -> list[dict[str, Any]]:
     new_messages = deepcopy(messages)
     if new_messages[0]["role"] == "system":
         new_messages[0]["content"] = system_prompt
@@ -30,9 +28,7 @@ def patch_system_prompt(
     return new_messages
 
 
-def ensure_system_prompt(
-    messages: list[dict[str, Any]], config: ServerConfig
-) -> list[dict[str, Any]]:
+def ensure_system_prompt(messages: list[dict[str, Any]], config: ServerConfig) -> list[dict[str, Any]]:
     prompt = config.get("system_prompt")
     if prompt:
         return patch_system_prompt(messages, prompt)
@@ -253,8 +249,7 @@ WEATHER_TOOL: ChatCompletionToolParam = {
             "properties": {
                 "city": {
                     "type": "string",
-                    "description": "The city to find the weather for, "
-                    "e.g. 'San Francisco'",
+                    "description": "The city to find the weather for, e.g. 'San Francisco'",
                 },
                 "state": {
                     "type": "string",
@@ -315,8 +310,7 @@ MESSAGES_WITH_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
                 "type": "function",
                 "function": {
                     "name": WEATHER_TOOL["function"]["name"],
-                    "arguments": '{"city": "Dallas", "state": "TX", '
-                    '"unit": "fahrenheit"}',
+                    "arguments": '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}',
                 },
             }
         ],
@@ -324,24 +318,21 @@ MESSAGES_WITH_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
     {
         "role": "tool",
         "tool_call_id": "chatcmpl-tool-03e6481b146e408e9523d9c956696295",
-        "content": "The weather in Dallas is 98 degrees fahrenheit, with partly"
-        "cloudy skies and a low chance of rain.",
+        "content": "The weather in Dallas is 98 degrees fahrenheit, with partlycloudy skies and a low chance of rain.",
     },
 ]
 
 MESSAGES_ASKING_FOR_PARALLEL_TOOLS: list[ChatCompletionMessageParam] = [
     {
         "role": "user",
-        "content": "What is the weather in Dallas, Texas and Orlando, Florida in "
-        "Fahrenheit?",
+        "content": "What is the weather in Dallas, Texas and Orlando, Florida in Fahrenheit?",
     }
 ]
 
 MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
     {
         "role": "user",
-        "content": "What is the weather in Dallas, Texas and Orlando, Florida in "
-        "Fahrenheit?",
+        "content": "What is the weather in Dallas, Texas and Orlando, Florida in Fahrenheit?",
     },
     {
         "role": "assistant",
@@ -351,8 +342,7 @@ MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
                 "type": "function",
                 "function": {
                     "name": WEATHER_TOOL["function"]["name"],
-                    "arguments": '{"city": "Dallas", "state": "TX", '
-                    '"unit": "fahrenheit"}',
+                    "arguments": '{"city": "Dallas", "state": "TX", "unit": "fahrenheit"}',
                 },
             },
             {
@@ -360,8 +350,7 @@ MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
                 "type": "function",
                 "function": {
                     "name": WEATHER_TOOL["function"]["name"],
-                    "arguments": '{"city": "Orlando", "state": "Fl", '
-                    '"unit": "fahrenheit"}',
+                    "arguments": '{"city": "Orlando", "state": "Fl", "unit": "fahrenheit"}',
                 },
             },
         ],
@@ -375,7 +364,6 @@ MESSAGES_WITH_PARALLEL_TOOL_RESPONSE: list[ChatCompletionMessageParam] = [
     {
         "role": "tool",
         "tool_call_id": "chatcmpl-tool-d027061e1bd21cda48bee7da829c1f5b",
-        "content": "The weather in Orlando FL is 78 degrees fahrenheit with clear"
-        "skies.",
+        "content": "The weather in Orlando FL is 78 degrees fahrenheit with clearskies.",
     },
 ]

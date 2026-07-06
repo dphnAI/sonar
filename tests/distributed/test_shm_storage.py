@@ -31,9 +31,7 @@ def _dummy_elem(size: int):
 
 
 def _dummy_item(size_by_key: dict[str, int]):
-    return MultiModalKwargsItem(
-        {key: _dummy_elem(size) for key, size in size_by_key.items()}
-    )
+    return MultiModalKwargsItem({key: _dummy_elem(size) for key, size in size_by_key.items()})
 
 
 class TestSingleWriterShmObjectStorage(unittest.TestCase):
@@ -298,9 +296,7 @@ def run_multiprocess_example():
         # initialize lock for reader processes
         handle.reader_lock = Lock()
         for i in range(storage.n_readers):
-            p = multiprocessing.Process(
-                target=reader_process, args=(i, handle, stored_items)
-            )
+            p = multiprocessing.Process(target=reader_process, args=(i, handle, stored_items))
             processes.append(p)
             p.start()
 

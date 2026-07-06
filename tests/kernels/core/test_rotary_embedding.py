@@ -7,8 +7,8 @@ Tests for miscellaneous utilities
 import pytest
 import torch
 
-from tests.kernels.utils import opcheck
 from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
+from tests.kernels.utils import opcheck
 
 
 def rotary_embedding_opcheck(
@@ -52,16 +52,12 @@ def test_rotary_embedding_opcheck(
     batch_size = 1
     base = 10000
     num_heads = 7
-    rot = RotaryEmbedding(
-        head_size, rotary_dim, max_position, base, is_neox_style, dtype
-    )
+    rot = RotaryEmbedding(head_size, rotary_dim, max_position, base, is_neox_style, dtype)
 
     positions = torch.randint(0, max_position, (batch_size, seq_len), device=device)
     head_stride = head_size + (64 if head_stride_is_contiguous else 0)
 
-    query = torch.randn(
-        batch_size, seq_len, num_heads, head_stride, dtype=dtype, device=device
-    )
+    query = torch.randn(batch_size, seq_len, num_heads, head_stride, dtype=dtype, device=device)
     key = torch.randn_like(query) if use_key else None
     query = query[..., :head_size]
     key = key[..., :head_size] if key is not None else None

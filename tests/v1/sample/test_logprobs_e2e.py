@@ -23,26 +23,19 @@ NUM_CONCURRENT = 100
 
 
 def test_prompt_logprobs_e2e():
-    results = lm_eval.simple_evaluate(
-        model="aphrodite", model_args=MODEL_ARGS, tasks=TASK, batch_size="auto"
-    )
+    results = lm_eval.simple_evaluate(model="aphrodite", model_args=MODEL_ARGS, tasks=TASK, batch_size="auto")
 
     measured_value = results["results"][TASK][FILTER]
-    assert (
-        measured_value - RTOL < EXPECTED_VALUE
-        and measured_value + RTOL > EXPECTED_VALUE
-    ), f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    assert measured_value - RTOL < EXPECTED_VALUE and measured_value + RTOL > EXPECTED_VALUE, (
+        f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    )
 
 
 def test_prompt_logprobs_e2e_server():
     with RemoteOpenAIServer(MODEL, SERVER_ARGS) as remote_server:
         url = f"{remote_server.url_for('v1')}/completions"
 
-        model_args = (
-            f"model={MODEL},"
-            f"base_url={url},"
-            f"num_concurrent={NUM_CONCURRENT},tokenized_requests=False"
-        )
+        model_args = f"model={MODEL},base_url={url},num_concurrent={NUM_CONCURRENT},tokenized_requests=False"
 
         results = lm_eval.simple_evaluate(
             model="local-completions",
@@ -51,7 +44,6 @@ def test_prompt_logprobs_e2e_server():
         )
 
         measured_value = results["results"][TASK][FILTER]
-        assert (
-            measured_value - RTOL < EXPECTED_VALUE
-            and measured_value + RTOL > EXPECTED_VALUE
-        ), f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+        assert measured_value - RTOL < EXPECTED_VALUE and measured_value + RTOL > EXPECTED_VALUE, (
+            f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+        )

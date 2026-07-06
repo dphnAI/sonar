@@ -13,7 +13,4 @@ def create_metric_per_engine(
     per_engine_labelvalues: dict[int, list[object]],
 ) -> dict[int, PromMetric]:
     """Create a labeled metric child for each engine index."""
-    return {
-        idx: metric.labels(*labelvalues)
-        for idx, labelvalues in per_engine_labelvalues.items()
-    }
+    return {idx: metric.labels(*labelvalues) for idx, labelvalues in per_engine_labelvalues.items()}

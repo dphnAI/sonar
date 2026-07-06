@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.layers.layernorm import RMSNorm
@@ -99,12 +99,8 @@ class WhisperCausalConv1d(nn.Conv1d):
         self._padding_total = self._effective_kernel_size - self._stride
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        n_frames = (
-            x.shape[-1] - self._effective_kernel_size + self._padding_total
-        ) / self._stride + 1
-        target_length = (math.ceil(n_frames) - 1) * self._stride + (
-            self._effective_kernel_size - self._padding_total
-        )
+        n_frames = (x.shape[-1] - self._effective_kernel_size + self._padding_total) / self._stride + 1
+        target_length = (math.ceil(n_frames) - 1) * self._stride + (self._effective_kernel_size - self._padding_total)
         extra_padding = target_length - x.shape[-1]
         x = _pad1d(x, (self._padding_total, extra_padding), mode="constant")
         return super().forward(x)
@@ -181,9 +177,7 @@ def create_whisper_attention_backend_with_block_pooling(
                 .flatten()
                 .clamp(min=-1)
             )
-            return super().build(
-                common_prefix_len, new_common_attn_metadata, fast_build
-            )
+            return super().build(common_prefix_len, new_common_attn_metadata, fast_build)
 
     # NOTE: We need a custom impl so we can use the transformed slot_mapping
     # computed by `WhisperCausalAttentionWithBlockPoolingBuilder` instead of
@@ -209,9 +203,7 @@ def create_whisper_attention_backend_with_block_pooling(
                 and key is not None
                 and value is not None
             ):
-                self.do_kv_cache_update(
-                    layer, key, value, kv_cache, attn_metadata.slot_mapping
-                )
+                self.do_kv_cache_update(layer, key, value, kv_cache, attn_metadata.slot_mapping)
 
             return super().forward(
                 layer,
@@ -399,9 +391,7 @@ class WhisperCausalAttention(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.out_proj",
         )
-        assert block_pool_size > 1, (
-            f"Causal attention only supports block_pool_size>1, not {block_pool_size}."
-        )
+        assert block_pool_size > 1, f"Causal attention only supports block_pool_size>1, not {block_pool_size}."
         self.attn = WhisperCausalAttentionWithBlockPooling(
             self.num_heads,
             self.head_dim,
@@ -415,9 +405,7 @@ class WhisperCausalAttention(nn.Module):
             block_pool_size=block_pool_size,
         )
 
-        assert per_layer_sliding_window is not None, (
-            "rope can only used in combination with a sliding window"
-        )
+        assert per_layer_sliding_window is not None, "rope can only used in combination with a sliding window"
         self._init_rotary_emb(max_position_embeddings)
 
     def _init_rotary_emb(self, max_position_embeddings: int) -> None:
@@ -536,16 +524,12 @@ class WhisperCausalEncoder(nn.Module):
         self.total_stride = self.conv1.stride[0] * self.conv2.stride[0]
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.encoder_layers,
-            lambda prefix: WhisperCausalEncoderLayer(
-                aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"
-            ),
+            lambda prefix: WhisperCausalEncoderLayer(aphrodite_config=aphrodite_config, prefix=f"{prefix}.layers"),
             prefix=f"{prefix}.layers",
         )
         self.layer_norm = CausalRMSNorm(config.d_model)
 
-    def forward_conv(
-        self, input_features: torch.Tensor | list[torch.Tensor]
-    ) -> torch.Tensor:
+    def forward_conv(self, input_features: torch.Tensor | list[torch.Tensor]) -> torch.Tensor:
         hidden_states = []
         for features in input_features:
             embeds = nn.functional.gelu(self.conv1(features))
@@ -559,9 +543,7 @@ class WhisperCausalEncoder(nn.Module):
 
         return hidden_states
 
-    def forward(
-        self, hidden_states: torch.Tensor, positions: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(hidden_states, positions)
 

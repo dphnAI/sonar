@@ -158,9 +158,7 @@ class PoolKey:
         return f"{key_prefix}@{chunk_hash}"
 
     def to_string(self) -> str:
-        return self.build_key_string(
-            self.build_prefix(self.key_metadata), self.chunk_hash
-        )
+        return self.build_key_string(self.build_prefix(self.key_metadata), self.chunk_hash)
 
 
 class ChunkedTokenDatabase:
@@ -177,8 +175,7 @@ class ChunkedTokenDatabase:
         self.hash_block_size = hash_block_size or block_size
         if self.block_size % self.hash_block_size != 0:
             raise ValueError(
-                f"block_size ({self.block_size}) must be a multiple of "
-                f"hash_block_size ({self.hash_block_size})"
+                f"block_size ({self.block_size}) must be a multiple of hash_block_size ({self.hash_block_size})"
             )
         self.kv_caches_base_addr: list[int] = []
         self.block_len: list[int] = []
@@ -193,9 +190,7 @@ class ChunkedTokenDatabase:
     def set_block_len(self, block_len: list[int]):
         self.block_len = block_len
 
-    def prepare_value(
-        self, start: int, end: int, block_ids: list[int]
-    ) -> tuple[list[int], list[int], int]:
+    def prepare_value(self, start: int, end: int, block_ids: list[int]) -> tuple[list[int], list[int], int]:
         """Compute memory addresses and sizes for a token range.
 
         Returns:

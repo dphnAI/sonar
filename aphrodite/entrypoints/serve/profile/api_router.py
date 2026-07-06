@@ -39,8 +39,7 @@ def attach_router(app: FastAPI):
     assert profiler_config is None or isinstance(profiler_config, ProfilerConfig)
     if profiler_config is not None and profiler_config.profiler is not None:
         logger.warning_once(
-            "Profiler with mode '%s' is enabled in the "
-            "API server. This should ONLY be used for local development!",
+            "Profiler with mode '%s' is enabled in the API server. This should ONLY be used for local development!",
             profiler_config.profiler,
         )
         app.include_router(router)

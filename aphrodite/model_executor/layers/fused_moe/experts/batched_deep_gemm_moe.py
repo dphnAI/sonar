@@ -110,9 +110,7 @@ def _silu_mul_fp8_quant_deep_gemm(
     base_ys_offset = e * stride_ys_e + g * stride_ys_g
 
     for t in tl.range(0, n_tokens, num_stages=NUM_STAGES):
-        gate = tl.load(
-            input_ptr + base_gate_offset + t * stride_i_t, mask=mask, other=0.0
-        ).to(tl.float32)
+        gate = tl.load(input_ptr + base_gate_offset + t * stride_i_t, mask=mask, other=0.0).to(tl.float32)
         up = tl.load(input_ptr + base_up_offset + t * stride_i_t, mask=mask, other=0.0)
 
         gate = gate * (1.0 / (1.0 + tl.exp(-gate)))
@@ -215,9 +213,7 @@ def persistent_masked_m_silu_mul_quant(
     cuda_arch = device_capability.to_int()
 
     if current_platform.is_cuda() and cuda_arch >= 80:
-        torch.ops._C.persistent_masked_m_silu_mul_quant(
-            y, tokens_per_expert, y_q, y_s, ceil_ue8m0
-        )
+        torch.ops._C.persistent_masked_m_silu_mul_quant(y, tokens_per_expert, y_q, y_s, ceil_ue8m0)
     else:
         # Triton fallback for ROCm -- the C++ kernel is guarded by
         # #ifndef USE_ROCM in activation_kernels.cu.
@@ -322,8 +318,7 @@ class BatchedDeepGemmExperts(mk.FusedMoEExpertsModular):
         GPUs (SM100 datacenter and SM120 consumer).
         """
         return is_deep_gemm_e8m0_used() and (
-            current_platform.is_device_capability_family(100)
-            or current_platform.is_device_capability_family(120)
+            current_platform.is_device_capability_family(100) or current_platform.is_device_capability_family(120)
         )
 
     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
@@ -355,18 +350,11 @@ class BatchedDeepGemmExperts(mk.FusedMoEExpertsModular):
         output = (num_experts, max_num_tokens * num_dispatchers, K)
         return (workspace13, workspace2, output)
 
-    def estimate_expected_m(
-        self, global_num_experts: int, max_tokens_per_expert: int, topk: int
-    ) -> int:
-        dp_meta = (
-            get_forward_context().dp_metadata
-            if is_forward_context_available()
-            else None
-        )
+    def estimate_expected_m(self, global_num_experts: int, max_tokens_per_expert: int, topk: int) -> int:
+        dp_meta = get_forward_context().dp_metadata if is_forward_context_available() else None
         if dp_meta is None:
             logger.warning_once(
-                "DPMetadata unavailable. Defaulting expected_m to "
-                f"{max_tokens_per_expert}.",
+                f"DPMetadata unavailable. Defaulting expected_m to {max_tokens_per_expert}.",
             )
             return max_tokens_per_expert
 
@@ -410,9 +398,7 @@ class BatchedDeepGemmExperts(mk.FusedMoEExpertsModular):
 
         assert w2.size(1) == K
 
-        E, max_num_tokens, N, K, _ = self.moe_problem_size(
-            hidden_states, w1, w2, topk_ids
-        )
+        E, max_num_tokens, N, K, _ = self.moe_problem_size(hidden_states, w1, w2, topk_ids)
 
         workspace1 = _resize_cache(workspace13, (E, max_num_tokens, N))
 

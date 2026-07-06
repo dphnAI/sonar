@@ -30,18 +30,14 @@ def apply_w8a8_block_int8_linear(
     output_shape = [*input.shape[:-1], weight.shape[0]]
 
     q_input, x_scale = per_token_group_quant_int8(input_2d, block_size[1])
-    output = w8a8_block_int8_matmul(
-        q_input, weight, x_scale, weight_scale, block_size, output_dtype=input.dtype
-    )
+    output = w8a8_block_int8_matmul(q_input, weight, x_scale, weight_scale, block_size, output_dtype=input.dtype)
 
     if bias is not None:
         output = output + bias
     return output.to(dtype=input.dtype).view(*output_shape)
 
 
-def input_to_int8(
-    x: torch.Tensor, dtype: torch.dtype = torch.int8
-) -> tuple[torch.Tensor, torch.Tensor]:
+def input_to_int8(x: torch.Tensor, dtype: torch.dtype = torch.int8) -> tuple[torch.Tensor, torch.Tensor]:
     """This function quantizes input values to int8 values with
     tensor-wise quantization."""
     iinfo = torch.iinfo(dtype)
@@ -220,9 +216,7 @@ def per_token_group_quant_int8(
         tuple[torch.Tensor, torch.Tensor]: The quantized tensor and the
             scaling factor for quantization.
     """
-    assert x.shape[-1] % group_size == 0, (
-        "the last dimension of `x` cannot be divisible by `group_size`"
-    )
+    assert x.shape[-1] % group_size == 0, "the last dimension of `x` cannot be divisible by `group_size`"
     assert x.is_contiguous(), "`x` is not contiguous"
 
     iinfo = torch.iinfo(dtype)
@@ -237,9 +231,7 @@ def per_token_group_quant_int8(
     )
     # Prefer native stable kernel on CUDA/ROCm when available.
     if current_platform.is_cuda_alike():
-        torch.ops._C.per_token_group_quant_int8(
-            x, x_q, x_s, group_size, eps, float(int8_min), float(int8_max)
-        )
+        torch.ops._C.per_token_group_quant_int8(x, x_q, x_s, group_size, eps, float(int8_min), float(int8_max))
         return x_q, x_s
 
     M = x.numel() // group_size
@@ -352,9 +344,7 @@ def _w8a8_block_int8_matmul(
 
 
 @functools.lru_cache
-def get_w8a8_block_int8_configs(
-    N: int, K: int, block_n: int, block_k: int
-) -> dict[int, Any] | None:
+def get_w8a8_block_int8_configs(N: int, K: int, block_n: int, block_k: int) -> dict[int, Any] | None:
     """
     Return optimized configurations for the w8a8 block fp8 kernel.
 
@@ -369,9 +359,7 @@ def get_w8a8_block_int8_configs(
     device_name = current_platform.get_device_name().replace(" ", "_")
     json_file_name = f"N={N},K={K},device_name={device_name},dtype=int8_w8a8,block_shape=[{block_n}, {block_k}].json"  # noqa: E501
 
-    config_file_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "configs", json_file_name
-    )
+    config_file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "configs", json_file_name)
     if os.path.exists(config_file_path):
         with open(config_file_path) as f:
             logger.info(
@@ -384,10 +372,7 @@ def get_w8a8_block_int8_configs(
     # If no optimized configuration is available, we will use the default
     # configuration
     logger.warning(
-        (
-            "Using default W8A8 Block INT8 kernel config. Performance might "
-            "be sub-optimal! Config file not found at %s"
-        ),
+        ("Using default W8A8 Block INT8 kernel config. Performance might be sub-optimal! Config file not found at %s"),
         config_file_path,
     )
     return None
@@ -453,9 +438,7 @@ def w8a8_block_int8_matmul(
         }
 
     def grid(META):
-        return (
-            triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),
-        )
+        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
 
     _w8a8_block_int8_matmul[grid](
         A,

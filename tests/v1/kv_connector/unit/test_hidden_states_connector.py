@@ -21,23 +21,18 @@ from aphrodite.v1.kv_cache_interface import (
 
 
 def _full(block_size: int) -> FullAttentionSpec:
-    return FullAttentionSpec(
-        block_size=block_size, num_kv_heads=8, head_size=128, dtype=torch.bfloat16
-    )
+    return FullAttentionSpec(block_size=block_size, num_kv_heads=8, head_size=128, dtype=torch.bfloat16)
 
 
 def _hidden(block_size: int) -> HiddenStateCacheSpec:
-    return HiddenStateCacheSpec(
-        block_size=block_size, num_kv_heads=6, head_size=2048, dtype=torch.bfloat16
-    )
+    return HiddenStateCacheSpec(block_size=block_size, num_kv_heads=6, head_size=2048, dtype=torch.bfloat16)
 
 
 def _config(*specs):
     """Minimal stand-in exposing only ``kv_cache_groups`` (all the helpers read)."""
     return SimpleNamespace(
         kv_cache_groups=[
-            KVCacheGroupSpec(layer_names=[f"layer.{i}"], kv_cache_spec=spec)
-            for i, spec in enumerate(specs)
+            KVCacheGroupSpec(layer_names=[f"layer.{i}"], kv_cache_spec=spec) for i, spec in enumerate(specs)
         ]
     )
 
@@ -85,17 +80,13 @@ def test_get_block_size_reads_hidden_group_spec_not_global():
     # Hidden group keeps block size 22; the global is bumped to 528 for hybrids.
     aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=528))
     cfg = _config(_full(528), _hidden(22))
-    block_size = ExampleHiddenStatesConnector._get_cache_block_size(
-        aphrodite_config, cfg, cache_kv_group_id=1
-    )
+    block_size = ExampleHiddenStatesConnector._get_cache_block_size(aphrodite_config, cfg, cache_kv_group_id=1)
     assert block_size == 22
 
 
 def test_get_block_size_falls_back_to_cache_config_when_no_kv_cache_config():
     aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(block_size=16))
-    block_size = ExampleHiddenStatesConnector._get_cache_block_size(
-        aphrodite_config, None, cache_kv_group_id=0
-    )
+    block_size = ExampleHiddenStatesConnector._get_cache_block_size(aphrodite_config, None, cache_kv_group_id=0)
     assert block_size == 16
 
 
@@ -107,9 +98,7 @@ def test_find_group_id_errors_clearly_when_absorbed_by_mla_swa_verifier():
     # window MLA verifier absorbs it into the MLA group instead of isolating it.
     dt = torch.bfloat16
     spec = {
-        "layers.0.mla": MLAAttentionSpec(
-            block_size=64, num_kv_heads=1, head_size=576, dtype=dt
-        ),
+        "layers.0.mla": MLAAttentionSpec(block_size=64, num_kv_heads=1, head_size=576, dtype=dt),
         "layers.1.swa": SlidingWindowMLASpec(
             block_size=64, num_kv_heads=1, head_size=576, dtype=dt, sliding_window=512
         ),

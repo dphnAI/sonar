@@ -4,14 +4,14 @@
 import pytest
 import torch
 
+from aphrodite.lora.ops.xpu_ops import bgmv_expand, bgmv_expand_slice, bgmv_shrink
+from aphrodite.platforms import current_platform
 from tests.lora.utils import (
     PunicaTensors,
     assert_close,
     generate_data,
     generate_data_for_expand_nslices,
 )
-from aphrodite.lora.ops.xpu_ops import bgmv_expand, bgmv_expand_slice, bgmv_shrink
-from aphrodite.platforms import current_platform
 
 
 def torch_bgmv_expand(

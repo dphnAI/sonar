@@ -64,26 +64,22 @@ class MooncakeStoreCoordinator:
         use_eagle: bool = False,
         retention_interval: int | None = None,
     ) -> None:
-        assert all(
-            g.kv_cache_spec.block_size % hash_block_size == 0 for g in kv_cache_groups
-        ), "block_size must be divisible by hash_block_size"
-        assert scheduler_block_size % hash_block_size == 0, (
-            f"scheduler_block_size ({scheduler_block_size}) must be a multiple of "
-            f"hash_block_size ({hash_block_size})"
+        assert all(g.kv_cache_spec.block_size % hash_block_size == 0 for g in kv_cache_groups), (
+            "block_size must be divisible by hash_block_size"
         )
-        assert all(
-            scheduler_block_size % g.kv_cache_spec.block_size == 0
-            for g in kv_cache_groups
-        ), "scheduler_block_size must be a multiple of each group's block_size"
+        assert scheduler_block_size % hash_block_size == 0, (
+            f"scheduler_block_size ({scheduler_block_size}) must be a multiple of hash_block_size ({hash_block_size})"
+        )
+        assert all(scheduler_block_size % g.kv_cache_spec.block_size == 0 for g in kv_cache_groups), (
+            "scheduler_block_size must be a multiple of each group's block_size"
+        )
         self.kv_cache_groups = kv_cache_groups
         self.hash_block_size = hash_block_size
         self.lcm_block_size = scheduler_block_size
         self.use_eagle = use_eagle
         # Mirror Aphrodite core's KVCacheCoordinator.retention_interval.
         self.retention_interval = retention_interval
-        self.eagle_group_ids = {
-            i for i, g in enumerate(kv_cache_groups) if g.is_eagle_group
-        }
+        self.eagle_group_ids = {i for i, g in enumerate(kv_cache_groups) if g.is_eagle_group}
         if use_eagle and not self.eagle_group_ids:
             self.eagle_group_ids = set(range(len(kv_cache_groups)))
         self._verify_and_split_kv_cache_groups()
@@ -92,15 +88,11 @@ class MooncakeStoreCoordinator:
         """Mirrors KVCacheCoordinator.verify_and_split_kv_cache_groups but
         dispatches via spec_manager_map (we don't allocate managers).
         """
-        attention_groups: list[
-            tuple[KVCacheSpec, list[int], type[SingleTypeKVCacheManager]]
-        ] = []
+        attention_groups: list[tuple[KVCacheSpec, list[int], type[SingleTypeKVCacheManager]]] = []
         for i, g in enumerate(self.kv_cache_groups):
             spec = _unwrap_spec(g.kv_cache_spec)
             manager_cls = KVCacheSpecRegistry.get_manager_class(spec)
-            assert manager_cls is not None, (
-                f"No manager registered for KVCacheSpec {spec}"
-            )
+            assert manager_cls is not None, f"No manager registered for KVCacheSpec {spec}"
             for existing_spec, group_ids, existing_cls in attention_groups:
                 if existing_spec == spec:
                     assert manager_cls is existing_cls
@@ -142,10 +134,7 @@ class MooncakeStoreCoordinator:
         blocks_per_group, hit_length = self._find_hit_blocks(
             block_hashes, max_length, cached_block_pool, apply_eagle=apply_eagle
         )
-        masks = tuple(
-            [blk is not cached_block_pool.null_block for blk in blocks]
-            for blocks in blocks_per_group
-        )
+        masks = tuple([blk is not cached_block_pool.null_block for blk in blocks] for blocks in blocks_per_group)
         return masks, hit_length
 
     def load_mask(
@@ -219,8 +208,7 @@ class MooncakeStoreCoordinator:
         num_prompt_tokens: int | None,
     ) -> tuple[list[bool] | None, ...]:
         assert aligned_token_len % self.lcm_block_size == 0, (
-            f"aligned_token_len ({aligned_token_len}) must be a multiple of "
-            f"lcm_block_size ({self.lcm_block_size})"
+            f"aligned_token_len ({aligned_token_len}) must be a multiple of lcm_block_size ({self.lcm_block_size})"
         )
         masks: list[list[bool] | None] = []
         for g_idx, g in enumerate(self.kv_cache_groups):
@@ -244,12 +232,8 @@ class MooncakeStoreCoordinator:
             masks.append(mask)
         return tuple(masks)
 
-    def block_hashes_for_spec(
-        self, block_hashes: Sequence[BlockHash], spec: KVCacheSpec
-    ) -> Sequence[BlockHash]:
-        return chunk_hashes_for_block_size(
-            block_hashes, self.hash_block_size, spec.block_size
-        )
+    def block_hashes_for_spec(self, block_hashes: Sequence[BlockHash], spec: KVCacheSpec) -> Sequence[BlockHash]:
+        return chunk_hashes_for_block_size(block_hashes, self.hash_block_size, spec.block_size)
 
     def _find_hit_blocks(
         self,
@@ -300,9 +284,7 @@ class MooncakeStoreCoordinator:
             for idx, (spec, group_ids, manager_cls) in enumerate(self.attention_groups):
                 cached = hit_blocks_by_group[group_ids[0]]
                 if isinstance(spec, FullAttentionSpec) and cached is not None:
-                    curr_hit_length = (
-                        curr_hit_length // spec.block_size * spec.block_size
-                    )
+                    curr_hit_length = curr_hit_length // spec.block_size * spec.block_size
                     continue
 
                 drop_eagle_block = idx in eagle_indices and idx not in eagle_verified

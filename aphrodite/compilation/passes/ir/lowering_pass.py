@@ -64,9 +64,7 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
         bound_args.apply_defaults()
         # It is not safe to run functional passes (like DCE) on the replacements
         # as they might not be functional.
-        match.replace_by_example(
-            ir_op_impl.func_impl_fn, bound_args.args, run_functional_passes=False
-        )
+        match.replace_by_example(ir_op_impl.func_impl_fn, bound_args.args, run_functional_passes=False)
 
     @AphroditeInductorPass.time_and_log
     def __call__(self, graph: fx.Graph) -> None:
@@ -118,13 +116,10 @@ class AphroditeIRLoweringPass(AphroditeInductorPass):
         so we include them in the cache key.
         """
         priorities = {name: op.get_priority() for name, op in IrOp.registry.items()}
-        priorities_str = ";".join(
-            f"{name}={','.join(p)}" for name, p in priorities.items()
-        )
+        priorities_str = ";".join(f"{name}={','.join(p)}" for name, p in priorities.items())
 
         impl_uuids_str = ";".join(
-            f"{name}="
-            + ",".join(IrOp.registry[name].impls[provider].uuid() for provider in p)
+            f"{name}=" + ",".join(IrOp.registry[name].impls[provider].uuid() for provider in p)
             for name, p in priorities.items()
         )
 

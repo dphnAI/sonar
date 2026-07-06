@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Qwen3-ASR model implementation for MLX.
 
 Conv2d audio encoder + Qwen3 causal LM decoder for speech recognition.
@@ -37,21 +38,9 @@ class AudioEncoderAttention(nn.Module):
         b, seq, _ = x.shape
         scale = self.head_dim**-0.5
 
-        q = (
-            self.q_proj(x)
-            .reshape(b, seq, self.n_head, self.head_dim)
-            .transpose(0, 2, 1, 3)
-        )
-        k = (
-            self.k_proj(x)
-            .reshape(b, seq, self.n_head, self.head_dim)
-            .transpose(0, 2, 1, 3)
-        )
-        v = (
-            self.v_proj(x)
-            .reshape(b, seq, self.n_head, self.head_dim)
-            .transpose(0, 2, 1, 3)
-        )
+        q = self.q_proj(x).reshape(b, seq, self.n_head, self.head_dim).transpose(0, 2, 1, 3)
+        k = self.k_proj(x).reshape(b, seq, self.n_head, self.head_dim).transpose(0, 2, 1, 3)
+        v = self.v_proj(x).reshape(b, seq, self.n_head, self.head_dim).transpose(0, 2, 1, 3)
 
         w = (q * scale) @ k.transpose(0, 1, 3, 2)
         if mask is not None:
@@ -90,9 +79,7 @@ class AudioEncoder(nn.Module):
 
         # Conv2d layers for mel downsampling
         # MLX Conv2d uses NHWC layout
-        self.conv2d1 = nn.Conv2d(
-            1, config.downsample_hidden_size, 3, stride=2, padding=1
-        )
+        self.conv2d1 = nn.Conv2d(1, config.downsample_hidden_size, 3, stride=2, padding=1)
         self.conv2d2 = nn.Conv2d(
             config.downsample_hidden_size,
             config.downsample_hidden_size,
@@ -123,9 +110,7 @@ class AudioEncoder(nn.Module):
 
         # Transformer encoder layers
         self.layers = [
-            AudioEncoderLayer(
-                config.d_model, config.encoder_attention_heads, config.encoder_ffn_dim
-            )
+            AudioEncoderLayer(config.d_model, config.encoder_attention_heads, config.encoder_ffn_dim)
             for _ in range(config.encoder_layers)
         ]
 
@@ -190,9 +175,7 @@ class AudioEncoder(nn.Module):
         x = x + pos.astype(x.dtype)
 
         # Compute valid lengths after CNN per chunk
-        cnn_lengths = [
-            Qwen3ASRAudioConfig.cnn_output_length(cl) for cl in chunk_lengths
-        ]
+        cnn_lengths = [Qwen3ASRAudioConfig.cnn_output_length(cl) for cl in chunk_lengths]
 
         # Extract valid frames per chunk
         valid = [x[i, : cnn_lengths[i], :] for i in range(n_chunks)]
@@ -217,18 +200,14 @@ class AudioEncoder(nn.Module):
         return hidden  # (total_frames, output_dim)
 
     @staticmethod
-    def sinusoidal_position_embedding(
-        max_len: int, d_model: int, dtype: mx.Dtype = mx.float32
-    ) -> mx.array:
+    def sinusoidal_position_embedding(max_len: int, d_model: int, dtype: mx.Dtype = mx.float32) -> mx.array:
         """Generate sinusoidal positional embeddings (non-learned)."""
         assert d_model % 2 == 0
         half = d_model // 2
         log_timescale = math.log(10000.0) / (half - 1)
         inv_timescales = mx.exp(-log_timescale * mx.arange(half))
         positions = mx.arange(max_len)[:, None] * inv_timescales[None, :]
-        return mx.concatenate([mx.sin(positions), mx.cos(positions)], axis=1).astype(
-            dtype
-        )
+        return mx.concatenate([mx.sin(positions), mx.cos(positions)], axis=1).astype(dtype)
 
 
 # ===========================================================================
@@ -256,9 +235,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         self.head_dim = head_dim
         self.rope_theta = rope_theta
         # Precompute inverse frequencies
-        inv_freq = 1.0 / (
-            rope_theta ** (mx.arange(0, head_dim, 2).astype(mx.float32) / head_dim)
-        )
+        inv_freq = 1.0 / (rope_theta ** (mx.arange(0, head_dim, 2).astype(mx.float32) / head_dim))
         self._inv_freq = inv_freq
 
     def __call__(self, x: mx.array, offset: int = 0) -> mx.array:
@@ -298,18 +275,10 @@ class Qwen3Attention(nn.Module):
         self.head_dim = config.head_dim
         self.n_rep = self.n_heads // self.n_kv_heads
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, self.n_heads * self.head_dim, bias=False
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, self.n_kv_heads * self.head_dim, bias=False
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, self.n_kv_heads * self.head_dim, bias=False
-        )
-        self.o_proj = nn.Linear(
-            self.n_heads * self.head_dim, config.hidden_size, bias=False
-        )
+        self.q_proj = nn.Linear(config.hidden_size, self.n_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.n_kv_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.n_kv_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.n_heads * self.head_dim, config.hidden_size, bias=False)
 
         # QK normalization (per head_dim RMSNorm)
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -369,15 +338,9 @@ class Qwen3MLP(nn.Module):
 
     def __init__(self, config: Qwen3ASRTextConfig):
         super().__init__()
-        self.gate_proj = nn.Linear(
-            config.hidden_size, config.intermediate_size, bias=False
-        )
-        self.up_proj = nn.Linear(
-            config.hidden_size, config.intermediate_size, bias=False
-        )
-        self.down_proj = nn.Linear(
-            config.intermediate_size, config.hidden_size, bias=False
-        )
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
     def __call__(self, x: mx.array) -> mx.array:
         return self.down_proj(nn.silu(self.gate_proj(x)) * self.up_proj(x))
@@ -391,9 +354,7 @@ class Qwen3DecoderLayer(nn.Module):
         self.self_attn = Qwen3Attention(config, dtype)
         self.mlp = Qwen3MLP(config)
         self.input_layernorm = Qwen3RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen3RMSNorm(
-            config.hidden_size, config.rms_norm_eps
-        )
+        self.post_attention_layernorm = Qwen3RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def __call__(
         self,
@@ -415,9 +376,7 @@ class Qwen3LM(nn.Module):
         self.config = config
         self._dtype = dtype
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = [
-            Qwen3DecoderLayer(config, dtype) for _ in range(config.num_hidden_layers)
-        ]
+        self.layers = [Qwen3DecoderLayer(config, dtype) for _ in range(config.num_hidden_layers)]
         self.norm = Qwen3RMSNorm(config.hidden_size, config.rms_norm_eps)
         if config.tie_word_embeddings:
             self.lm_head = None

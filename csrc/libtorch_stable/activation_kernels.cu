@@ -244,8 +244,8 @@ packed_gelu_tanh_kernel(const packed_t& val, const float /*alpha*/) {
   int cc_major = get_device_prop()->major;                                     \
   int support_vec =                                                            \
       (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)            \
-          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                           \
-          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                         \
+          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                      \
+          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                    \
   int vec_size = support_vec / input.element_size();                           \
   const bool use_vec = (d % vec_size == 0);                                    \
   const torch::stable::accelerator::DeviceGuard device_guard(                  \
@@ -254,44 +254,55 @@ packed_gelu_tanh_kernel(const packed_t& val, const float /*alpha*/) {
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {   \
-        aphrodite::act_and_mul_kernel<                                              \
-            scalar_t, typename aphrodite::PackedTypeConverter<scalar_t>::Type,      \
-            KERNEL<scalar_t>,                                                  \
-            PACKED_KERNEL<typename aphrodite::PackedTypeConverter<scalar_t>::Type>, \
-            ACT_FIRST, true, HAS_CLAMP, true><<<grid, block, 0, stream>>>(     \
-            out.mutable_data_ptr<scalar_t>(),                                  \
-            input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);          \
-      });                                                                      \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+          dtype, "act_and_mul_kernel", [&] {                                   \
+            aphrodite::act_and_mul_kernel<                                     \
+                scalar_t,                                                      \
+                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
+                KERNEL<scalar_t>,                                              \
+                PACKED_KERNEL<                                                 \
+                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
+                ACT_FIRST, true, HAS_CLAMP, true><<<grid, block, 0, stream>>>( \
+                out.mutable_data_ptr<scalar_t>(),                              \
+                input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);      \
+          });                                                                  \
     } else {                                                                   \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {   \
-        aphrodite::act_and_mul_kernel<                                              \
-            scalar_t, typename aphrodite::PackedTypeConverter<scalar_t>::Type,      \
-            KERNEL<scalar_t>,                                                  \
-            PACKED_KERNEL<typename aphrodite::PackedTypeConverter<scalar_t>::Type>, \
-            ACT_FIRST, true, HAS_CLAMP, false><<<grid, block, 0, stream>>>(    \
-            out.mutable_data_ptr<scalar_t>(),                                  \
-            input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);          \
-      });                                                                      \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+          dtype, "act_and_mul_kernel", [&] {                                   \
+            aphrodite::act_and_mul_kernel<                                     \
+                scalar_t,                                                      \
+                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
+                KERNEL<scalar_t>,                                              \
+                PACKED_KERNEL<                                                 \
+                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
+                ACT_FIRST, true, HAS_CLAMP, false>                             \
+                <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(), \
+                                             input.const_data_ptr<scalar_t>(), \
+                                             d, LIMIT, ALPHA, BETA);           \
+          });                                                                  \
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "act_and_mul_kernel", [&] {     \
-      aphrodite::act_and_mul_kernel<                                                \
-          scalar_t, typename aphrodite::PackedTypeConverter<scalar_t>::Type,        \
-          KERNEL<scalar_t>,                                                    \
-          PACKED_KERNEL<typename aphrodite::PackedTypeConverter<scalar_t>::Type>,   \
-          ACT_FIRST, false, HAS_CLAMP><<<grid, block, 0, stream>>>(            \
-          out.mutable_data_ptr<scalar_t>(), input.const_data_ptr<scalar_t>(),  \
-          d, LIMIT, ALPHA, BETA);                                              \
-    });                                                                        \
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                  \
+        dtype, "act_and_mul_kernel", [&] {                                     \
+          aphrodite::act_and_mul_kernel<                                       \
+              scalar_t,                                                        \
+              typename aphrodite::PackedTypeConverter<scalar_t>::Type,         \
+              KERNEL<scalar_t>,                                                \
+              PACKED_KERNEL<                                                   \
+                  typename aphrodite::PackedTypeConverter<scalar_t>::Type>,    \
+              ACT_FIRST, false, HAS_CLAMP><<<grid, block, 0, stream>>>(        \
+              out.mutable_data_ptr<scalar_t>(),                                \
+              input.const_data_ptr<scalar_t>(), d, LIMIT, ALPHA, BETA);        \
+        });                                                                    \
   }
 
 void silu_and_mul(torch::stable::Tensor& out,    // [..., d]
                   torch::stable::Tensor& input)  // [..., 2 * d]
 {
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel, aphrodite::packed_silu_kernel,
-                                true, false, 0.0f, 1.0f, 0.0f);
+  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
+                                aphrodite::packed_silu_kernel, true, false,
+                                0.0f, 1.0f, 0.0f);
 }
 
 void silu_and_mul_clamp(torch::stable::Tensor& out,    // [..., d]
@@ -300,9 +311,9 @@ void silu_and_mul_clamp(torch::stable::Tensor& out,    // [..., d]
   // out = (gate.clamp(max=limit) * sigmoid(alpha * gate.clamp(max=limit)))
   //       * (up.clamp(+-limit) + beta)
   // alpha=1.0, beta=0.0 reduce this to silu(gate) * up.
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel, aphrodite::packed_silu_kernel,
-                                true, true, (float)limit, (float)alpha,
-                                (float)beta);
+  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
+                                aphrodite::packed_silu_kernel, true, true,
+                                (float)limit, (float)alpha, (float)beta);
 }
 
 void mul_and_silu(torch::stable::Tensor& out,    // [..., d]
@@ -310,15 +321,17 @@ void mul_and_silu(torch::stable::Tensor& out,    // [..., d]
 {
   // The difference between mul_and_silu and silu_and_mul is that mul_and_silu
   // applies the silu to the latter half of the input.
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel, aphrodite::packed_silu_kernel,
-                                false, false, 0.0f, 1.0f, 0.0f);
+  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::silu_kernel,
+                                aphrodite::packed_silu_kernel, false, false,
+                                0.0f, 1.0f, 0.0f);
 }
 
 void gelu_and_mul(torch::stable::Tensor& out,    // [..., d]
                   torch::stable::Tensor& input)  // [..., 2 * d]
 {
-  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::gelu_kernel, aphrodite::packed_gelu_kernel,
-                                true, false, 0.0f, 1.0f, 0.0f);
+  LAUNCH_ACTIVATION_GATE_KERNEL(aphrodite::gelu_kernel,
+                                aphrodite::packed_gelu_kernel, true, false,
+                                0.0f, 1.0f, 0.0f);
 }
 
 void gelu_tanh_and_mul(torch::stable::Tensor& out,    // [..., d]
@@ -477,8 +490,8 @@ __global__ void swigluoai_and_mul_kernel(
   int cc_major = get_device_prop()->major;                                     \
   int support_vec =                                                            \
       (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)            \
-          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                           \
-          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                         \
+          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                      \
+          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                    \
   int vec_size = support_vec / input.element_size();                           \
   const bool use_vec = (d % vec_size == 0);                                    \
   const torch::stable::accelerator::DeviceGuard device_guard(                  \
@@ -487,25 +500,27 @@ __global__ void swigluoai_and_mul_kernel(
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                     \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
           dtype, "act_and_mul_kernel_with_param", [&] {                        \
-            aphrodite::act_and_mul_kernel_with_param<                               \
-                scalar_t, typename aphrodite::PackedTypeConverter<scalar_t>::Type,  \
+            aphrodite::act_and_mul_kernel_with_param<                          \
+                scalar_t,                                                      \
+                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
                 KERNEL<scalar_t>,                                              \
                 PACKED_KERNEL<                                                 \
-                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,       \
+                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
                 true, true><<<grid, block, 0, stream>>>(                       \
                 out.mutable_data_ptr<scalar_t>(),                              \
                 input.const_data_ptr<scalar_t>(), d, PARAM);                   \
           });                                                                  \
     } else {                                                                   \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                     \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
           dtype, "act_and_mul_kernel_with_param", [&] {                        \
-            aphrodite::act_and_mul_kernel_with_param<                               \
-                scalar_t, typename aphrodite::PackedTypeConverter<scalar_t>::Type,  \
+            aphrodite::act_and_mul_kernel_with_param<                          \
+                scalar_t,                                                      \
+                typename aphrodite::PackedTypeConverter<scalar_t>::Type,       \
                 KERNEL<scalar_t>,                                              \
                 PACKED_KERNEL<                                                 \
-                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,       \
+                    typename aphrodite::PackedTypeConverter<scalar_t>::Type>,  \
                 true, false><<<grid, block, 0, stream>>>(                      \
                 out.mutable_data_ptr<scalar_t>(),                              \
                 input.const_data_ptr<scalar_t>(), d, PARAM);                   \
@@ -513,13 +528,14 @@ __global__ void swigluoai_and_mul_kernel(
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                       \
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                  \
         dtype, "act_and_mul_kernel_with_param", [&] {                          \
-          aphrodite::act_and_mul_kernel_with_param<                                 \
-              scalar_t, typename aphrodite::PackedTypeConverter<scalar_t>::Type,    \
+          aphrodite::act_and_mul_kernel_with_param<                            \
+              scalar_t,                                                        \
+              typename aphrodite::PackedTypeConverter<scalar_t>::Type,         \
               KERNEL<scalar_t>,                                                \
               PACKED_KERNEL<                                                   \
-                  typename aphrodite::PackedTypeConverter<scalar_t>::Type>,         \
+                  typename aphrodite::PackedTypeConverter<scalar_t>::Type>,    \
               false><<<grid, block, 0, stream>>>(                              \
               out.mutable_data_ptr<scalar_t>(),                                \
               input.const_data_ptr<scalar_t>(), d, PARAM);                     \
@@ -534,9 +550,9 @@ __global__ void swigluoai_and_mul_kernel(
   const torch::stable::accelerator::DeviceGuard device_guard(                 \
       input.get_device_index());                                              \
   const cudaStream_t stream = get_current_cuda_stream();                      \
-  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                        \
+  APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                   \
       input.scalar_type(), "clamp_swiglu_kernel_with_params", [&] {           \
-        aphrodite::swigluoai_and_mul_kernel<scalar_t, KERNEL<scalar_t>>            \
+        aphrodite::swigluoai_and_mul_kernel<scalar_t, KERNEL<scalar_t>>       \
             <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),    \
                                          input.const_data_ptr<scalar_t>(), d, \
                                          ALPHA, LIMIT);                       \
@@ -615,8 +631,8 @@ __global__ void activation_kernel(
   int cc_major = get_device_prop()->major;                                     \
   int support_vec =                                                            \
       (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128)            \
-          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                           \
-          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                         \
+          ? aphrodite::VecTraits<true>::ARCH_MAX_VEC_SIZE                      \
+          : aphrodite::VecTraits<false>::ARCH_MAX_VEC_SIZE;                    \
   int vec_size = support_vec / input.element_size();                           \
   const bool use_vec = (d % vec_size == 0);                                    \
   const torch::stable::accelerator::DeviceGuard device_guard(                  \
@@ -625,22 +641,26 @@ __global__ void activation_kernel(
   if (use_vec) {                                                               \
     dim3 block(std::min(d / vec_size, 1024));                                  \
     if (CUDA_VERSION >= 12090 && cc_major >= 10 && num_tokens > 128) {         \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {    \
-        aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, true, true>        \
-            <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),     \
-                                         input.const_data_ptr<scalar_t>(), d); \
-      });                                                                      \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+          dtype, "activation_kernel", [&] {                                    \
+            aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, true,     \
+                                         true><<<grid, block, 0, stream>>>(    \
+                out.mutable_data_ptr<scalar_t>(),                              \
+                input.const_data_ptr<scalar_t>(), d);                          \
+          });                                                                  \
     } else {                                                                   \
-      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {    \
-        aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, true, false>       \
-            <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),     \
-                                         input.const_data_ptr<scalar_t>(), d); \
-      });                                                                      \
+      APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(                                \
+          dtype, "activation_kernel", [&] {                                    \
+            aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, true,     \
+                                         false><<<grid, block, 0, stream>>>(   \
+                out.mutable_data_ptr<scalar_t>(),                              \
+                input.const_data_ptr<scalar_t>(), d);                          \
+          });                                                                  \
     }                                                                          \
   } else {                                                                     \
     dim3 block(std::min(d, 1024));                                             \
-    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] {      \
-      aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, false>               \
+    APHRODITE_STABLE_DISPATCH_FLOATING_TYPES(dtype, "activation_kernel", [&] { \
+      aphrodite::activation_kernel<scalar_t, KERNEL<scalar_t>, false>          \
           <<<grid, block, 0, stream>>>(out.mutable_data_ptr<scalar_t>(),       \
                                        input.const_data_ptr<scalar_t>(), d);   \
     });                                                                        \

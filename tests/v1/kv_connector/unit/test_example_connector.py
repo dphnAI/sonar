@@ -89,9 +89,7 @@ def process_prompt(processor, llm: LLM, question: str, image_urls: list[Image]):
         },
     ]
 
-    prompt = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
+    prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     outputs = llm.generate(
         {
@@ -181,19 +179,13 @@ def test_shared_storage_connector_hashes(tmp_path, attn_backend):
             text=TEXT_PROMPTS[0],
             img=[image_1],
             expected_len=2,
-            info=(
-                "image_1 single input the 2nd time. "
-                "It should not form another new hash."
-            ),
+            info=("image_1 single input the 2nd time. It should not form another new hash."),
         ),
         InputCase(
             text=TEXT_PROMPTS[0],
             img=[image_2],
             expected_len=2,
-            info=(
-                "image_2 single input the 2nd time. "
-                "It should not form another new hash."
-            ),
+            info=("image_2 single input the 2nd time. It should not form another new hash."),
         ),
         InputCase(
             text=TEXT_PROMPTS[0],
@@ -211,19 +203,13 @@ def test_shared_storage_connector_hashes(tmp_path, attn_backend):
             text=TEXT_PROMPTS[0],
             img=[image_1, image_2],
             expected_len=4,
-            info=(
-                "[image_1, image_2] input the 2nd time. "
-                "It should not form another new hash."
-            ),
+            info=("[image_1, image_2] input the 2nd time. It should not form another new hash."),
         ),
         InputCase(
             text=TEXT_PROMPTS[0],
             img=[image_2, image_1],
             expected_len=4,
-            info=(
-                "[image_2, image_1] input the 2nd time. "
-                "It should not form another new hash."
-            ),
+            info=("[image_2, image_1] input the 2nd time. It should not form another new hash."),
         ),
         InputCase(
             text=TEXT_PROMPTS[0],

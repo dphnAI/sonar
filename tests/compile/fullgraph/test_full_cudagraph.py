@@ -6,13 +6,13 @@ import weakref
 
 import pytest
 
-from tests.utils import wait_for_gpu_memory_to_clear
-from tests.v1.attention.utils import full_cg_backend_configs as backend_configs
 from aphrodite import LLM, SamplingParams
 from aphrodite.config import CompilationConfig
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+from tests.utils import wait_for_gpu_memory_to_clear
+from tests.v1.attention.utils import full_cg_backend_configs as backend_configs
 
 
 @contextlib.contextmanager
@@ -39,14 +39,10 @@ model_backends_full_cudagraph = []
 # deepseek-ai/DeepSeek-V2-Lite with MLA
 MLA_backends = ["FlashMLA", "FlashAttentionMLA", "CutlassMLA"]
 for mla_backend in MLA_backends:
-    model_backends_full_cudagraph.append(
-        ("deepseek-ai/DeepSeek-V2-Lite", backend_configs[mla_backend])
-    )
+    model_backends_full_cudagraph.append(("deepseek-ai/DeepSeek-V2-Lite", backend_configs[mla_backend]))
 
 # Qwen/Qwen2-1.5B-Instruct with other backends
-other_backend_configs = [
-    backend_configs[c] for c in backend_configs if c not in MLA_backends
-]
+other_backend_configs = [backend_configs[c] for c in backend_configs if c not in MLA_backends]
 for backend_config in other_backend_configs:
     model_backends_full_cudagraph.append(("Qwen/Qwen2-1.5B-Instruct", backend_config))
 
@@ -54,9 +50,7 @@ for backend_config in other_backend_configs:
 @pytest.fixture(scope="class")
 def llm_pair(request):
     model, backend_config, use_inductor_graph_partition = request.param
-    backend_config.comp_config["use_inductor_graph_partition"] = (
-        use_inductor_graph_partition
-    )
+    backend_config.comp_config["use_inductor_graph_partition"] = use_inductor_graph_partition
 
     if use_inductor_graph_partition and not is_torch_equal_or_newer("2.9.0.dev"):
         pytest.skip("Inductor graph partition only supported in torch>=2.9")
@@ -157,16 +151,11 @@ class TestFullCUDAGraph:
         prompts = ["the quick brown fox"] * batch_size
         # Use purely greedy decoding to avoid top-p truncation sensitivity
         # that can amplify tiny numeric differences across runtimes.
-        sampling_params = SamplingParams(
-            temperature=0.0, max_tokens=max_tokens, top_p=1.0
-        )
+        sampling_params = SamplingParams(temperature=0.0, max_tokens=max_tokens, top_p=1.0)
 
         piecewise_responses = piecewise_llm.generate(prompts, sampling_params)
         full_responses = full_cudagraph_llm.generate(prompts, sampling_params)
 
         # Check that all responses are the same
         for piecewise_res, full_res in zip(piecewise_responses, full_responses):
-            assert (
-                piecewise_res.outputs[0].text.lower()
-                == full_res.outputs[0].text.lower()
-            )
+            assert piecewise_res.outputs[0].text.lower() == full_res.outputs[0].text.lower()

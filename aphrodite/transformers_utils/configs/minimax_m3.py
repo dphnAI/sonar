@@ -83,9 +83,7 @@ class MiniMaxM3TextConfig(PretrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.num_mtp_modules = num_mtp_modules
         # First 3 layers are dense; the remaining 57 are sparse MoE.
-        self.moe_layer_freq = (
-            moe_layer_freq if moe_layer_freq is not None else [0] * 3 + [1] * 57
-        )
+        self.moe_layer_freq = moe_layer_freq if moe_layer_freq is not None else [0] * 3 + [1] * 57
         self.sparse_attention_config = (
             sparse_attention_config
             if sparse_attention_config is not None

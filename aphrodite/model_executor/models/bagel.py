@@ -135,9 +135,7 @@ class PositionEmbedding(nn.Module):
         grid = np.meshgrid(grid_w, grid_h)  # w goes first
         grid = np.stack(grid, axis=0)
         grid = grid.reshape([2, 1, grid_size, grid_size])
-        pos_embed = PositionEmbedding._get_2d_sincos_pos_embed_from_grid(
-            embed_dim, grid
-        )
+        pos_embed = PositionEmbedding._get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
         return pos_embed
 
     @staticmethod
@@ -147,12 +145,8 @@ class PositionEmbedding(nn.Module):
 
         assert embed_dim % 2 == 0
         # use half of dimensions to encode grid_h
-        emb_h = PositionEmbedding._get_1d_sincos_pos_embed_from_grid(
-            embed_dim // 2, grid[0]
-        )
-        emb_w = PositionEmbedding._get_1d_sincos_pos_embed_from_grid(
-            embed_dim // 2, grid[1]
-        )
+        emb_h = PositionEmbedding._get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])
+        emb_w = PositionEmbedding._get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])
         emb = np.concatenate([emb_h, emb_w], axis=1)
         return emb
 
@@ -294,9 +288,7 @@ class BagelMultiModalProcessor(BaseMultiModalProcessor[BagelProcessingInfo]):
         tokenizer = self.info.get_tokenizer()
         image_token_id = tokenizer.get_vocab().get("<|image_pad|>")
         if image_token_id is None:
-            raise ValueError(
-                "Image token '<|image_pad|>' not found in tokenizer vocabulary"
-            )
+            raise ValueError("Image token '<|image_pad|>' not found in tokenizer vocabulary")
 
         def get_replacement_bagel(item_idx: int):
             # For BAGEL, calculate number of tokens based on max patch size
@@ -327,9 +319,7 @@ class BagelMultiModalProcessor(BaseMultiModalProcessor[BagelProcessingInfo]):
     info=BagelProcessingInfo,
     dummy_inputs=BagelDummyInputsBuilder,
 )
-class BagelForConditionalGeneration(
-    nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP
-):
+class BagelForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsLoRA, SupportsPP):
     """
     BAGEL: A unified multimodal model for image understanding and generation.
 
@@ -365,8 +355,7 @@ class BagelForConditionalGeneration(
         # When trust_remote_code=True, the config comes from transformers_modules
         if type(config).__name__ != "BagelConfig":
             raise ValueError(
-                f"Expected BagelConfig, got {type(config).__name__}. "
-                "Make sure the model config is properly loaded."
+                f"Expected BagelConfig, got {type(config).__name__}. Make sure the model config is properly loaded."
             )
 
         self.config = config
@@ -389,14 +378,12 @@ class BagelForConditionalGeneration(
             vit_config = config.vit_config
             if vit_config.num_hidden_layers == 27:
                 logger.warning(
-                    "Overriding vit_config.num_hidden_layers from 27 to 26 "
-                    "to match the Bagel model checkpoint."
+                    "Overriding vit_config.num_hidden_layers from 27 to 26 to match the Bagel model checkpoint."
                 )
                 vit_config.num_hidden_layers = 26
             if not hasattr(vit_config, "vision_use_head"):
                 logger.warning(
-                    "Setting vit_config.vision_use_head to False as it is not "
-                    "present in the Bagel model checkpoint."
+                    "Setting vit_config.vision_use_head to False as it is not present in the Bagel model checkpoint."
                 )
                 vit_config.vision_use_head = False
 
@@ -430,13 +417,9 @@ class BagelForConditionalGeneration(
             self.connector = StageMissingLayer("image_tower")
             self.vit_pos_embed = StageMissingLayer("image_tower")
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> BagelImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> BagelImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
 
         if pixel_values is None:
@@ -447,9 +430,7 @@ class BagelForConditionalGeneration(
             pixel_values=pixel_values,
         )
 
-    def _process_image_input(
-        self, image_input: BagelImageInputs
-    ) -> tuple[torch.Tensor, ...]:
+    def _process_image_input(self, image_input: BagelImageInputs) -> tuple[torch.Tensor, ...]:
         """Process image inputs through vision encoder and connector."""
         pixel_values = image_input["pixel_values"]
 
@@ -459,9 +440,7 @@ class BagelForConditionalGeneration(
         if pixel_values.ndim == 5:
             # Flatten batch and num_images dimensions
             batch_size, num_images, channels, height, width = pixel_values.shape
-            pixel_values = pixel_values.reshape(
-                batch_size * num_images, channels, height, width
-            )
+            pixel_values = pixel_values.reshape(batch_size * num_images, channels, height, width)
 
         # Get vision features from SigLIP
         # pixel_values shape: (batch_size * num_images, 3, H, W)
@@ -482,9 +461,7 @@ class BagelForConditionalGeneration(
         # For BAGEL, we use extrapolate mode by default
         h_coords = torch.arange(num_patches_per_side, device=vision_embeds.device)
         w_coords = torch.arange(num_patches_per_side, device=vision_embeds.device)
-        position_ids = (
-            h_coords[:, None] * self.config.vit_max_num_patch_per_side + w_coords
-        ).flatten()
+        position_ids = (h_coords[:, None] * self.config.vit_max_num_patch_per_side + w_coords).flatten()
         position_ids = position_ids.unsqueeze(0).expand(batch_size, -1).flatten()
 
         # Add position embeddings
@@ -572,9 +549,7 @@ class BagelForConditionalGeneration(
                 patch_size = self.config.vit_config.patch_size
                 in_channels = self.config.vit_config.num_channels
                 if in_features == in_channels * patch_size * patch_size:
-                    tensor = tensor.reshape(
-                        out_channels, patch_size, patch_size, in_channels
-                    )
+                    tensor = tensor.reshape(out_channels, patch_size, patch_size, in_channels)
                     tensor = tensor.permute(0, 3, 1, 2).contiguous()
 
             filtered_weights.append((name, tensor))

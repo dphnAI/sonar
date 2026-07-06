@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-import unittest
+import unittest.mock
 
 import pytest
 import torch
 
-from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 from aphrodite.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
@@ -14,6 +13,7 @@ from aphrodite.distributed.parallel_state import (
 from aphrodite.model_executor.layers.mamba.mamba_mixer2 import Mixer2RMSNormGated
 from aphrodite.utils.system_utils import update_environment_variables
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.utils import ensure_current_aphrodite_config, multi_gpu_test
 
 
 @multi_gpu_test(num_gpus=2)
@@ -106,13 +106,11 @@ def mixer2_gated_norm_tensor_parallel(
     # - utilize mock patching to disable TP when
     with (
         unittest.mock.patch(
-            "aphrodite.model_executor.layers.mamba.mamba_mixer2."
-            "get_tensor_model_parallel_world_size",
+            "aphrodite.model_executor.layers.mamba.mamba_mixer2.get_tensor_model_parallel_world_size",
             return_value=1,
         ),
         unittest.mock.patch(
-            "aphrodite.model_executor.layers.mamba.mamba_mixer2."
-            "get_tensor_model_parallel_rank",
+            "aphrodite.model_executor.layers.mamba.mamba_mixer2.get_tensor_model_parallel_rank",
             return_value=0,
         ),
     ):

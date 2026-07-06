@@ -91,10 +91,7 @@ class KVCacheSpecRegistry:
                 manager_class == registered_spec.manager_class
                 and uniform_type_base_spec == registered_spec.uniform_type_base_spec
             )
-            assert is_same_registration, (
-                f"Conflicting registration for KVCacheSpec "
-                f": {kvcache_spec_cls.__name__}"
-            )
+            assert is_same_registration, f"Conflicting registration for KVCacheSpec : {kvcache_spec_cls.__name__}"
 
         _REGISTRY_KVCACHESPEC_LIST[kvcache_spec_cls] = KVCacheSpecMetadata(
             kvcache_spec_cls=kvcache_spec_cls,
@@ -103,9 +100,7 @@ class KVCacheSpecRegistry:
         )
 
     @classmethod
-    def get_manager_class(
-        cls, kvcache_spec: "KVCacheSpec"
-    ) -> type["SingleTypeKVCacheManager"] | None:
+    def get_manager_class(cls, kvcache_spec: "KVCacheSpec") -> type["SingleTypeKVCacheManager"] | None:
         """
         Get the single type kvcache manager class for a given kvcache spec instance.
 
@@ -126,9 +121,7 @@ class KVCacheSpecRegistry:
         return None
 
     @classmethod
-    def get_uniform_type_base_spec(
-        cls, kvcache_spec: "KVCacheSpec"
-    ) -> type["KVCacheSpec"] | None:
+    def get_uniform_type_base_spec(cls, kvcache_spec: "KVCacheSpec") -> type["KVCacheSpec"] | None:
         """
         Get the base kvcache spec class for grouping compatibility checks.
         KVCacheSpecs with uniform_type_base_spec will be trated as one group.
@@ -150,9 +143,7 @@ class KVCacheSpecRegistry:
         return None
 
     @classmethod
-    def check_kv_cache_spec_registry(
-        cls, kv_cache_spec: dict[str, "KVCacheSpec"]
-    ) -> None:
+    def check_kv_cache_spec_registry(cls, kv_cache_spec: dict[str, "KVCacheSpec"]) -> None:
         """
         Check if the KVCacheSpecs of each layer are registered as expected.
         """

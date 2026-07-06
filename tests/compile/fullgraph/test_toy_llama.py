@@ -19,10 +19,10 @@ from torch import nn
 
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     CUDAGraphMode,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.forward_context import BatchDescriptor, set_forward_context
@@ -115,11 +115,7 @@ class LlamaAttention(nn.Module):
 
         if config.tractable_init:
             nn.init.eye_(self.qkv_projection.weight.data[: config.hidden_size])
-            nn.init.eye_(
-                self.qkv_projection.weight.data[
-                    config.hidden_size : 2 * config.hidden_size
-                ]
-            )
+            nn.init.eye_(self.qkv_projection.weight.data[config.hidden_size : 2 * config.hidden_size])
             nn.init.eye_(self.qkv_projection.weight.data[2 * config.hidden_size :])
             nn.init.eye_(self.output_projection.weight.data)
         else:
@@ -184,9 +180,7 @@ class LlamaDecoderLayer(nn.Module):
             residual = hidden_states
             hidden_states = hidden_states + 1
 
-        hidden_states = self.self_attention(
-            positions=positions, hidden_states=hidden_states
-        )
+        hidden_states = self.self_attention(positions=positions, hidden_states=hidden_states)
 
         hidden_states = hidden_states + residual
         residual = hidden_states
@@ -211,9 +205,7 @@ class LlamaModel(nn.Module):
             num_embeddings=config.vocab_size,
             embedding_dim=config.hidden_size,
         )
-        self.layers = nn.ModuleList(
-            [LlamaDecoderLayer(config) for _ in range(config.num_layers)]
-        )
+        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_layers)])
 
         # this is the initial value of the hidden states
         self.embedding_tokens.weight.data.fill_(config.init_value)
@@ -265,15 +257,9 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
     compile_config = deepcopy(compile_config)
     cudagraph_runtime_mode = compile_config.cudagraph_mode
 
-    aphrodite_config = AphroditeConfig(
-        compilation_config=compile_config, additional_config=llama_config
-    )
+    aphrodite_config = AphroditeConfig(compilation_config=compile_config, additional_config=llama_config)
     with set_current_aphrodite_config(aphrodite_config):
-        model = (
-            LlamaModel(config=llama_config, aphrodite_config=aphrodite_config, prefix="")
-            .eval()
-            .cuda()
-        )
+        model = LlamaModel(config=llama_config, aphrodite_config=aphrodite_config, prefix="").eval().cuda()
 
     with set_forward_context({}, aphrodite_config=aphrodite_config):  # background context
         B = 16  # max batch size
@@ -318,9 +304,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
         output = output.cpu()
 
         if llama_config.tractable_init:
-            expected_output = tractable_computation(
-                input_ids[:2], positions[:2], llama_config
-            ).cpu()
+            expected_output = tractable_computation(input_ids[:2], positions[:2], llama_config).cpu()
 
             assert torch.allclose(output, expected_output)
         else:
@@ -336,9 +320,7 @@ def run_model(llama_config, compile_config: CompilationConfig) -> torch.Tensor:
     ],
 )
 @create_new_process_for_each_test("spawn")
-def test_toy_llama(
-    backend: str, use_inductor_graph_partition: bool, monkeypatch, tmp_path
-):
+def test_toy_llama(backend: str, use_inductor_graph_partition: bool, monkeypatch, tmp_path):
     from aphrodite.compilation.counter import compilation_counter
 
     # We disable the Aphrodite compile cache into a new tmp dir for 1 reason:
@@ -350,13 +332,9 @@ def test_toy_llama(
 
     # compare output with and without piecewise compilation
 
-    llama_config = LlamaConfig(
-        hidden_size=128, mlp_size=256, vocab_size=128, num_layers=12
-    )
+    llama_config = LlamaConfig(hidden_size=128, mlp_size=256, vocab_size=128, num_layers=12)
 
-    tractable_config = LlamaConfig(
-        hidden_size=128, mlp_size=256, vocab_size=128, num_layers=2, tractable_init=True
-    )
+    tractable_config = LlamaConfig(hidden_size=128, mlp_size=256, vocab_size=128, num_layers=2, tractable_init=True)
 
     compile_config_no_compile = CompilationConfig(
         mode=CompilationMode.NONE,
@@ -431,15 +409,11 @@ def benchmark():
     from triton.testing import do_bench
 
     # similar to llama 3.1-8B
-    llama_config = LlamaConfig(
-        hidden_size=4096, mlp_size=14336, vocab_size=128 * 1024, num_layers=32
-    )
+    llama_config = LlamaConfig(hidden_size=4096, mlp_size=14336, vocab_size=128 * 1024, num_layers=32)
 
     # a tiny model to measure the overhead
     # of piecewise cudagraph
-    llama_config = LlamaConfig(
-        hidden_size=40, mlp_size=80, vocab_size=128, num_layers=2
-    )
+    llama_config = LlamaConfig(hidden_size=40, mlp_size=80, vocab_size=128, num_layers=2)
 
     cudagraph_sizes = [1, 2, 4] + [i * 8 for i in range(1, 33)]
 
@@ -510,10 +484,7 @@ def benchmark():
     # print in tabular format
     print("batch size\teager mode\tfull cudagraph\tpiecewise cudagraph")
     for b in cudagraph_sizes:
-        print(
-            f"{b}\t{eager_time[b]:.3f}\t{full_cudagraph_time[b]:.3f}"
-            f"\t{piecewise_cudagraph_time[b]:.3f}"
-        )
+        print(f"{b}\t{eager_time[b]:.3f}\t{full_cudagraph_time[b]:.3f}\t{piecewise_cudagraph_time[b]:.3f}")
 
 
 if __name__ == "__main__":

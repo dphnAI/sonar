@@ -22,9 +22,7 @@ def server():
 
 @pytest_asyncio.fixture
 async def client(server):
-    async with httpx.AsyncClient(
-        base_url=server.url_for(""), timeout=30.0
-    ) as http_client:
+    async with httpx.AsyncClient(base_url=server.url_for(""), timeout=30.0) as http_client:
         yield http_client
 
 
@@ -70,9 +68,7 @@ async def test_chat_completion_render_basic(client):
             "messages": [
                 {
                     "role": "user",
-                    "content": (
-                        "Returning an empty string for the prompt may be confusing."
-                    ),
+                    "content": ("Returning an empty string for the prompt may be confusing."),
                 }
             ],
         },

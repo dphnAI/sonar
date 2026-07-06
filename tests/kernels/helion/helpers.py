@@ -62,9 +62,7 @@ def dummy_kernel_registry(
                     name = op_name or fn.__name__
                     kernel_dir = config_dir / name
                     kernel_dir.mkdir(parents=True, exist_ok=True)
-                    (kernel_dir / f"{GPU_PLATFORM}.json").write_text(
-                        json.dumps(_to_config_entries(configs))
-                    )
+                    (kernel_dir / f"{GPU_PLATFORM}.json").write_text(json.dumps(_to_config_entries(configs)))
                     return register_kernel(op_name, **kwargs)(fn)
 
                 return decorator

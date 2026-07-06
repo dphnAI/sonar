@@ -82,9 +82,7 @@ def test_multiple_priority(llm: LLM):
 
     # Exception raised, if the length of priority does not match the length of prompts
     with pytest.raises(ValueError):
-        outputs = llm.generate(
-            PROMPTS, sampling_params=None, priority=[0] * (len(PROMPTS) - 1)
-        )
+        outputs = llm.generate(PROMPTS, sampling_params=None, priority=[0] * (len(PROMPTS) - 1))
 
     # Exception raised, if the priority list is empty
     with pytest.raises(ValueError):
@@ -108,9 +106,7 @@ def test_max_model_len():
     sampling_params = SamplingParams(max_tokens=max_model_len + 10)
     outputs = llm.generate(PROMPTS, sampling_params)
     for output in outputs:
-        num_total_tokens = len(output.prompt_token_ids) + len(
-            output.outputs[0].token_ids
-        )
+        num_total_tokens = len(output.prompt_token_ids) + len(output.outputs[0].token_ids)
         # Total tokens must not exceed max_model_len.
         # It can be less if generation finishes due to other reasons (e.g., EOS)
         # before reaching the absolute model length limit.

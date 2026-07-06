@@ -21,14 +21,9 @@ def test_cascade_attention(example_system_message, attn_backend):
     prompt = "\n<User>: Implement fibonacci sequence in Python.\n<Claude>:"
 
     if attn_backend == "FLASHINFER":
-        pytest.skip(
-            "This test is failing with FlashInfer backend and "
-            "needs investigation. See issue #25679."
-        )
+        pytest.skip("This test is failing with FlashInfer backend and needs investigation. See issue #25679.")
 
-    llm = LLM(
-        model="Qwen/Qwen2-1.5B-Instruct", attention_config={"backend": attn_backend}
-    )
+    llm = LLM(model="Qwen/Qwen2-1.5B-Instruct", attention_config={"backend": attn_backend})
     sampling_params = SamplingParams(temperature=0.0, max_tokens=100)
 
     # No cascade attention.

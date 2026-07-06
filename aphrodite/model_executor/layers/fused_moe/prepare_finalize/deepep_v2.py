@@ -209,9 +209,7 @@ class DeepEPV2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
                 offset = 0
                 for i, count in enumerate(recv_expert_num_tokens):
                     if count > 0:
-                        recv_topk_idx[offset : offset + count].fill_(
-                            i + self.rank_expert_offset
-                        )
+                        recv_topk_idx[offset : offset + count].fill_(i + self.rank_expert_offset)
                         offset += count
             else:
                 recv_topk_idx = torch.empty(
@@ -284,9 +282,7 @@ class DeepEPV2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
     ) -> mk.ReceiverType:
         if apply_router_weight_on_input:
             topk = topk_ids.size(1)
-            assert topk == 1, (
-                "apply_router_weight_on_input is only implemented for topk=1"
-            )
+            assert topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
             a1 = a1 * topk_weights.to(a1.dtype)
 
         if quant_config.is_block_quantized and not defer_input_quant:
@@ -303,11 +299,7 @@ class DeepEPV2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
         else:
             a1q = a1
             a1q_scale = None
-            a1_post_scale = (
-                quant_config.a1_gscale
-                if quant_config.quant_dtype == "nvfp4"
-                else quant_config.a1_scale
-            )
+            a1_post_scale = quant_config.a1_gscale if quant_config.quant_dtype == "nvfp4" else quant_config.a1_scale
 
         return self._do_dispatch(
             tokens=a1q,
@@ -369,10 +361,7 @@ class DeepEPV2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
             )
 
         if fused_expert_output.dtype != torch.bfloat16:
-            raise ValueError(
-                f"DeepEP v2 combine requires bfloat16 input, "
-                f"got {fused_expert_output.dtype}"
-            )
+            raise ValueError(f"DeepEP v2 combine requires bfloat16 input, got {fused_expert_output.dtype}")
 
         combined_x, _, event = self.buffer.combine(
             x=fused_expert_output,

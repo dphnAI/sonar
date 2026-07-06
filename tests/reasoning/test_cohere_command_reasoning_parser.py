@@ -221,9 +221,7 @@ class TestExtractReasoning:
                             "id": tc.id,
                             "index": tc.index,
                             "name": tc.function.name if tc.function else None,
-                            "arguments": (
-                                tc.function.arguments if tc.function else None
-                            ),
+                            "arguments": (tc.function.arguments if tc.function else None),
                         }
                     )
 
@@ -281,9 +279,7 @@ class TestIsReasoningEnd:
         # Full prompt/history tokens are scoped to the latest chatbot marker,
         # so stray thinking tokens from the preamble or previous turns are ignored.
         assert not parser.is_reasoning_end([start_id, end_id, chatbot_id, *content_ids])
-        assert parser.is_reasoning_end(
-            [start_id, end_id, chatbot_id, start_id, *content_ids, end_id]
-        )
+        assert parser.is_reasoning_end([start_id, end_id, chatbot_id, start_id, *content_ids, end_id])
 
 
 SCHEMA_A = {"type": "object", "properties": {"a": {"type": "string"}}}
@@ -429,9 +425,7 @@ class TestAdjustRequestFoldFromResponseFormat:
             pytest.param(
                 ResponseFormat(
                     type="json_schema",
-                    json_schema=JsonSchemaResponseFormat(
-                        name="n", json_schema=SCHEMA_A
-                    ),
+                    json_schema=JsonSchemaResponseFormat(name="n", json_schema=SCHEMA_A),
                 ),
                 SCHEMA_A,
                 id="json_schema_pydantic",
@@ -451,15 +445,11 @@ class TestAdjustRequestFoldFromResponseFormat:
             ),
         ],
     )
-    def test_response_format_cleared(
-        self, parser, response_format, expected_schema
-    ) -> None:
+    def test_response_format_cleared(self, parser, response_format, expected_schema) -> None:
         r = _make_chat_request(response_format=response_format)
         o = parser.adjust_request(r)
         assert o.response_format is None
-        assert (
-            _first_json_schema(o.structured_outputs.structural_tag) == expected_schema
-        )
+        assert _first_json_schema(o.structured_outputs.structural_tag) == expected_schema
 
 
 class TestHasEffectiveTools:
@@ -496,9 +486,7 @@ class TestAdjustRequestFoldFromStructuredOutputs:
         [
             pytest.param({"json": SCHEMA_B}, SCHEMA_B, id="json_dict"),
             pytest.param({"json": json.dumps(SCHEMA_B)}, SCHEMA_B, id="json_string"),
-            pytest.param(
-                {"json_object": True}, {"type": "object"}, id="json_object_flag"
-            ),
+            pytest.param({"json_object": True}, {"type": "object"}, id="json_object_flag"),
             pytest.param(
                 StructuredOutputsParams(json=SCHEMA_B),
                 SCHEMA_B,
@@ -511,15 +499,11 @@ class TestAdjustRequestFoldFromStructuredOutputs:
             ),
         ],
     )
-    def test_structured_outputs_folded(
-        self, parser, structured_outputs, expected_schema
-    ) -> None:
+    def test_structured_outputs_folded(self, parser, structured_outputs, expected_schema) -> None:
         o = parser.adjust_request(
             _make_chat_request(structured_outputs=structured_outputs),
         )
-        assert (
-            _first_json_schema(o.structured_outputs.structural_tag) == expected_schema
-        )
+        assert _first_json_schema(o.structured_outputs.structural_tag) == expected_schema
 
     def test_responses_request_default_empty_tools(self, parser) -> None:
         """``ResponsesRequest.tools`` defaults to ``[]``, not ``None``."""
@@ -543,15 +527,11 @@ class TestAdjustRequestFoldFromStructuredOutputs:
         "json_value, match",
         [
             pytest.param("{not json}", "valid JSON", id="invalid_json_string"),
-            pytest.param(
-                json.dumps(["a", "b"]), "JSON object", id="non_object_json_string"
-            ),
+            pytest.param(json.dumps(["a", "b"]), "JSON object", id="non_object_json_string"),
             pytest.param("   ", "empty", id="empty_json_string"),
         ],
     )
-    def test_structured_outputs_json_string_raises(
-        self, parser, json_value, match
-    ) -> None:
+    def test_structured_outputs_json_string_raises(self, parser, json_value, match) -> None:
         with pytest.raises(ValueError, match=match):
             parser.adjust_request(
                 _make_chat_request(structured_outputs={"json": json_value}),

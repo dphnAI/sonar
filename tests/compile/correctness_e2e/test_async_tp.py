@@ -5,16 +5,16 @@ import json
 
 import pytest
 
-from tests.models.registry import HF_EXAMPLE_MODELS
-from tests.utils import (
-    compare_two_settings,
-    create_new_process_for_each_test,
-)
 from aphrodite.config import (
     CompilationMode,
 )
 from aphrodite.platforms import current_platform
 from aphrodite.utils.flashinfer import has_flashinfer
+from tests.models.registry import HF_EXAMPLE_MODELS
+from tests.utils import (
+    compare_two_settings,
+    create_new_process_for_each_test,
+)
 
 NVFP4_MODEL_ID = "nvidia/Llama-3.1-8B-Instruct-NVFP4"
 NVFP4_HF_OVERRIDES = {
@@ -103,10 +103,7 @@ def test_async_tp_pass_correctness(
 
 @create_new_process_for_each_test()
 def test_async_tp_pass_nvfp4_correctness(num_gpus_available: int):
-    if (
-        not current_platform.is_cuda()
-        or not current_platform.is_device_capability_family(100)
-    ):
+    if not current_platform.is_cuda() or not current_platform.is_device_capability_family(100):
         pytest.skip("NVFP4 requires Blackwell")
     if not has_flashinfer():
         pytest.skip("FlashInfer is required for the NVFP4 AsyncTP path")

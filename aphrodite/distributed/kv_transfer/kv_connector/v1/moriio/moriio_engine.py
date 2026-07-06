@@ -120,9 +120,7 @@ class MoRIIOWriter:
             return
         self._write_worker_started = True
         with self._write_worker_lock:
-            thread = threading.Thread(
-                target=self._write_worker_loop, daemon=True, name="moriio-write-worker"
-            )
+            thread = threading.Thread(target=self._write_worker_loop, daemon=True, name="moriio-write-worker")
             thread.start()
             logger.info("Started MoRIIO write worker thread")
 
@@ -164,11 +162,7 @@ class MoRIIOWriter:
                 if transfer_id in self._sealed_writes:
                     continue
                 self._sealed_writes[transfer_id] = write_count
-                request_info = (
-                    self.worker.moriio_wrapper.done_remote_allocate_req_dict.get(
-                        transfer_id
-                    )
-                )
+                request_info = self.worker.moriio_wrapper.done_remote_allocate_req_dict.get(transfer_id)
                 if request_info is not None:
                     request_info.writes_expected = write_count
                     pending.append((transfer_id, request_info))
@@ -276,9 +270,7 @@ class MoRIIOWriter:
         Returns:
             True if remote blocks are ready
         """
-        return (
-            task.transfer_id in self.worker.moriio_wrapper.done_remote_allocate_req_dict
-        )
+        return task.transfer_id in self.worker.moriio_wrapper.done_remote_allocate_req_dict
 
     def _get_remote_alloc_info(self, transfer_id: str) -> RemoteAllocInfo:
         """Get remote allocation info for a request.
@@ -295,9 +287,7 @@ class MoRIIOWriter:
         try:
             return self.worker.moriio_wrapper.done_remote_allocate_req_dict[transfer_id]
         except KeyError as e:
-            raise KeyError(
-                f"Remote allocation info missing for transfer {transfer_id}"
-            ) from e
+            raise KeyError(f"Remote allocation info missing for transfer {transfer_id}") from e
 
     def _execute_write_task(self, task: WriteTask) -> None:
         """Execute a single write task.
@@ -331,14 +321,10 @@ class MoRIIOWriter:
         task.event.synchronize()
 
         # Update engine ID with DP rank
-        task.dst_engine_id = self.worker.get_engine_name_with_dp(
-            task.dst_engine_id, request_info.decode_dp_rank
-        )
+        task.dst_engine_id = self.worker.get_engine_name_with_dp(task.dst_engine_id, request_info.decode_dp_rank)
 
         # Get or create sessions
-        sessions, remote_moriio_meta = self.worker._get_built_session(
-            task.dst_engine_id
-        )
+        sessions, remote_moriio_meta = self.worker._get_built_session(task.dst_engine_id)
 
         # Prepare transfer plan
         plan = self._prepare_transfer_plan(task, request_info, remote_moriio_meta)
@@ -424,17 +410,13 @@ class MoRIIOWriter:
             )
         return transfer_statuses
 
-    def _mark_write_done(
-        self, transfer_id: TransferId, request_info: RemoteAllocInfo
-    ) -> None:
+    def _mark_write_done(self, transfer_id: TransferId, request_info: RemoteAllocInfo) -> None:
         """Record one completed WRITE task and finalize if sealed."""
         with self._write_state_lock:
             request_info.writes_done += 1
         self._finalize_if_complete(transfer_id, request_info)
 
-    def _finalize_if_complete(
-        self, transfer_id: TransferId, request_info: RemoteAllocInfo
-    ) -> None:
+    def _finalize_if_complete(self, transfer_id: TransferId, request_info: RemoteAllocInfo) -> None:
         """Finalize transfer if all scheduled writes are complete."""
         with self._write_state_lock:
             expected = request_info.writes_expected
@@ -454,25 +436,17 @@ class MoRIIOWriter:
         # Wait for this request's transfers to complete.
         self.worker.moriio_wrapper.waiting_for_transfer_complete(transfer_statuses)
 
-        remote_port = remote_notify_port + get_port_offset(
-            request_info.decode_dp_rank, self.worker.tp_rank
-        )
+        remote_port = remote_notify_port + get_port_offset(request_info.decode_dp_rank, self.worker.tp_rank)
         # Consider using RDMA immediate data in decode side
         # to eliminate the need for this notification.
         # Consider including the first gen token from prefill in the notification
 
         # Send completion notification
-        self.worker.moriio_wrapper.send_notify(
-            transfer_id, remote_ip, remote_port, message_type="write_done"
-        )
+        self.worker.moriio_wrapper.send_notify(transfer_id, remote_ip, remote_port, message_type="write_done")
         # mark request as done, then we can free the blocks
         with self.worker.moriio_wrapper.lock:
-            self.worker.moriio_wrapper.done_req_ids.append(
-                MoRIIOTransferAck(transfer_id)
-            )
-            self.worker.moriio_wrapper.done_remote_allocate_req_dict.pop(
-                transfer_id, None
-            )
+            self.worker.moriio_wrapper.done_req_ids.append(MoRIIOTransferAck(transfer_id))
+            self.worker.moriio_wrapper.done_remote_allocate_req_dict.pop(transfer_id, None)
             self.worker.moriio_wrapper._mark_transfer_terminal_locked(transfer_id)
         self._clear_transfer_state(transfer_id)
         logger.debug(
@@ -521,9 +495,7 @@ class MoRIIOWrapper:
         self.paths: dict[str, zmq.Socket] = {}
 
     def set_moriio_engine(self, moriio_engine):
-        assert moriio_engine is not None, (
-            "You Cannot pass None engine to MoRIIOWrapper!"
-        )
+        assert moriio_engine is not None, "You Cannot pass None engine to MoRIIOWrapper!"
         self.moriio_engine = moriio_engine
 
     def set_backend_type(
@@ -539,8 +511,7 @@ class MoRIIOWrapper:
             self.moriio_engine.create_backend(backend_type, XgmiBackendConfig())
         else:
             logger.info(
-                "Using MoRIIO backend: RDMA "
-                "(qp_per_transfer=%d, post_batch_size=%d, num_workers=%d)",
+                "Using MoRIIO backend: RDMA (qp_per_transfer=%d, post_batch_size=%d, num_workers=%d)",
                 qp_per_transfer,
                 post_batch_size,
                 num_workers,
@@ -576,12 +547,8 @@ class MoRIIOWrapper:
     def register_local_tensor(self, tensor: torch.Tensor):
         assert self.moriio_engine is not None, "MoRIIO engine must be set first"
         try:
-            self.local_memory_metadata = self.moriio_engine.register_torch_tensor(
-                tensor
-            )
-            assert self.local_memory_metadata is not None, (
-                "register_torch_tensor returned None"
-            )
+            self.local_memory_metadata = self.moriio_engine.register_torch_tensor(tensor)
+            assert self.local_memory_metadata is not None, "register_torch_tensor returned None"
             local_memory_metadata_packed = self.local_memory_metadata.pack()
         except Exception as e:
             raise MoRIIOError(f"Failed to register local memory: {e}") from e
@@ -593,13 +560,9 @@ class MoRIIOWrapper:
 
     def build_session(self, local_memory_metadata, remote_memory_metadata):
         assert self.moriio_engine is not None, "MoRIIO engine must be set first"
-        return self.moriio_engine.create_session(
-            local_memory_metadata, remote_memory_metadata
-        )
+        return self.moriio_engine.create_session(local_memory_metadata, remote_memory_metadata)
 
-    def read_remote_data(
-        self, transfer_size_byte, local_offset=0, remote_offset=0, session=None
-    ):
+    def read_remote_data(self, transfer_size_byte, local_offset=0, remote_offset=0, session=None):
         assert self.local_memory_registered, "You have not register local memory data!"
         assert self.moriio_engine is not None, "MoRIIO engine must be set first"
         transfer_status = session.batch_read(
@@ -611,21 +574,15 @@ class MoRIIOWrapper:
 
         return transfer_status
 
-    def write_remote_data(
-        self, transfer_size_byte, local_offset=0, remote_offset=0, session=None
-    ):
+    def write_remote_data(self, transfer_size_byte, local_offset=0, remote_offset=0, session=None):
         assert self.local_memory_registered, "You have not register local memory data!"
         assert self.moriio_engine is not None, "MoRIIO engine must be set first"
         write_uid = self.moriio_engine.allocate_transfer_uid()
 
-        transfer_status = session.batch_write(
-            local_offset, remote_offset, transfer_size_byte, write_uid
-        )
+        transfer_status = session.batch_write(local_offset, remote_offset, transfer_size_byte, write_uid)
         return transfer_status
 
-    def write_remote_data_single(
-        self, transfer_size_byte, local_offset=0, remote_offset=0, sess_idx=0
-    ):
+    def write_remote_data_single(self, transfer_size_byte, local_offset=0, remote_offset=0, sess_idx=0):
         assert self.local_memory_registered, "You have not register local memory data!"
         assert self.moriio_engine is not None, "MoRIIO engine must be set first"
         transfer_status = self.sessions[sess_idx].write(
@@ -659,10 +616,7 @@ class MoRIIOWrapper:
                 if status.Succeeded():
                     continue
                 if status.Failed():
-                    errors.append(
-                        f"RDMA transfer failed: {status.Message()} "
-                        f"(code={status.Code()})"
-                    )
+                    errors.append(f"RDMA transfer failed: {status.Message()} (code={status.Code()})")
                     continue
                 if timed_out:
                     errors.append(
@@ -676,10 +630,7 @@ class MoRIIOWrapper:
             if remaining:
                 time.sleep(0.001)
         if errors:
-            raise TransferError(
-                f"{len(errors)}/{len(transfers_to_wait)} transfers failed:\n"
-                + "\n".join(errors)
-            )
+            raise TransferError(f"{len(errors)}/{len(transfers_to_wait)} transfers failed:\n" + "\n".join(errors))
 
     def async_wait_reqid(self):
         assert self.notify_port is not None, "Notify port cannot be None"
@@ -701,9 +652,7 @@ class MoRIIOWrapper:
                         logger.error("Error processing message: %s", e)
                         raise HandshakeError(f"Error processing message: {e}") from e
 
-        self.notify_thread = threading.Thread(
-            target=_async_wait, daemon=True, name="moriio-notify-listener"
-        )
+        self.notify_thread = threading.Thread(target=_async_wait, daemon=True, name="moriio-notify-listener")
         self.notify_thread.start()
 
     def _handle_message(self, msg: bytes):
@@ -759,9 +708,7 @@ class MoRIIOWrapper:
         block_notify_list = data.get("block_notify_list", [])
         decode_dp_rank = data.get("decode_rank", 0)
         if not block_notify_list:
-            raise MoRIIOError(
-                "block_notify_list cannot be empty in remote allocate message"
-            )
+            raise MoRIIOError("block_notify_list cannot be empty in remote allocate message")
 
         with self.lock:
             if self._is_transfer_terminal_locked(transfer_id):
@@ -775,23 +722,17 @@ class MoRIIOWrapper:
             )
 
     def _handle_write_done_message(self, data: dict):
-        assert get_role() != ROLE.PRODUCER, (
-            "Only decode can get WRITE completion messages"
-        )
+        assert get_role() != ROLE.PRODUCER, "Only decode can get WRITE completion messages"
         transfer_id = data["transfer_id"]
         with self.lock:
             self.done_write_cache_req_ids.append(transfer_id)
 
     def _handle_release_message(self, data: dict):
-        assert get_role() == ROLE.PRODUCER, (
-            "Only prefill can get transfer release messages"
-        )
+        assert get_role() == ROLE.PRODUCER, "Only prefill can get transfer release messages"
         transfer_id = data["transfer_id"]
         consumer_tp_size = int(data.get("consumer_tp_size", 1))
         if consumer_tp_size <= 0:
-            raise MoRIIOError(
-                f"Invalid consumer_tp_size in release message: {consumer_tp_size}"
-            )
+            raise MoRIIOError(f"Invalid consumer_tp_size in release message: {consumer_tp_size}")
         with self.lock:
             self.done_req_ids.append(MoRIIOTransferAck(transfer_id, consumer_tp_size))
             self.done_remote_allocate_req_dict.pop(transfer_id, None)
@@ -831,9 +772,7 @@ class MoRIIOWrapper:
 
         if path not in self.paths:
             ctx = zmq.Context.instance()
-            sock = make_zmq_socket(
-                ctx=ctx, path=path, socket_type=zmq.DEALER, bind=False
-            )
+            sock = make_zmq_socket(ctx=ctx, path=path, socket_type=zmq.DEALER, bind=False)
             self.paths[path] = sock
 
         req_list = req_ids if isinstance(req_ids, list) else [req_ids]
@@ -842,9 +781,7 @@ class MoRIIOWrapper:
         try:
             for req_id in req_list:
                 if not isinstance(req_id, str):
-                    logger.warning(
-                        "Invalid req_id type: %s, expected str", type(req_id)
-                    )
+                    logger.warning("Invalid req_id type: %s, expected str", type(req_id))
                     continue
                 if message_type is None:
                     sock.send(req_id.encode("utf-8"))

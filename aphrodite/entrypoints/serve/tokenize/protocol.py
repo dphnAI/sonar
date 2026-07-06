@@ -27,16 +27,11 @@ class TokenizeCompletionRequest(OpenAIBaseModel):
 
     add_special_tokens: bool = Field(
         default=True,
-        description=(
-            "If true (the default), special tokens (e.g. BOS) will be added to "
-            "the prompt."
-        ),
+        description=("If true (the default), special tokens (e.g. BOS) will be added to the prompt."),
     )
     return_token_strs: bool | None = Field(
         default=False,
-        description=(
-            "If true, also return the token strings corresponding to the token ids."
-        ),
+        description=("If true, also return the token strings corresponding to the token ids."),
     )
 
     def build_tok_params(self, model_config: ModelConfig) -> TokenizeParams:
@@ -61,9 +56,7 @@ class TokenizeChatRequest(OpenAIBaseModel):
     )
     return_token_strs: bool | None = Field(
         default=False,
-        description=(
-            "If true, also return the token strings corresponding to the token ids."
-        ),
+        description=("If true, also return the token strings corresponding to the token ids."),
     )
     continue_final_message: bool = Field(
         default=False,
@@ -97,8 +90,7 @@ class TokenizeChatRequest(OpenAIBaseModel):
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Additional keyword args to pass to the template renderer. "
-            "Will be accessible by the chat template."
+            "Additional keyword args to pass to the template renderer. Will be accessible by the chat template."
         ),
     )
     media_io_kwargs: dict[str, dict[str, Any]] | None = Field(
@@ -122,8 +114,7 @@ class TokenizeChatRequest(OpenAIBaseModel):
     def check_generation_prompt(cls, data):
         if data.get("continue_final_message") and data.get("add_generation_prompt"):
             raise APHRODITEValidationError(
-                "Cannot set both `continue_final_message` and "
-                "`add_generation_prompt` to True.",
+                "Cannot set both `continue_final_message` and `add_generation_prompt` to True.",
             )
         return data
 

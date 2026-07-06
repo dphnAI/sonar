@@ -42,11 +42,7 @@ class IOProcessor(ABC, Generic[IOProcessorInput, IOProcessorOutput]):
         self,
         params: SamplingParams | None = None,
     ) -> SamplingParams:
-        if callable(
-            validate_or_generate_params := getattr(
-                self, "validate_or_generate_params", None
-            )
-        ):
+        if callable(validate_or_generate_params := getattr(self, "validate_or_generate_params", None)):
             warnings.warn(
                 "`validate_or_generate_params` has been split into "
                 "`merge_sampling_params` and `merge_pooling_params`."
@@ -64,11 +60,7 @@ class IOProcessor(ABC, Generic[IOProcessorInput, IOProcessorOutput]):
         self,
         params: PoolingParams | None = None,
     ) -> PoolingParams:
-        if callable(
-            validate_or_generate_params := getattr(
-                self, "validate_or_generate_params", None
-            )
-        ):
+        if callable(validate_or_generate_params := getattr(self, "validate_or_generate_params", None)):
             warnings.warn(
                 "`validate_or_generate_params` has been split into "
                 "`merge_sampling_params` and `merge_pooling_params`."
@@ -117,8 +109,6 @@ class IOProcessor(ABC, Generic[IOProcessorInput, IOProcessorOutput]):
         # We cannot guarantee outputs are returned in the same order they were
         # fed to Aphrodite.
         # Let's sort them by id before post_processing
-        sorted_output = sorted(
-            [(i, item) async for i, item in model_output], key=lambda output: output[0]
-        )
+        sorted_output = sorted([(i, item) async for i, item in model_output], key=lambda output: output[0])
         collected_output = [output[1] for output in sorted_output]
         return self.post_process(collected_output, request_id=request_id, **kwargs)

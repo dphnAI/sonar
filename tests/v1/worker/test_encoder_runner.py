@@ -39,9 +39,7 @@ def _make_runner(
     cache.mm_features["req0"] = features
     for f in cached:
         length = f.mm_position.length
-        cache.encoder_outputs[f.identifier] = torch.arange(
-            length * HIDDEN, dtype=torch.float32
-        ).reshape(length, HIDDEN)
+        cache.encoder_outputs[f.identifier] = torch.arange(length * HIDDEN, dtype=torch.float32).reshape(length, HIDDEN)
     return EncoderRunner(
         model=None,  # unused by gather_mm_embeddings
         max_num_tokens=64,
@@ -129,9 +127,9 @@ def test_multi_request_batch_gathers_per_request(draft_lookahead):
     cache.mm_features["req0"] = [a0]
     cache.mm_features["req1"] = [b0]
     for f in (a0, b0):
-        cache.encoder_outputs[f.identifier] = torch.arange(
-            f.mm_position.length * HIDDEN, dtype=torch.float32
-        ).reshape(f.mm_position.length, HIDDEN)
+        cache.encoder_outputs[f.identifier] = torch.arange(f.mm_position.length * HIDDEN, dtype=torch.float32).reshape(
+            f.mm_position.length, HIDDEN
+        )
     runner = EncoderRunner(
         model=None,
         max_num_tokens=64,

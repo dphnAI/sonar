@@ -11,7 +11,6 @@ import pytest
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 
-from tests.kernels.helion.utils import skip_if_platform_unsupported
 from aphrodite.benchmarks.lib.utils import default_aphrodite_config
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import ConfigManager
@@ -23,6 +22,7 @@ from aphrodite.kernels.helion.ops.fused_qk_norm_rope import (
 )
 from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 from aphrodite.utils.import_utils import has_helion
+from tests.kernels.helion.utils import skip_if_platform_unsupported
 
 if not has_helion():
     pytest.skip(
@@ -32,9 +32,7 @@ if not has_helion():
 
 
 @default_aphrodite_config()
-def _generate_fake_input(
-    num_tokens: int, num_q_heads: int, num_kv_heads: int
-) -> tuple[Any, ...]:
+def _generate_fake_input(num_tokens: int, num_q_heads: int, num_kv_heads: int) -> tuple[Any, ...]:
     with FakeTensorMode():
         head_dim = 128
         eps = 1e-6
@@ -104,9 +102,7 @@ class TestFusedQkNormRopeConfigPicker:
 
         args = _generate_fake_input(16, 4096, 128)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"q_heads": 4096, "kv_heads": 128, "num_tokens": 16}
-        )
+        assert selected_key == CaseKey({"q_heads": 4096, "kv_heads": 128, "num_tokens": 16})
 
     def test_config_picker_closest_match(self):
         config_keys = [
@@ -122,9 +118,7 @@ class TestFusedQkNormRopeConfigPicker:
 
         args = _generate_fake_input(20, 3000, 70)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"q_heads": 2048, "kv_heads": 64, "num_tokens": 32}
-        )
+        assert selected_key == CaseKey({"q_heads": 2048, "kv_heads": 64, "num_tokens": 32})
 
     def test_config_picker_no_configs(self):
         config_keys: list[dict] = []
@@ -147,15 +141,11 @@ class TestFusedQkNormRopeConfigPicker:
 
         args = _generate_fake_input(64, 8192, 256)
         selected_key = pick_config(args, config_keys)
-        assert selected_key == CaseKey(
-            {"q_heads": 4096, "kv_heads": 128, "num_tokens": 32}
-        )
+        assert selected_key == CaseKey({"q_heads": 4096, "kv_heads": 128, "num_tokens": 32})
 
 
 class TestFusedQkNormRopeCorrectness:
-    @pytest.mark.parametrize(
-        "num_heads, num_kv_heads, head_dim", [(16, 4, 128), (64, 8, 128)]
-    )
+    @pytest.mark.parametrize("num_heads, num_kv_heads, head_dim", [(16, 4, 128), (64, 8, 128)])
     @pytest.mark.parametrize("num_tokens", [1, 7, 1024, 1025])
     @pytest.mark.parametrize("is_neox", [False, True])
     @pytest.mark.parametrize("rotary_ratio", [1.0, 0.5, 0.25])
@@ -177,9 +167,7 @@ class TestFusedQkNormRopeCorrectness:
         eps = 1e-6
         device = "cuda"
         total_dim = (num_heads + 2 * num_kv_heads) * head_dim
-        ref_qkv = torch.empty(
-            num_tokens, total_dim, dtype=dtype, device=device
-        ).uniform_(-0.1, 0.1)
+        ref_qkv = torch.empty(num_tokens, total_dim, dtype=dtype, device=device).uniform_(-0.1, 0.1)
         ops_qkv = ref_qkv.clone()
         positions = torch.arange(num_tokens, dtype=torch.long, device=device)
         q_weight = torch.empty(head_dim, dtype=dtype, device=device).uniform_(0.8, 1.2)

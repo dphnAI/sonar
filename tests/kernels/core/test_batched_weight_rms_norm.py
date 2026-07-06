@@ -31,9 +31,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("dtype", [torch.half, torch.bfloat16, torch.float])
 @pytest.mark.parametrize("seed", [42])
 @torch.inference_mode()
-def test_rms_norm_matches_loop(
-    shape: tuple[int, ...], dtype: torch.dtype, seed: int
-) -> None:
+def test_rms_norm_matches_loop(shape: tuple[int, ...], dtype: torch.dtype, seed: int) -> None:
     set_random_seed(seed)
     torch.set_default_device("cuda")
 

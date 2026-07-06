@@ -32,10 +32,7 @@ class KVCacheScaleParameter(torch.nn.Parameter):
     @staticmethod
     def weight_loader(param: torch.nn.Parameter, loaded_weight: torch.Tensor) -> None:
         if loaded_weight.numel() != 1:
-            raise ValueError(
-                f"KV-cache scale expects a scalar weight, got shape "
-                f"{tuple(loaded_weight.shape)}"
-            )
+            raise ValueError(f"KV-cache scale expects a scalar weight, got shape {tuple(loaded_weight.shape)}")
         param.data.copy_(loaded_weight.reshape(()))
 
 
@@ -97,10 +94,7 @@ class BaseKVCacheMethod(QuantizeMethodBase):
         # regardless whether the kv-scale is available in the checkpoint.
         # No need to process kv scales after loading if we are going to
         # calculate them on the fly.
-        if (
-            is_quantized_kv_cache(layer.kv_cache_dtype)
-            and not layer.calculate_kv_scales
-        ):
+        if is_quantized_kv_cache(layer.kv_cache_dtype) and not layer.calculate_kv_scales:
             if layer.k_scale > 0.0 and layer.v_scale > 0.0:
                 # We prefer to use separate k_scale and v_scale if present
                 k_scale = layer.k_scale.to("cpu").tolist()
@@ -126,9 +120,7 @@ class BaseKVCacheMethod(QuantizeMethodBase):
                     v_scale *= 2
 
             if not isinstance(k_scale, float) or not isinstance(v_scale, float):
-                raise ValueError(
-                    "Only support per-tensor scaling factor for fp8 KV cache"
-                )
+                raise ValueError("Only support per-tensor scaling factor for fp8 KV cache")
 
             if layer.q_scale < 0.0:
                 logger.warning_once(
@@ -166,21 +158,14 @@ class BaseKVCacheMethod(QuantizeMethodBase):
             prob_scale = 1.0
 
         is_singleton_float = (
-            lambda x: isinstance(x, float)
-            or isinstance(x, torch.Tensor)
-            and x.numel() == 1
-            and x.is_floating_point()
+            lambda x: isinstance(x, float) or isinstance(x, torch.Tensor) and x.numel() == 1 and x.is_floating_point()
         )
         if not is_singleton_float(q_scale) or not is_singleton_float(prob_scale):
-            raise ValueError(
-                "Only support per-tensor scaling factorfor fp8-quantized Q/prob"
-            )
+            raise ValueError("Only support per-tensor scaling factorfor fp8-quantized Q/prob")
 
         # These are used in the final Attention.forward()
         layer._q_scale.copy_(q_scale)
-        layer._q_scale_float = (
-            q_scale.item() if isinstance(q_scale, torch.Tensor) else q_scale
-        )
+        layer._q_scale_float = q_scale.item() if isinstance(q_scale, torch.Tensor) else q_scale
 
         layer._prob_scale.copy_(prob_scale)
         if layer.kv_cache_dtype == "fp8" and (q_scale == 1.0 or prob_scale == 1.0):

@@ -5,14 +5,14 @@ import pytest
 import torch
 
 import aphrodite.config
-from tests.compile.backend import TestBackend
 from aphrodite.compilation.passes.aphrodite_inductor_pass import (
     AphroditeFusionPatternMatcherPass,
     AphroditePatternMatcherPass,
     AphroditePatternReplacement,
 )
-from aphrodite.config import CompilationConfig, CompilationMode, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CompilationConfig, CompilationMode
 from aphrodite.platforms import current_platform
+from tests.compile.backend import TestBackend
 
 
 class ReluToAbsPattern(AphroditePatternReplacement):

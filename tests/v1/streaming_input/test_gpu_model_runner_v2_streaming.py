@@ -128,9 +128,7 @@ def test_e2e_streaming_request_update_basic_flow(
 
     # Verify model_state and block_tables were re-registered
     runner.model_state.add_request.assert_called_with(new_idx, updated_req_data)
-    runner.block_tables.append_block_ids.assert_called_with(
-        new_idx, ([0, 1],), overwrite=True
-    )
+    runner.block_tables.append_block_ids.assert_called_with(new_idx, ([0, 1],), overwrite=True)
 
 
 def test_e2e_streaming_with_multimodal_features(
@@ -195,9 +193,7 @@ def test_e2e_streaming_with_multimodal_features(
 
     # Verify encoder_cache was cleaned up and re-registered
     runner.encoder_cache.remove_request.assert_called_once_with(req_id)
-    runner.encoder_cache.add_request.assert_called_once_with(
-        req_id, [mm_feature_1, mm_feature_2]
-    )
+    runner.encoder_cache.add_request.assert_called_once_with(req_id, [mm_feature_1, mm_feature_2])
 
     # Verify model_state was re-registered with new data
     new_idx = req_states.req_id_to_index[req_id]

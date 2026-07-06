@@ -52,9 +52,7 @@ def test_ranks(
         assert len(prompt_tokens) == len(prompt_logprobs)
         # No logprob for first prompt token
         assert not prompt_logprobs[0]
-        for position, (token, logprobs) in enumerate(
-            zip(prompt_tokens[1:], prompt_logprobs[1:]), start=1
-        ):
+        for position, (token, logprobs) in enumerate(zip(prompt_tokens[1:], prompt_logprobs[1:]), start=1):
             # Ensure logprobs of prompt token is always returned
             logprob = logprobs.get(token)
             assert logprob is not None
@@ -63,17 +61,13 @@ def test_ranks(
             # either NUM_PROMPT_LOGPROBS or NUM_PROMPT_LOGPROBS+1
             assert NUM_PROMPT_LOGPROBS <= len(logprobs) <= NUM_PROMPT_LOGPROBS + 1
             # Ensure top NUM_PROMPT_LOGPROBS is always extracted
-            assert set(range(1, NUM_PROMPT_LOGPROBS + 1)).issubset(
-                {logprob.rank for logprob in logprobs.values()}
-            )
+            assert set(range(1, NUM_PROMPT_LOGPROBS + 1)).issubset({logprob.rank for logprob in logprobs.values()})
 
         ########################
         # Check sample logprobs
         ########################
         assert len(decode_tokens) == len(decode_logprobs)
-        for position, (token, logprobs) in enumerate(
-            zip(decode_tokens, decode_logprobs)
-        ):
+        for position, (token, logprobs) in enumerate(zip(decode_tokens, decode_logprobs)):
             # Ensure logprobs of chosen token is always returned
             logprob = logprobs.get(token)
             assert logprob is not None
@@ -86,6 +80,4 @@ def test_ranks(
             # either NUM_TOP_LOGPROBS or NUM_TOP_LOGPROBS+1
             assert NUM_TOP_LOGPROBS <= len(logprobs) <= NUM_TOP_LOGPROBS + 1
             # Ensure top NUM_TOP_LOGPROBS logprobs is always extracted
-            assert set(range(1, NUM_TOP_LOGPROBS + 1)).issubset(
-                {logprob.rank for logprob in logprobs.values()}
-            )
+            assert set(range(1, NUM_TOP_LOGPROBS + 1)).issubset({logprob.rank for logprob in logprobs.values()})

@@ -126,13 +126,11 @@ def apply_moe_activation(
     assert output.dim() == 2, "Output must be 2D"
     if activation.is_gated:
         assert output.size(-1) * 2 == input.size(-1), (
-            f"{activation.value} expects 2x ratio: "
-            f"{output.size(-1) * 2} vs {input.size(-1)}"
+            f"{activation.value} expects 2x ratio: {output.size(-1) * 2} vs {input.size(-1)}"
         )
     else:
         assert output.size(-1) == input.size(-1), (
-            f"{activation.value} expects equal sizes: "
-            f"{output.size(-1)} vs {input.size(-1)}"
+            f"{activation.value} expects equal sizes: {output.size(-1)} vs {input.size(-1)}"
         )
 
     # Activations with gated multiplication (gate × activation(up))

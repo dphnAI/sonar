@@ -35,12 +35,6 @@ if __name__ == "__main__":
         assert test_result == expected, f"Expected {expected} nodes, got {test_result}"
 
         if pg == dist.group.WORLD:
-            print(
-                f"Node count test passed! Got {test_result} nodes "
-                f"when using torch distributed!"
-            )
+            print(f"Node count test passed! Got {test_result} nodes when using torch distributed!")
         else:
-            print(
-                f"Node count test passed! Got {test_result} nodes "
-                f"when using StatelessProcessGroup!"
-            )
+            print(f"Node count test passed! Got {test_result} nodes when using StatelessProcessGroup!")

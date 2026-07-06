@@ -79,9 +79,7 @@ elif sys.platform.startswith("linux") and os.getenv("APHRODITE_TARGET_DEVICE") i
 
 
 def is_sccache_available() -> bool:
-    return which("sccache") is not None and not bool(
-        int(os.getenv("APHRODITE_DISABLE_SCCACHE", "0"))
-    )
+    return which("sccache") is not None and not bool(int(os.getenv("APHRODITE_DISABLE_SCCACHE", "0")))
 
 
 def is_ccache_available() -> bool:
@@ -377,9 +375,7 @@ class cmake_build_ext(build_ext):
             recursive=True,
         )
         for file in files:
-            dst_file = os.path.join(
-                "aphrodite/vllm_flash_attn", file.split("aphrodite/vllm_flash_attn/")[-1]
-            )
+            dst_file = os.path.join("aphrodite/vllm_flash_attn", file.split("aphrodite/vllm_flash_attn/")[-1])
             print(f"Copying {file} to {dst_file}")
             os.makedirs(os.path.dirname(dst_file), exist_ok=True)
             self.copy_file(file, dst_file)
@@ -389,8 +385,7 @@ class cmake_build_ext(build_ext):
             # to current directory so that they can be included in the editable
             # build
             print(
-                f"Copying {self.build_lib}/aphrodite/third_party/triton_kernels "
-                "to aphrodite/third_party/triton_kernels"
+                f"Copying {self.build_lib}/aphrodite/third_party/triton_kernels to aphrodite/third_party/triton_kernels"
             )
             shutil.copytree(
                 f"{self.build_lib}/aphrodite/third_party/triton_kernels",
@@ -401,9 +396,7 @@ class cmake_build_ext(build_ext):
         if _is_cuda():
             # copy vendored deep_gemm package from build_lib to source tree
             # for editable installs
-            deep_gemm_build = os.path.join(
-                self.build_lib, "aphrodite", "third_party", "deep_gemm"
-            )
+            deep_gemm_build = os.path.join(self.build_lib, "aphrodite", "third_party", "deep_gemm")
             if os.path.exists(deep_gemm_build):
                 print(f"Copying {deep_gemm_build} to aphrodite/third_party/deep_gemm")
                 shutil.copytree(
@@ -414,9 +407,7 @@ class cmake_build_ext(build_ext):
 
             # copy vendored fmha_sm100 package from build_lib to source tree
             # for editable installs
-            fmha_sm100_build = os.path.join(
-                self.build_lib, "aphrodite", "third_party", "fmha_sm100"
-            )
+            fmha_sm100_build = os.path.join(self.build_lib, "aphrodite", "third_party", "fmha_sm100")
             if os.path.exists(fmha_sm100_build):
                 print(f"Copying {fmha_sm100_build} to aphrodite/third_party/fmha_sm100")
                 shutil.copytree(
@@ -436,9 +427,7 @@ def _is_cuda() -> bool:
 
 
 def _is_hip() -> bool:
-    return (
-        APHRODITE_TARGET_DEVICE == "cuda" or APHRODITE_TARGET_DEVICE == "rocm"
-    ) and torch.version.hip is not None
+    return (APHRODITE_TARGET_DEVICE == "cuda" or APHRODITE_TARGET_DEVICE == "rocm") and torch.version.hip is not None
 
 
 def _is_tpu() -> bool:
@@ -483,12 +472,7 @@ def get_rocm_version():
         minor = ctypes.c_uint32()
         patch = ctypes.c_uint32()
 
-        if (
-            get_rocm_core_version(
-                ctypes.byref(major), ctypes.byref(minor), ctypes.byref(patch)
-            )
-            == 0
-        ):
+        if get_rocm_core_version(ctypes.byref(major), ctypes.byref(minor), ctypes.byref(patch)) == 0:
             return f"{major.value}.{minor.value}.{patch.value}"
         return None
     except Exception:
@@ -501,9 +485,7 @@ def get_nvcc_cuda_version() -> Version:
     Adapted from https://github.com/NVIDIA/apex/blob/8b7a1ff183741dd8f9b87e7bafd04cfde99cea28/setup.py
     """
     assert CUDA_HOME is not None, "CUDA_HOME is not set"
-    nvcc_output = subprocess.check_output(
-        [CUDA_HOME + "/bin/nvcc", "-V"], universal_newlines=True
-    )
+    nvcc_output = subprocess.check_output([CUDA_HOME + "/bin/nvcc", "-V"], universal_newlines=True)
     output = nvcc_output.split()
     release_idx = output.index("release") + 1
     nvcc_cuda_version = parse(output[release_idx].split(",")[0])
@@ -564,11 +546,7 @@ def get_requirements() -> list[str]:
         for line in requirements:
             if line.startswith("-r "):
                 resolved_requirements += _read_requirements(line.split()[1])
-            elif (
-                not line.startswith("--")
-                and not line.startswith("#")
-                and line.strip() != ""
-            ):
+            elif not line.startswith("--") and not line.startswith("#") and line.strip() != "":
                 resolved_requirements.append(line)
         return resolved_requirements
 
@@ -627,17 +605,13 @@ if _is_cuda():
         ext_modules.append(CMakeExtension(name="aphrodite.vllm_flash_attn._vllm_fa3_C"))
     # FA4 CuteDSL - Python-only component for FA4's cute DSL support
     # Optional since this doesn't produce a .so file, just copies Python files
-    ext_modules.append(
-        CMakeExtension(name="aphrodite.vllm_flash_attn._vllm_fa4_cutedsl_C", optional=True)
-    )
+    ext_modules.append(CMakeExtension(name="aphrodite.vllm_flash_attn._vllm_fa4_cutedsl_C", optional=True))
     if CUDA_HOME and get_nvcc_cuda_version() >= Version("12.9"):
         # FlashMLA requires CUDA 12.9 or later
         # Optional since this doesn't get built (produce an .so file) when
         # not targeting a hopper system
         ext_modules.append(CMakeExtension(name="aphrodite._flashmla_C", optional=True))
-        ext_modules.append(
-            CMakeExtension(name="aphrodite._flashmla_extension_C", optional=True)
-        )
+        ext_modules.append(CMakeExtension(name="aphrodite._flashmla_extension_C", optional=True))
     if CUDA_HOME and get_nvcc_cuda_version() >= Version("12.3"):
         # DeepGEMM requires CUDA 12.3+ (SM90/SM100)
         # Optional since it won't build on unsupported architectures
@@ -659,9 +633,7 @@ if _is_cpu():
 if _build_custom_ops():
     if _is_metal():
         # MLX/nanobind paged-attention Metal kernel (aphrodite/metal/metal/_paged_ops).
-        ext_modules.append(
-            CMakeExtension(name="aphrodite.metal.metal._paged_ops", py_limited_api=False)
-        )
+        ext_modules.append(CMakeExtension(name="aphrodite.metal.metal._paged_ops", py_limited_api=False))
     if _is_hip():
         ext_modules.append(CMakeExtension(name="aphrodite._C"))
     if _is_cuda() or _is_hip():
@@ -716,14 +688,14 @@ if _no_device():
 if APHRODITE_USE_PRECOMPILED:
     prebuilt = sorted(
         p.relative_to(ROOT_DIR / "aphrodite")
-        for pattern in ("*.so", "vllm_flash_attn/*.so", "third_party/deep_gemm/*.so",
-                        "metal/metal/*.so")
+        for pattern in ("*.so", "vllm_flash_attn/*.so", "third_party/deep_gemm/*.so", "metal/metal/*.so")
         for p in (ROOT_DIR / "aphrodite").glob(pattern)
     )
     if prebuilt:
         logger.info(
             "APHRODITE_USE_PRECOMPILED=1: skipping native builds; reusing %d prebuilt "
-            "extension(s) found in the source tree", len(prebuilt)
+            "extension(s) found in the source tree",
+            len(prebuilt),
         )
         for rel in prebuilt:
             add_aphrodite_package_data(str(rel))
@@ -746,12 +718,8 @@ else:
 if APHRODITE_USE_PRECOMPILED:
     rust_extensions = []
 else:
-    rust_build = load_module_from_path(
-        "rust_build", os.path.join(ROOT_DIR, "tools", "build_rust.py")
-    )
-    rust_extensions = rust_build.rust_extensions(
-        optional=not should_require_rust_frontend()
-    )
+    rust_build = load_module_from_path("rust_build", os.path.join(ROOT_DIR, "tools", "build_rust.py"))
+    rust_extensions = rust_build.rust_extensions(optional=not should_require_rust_frontend())
 
 setup(
     # static metadata should rather go in pyproject.toml

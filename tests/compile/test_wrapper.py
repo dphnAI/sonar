@@ -9,9 +9,9 @@ import torch
 
 from aphrodite.compilation.wrapper import TorchCompileWithNoGuardsWrapper
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 
@@ -58,25 +58,19 @@ def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
 
         result1 = wrapper(x)
         expected1 = torch.tensor([2, 4, 6, 8])
-        assert torch.allclose(result1, expected1), (
-            f"Expected {expected1}, got {result1}"
-        )
+        assert torch.allclose(result1, expected1), f"Expected {expected1}, got {result1}"
 
         # Second call should use compiled code
         x2 = torch.tensor([1, 2, 3])
         result2 = wrapper(x2)
         expected2 = torch.tensor([2, 4, 6])
-        assert torch.allclose(result2, expected2), (
-            f"Expected {expected2}, got {result2}"
-        )
+        assert torch.allclose(result2, expected2), f"Expected {expected2}, got {result2}"
 
         # without the wrapper result would be different.
         result3 = mod(x2)
         expected3 = torch.tensor([100, 200, 300])
 
-        assert torch.allclose(result3, expected3), (
-            f"Expected {result3}, got {expected3}"
-        )
+        assert torch.allclose(result3, expected3), f"Expected {result3}, got {expected3}"
 
     # with STOCK_TORCH_COMPILE we do not remove guards.
     aphrodite_config.compilation_config.mode = CompilationMode.STOCK_TORCH_COMPILE
@@ -91,17 +85,13 @@ def test_torch_compile_wrapper(use_bytecode_hook, monkeypatch):
 
         result1 = wrapper(x)
         expected1 = torch.tensor([2, 4, 6, 8])
-        assert torch.allclose(result1, expected1), (
-            f"Expected {expected1}, got {result1}"
-        )
+        assert torch.allclose(result1, expected1), f"Expected {expected1}, got {result1}"
 
         # Second call should trigger another compilation
         x2 = torch.tensor([1, 2, 3])
         result2 = wrapper(x2)
         expected2 = torch.tensor([100, 200, 300])
-        assert torch.allclose(result2, expected2), (
-            f"Expected {expected2}, got {result2}"
-        )
+        assert torch.allclose(result2, expected2), f"Expected {expected2}, got {result2}"
 
     # NO_COMPILATION level not supported.
     aphrodite_config.compilation_config.mode = None

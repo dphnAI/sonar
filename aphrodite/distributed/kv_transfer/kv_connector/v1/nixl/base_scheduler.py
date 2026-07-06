@@ -63,35 +63,24 @@ class NixlBaseConnectorScheduler:
         self.kv_cache_config = kv_cache_config
         self.side_channel_host = envs.APHRODITE_NIXL_SIDE_CHANNEL_HOST
         self.side_channel_port = (
-            envs.APHRODITE_NIXL_SIDE_CHANNEL_PORT
-            + aphrodite_config.parallel_config.data_parallel_index
+            envs.APHRODITE_NIXL_SIDE_CHANNEL_PORT + aphrodite_config.parallel_config.data_parallel_index
         )
         assert aphrodite_config.kv_transfer_config is not None
-        self._kv_lease_duration: int = (
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
-                "kv_lease_duration", 30
-            )
+        self._kv_lease_duration: int = aphrodite_config.kv_transfer_config.get_from_extra_config(
+            "kv_lease_duration", 30
         )
         # NOTE (NickLucche): For now we use a hardcoded value for a simpler interface.
         self._heartbeat_interval = self._kv_lease_duration // 6
         if current_platform.device_type == "cpu":
             self.use_host_buffer = False
         else:
-            self.use_host_buffer = (
-                aphrodite_config.kv_transfer_config.kv_buffer_device == "cpu"
-            )
+            self.use_host_buffer = aphrodite_config.kv_transfer_config.kv_buffer_device == "cpu"
         self._is_hma_required = (
             not aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager
             # Also handle unlikely SW-only model case instead of checking num_groups>1.
-            and any(
-                not isinstance(g.kv_cache_spec, FullAttentionSpec)
-                for g in kv_cache_config.kv_cache_groups
-            )
+            and any(not isinstance(g.kv_cache_spec, FullAttentionSpec) for g in kv_cache_config.kv_cache_groups)
         )
-        self._has_mamba = any(
-            isinstance(g.kv_cache_spec, MambaSpec)
-            for g in kv_cache_config.kv_cache_groups
-        )
+        self._has_mamba = any(isinstance(g.kv_cache_spec, MambaSpec) for g in kv_cache_config.kv_cache_groups)
 
         logger.info("Initializing NIXL Scheduler %s", engine_id)
         if aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager:
@@ -131,30 +120,23 @@ class NixlBaseConnectorScheduler:
         # cdiv(n_tokens, block_size) gives blocks/window; add 1 to conservatively
         # account for boundary overlap eg window isn't fully aligned with blocks.
         self.blocks_per_sw = [
-            cdiv(n_tokens, block_size) + 1 if n_tokens else 0
-            for n_tokens, block_size in sw_sizes_tokens
+            cdiv(n_tokens, block_size) + 1 if n_tokens else 0 for n_tokens, block_size in sw_sizes_tokens
         ]
 
         # Threshold to decide whether to compute kv cache locally
         # or pull from a remote node: minimum number of remote
         # tokens to amortize the xfer latencies
         self.kv_recompute_threshold: int = int(
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
-                "kv_recompute_threshold", 64
-            )
+            aphrodite_config.kv_transfer_config.get_from_extra_config("kv_recompute_threshold", 64)
         )
 
         # Bi-directional KV transfer feature supports KV block
         # transfers from D node to P node
-        self.is_bidirectional_kv_xfer_enabled = (
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
-                "bidirectional_kv_xfer", False
-            )
+        self.is_bidirectional_kv_xfer_enabled = aphrodite_config.kv_transfer_config.get_from_extra_config(
+            "bidirectional_kv_xfer", False
         )
-        self.decoder_kv_blocks_ttl = (
-            aphrodite_config.kv_transfer_config.get_from_extra_config(
-                "decoder_kv_blocks_ttl", 480
-            )
+        self.decoder_kv_blocks_ttl = aphrodite_config.kv_transfer_config.get_from_extra_config(
+            "decoder_kv_blocks_ttl", 480
         )
 
         if self.is_bidirectional_kv_xfer_enabled and self.kv_recompute_threshold > 0:
@@ -185,13 +167,7 @@ class NixlBaseConnectorScheduler:
         host = params.get("remote_host")
         port = params.get("remote_port")
         tp_size = params.get("tp_size")
-        if (
-            remote_engine_id is None
-            or remote_request_id is None
-            or host is None
-            or port is None
-            or tp_size is None
-        ):
+        if remote_engine_id is None or remote_request_id is None or host is None or port is None or tp_size is None:
             return
         if remote_engine_id not in self._heartbeat_by_engine:
             self._heartbeat_by_engine[remote_engine_id] = HeartbeatInfo(
@@ -230,22 +206,16 @@ class NixlBaseConnectorScheduler:
         # NOTE (NickLucche) This logic is currently handled at the connector level
         # because offloading connectors might want to receive the whole sequence even
         # for SWA groups. We will abstract this logic once the interface is more stable
-        assert len(block_ids) == len(self.blocks_per_sw), (
-            "Number of KV cache groups must match"
-        )
+        assert len(block_ids) == len(self.blocks_per_sw), "Number of KV cache groups must match"
         # For non-SWA groups, blocks_per_sw is 0 so we return all block_ids unchanged
         return tuple(
             [
-                blocks[-self.blocks_per_sw[i] :]
-                if self.blocks_per_sw[i] > 0
-                else blocks
+                blocks[-self.blocks_per_sw[i] :] if self.blocks_per_sw[i] > 0 else blocks
                 for i, blocks in enumerate(block_ids)
             ]
         )
 
-    def set_xfer_handshake_metadata(
-        self, metadata: dict[int, KVConnectorHandshakeMetadata]
-    ) -> None:
+    def set_xfer_handshake_metadata(self, metadata: dict[int, KVConnectorHandshakeMetadata]) -> None:
         """
         Set the KV connector handshake metadata for this connector.
 
@@ -256,10 +226,7 @@ class NixlBaseConnectorScheduler:
         encoder = msgspec.msgpack.Encoder()
         for tp_rank, rank_metadata in metadata.items():
             if not isinstance(rank_metadata, NixlHandshakePayload):
-                raise ValueError(
-                    "NixlConnectorScheduler expects NixlHandshakePayload for "
-                    "handshake metadata."
-                )
+                raise ValueError("NixlConnectorScheduler expects NixlHandshakePayload for handshake metadata.")
             encoded_data[tp_rank] = encoder.encode(rank_metadata)
             logger.debug(
                 "Tp rank %d: encoded NixlHandshakePayload size: %s bytes",
@@ -377,9 +344,7 @@ class NixlBaseConnectorScheduler:
             )
             assert scheduler_output.num_scheduled_tokens is not None
             num_scheduled_tokens = scheduler_output.num_scheduled_tokens[req_id]
-            is_partial = (
-                req.num_computed_tokens + num_scheduled_tokens
-            ) < req.num_prompt_tokens
+            is_partial = (req.num_computed_tokens + num_scheduled_tokens) < req.num_prompt_tokens
             if not is_partial:
                 # For non-partial prefills, once new req_meta is scheduled, it
                 # can be removed from _reqs_need_save.
@@ -437,14 +402,10 @@ class NixlBaseConnectorScheduler:
     # Abstract methods that subclasses must implement
     ############################################################
 
-    def get_num_new_matched_tokens(
-        self, request: "Request", num_computed_tokens: int
-    ) -> tuple[int, bool]:
+    def get_num_new_matched_tokens(self, request: "Request", num_computed_tokens: int) -> tuple[int, bool]:
         raise NotImplementedError
 
-    def update_state_after_alloc(
-        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
         raise NotImplementedError
 
     def request_finished(

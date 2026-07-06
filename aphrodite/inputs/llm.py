@@ -143,9 +143,7 @@ class EmbedsPrompt(_PromptOptions):
     Must be the same length as `prompt_token_ids` when both are set."""
 
 
-DecoderOnlyPrompt: TypeAlias = (
-    str | TextPrompt | list[int] | TokensPrompt | EmbedsPrompt
-)
+DecoderOnlyPrompt: TypeAlias = str | TextPrompt | list[int] | TokensPrompt | EmbedsPrompt
 """
 Schema of a prompt for a decoder-only model:
 

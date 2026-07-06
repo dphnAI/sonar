@@ -60,21 +60,14 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
         self.input_quant = input_quant
         self.static_input_scales = False  # always dynamic per token
         # Weight can be channel-wise (group_size=None) or group-wise
-        self.group_size = (
-            weight_quant.group_size if (weight_quant.group_size is not None) else -1
-        )
+        self.group_size = weight_quant.group_size if (weight_quant.group_size is not None) else -1
 
         # Validate scheme: weights=W4 (channel or group),
         # activations=dynamic TOKEN (A8)
 
         # Must be dynamic per-token activations
-        if (
-            input_quant.strategy != QuantizationStrategy.TOKEN
-            or not input_quant.dynamic
-        ):
-            raise ValueError(
-                "W4A8-int MoE needs dynamic per-token activation quantization."
-            )
+        if input_quant.strategy != QuantizationStrategy.TOKEN or not input_quant.dynamic:
+            raise ValueError("W4A8-int MoE needs dynamic per-token activation quantization.")
 
         if weight_quant.num_bits != 4:
             raise ValueError("This method only supports 4-bit weights (num_bits=4).")
@@ -138,15 +131,11 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
             return 1 if g == -1 else (in_features // g)
 
         # Register unpacked int4-as-int8 weights the loader will fill.
-        w13 = torch.nn.Parameter(
-            torch.empty(E, 2 * IN, H, dtype=torch.int8), requires_grad=False
-        )
+        w13 = torch.nn.Parameter(torch.empty(E, 2 * IN, H, dtype=torch.int8), requires_grad=False)
         set_weight_attrs(w13, extra_weight_attrs)
         layer.register_parameter("w13_weight", w13)
 
-        w2 = torch.nn.Parameter(
-            torch.empty(E, H, IN, dtype=torch.int8), requires_grad=False
-        )
+        w2 = torch.nn.Parameter(torch.empty(E, H, IN, dtype=torch.int8), requires_grad=False)
         set_weight_attrs(w2, extra_weight_attrs)
         layer.register_parameter("w2_weight", w2)
 
@@ -165,9 +154,7 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
         )
         layer.register_parameter("w13_weight_scale", w13_s)
 
-        w2_s = torch.nn.Parameter(
-            torch.ones(E, H, _n_scale_cols(IN), dtype=scale_dtype), requires_grad=False
-        )
+        w2_s = torch.nn.Parameter(torch.ones(E, H, _n_scale_cols(IN), dtype=scale_dtype), requires_grad=False)
         set_weight_attrs(
             w2_s,
             {"quant_method": "channel" if g == -1 else "group", **extra_weight_attrs},
@@ -175,9 +162,7 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
         layer.register_parameter("w2_weight_scale", w2_s)
 
         if self.has_bias:
-            w13_bias = torch.nn.Parameter(
-                torch.zeros(E, 2 * IN, dtype=params_dtype), requires_grad=False
-            )
+            w13_bias = torch.nn.Parameter(torch.zeros(E, 2 * IN, dtype=params_dtype), requires_grad=False)
             layer.register_parameter("w13_bias", w13_bias)
             set_weight_attrs(w13_bias, extra_weight_attrs)
 
@@ -189,14 +174,10 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
             set_weight_attrs(w2_bias, extra_weight_attrs)
 
         # Placeholders for packed weights (will be replaced after packing)
-        layer.register_parameter(
-            "w13_weight_packed", torch.nn.Parameter(torch.empty(0), requires_grad=False)
-        )
+        layer.register_parameter("w13_weight_packed", torch.nn.Parameter(torch.empty(0), requires_grad=False))
         set_weight_attrs(layer.w13_weight_packed, extra_weight_attrs)
 
-        layer.register_parameter(
-            "w2_weight_packed", torch.nn.Parameter(torch.empty(0), requires_grad=False)
-        )
+        layer.register_parameter("w2_weight_packed", torch.nn.Parameter(torch.empty(0), requires_grad=False))
         set_weight_attrs(layer.w2_weight_packed, extra_weight_attrs)
 
         # dims for 4 bit fused matmuls
@@ -209,16 +190,14 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
     # post-load packing to dyn-4bit KleidiAI kernel's format
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         # Use oracle to pack weights.
-        w13_packed, w2_packed, w13_weight_scale, w2_weight_scale, w13_bias, w2_bias = (
-            convert_to_w4a8_int8_moe_format(
-                w13_weight=layer.w13_weight,
-                w2_weight=layer.w2_weight,
-                w13_weight_scale=layer.w13_weight_scale,
-                w2_weight_scale=layer.w2_weight_scale,
-                group_size=self.group_size,
-                w13_bias=layer.w13_bias if self.has_bias else None,
-                w2_bias=layer.w2_bias if self.has_bias else None,
-            )
+        w13_packed, w2_packed, w13_weight_scale, w2_weight_scale, w13_bias, w2_bias = convert_to_w4a8_int8_moe_format(
+            w13_weight=layer.w13_weight,
+            w2_weight=layer.w2_weight,
+            w13_weight_scale=layer.w13_weight_scale,
+            w2_weight_scale=layer.w2_weight_scale,
+            group_size=self.group_size,
+            w13_bias=layer.w13_bias if self.has_bias else None,
+            w2_bias=layer.w2_bias if self.has_bias else None,
         )
 
         # Register packed weights as parameters
@@ -233,12 +212,8 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
             torch.nn.Parameter(w2_packed, requires_grad=False),
         )
 
-        replace_parameter(
-            layer, "w13_weight", torch.nn.Parameter(torch.empty(0), requires_grad=False)
-        )
-        replace_parameter(
-            layer, "w2_weight", torch.nn.Parameter(torch.empty(0), requires_grad=False)
-        )
+        replace_parameter(layer, "w13_weight", torch.nn.Parameter(torch.empty(0), requires_grad=False))
+        replace_parameter(layer, "w2_weight", torch.nn.Parameter(torch.empty(0), requires_grad=False))
         replace_parameter(
             layer,
             "w13_weight_scale",
@@ -273,9 +248,7 @@ class CompressedTensorsW4A8Int8MoEMethod(CompressedTensorsMoEMethod):
             routing_tables=layer._expert_routing_tables(),
         )
 
-    def get_fused_moe_quant_config(
-        self, layer: torch.nn.Module
-    ) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(self, layer: torch.nn.Module) -> FusedMoEQuantConfig | None:
         # Determine block shape from group_size
         # group_size=-1 means channel-wise: (-1, 1)
         # group_size=N means group-wise: (1, N)

@@ -6,9 +6,9 @@ import requests
 import torch
 import torch.nn.functional as F
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.pooling.protocol import PoolingResponse
 from aphrodite.entrypoints.pooling.scoring.protocol import ScoreResponse
+from tests.utils import RemoteOpenAIServer
 
 model_name = "jinaai/jina-reranker-v3"
 query = "What are the health benefits of green tea?"
@@ -125,14 +125,10 @@ def _test_offline_n_v_n(llm):
 
 
 def _test_offline_token_embed_illegal_inputs(llm):
-    with pytest.raises(
-        ValueError, match="The JinaForRanking model requires at least 2 inputs."
-    ):
+    with pytest.raises(ValueError, match="The JinaForRanking model requires at least 2 inputs."):
         llm.encode([query], pooling_task="token_embed")
 
-    with pytest.raises(
-        ValueError, match="The JinaForRanking model only supports text as input."
-    ):
+    with pytest.raises(ValueError, match="The JinaForRanking model only supports text as input."):
         llm.encode([1, 2, 3], pooling_task="token_embed")
 
 
@@ -239,9 +235,7 @@ def _test_online_token_embed_illegal_inputs(server):
             "encoding_format": "float",
         },
     )
-    assert response.json()["error"]["message"].startswith(
-        "The JinaForRanking model requires at least 2 inputs."
-    )
+    assert response.json()["error"]["message"].startswith("The JinaForRanking model requires at least 2 inputs.")
 
     response = requests.post(
         server.url_for("pooling"),
@@ -252,9 +246,7 @@ def _test_online_token_embed_illegal_inputs(server):
             "encoding_format": "float",
         },
     )
-    assert response.json()["error"]["message"].startswith(
-        "The JinaForRanking model only supports text as input."
-    )
+    assert response.json()["error"]["message"].startswith("The JinaForRanking model only supports text as input.")
 
     response = requests.post(
         server.url_for("pooling"),
@@ -270,6 +262,4 @@ def _test_online_token_embed_illegal_inputs(server):
             "encoding_format": "float",
         },
     )
-    assert response.json()["error"]["message"].startswith(
-        "The JinaForRanking does not support chat Request."
-    )
+    assert response.json()["error"]["message"].startswith("The JinaForRanking does not support chat Request.")

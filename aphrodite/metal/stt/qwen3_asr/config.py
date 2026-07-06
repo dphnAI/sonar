@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Qwen3-ASR configuration (MLX-free).
 
 Keep this module free of MLX imports so Aphrodite compat code can import config and
@@ -48,9 +49,7 @@ class Qwen3ASRAudioConfig:
         full_chunks, remainder = divmod(num_mel_frames, chunk_size)
         if remainder == 0:
             return int(full_chunks * frames_per_full_chunk)
-        return int(
-            full_chunks * frames_per_full_chunk + self.cnn_output_length(remainder)
-        )
+        return int(full_chunks * frames_per_full_chunk + self.cnn_output_length(remainder))
 
 
 @dataclass

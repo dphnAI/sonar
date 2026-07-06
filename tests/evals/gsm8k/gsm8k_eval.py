@@ -155,17 +155,12 @@ def _build_gsm8k_prompts(
 
     few_shot_examples = ""
     for i in range(num_shots):
-        few_shot_examples += (
-            f"Question: {train_data[i]['question']}\n"
-            f"Answer: {train_data[i]['answer']}\n\n"
-        )
+        few_shot_examples += f"Question: {train_data[i]['question']}\nAnswer: {train_data[i]['answer']}\n\n"
 
     prompts = []
     labels = []
     for i in range(num_questions):
-        prompts.append(
-            few_shot_examples + f"Question: {test_data[i]['question']}\nAnswer:"
-        )
+        prompts.append(few_shot_examples + f"Question: {test_data[i]['question']}\nAnswer:")
         labels.append(get_answer_value(test_data[i]["answer"]))
 
     assert all(label != INVALID for label in labels), "Some labels are invalid"
@@ -294,9 +289,7 @@ def evaluate_gsm8k_offline(
         stop=["Question", "Assistant:", "<|separator|>"],
     )
 
-    print(
-        f"Running offline GSM8K evaluation: {len(prompts)} questions, {num_shots}-shot"
-    )
+    print(f"Running offline GSM8K evaluation: {len(prompts)} questions, {num_shots}-shot")
 
     tic = time.perf_counter()
     outputs = llm.generate(prompts, sampling_params)
@@ -310,26 +303,18 @@ def evaluate_gsm8k_offline(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="GSM8K evaluation for Aphrodite serve")
-    parser.add_argument(
-        "--num-shots", type=int, default=5, help="Number of few-shot examples"
-    )
+    parser.add_argument("--num-shots", type=int, default=5, help="Number of few-shot examples")
     parser.add_argument(
         "--num-questions",
         type=int,
         default=1319,
         help="Number of questions to evaluate",
     )
-    parser.add_argument(
-        "--max-tokens", type=int, default=256, help="Max tokens for generation"
-    )
+    parser.add_argument("--max-tokens", type=int, default=256, help="Max tokens for generation")
     parser.add_argument("--host", type=str, default="http://127.0.0.1", help="Host URL")
     parser.add_argument("--port", type=int, default=8000, help="Port number")
-    parser.add_argument(
-        "--temperature", type=float, default=0.0, help="Temperature for generation"
-    )
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Random seed for reproducibility"
-    )
+    parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for generation")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--save-results", type=str, help="Save results to JSON file")
 
     args = parser.parse_args()

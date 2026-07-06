@@ -51,9 +51,7 @@ class ServingRender(BaseServing):
 
         self.online_renderer = online_renderer
 
-        self.default_sampling_params = (
-            online_renderer.model_config.get_diff_sampling_param()
-        )
+        self.default_sampling_params = online_renderer.model_config.get_diff_sampling_param()
         mc = online_renderer.model_config
         self.override_max_tokens = (
             self.default_sampling_params.get("max_tokens")
@@ -76,9 +74,7 @@ class ServingRender(BaseServing):
             return error_check_ret
 
         if request.use_beam_search:
-            return self.create_error_response(
-                "Beam search is not supported by the render endpoint"
-            )
+            return self.create_error_response("Beam search is not supported by the render endpoint")
 
         result = await self.online_renderer.render_chat(request, skip_mm_cache=True)
         if isinstance(result, ErrorResponse):
@@ -87,9 +83,7 @@ class ServingRender(BaseServing):
         _, engine_inputs = result
 
         if len(engine_inputs) != 1:
-            return self.create_error_response(
-                f"Expected exactly 1 engine prompt, got {len(engine_inputs)}"
-            )
+            return self.create_error_response(f"Expected exactly 1 engine prompt, got {len(engine_inputs)}")
 
         engine_input = engine_inputs[0]
 
@@ -102,9 +96,7 @@ class ServingRender(BaseServing):
         input_length = extract_prompt_len(self.model_config, engine_input)
         max_tokens = get_max_tokens(
             self.model_config.max_model_len,
-            request.max_completion_tokens
-            if request.max_completion_tokens is not None
-            else request.max_tokens,
+            request.max_completion_tokens if request.max_completion_tokens is not None else request.max_tokens,
             input_length,
             self.default_sampling_params,
             self.override_max_tokens,
@@ -115,9 +107,7 @@ class ServingRender(BaseServing):
         assistant_tokens_mask: list[int] | None = engine_input.get(  # type: ignore[assignment]
             "assistant_tokens_mask"
         )
-        if assistant_tokens_mask is not None and len(assistant_tokens_mask) != len(
-            token_ids
-        ):
+        if assistant_tokens_mask is not None and len(assistant_tokens_mask) != len(token_ids):
             logger.warning(
                 "assistant_tokens_mask length (%d) != token_ids length (%d); "
                 "this can happen with multimodal inputs where "
@@ -127,9 +117,7 @@ class ServingRender(BaseServing):
                 len(token_ids),
             )
             if len(assistant_tokens_mask) < len(token_ids):
-                assistant_tokens_mask.extend(
-                    [0] * (len(token_ids) - len(assistant_tokens_mask))
-                )
+                assistant_tokens_mask.extend([0] * (len(token_ids) - len(assistant_tokens_mask)))
             else:
                 assistant_tokens_mask = assistant_tokens_mask[: len(token_ids)]
 
@@ -161,16 +149,12 @@ class ServingRender(BaseServing):
         error_check_ret = await self._check_model(request)
         if error_check_ret is not None:
             return error_check_ret
-        result = await self.online_renderer.render_completion(
-            request, skip_mm_cache=True
-        )
+        result = await self.online_renderer.render_completion(request, skip_mm_cache=True)
         if isinstance(result, ErrorResponse):
             return result
         generate_requests: list[GenerateRequest] = []
         for engine_input in result:
-            prompt_components = extract_prompt_components(
-                self.model_config, engine_input
-            )
+            prompt_components = extract_prompt_components(self.model_config, engine_input)
             token_ids = prompt_components.token_ids
             if not token_ids:
                 return self.create_error_response("No token_ids rendered")
@@ -185,9 +169,7 @@ class ServingRender(BaseServing):
                 self.override_max_tokens,
                 truncate_prompt_tokens=request.truncate_prompt_tokens,
             )
-            params = request.to_sampling_params(
-                max_tokens, self.default_sampling_params
-            )
+            params = request.to_sampling_params(max_tokens, self.default_sampling_params)
 
             request_id = f"cmpl-{random_uuid()}"
 
@@ -225,9 +207,7 @@ class ServingRender(BaseServing):
         raw_placeholders: MultiModalPlaceholders = mm_engine_input["mm_placeholders"]
 
         mm_placeholders = {
-            modality: [
-                PlaceholderRangeInfo(offset=p.offset, length=p.length) for p in ranges
-            ]
+            modality: [PlaceholderRangeInfo(offset=p.offset, length=p.length) for p in ranges]
             for modality, ranges in raw_placeholders.items()
         }
 
@@ -236,10 +216,7 @@ class ServingRender(BaseServing):
         if raw_mm_kwargs := mm_engine_input.get("mm_kwargs"):
             kwargs_data = {}
             for modality, items in raw_mm_kwargs.items():
-                kwargs_data[modality] = [
-                    encode_mm_kwargs_item(item) if item is not None else None
-                    for item in items
-                ]
+                kwargs_data[modality] = [encode_mm_kwargs_item(item) if item is not None else None for item in items]
 
         return MultiModalFeatures(
             mm_hashes=mm_hashes,

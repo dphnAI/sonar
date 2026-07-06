@@ -8,6 +8,10 @@ from types import MethodType, SimpleNamespace
 import pytest
 import torch
 
+from aphrodite import _custom_ops as ops
+from aphrodite.config import set_current_aphrodite_config
+from aphrodite.model_executor.layers.linear import ColumnParallelLinear
+from aphrodite.platforms import current_platform
 from tests.v1.attention.test_mla_backends import (
     BATCH_SPECS,
     BatchSpec,
@@ -15,14 +19,10 @@ from tests.v1.attention.test_mla_backends import (
     create_and_prepopulate_kv_cache,
 )
 from tests.v1.attention.utils import (
+    create_aphrodite_config,
     create_common_attn_metadata,
     create_standard_kv_cache_spec,
-    create_aphrodite_config,
 )
-from aphrodite import _custom_ops as ops
-from aphrodite.config import set_current_aphrodite_config
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear
-from aphrodite.platforms import current_platform
 
 # TODO: Integrate ROCMAiterMLASparseBackend for ROCm.
 # The ROCm sparse MLA backend (rocm_aiter_mla_sparse.py) has a compatible
@@ -57,12 +57,8 @@ SPARSE_BACKEND_BATCH_SPECS = {
     ]
 }
 
-SPARSE_BACKEND_BATCH_SPECS["large_q_prefill"] = BatchSpec(
-    seq_lens=[1024] * 2, query_lens=[256] * 2
-)
-SPARSE_BACKEND_BATCH_SPECS["large_q_pure_prefill"] = BatchSpec(
-    seq_lens=[256] * 2, query_lens=[256] * 2
-)
+SPARSE_BACKEND_BATCH_SPECS["large_q_prefill"] = BatchSpec(seq_lens=[1024] * 2, query_lens=[256] * 2)
+SPARSE_BACKEND_BATCH_SPECS["large_q_pure_prefill"] = BatchSpec(seq_lens=[256] * 2, query_lens=[256] * 2)
 
 DEVICE_TYPE = current_platform.device_type
 
@@ -142,14 +138,10 @@ def _quantize_dequantize_fp8_ds_mla(
     num_blocks = max(1, math.ceil(num_tokens / block_size))
     entry_size = kv_lora_rank + 4 * 4 + 2 * rope_dim
 
-    tmp_cache = torch.zeros(
-        num_blocks, block_size, entry_size, dtype=torch.uint8, device=kv_c.device
-    )
+    tmp_cache = torch.zeros(num_blocks, block_size, entry_size, dtype=torch.uint8, device=kv_c.device)
     slot_mapping = torch.arange(num_tokens, dtype=torch.long, device=kv_c.device)
 
-    ops.concat_and_cache_mla(
-        kv_c, k_pe, tmp_cache, slot_mapping, kv_cache_dtype="fp8_ds_mla", scale=scale
-    )
+    ops.concat_and_cache_mla(kv_c, k_pe, tmp_cache, slot_mapping, kv_cache_dtype="fp8_ds_mla", scale=scale)
 
     dequant_kv_c = torch.empty_like(kv_c)
     dequant_k_pe = torch.empty_like(k_pe)
@@ -197,21 +189,12 @@ def test_sparse_backend_decode_correctness(
     if kv_cache_dtype not in backend_cls.supported_kv_cache_dtypes:
         pytest.skip(f"{backend_cls.get_name()} does not support {kv_cache_dtype}")
 
-    if (
-        backend_cls == FlashMLASparseBackend
-        and kv_cache_dtype.startswith("fp8")
-        and kv_cache_dtype != "fp8_ds_mla"
-    ):
-        pytest.skip(
-            "FlashMLA Sparse Attention backend fp8 only supports "
-            "fp8_ds_mla kv-cache dtype"
-        )
+    if backend_cls == FlashMLASparseBackend and kv_cache_dtype.startswith("fp8") and kv_cache_dtype != "fp8_ds_mla":
+        pytest.skip("FlashMLA Sparse Attention backend fp8 only supports fp8_ds_mla kv-cache dtype")
 
     supported_block_sizes = backend_cls.get_supported_kernel_block_sizes()
     if block_size not in supported_block_sizes:
-        pytest.skip(
-            f"{backend_cls.get_name()} does not support block_size={block_size}"
-        )
+        pytest.skip(f"{backend_cls.get_name()} does not support block_size={block_size}")
 
     if backend_cls == FlashMLASparseBackend:
         ok, reason = flashmla.is_flashmla_sparse_supported()
@@ -219,9 +202,7 @@ def test_sparse_backend_decode_correctness(
             pytest.skip(reason)
     elif backend_cls == FlashInferMLASparseTRTLLMBackend:
         device_capability = current_platform.get_device_capability()
-        if device_capability is None or not backend_cls.supports_compute_capability(
-            device_capability
-        ):
+        if device_capability is None or not backend_cls.supports_compute_capability(device_capability):
             pytest.skip("FlashInferMLASparseTRTLLMBackend requires SM 10.x capability")
 
     batch_spec = SPARSE_BACKEND_BATCH_SPECS[batch_name]
@@ -272,9 +253,7 @@ def test_sparse_backend_decode_correctness(
         lambda self, parallel_config: num_heads,
         model_config,
     )
-    model_config.get_num_kv_heads = MethodType(
-        lambda self, parallel_config: 1, model_config
-    )
+    model_config.get_num_kv_heads = MethodType(lambda self, parallel_config: 1, model_config)
     model_config.get_head_size = MethodType(lambda self: head_size, model_config)
     model_config.get_sliding_window = MethodType(lambda self: None, model_config)
 
@@ -285,9 +264,7 @@ def test_sparse_backend_decode_correctness(
     scale = 1.0 / math.sqrt(head_size)
 
     # Shared MLA projection weights to keep reference and backend in sync
-    W_UK = torch.rand(
-        kv_lora_rank, num_heads, qk_nope_head_dim, dtype=dtype, device=device
-    )
+    W_UK = torch.rand(kv_lora_rank, num_heads, qk_nope_head_dim, dtype=dtype, device=device)
     W_UV = torch.rand(kv_lora_rank, num_heads, v_head_dim, dtype=dtype, device=device)
 
     # Build synthetic decode-only workload
@@ -309,9 +286,7 @@ def test_sparse_backend_decode_correctness(
     # the kernel uses wrong indices for some tokens (e.g., due to incorrect
     # tensor shapes like [1, num_tokens, ...] instead of [num_tokens, 1, ...]).
     # Also include -1 masked indices to verify the kernel handles them correctly.
-    sparse_indices = torch.empty(
-        total_query_tokens, topk_tokens, dtype=torch.int32, device=device
-    )
+    sparse_indices = torch.empty(total_query_tokens, topk_tokens, dtype=torch.int32, device=device)
     for tok_idx in range(total_query_tokens):
         max_valid_idx = positions[tok_idx]
         offset = tok_idx * 7  # Prime number for varied offsets
@@ -325,15 +300,11 @@ def test_sparse_backend_decode_correctness(
             tok_indices = torch.cat(
                 [
                     tok_indices,
-                    torch.full(
-                        (topk_tokens - num_valid,), -1, device=device, dtype=torch.int32
-                    ),
+                    torch.full((topk_tokens - num_valid,), -1, device=device, dtype=torch.int32),
                 ]
             )
         else:
-            tok_indices = torch.full(
-                (topk_tokens,), -1, device=device, dtype=torch.int32
-            )
+            tok_indices = torch.full((topk_tokens,), -1, device=device, dtype=torch.int32)
             tok_indices[0] = 0  # At least one valid index
         sparse_indices[tok_idx] = tok_indices
 
@@ -395,12 +366,8 @@ def test_sparse_backend_decode_correctness(
             k_sdpa_in = k_sparse.unsqueeze(0).transpose(1, 2)
             v_sdpa_in = v_sparse.unsqueeze(0).transpose(1, 2)
 
-            sdpa_out = torch.nn.functional.scaled_dot_product_attention(
-                q_sdpa_in, k_sdpa_in, v_sdpa_in, scale=scale
-            )
-            sdpa_out = sdpa_out.transpose(1, 2).squeeze(
-                0
-            )  # [1, num_heads, kv_lora_rank]
+            sdpa_out = torch.nn.functional.scaled_dot_product_attention(q_sdpa_in, k_sdpa_in, v_sdpa_in, scale=scale)
+            sdpa_out = sdpa_out.transpose(1, 2).squeeze(0)  # [1, num_heads, kv_lora_rank]
 
             sdpa_out = torch.einsum("qnl,lnv->qnv", sdpa_out, W_UV)
             reference_outputs.append(sdpa_out.flatten(start_dim=-2))
@@ -444,17 +411,13 @@ def test_sparse_backend_decode_correctness(
 
     builder_cls = backend_cls.get_builder_cls()
     builder = builder_cls(kv_cache_spec, ["placeholder"], aphrodite_config, device)
-    metadata = builder.build(
-        common_prefix_len=0, common_attn_metadata=common_attn_metadata
-    )
+    metadata = builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
     # Use the pre-computed sparse_indices for the mock indexer
     mock_indexer = SimpleNamespace(topk_indices_buffer=sparse_indices)
 
     kv_b_proj_weight = torch.cat([W_UK, W_UV], dim=-1)
-    kv_b_proj_weight = kv_b_proj_weight.view(
-        kv_lora_rank, num_heads * (qk_nope_head_dim + v_head_dim)
-    )
+    kv_b_proj_weight = kv_b_proj_weight.view(kv_lora_rank, num_heads * (qk_nope_head_dim + v_head_dim))
 
     mock_kv_b_proj = ColumnParallelLinear(
         input_size=kv_lora_rank,
@@ -503,9 +466,7 @@ def test_sparse_backend_decode_correctness(
             k_scale=k_scale,
         )
 
-    out_buffer = torch.empty(
-        metadata.num_actual_tokens, num_heads * v_head_dim, dtype=dtype, device=device
-    )
+    out_buffer = torch.empty(metadata.num_actual_tokens, num_heads * v_head_dim, dtype=dtype, device=device)
 
     with torch.inference_mode():
         backend_output = mock_layer.forward_impl(
@@ -524,9 +485,7 @@ def test_sparse_backend_decode_correctness(
     # FP8 quantization introduces some error, but should be within reasonable bounds
     # BF16 (auto) should be very accurate, FP8 allows slightly more tolerance
     if kv_cache_dtype.startswith("fp8"):
-        torch.testing.assert_close(
-            backend_output, sdpa_reference, rtol=0.065, atol=0.05
-        )
+        torch.testing.assert_close(backend_output, sdpa_reference, rtol=0.065, atol=0.05)
     else:
         torch.testing.assert_close(backend_output, sdpa_reference, rtol=0.01, atol=0.01)
 
@@ -544,9 +503,7 @@ def _triton_convert_reference_impl(
     """Reference implementation for triton_convert_req_index_to_global_index."""
     num_tokens = req_ids.shape[0]
     max_blocks_per_req = block_table.shape[1]
-    result = torch.empty(
-        num_tokens, num_topk_tokens, dtype=torch.int32, device=req_ids.device
-    )
+    result = torch.empty(num_tokens, num_topk_tokens, dtype=torch.int32, device=req_ids.device)
 
     for token_id in range(num_tokens):
         req_id = req_ids[token_id].item()
@@ -588,20 +545,14 @@ def _triton_convert_reference_impl(
     torch.cuda.get_device_capability() < (9, 0),
     reason="FlashMLASparseBackend requires CUDA 9.0 or higher",
 )
-def test_triton_convert_req_index_to_global_index_decode_only(
-    block_size, num_topk_tokens
-):
+def test_triton_convert_req_index_to_global_index_decode_only(block_size, num_topk_tokens):
     device = torch.device(DEVICE_TYPE)
     num_tokens = 8
     num_requests = 4
     max_blocks_per_req = 10
 
-    req_id = torch.randint(
-        0, num_requests, (num_tokens,), dtype=torch.int32, device=device
-    )
-    block_table = torch.randint(
-        0, 100, (num_requests, max_blocks_per_req), dtype=torch.int32, device=device
-    )
+    req_id = torch.randint(0, num_requests, (num_tokens,), dtype=torch.int32, device=device)
+    block_table = torch.randint(0, 100, (num_requests, max_blocks_per_req), dtype=torch.int32, device=device)
 
     token_indices = torch.randint(
         0,
@@ -650,9 +601,7 @@ def test_triton_convert_req_index_to_global_index_with_prefill_workspace(block_s
     num_topk_tokens = 128
 
     # First 6 tokens are decode (reqs 0, 1), last 6 are prefill (reqs 2, 3)
-    req_id = torch.tensor(
-        [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3], dtype=torch.int32, device=device
-    )
+    req_id = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3], dtype=torch.int32, device=device)
     prefill_workspace_request_ids = torch.tensor(
         [-1, -1, -1, -1, -1, -1, 0, 0, 0, 1, 1, 1], dtype=torch.int32, device=device
     )
@@ -660,9 +609,7 @@ def test_triton_convert_req_index_to_global_index_with_prefill_workspace(block_s
     # Workspace starts for the 2 prefill reqs: req 2 starts at 0, req 3 starts at 100
     prefill_workspace_starts = torch.tensor([0, 100], dtype=torch.int32, device=device)
 
-    block_table = torch.randint(
-        0, 50, (num_requests, max_blocks_per_req), dtype=torch.int32, device=device
-    )
+    block_table = torch.randint(0, 50, (num_requests, max_blocks_per_req), dtype=torch.int32, device=device)
     token_indices = torch.randint(
         0,
         block_size * max_blocks_per_req,
@@ -772,9 +719,7 @@ def test_split_prefill_chunks(seq_lens, max_buf, expected):
         ),
     ],
 )
-def test_split_indexer_prefill_chunks(
-    seq_lens, query_lens, workspace_size, max_logits_bytes, expected
-):
+def test_split_indexer_prefill_chunks(seq_lens, query_lens, workspace_size, max_logits_bytes, expected):
     out = split_indexer_prefill_chunks(
         seq_lens,
         query_lens,
@@ -807,9 +752,9 @@ def test_triton_convert_returns_valid_counts():
     num_topk_tokens = 128
 
     req_id = torch.tensor([0, 0, 0, 0, 1, 1, 1, 1], dtype=torch.int32, device=device)
-    block_table = torch.arange(
-        num_requests * max_blocks_per_req, dtype=torch.int32, device=device
-    ).view(num_requests, max_blocks_per_req)
+    block_table = torch.arange(num_requests * max_blocks_per_req, dtype=torch.int32, device=device).view(
+        num_requests, max_blocks_per_req
+    )
 
     # Create token indices with varying numbers of valid entries
     # Token 0: 64 valid, 64 invalid (-1)
@@ -817,20 +762,16 @@ def test_triton_convert_returns_valid_counts():
     # Token 2: 128 valid (all)
     # Token 3: 1 valid, 127 invalid
     # etc.
-    token_indices = torch.full(
-        (num_tokens, num_topk_tokens), -1, dtype=torch.int32, device=device
-    )
+    token_indices = torch.full((num_tokens, num_topk_tokens), -1, dtype=torch.int32, device=device)
     expected_valid = []
     for i in range(num_tokens):
         num_valid = [64, 32, 128, 1, 64, 32, 128, 1][i]
-        token_indices[i, :num_valid] = torch.arange(
-            num_valid, dtype=torch.int32, device=device
-        ) % (block_size * max_blocks_per_req)
+        token_indices[i, :num_valid] = torch.arange(num_valid, dtype=torch.int32, device=device) % (
+            block_size * max_blocks_per_req
+        )
         expected_valid.append(num_valid)
 
-    expected_valid_tensor = torch.tensor(
-        expected_valid, dtype=torch.int32, device=device
-    )
+    expected_valid_tensor = torch.tensor(expected_valid, dtype=torch.int32, device=device)
 
     # Test with return_valid_counts=True
     result, valid_counts = triton_convert_req_index_to_global_index(

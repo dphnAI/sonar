@@ -108,11 +108,7 @@ class HF3FSRequestMetadata:
         token_count = len(state.token_ids)
         total_blocks = token_count // block_size
 
-        skip_blocks = (
-            state.num_saved_blocks
-            if skip_leading_blocks is None
-            else skip_leading_blocks
-        )
+        skip_blocks = state.num_saved_blocks if skip_leading_blocks is None else skip_leading_blocks
 
         new_blocks_to_save = total_blocks - state.num_saved_blocks
         if new_blocks_to_save <= 0 and load_op is None:

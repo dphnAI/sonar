@@ -85,12 +85,8 @@ def _get_alibi_slopes(total_num_heads: int) -> torch.Tensor:
             2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))),
             dtype=torch.float32,
         )
-        num_remaining_heads = min(
-            closest_power_of_2, total_num_heads - closest_power_of_2
-        )
-        extra_powers = torch.arange(
-            start=1, end=1 + 2 * num_remaining_heads, step=2, dtype=torch.int32
-        )
+        num_remaining_heads = min(closest_power_of_2, total_num_heads - closest_power_of_2)
+        extra_powers = torch.arange(start=1, end=1 + 2 * num_remaining_heads, step=2, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
     return slopes.float()
 
@@ -148,22 +144,14 @@ def ref_paged_attn(
             mask = torch.triu(empty_mask, diagonal=kv_len - query_len + 1).bool()
             if sliding_window is not None:
                 sliding_window_mask = (
-                    torch.triu(
-                        empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1
-                    )
-                    .bool()
-                    .logical_not()
+                    torch.triu(empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1).bool().logical_not()
                 )
                 mask |= sliding_window_mask
         else:
             if sliding_window is not None:
                 mask = (
-                    torch.triu(
-                        empty_mask, diagonal=1 - sliding_window + kv_len - query_len
-                    ).bool()
-                    ^ torch.triu(
-                        empty_mask, diagonal=sliding_window + kv_len - query_len
-                    ).bool()
+                    torch.triu(empty_mask, diagonal=1 - sliding_window + kv_len - query_len).bool()
+                    ^ torch.triu(empty_mask, diagonal=sliding_window + kv_len - query_len).bool()
                 ).logical_not()
             else:
                 mask = empty_mask.logical_not()
@@ -304,17 +292,11 @@ def varlen_encoder_attention(
     key, value = key_value.unbind(0)
 
     # KV cache for CPU attention
-    packed_key_value_cache = torch.zeros(
-        total_block_num, num_kv_heads, block_size, head_size * 2, dtype=dtype
-    )
-    packed_key_value_cache = packed_key_value_cache.view(
-        (total_block_num, num_kv_heads, block_size * 2, -1)
-    )
+    packed_key_value_cache = torch.zeros(total_block_num, num_kv_heads, block_size, head_size * 2, dtype=dtype)
+    packed_key_value_cache = packed_key_value_cache.view((total_block_num, num_kv_heads, block_size * 2, -1))
     packed_key_cache, packed_value_cache = packed_key_value_cache.chunk(2, dim=2)
 
-    cu_query_lens = torch.tensor([0] + seq_lens, dtype=torch.int32).cumsum(
-        dim=0, dtype=torch.int32
-    )
+    cu_query_lens = torch.tensor([0] + seq_lens, dtype=torch.int32).cumsum(dim=0, dtype=torch.int32)
     kv_lens_tensor = torch.tensor(seq_lens, dtype=torch.int32)
 
     # use reshape_and_cache to pack key_cache and value_cache
@@ -439,19 +421,13 @@ def varlen_with_paged_kv(
     max_kv_len = max(kv_lens)
     scale = head_size**-0.5
     token_num = sum(query_lens)
-    dynamic_causal_tensor = (
-        torch.tensor(dynamic_causal, dtype=torch.bool)
-        if dynamic_causal is not None
-        else None
-    )
+    dynamic_causal_tensor = torch.tensor(dynamic_causal, dtype=torch.bool) if dynamic_causal is not None else None
 
     # for n heads the set of slopes is the geometric sequence that starts
     # 2^(-8/n)
     alibi_slopes = _get_alibi_slopes(num_query_heads) if use_alibi else None
 
-    s_aux = (
-        15 * torch.rand((num_query_heads,), dtype=torch.bfloat16) if use_sink else None
-    )
+    s_aux = 15 * torch.rand((num_query_heads,), dtype=torch.bfloat16) if use_sink else None
 
     is_fp8 = kv_cache_dtype != "auto"
     if is_fp8 and current_platform.get_cpu_architecture() != CpuArchEnum.X86:
@@ -487,30 +463,18 @@ def varlen_with_paged_kv(
 
     # KV cache for CPU attention
     cache_dtype = torch.uint8 if is_fp8 else dtype
-    packed_key_value_cache = torch.empty(
-        num_blocks, num_kv_heads, block_size, head_size * 2, dtype=cache_dtype
-    )
-    packed_key_value_cache = packed_key_value_cache.view(
-        (num_blocks, num_kv_heads, block_size * 2, -1)
-    )
+    packed_key_value_cache = torch.empty(num_blocks, num_kv_heads, block_size, head_size * 2, dtype=cache_dtype)
+    packed_key_value_cache = packed_key_value_cache.view((num_blocks, num_kv_heads, block_size * 2, -1))
     packed_key_cache, packed_value_cache = packed_key_value_cache.chunk(2, dim=2)
 
-    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(
-        dim=0, dtype=torch.int32
-    )
+    cu_query_lens = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(dim=0, dtype=torch.int32)
     kv_lens_tensor = torch.tensor(kv_lens, dtype=torch.int32)
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, num_blocks, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     # use reshape_and_cache to pack key_cache and value_cache
     slot_mapping = torch.arange(0, num_blocks * block_size, dtype=torch.int64)
-    fp8_kwargs: dict = (
-        dict(k_scale=k_scale, v_scale=v_scale, kv_cache_dtype=kv_cache_dtype)
-        if is_fp8
-        else {}
-    )
+    fp8_kwargs: dict = dict(k_scale=k_scale, v_scale=v_scale, kv_cache_dtype=kv_cache_dtype) if is_fp8 else {}
     cpu_attn_reshape_and_cache(
         key=key_cache.view(-1, num_kv_heads, head_size),
         value=value_cache.view(-1, num_kv_heads, head_size),
@@ -594,9 +558,7 @@ def varlen_with_paged_kv(
     if is_fp8:
         # Build a float KV cache via the non-FP8 path and run float attention
         # to use as the reference.
-        ref_key_cache = torch.empty(
-            num_blocks, num_kv_heads, block_size, head_size, dtype=dtype
-        )
+        ref_key_cache = torch.empty(num_blocks, num_kv_heads, block_size, head_size, dtype=dtype)
         ref_value_cache = torch.empty_like(ref_key_cache)
         cpu_attn_reshape_and_cache(
             key=key_cache.view(-1, num_kv_heads, head_size),

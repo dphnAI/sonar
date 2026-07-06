@@ -19,7 +19,6 @@ The kernel is imported via
 import pytest
 import torch
 
-from tests.kernels.utils import bf16_ulp_distance, fp8_ulp_distance
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     get_fp8_min_max,
 )
@@ -28,6 +27,7 @@ from aphrodite.models.deepseek_v4.common.ops import (
     quantize_and_insert_k_cache,
 )
 from aphrodite.platforms import current_platform
+from tests.kernels.utils import bf16_ulp_distance, fp8_ulp_distance
 
 # ── Constants matching the kernel ────────────────────────────────────────────
 HEAD_DIM = 512
@@ -53,19 +53,14 @@ def make_cos_sin_cache(max_pos: int, rope_dim: int, dtype, device):
     cos_sin_cache[pos, :rope_dim/2] = cos(theta), [rope_dim/2:] = sin(theta).
     """
     base = 10000.0
-    inv_freq = 1.0 / (
-        base
-        ** (torch.arange(0, rope_dim, 2, dtype=torch.float32, device=device) / rope_dim)
-    )
+    inv_freq = 1.0 / (base ** (torch.arange(0, rope_dim, 2, dtype=torch.float32, device=device) / rope_dim))
     t = torch.arange(max_pos, dtype=torch.float32, device=device)
     freqs = torch.einsum("i,j -> ij", t, inv_freq)  # [max_pos, rope_dim/2]
     cache = torch.cat((freqs.cos(), freqs.sin()), dim=-1)  # [max_pos, rope_dim]
     return cache.to(dtype)
 
 
-def apply_rope_gptj_last_k(
-    x: torch.Tensor, positions: torch.Tensor, cos_sin_cache: torch.Tensor
-) -> torch.Tensor:
+def apply_rope_gptj_last_k(x: torch.Tensor, positions: torch.Tensor, cos_sin_cache: torch.Tensor) -> torch.Tensor:
     """GPT-J-style (interleaved-pair) RoPE on the LAST rope_dim elements.
 
     x: [..., head_dim] float32
@@ -128,15 +123,11 @@ def _op_available() -> bool:
 
 
 def _full_cache_fp8_op_available() -> bool:
-    return hasattr(
-        torch.ops._C, "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert"
-    )
+    return hasattr(torch.ops._C, "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_fp8_insert")
 
 
 def _full_cache_bf16_op_available() -> bool:
-    return hasattr(
-        torch.ops._C, "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert"
-    )
+    return hasattr(torch.ops._C, "fused_deepseek_v4_qnorm_rope_kv_rope_full_cache_bf16_insert")
 
 
 pytestmark = pytest.mark.skipif(
@@ -145,9 +136,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _call_fused(
-    q_in, q_head_padded, kv, k_cache, slot_mapping, positions, cos_sin_cache, eps, bs
-):
+def _call_fused(q_in, q_head_padded, kv, k_cache, slot_mapping, positions, cos_sin_cache, eps, bs):
     return torch.ops._C.fused_deepseek_v4_qnorm_rope_kv_rope_quant_insert(
         q_in,
         kv,
@@ -172,9 +161,7 @@ def _dequant_cache(k_cache_2d, num_tokens, num_blocks, block_size):
     device = k_cache_2d.device
     out = torch.zeros(1, num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device)
     seq_lens = torch.tensor([num_tokens], dtype=torch.int32, device=device)
-    block_table = torch.arange(num_blocks, dtype=torch.int32, device=device).unsqueeze(
-        0
-    )
+    block_table = torch.arange(num_blocks, dtype=torch.int32, device=device).unsqueeze(0)
     k_cache_3d = k_cache_2d.view(num_blocks, block_size, HEAD_BYTES)
     dequantize_and_gather_k_cache(
         out,
@@ -189,9 +176,7 @@ def _dequant_cache(k_cache_2d, num_tokens, num_blocks, block_size):
     return out[0, :num_tokens]
 
 
-def _assert_kv_cache_parity(
-    k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size
-):
+def _assert_kv_cache_parity(k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size):
     """Assert the fused and reference K-caches agree after decoding.
 
     The NoPE region is deterministic UE8M0 FP8, so its round-trip must be
@@ -203,12 +188,8 @@ def _assert_kv_cache_parity(
     """
     rec_fused = _dequant_cache(k_cache_fused, num_tokens, num_blocks, block_size)
     rec_ref = _dequant_cache(k_cache_ref, num_tokens, num_blocks, block_size)
-    torch.testing.assert_close(
-        rec_fused[:, :NOPE_DIM], rec_ref[:, :NOPE_DIM], rtol=0, atol=0
-    )
-    max_ulp = int(
-        bf16_ulp_distance(rec_fused[:, NOPE_DIM:], rec_ref[:, NOPE_DIM:]).max().item()
-    )
+    torch.testing.assert_close(rec_fused[:, :NOPE_DIM], rec_ref[:, :NOPE_DIM], rtol=0, atol=0)
+    max_ulp = int(bf16_ulp_distance(rec_fused[:, NOPE_DIM:], rec_ref[:, NOPE_DIM:]).max().item())
     assert max_ulp <= 1, f"RoPE bf16 region differs by {max_ulp} ULP (>1)"
 
 
@@ -253,20 +234,14 @@ def test_q_path_matches_reference(num_tokens: int, n_heads: int, padded_heads: i
     num_blocks = 2
     bs = 16
     kv = torch.zeros(num_tokens, HEAD_DIM, dtype=dtype, device=device)
-    k_cache = torch.zeros(
-        num_blocks, bs, HEAD_BYTES, dtype=torch.uint8, device=device
-    ).view(num_blocks, -1)
+    k_cache = torch.zeros(num_blocks, bs, HEAD_BYTES, dtype=torch.uint8, device=device).view(num_blocks, -1)
     slot_mapping = torch.full((num_tokens,), -1, dtype=torch.int64, device=device)
-    q_out = _call_fused(
-        q, padded_heads, kv, k_cache, slot_mapping, positions, cos_sin_cache, eps, bs
-    )
+    q_out = _call_fused(q, padded_heads, kv, k_cache, slot_mapping, positions, cos_sin_cache, eps, bs)
 
     torch.testing.assert_close(q_out[:, :n_heads], q_ref, rtol=1e-2, atol=1e-2)
     if n_heads < padded_heads:
         pad_region = q_out[:, n_heads:padded_heads]
-        assert pad_region.abs().max().item() == 0.0, (
-            "padded head slots must be exact zero"
-        )
+        assert pad_region.abs().max().item() == 0.0, "padded head slots must be exact zero"
 
 
 # ── Test 2: KV path round-trip byte/value parity ─────────────────────────────
@@ -301,12 +276,8 @@ def test_kv_path_matches_reference(num_tokens: int, block_size: int):
 
     # ── Reference path: RoPE on kv, then existing Triton quant+insert ──────
     kv_ref = apply_rope_gptj_last_k(kv, positions, cos_sin_cache)
-    k_cache_ref = torch.zeros(
-        num_blocks, block_size * HEAD_BYTES, dtype=torch.uint8, device=device
-    )
-    quantize_and_insert_k_cache(
-        kv_ref, k_cache_ref, slot_mapping, block_size=block_size, use_fnuz=USE_FNUZ
-    )
+    k_cache_ref = torch.zeros(num_blocks, block_size * HEAD_BYTES, dtype=torch.uint8, device=device)
+    quantize_and_insert_k_cache(kv_ref, k_cache_ref, slot_mapping, block_size=block_size, use_fnuz=USE_FNUZ)
 
     # ── Fused path (dummy q, padded to FlashMLA's min head count 64) ───────
     k_cache_fused = torch.zeros_like(k_cache_ref)
@@ -327,13 +298,9 @@ def test_kv_path_matches_reference(num_tokens: int, block_size: int):
     def _dequant(k_cache_2d):
         num_reqs = 1
         max_blocks = num_blocks
-        out = torch.zeros(
-            num_reqs, num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device
-        )
+        out = torch.zeros(num_reqs, num_tokens, HEAD_DIM, dtype=torch.bfloat16, device=device)
         seq_lens = torch.tensor([num_tokens], dtype=torch.int32, device=device)
-        block_table = torch.arange(
-            max_blocks, dtype=torch.int32, device=device
-        ).unsqueeze(0)
+        block_table = torch.arange(max_blocks, dtype=torch.int32, device=device).unsqueeze(0)
         # gather_lens arg is None (use seq_lens)
         k_cache_3d = k_cache_2d.view(num_blocks, block_size, HEAD_BYTES)
         dequantize_and_gather_k_cache(
@@ -355,23 +322,13 @@ def test_kv_path_matches_reference(num_tokens: int, block_size: int):
     scales = _ue8m0_per_block_scales(kv_ref[:, :NOPE_DIM].float(), QUANT_BLOCK)
     for t in range(num_tokens):
         max_allowed = 16.0 * scales[t].max().item()
-        diff_ref = (
-            (recovered_ref[t, :NOPE_DIM] - kv_ref[t, :NOPE_DIM]).abs().max().item()
-        )
-        diff_fused = (
-            (recovered_fused[t, :NOPE_DIM] - kv_ref[t, :NOPE_DIM]).abs().max().item()
-        )
-        assert diff_ref <= max_allowed, (
-            f"ref NoPE token {t} diff {diff_ref} > {max_allowed}"
-        )
-        assert diff_fused <= max_allowed, (
-            f"fused NoPE token {t} diff {diff_fused} > {max_allowed}"
-        )
+        diff_ref = (recovered_ref[t, :NOPE_DIM] - kv_ref[t, :NOPE_DIM]).abs().max().item()
+        diff_fused = (recovered_fused[t, :NOPE_DIM] - kv_ref[t, :NOPE_DIM]).abs().max().item()
+        assert diff_ref <= max_allowed, f"ref NoPE token {t} diff {diff_ref} > {max_allowed}"
+        assert diff_fused <= max_allowed, f"fused NoPE token {t} diff {diff_fused} > {max_allowed}"
 
     # Strong parity: NoPE FP8 round-trip bit-identical, RoPE bf16 within 1 ULP.
-    _assert_kv_cache_parity(
-        k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size
-    )
+    _assert_kv_cache_parity(k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size)
 
 
 # ── Test 2b: DP padding (slot_mapping shorter than q/kv) ─────────────────────
@@ -398,15 +355,9 @@ def test_kv_path_with_dp_padding(num_tokens: int, pad: int, block_size: int):
     slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device)
 
     # Reference: only the first num_tokens kv rows get inserted.
-    kv_ref = apply_rope_gptj_last_k(
-        kv[:num_tokens], positions[:num_tokens], cos_sin_cache
-    )
-    k_cache_ref = torch.zeros(
-        num_blocks, block_size * HEAD_BYTES, dtype=torch.uint8, device=device
-    )
-    quantize_and_insert_k_cache(
-        kv_ref, k_cache_ref, slot_mapping, block_size=block_size, use_fnuz=USE_FNUZ
-    )
+    kv_ref = apply_rope_gptj_last_k(kv[:num_tokens], positions[:num_tokens], cos_sin_cache)
+    k_cache_ref = torch.zeros(num_blocks, block_size * HEAD_BYTES, dtype=torch.uint8, device=device)
+    quantize_and_insert_k_cache(kv_ref, k_cache_ref, slot_mapping, block_size=block_size, use_fnuz=USE_FNUZ)
 
     # Fused: pass full-sized q/kv/positions, shorter slot_mapping.
     q_dummy = torch.zeros(total, 1, HEAD_DIM, dtype=dtype, device=device)
@@ -423,9 +374,7 @@ def test_kv_path_with_dp_padding(num_tokens: int, pad: int, block_size: int):
         block_size,
     )
 
-    _assert_kv_cache_parity(
-        k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size
-    )
+    _assert_kv_cache_parity(k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size)
 
 
 # ── Test 3: combined single-call Q + KV parity ───────────────────────────────
@@ -449,9 +398,7 @@ def test_kv_path_with_dp_padding(num_tokens: int, pad: int, block_size: int):
     ],
 )
 @pytest.mark.parametrize("block_size", [16, 64])
-def test_combined_q_and_kv(
-    num_tokens: int, n_heads: int, padded_heads: int, block_size: int
-):
+def test_combined_q_and_kv(num_tokens: int, n_heads: int, padded_heads: int, block_size: int):
     torch.manual_seed(2)
     device = "cuda"
     dtype = torch.bfloat16
@@ -470,12 +417,8 @@ def test_combined_q_and_kv(
     q_ref = rmsnorm_no_weight(q, eps)
     q_ref = apply_rope_gptj_last_k(q_ref, positions, cos_sin_cache).to(dtype)
     kv_ref = apply_rope_gptj_last_k(kv, positions, cos_sin_cache)
-    k_cache_ref = torch.zeros(
-        num_blocks, block_size * HEAD_BYTES, dtype=torch.uint8, device=device
-    )
-    quantize_and_insert_k_cache(
-        kv_ref, k_cache_ref, slot_mapping, block_size=block_size, use_fnuz=USE_FNUZ
-    )
+    k_cache_ref = torch.zeros(num_blocks, block_size * HEAD_BYTES, dtype=torch.uint8, device=device)
+    quantize_and_insert_k_cache(kv_ref, k_cache_ref, slot_mapping, block_size=block_size, use_fnuz=USE_FNUZ)
 
     # Fused single call.
     k_cache_fused = torch.zeros_like(k_cache_ref)
@@ -494,12 +437,8 @@ def test_combined_q_and_kv(
     torch.testing.assert_close(q_out[:, :n_heads], q_ref, rtol=1e-2, atol=1e-2)
     if n_heads < padded_heads:
         pad_region = q_out[:, n_heads:padded_heads]
-        assert pad_region.abs().max().item() == 0.0, (
-            "padded head slots must be exact zero"
-        )
-    _assert_kv_cache_parity(
-        k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size
-    )
+        assert pad_region.abs().max().item() == 0.0, "padded head slots must be exact zero"
+    _assert_kv_cache_parity(k_cache_fused, k_cache_ref, num_tokens, num_blocks, block_size)
 
 
 # ── Full-cache (FlashInfer) path parity ──────────────────────────────────────
@@ -570,20 +509,16 @@ def _fp8_full_cache_reference(
 ):
     q_ref = rmsnorm_no_weight(q, eps)
     q_ref = apply_rope_gptj_last_k(q_ref, positions, cos_sin_cache)
-    q_fp8.copy_(
-        torch.clamp(q_ref.float() * q_fp8_scale_inv, -FP8_MAX, FP8_MAX).to(
-            FP8_STORE_DTYPE
-        )
-    )
+    q_fp8.copy_(torch.clamp(q_ref.float() * q_fp8_scale_inv, -FP8_MAX, FP8_MAX).to(FP8_STORE_DTYPE))
 
     kv_ref = apply_rope_gptj_last_k(kv, positions, cos_sin_cache)
     valid = slot_mapping >= 0
     slots = slot_mapping[valid]
     block_idx = slots // block_size
     pos_in_block = slots % block_size
-    k_cache[block_idx, pos_in_block] = torch.clamp(
-        kv_ref[valid].float() / fp8_scale, -FP8_MAX, FP8_MAX
-    ).to(FP8_STORE_DTYPE)
+    k_cache[block_idx, pos_in_block] = torch.clamp(kv_ref[valid].float() / fp8_scale, -FP8_MAX, FP8_MAX).to(
+        FP8_STORE_DTYPE
+    )
 
 
 def _bf16_full_cache_reference(
@@ -643,12 +578,8 @@ def test_full_cache_per_tensor_fp8_matches_reference(
     # because the op asserts that dtype.
     q_fp8_ref = torch.empty_like(q, dtype=FP8_STORE_DTYPE)
     q_fp8_fused = torch.empty_like(q, dtype=torch.float8_e4m3fn)
-    k_cache_ref = torch.zeros(
-        num_blocks, block_size, HEAD_DIM, dtype=FP8_STORE_DTYPE, device=device
-    )
-    k_cache_fused = torch.zeros(
-        num_blocks, block_size, HEAD_DIM, dtype=torch.float8_e4m3fn, device=device
-    )
+    k_cache_ref = torch.zeros(num_blocks, block_size, HEAD_DIM, dtype=FP8_STORE_DTYPE, device=device)
+    k_cache_fused = torch.zeros(num_blocks, block_size, HEAD_DIM, dtype=torch.float8_e4m3fn, device=device)
 
     _fp8_full_cache_reference(
         q,
@@ -694,11 +625,7 @@ def test_full_cache_per_tensor_fp8_matches_reference(
         rtol=0,
         atol=0,
     )
-    k_max_ulp = int(
-        fp8_ulp_distance(k_fused[..., NOPE_DIM:], k_cache_ref[..., NOPE_DIM:])
-        .max()
-        .item()
-    )
+    k_max_ulp = int(fp8_ulp_distance(k_fused[..., NOPE_DIM:], k_cache_ref[..., NOPE_DIM:]).max().item())
     assert k_max_ulp <= 1, f"K-cache RoPE fp8 differs by {k_max_ulp} ULP (>1)"
 
 
@@ -730,9 +657,7 @@ def test_full_cache_bf16_matches_reference(
     slot_mapping = torch.arange(num_tokens, dtype=torch.int64, device=device)
 
     q_fused = q.clone()
-    k_cache_ref = torch.zeros(
-        num_blocks, block_size, HEAD_DIM, dtype=torch.bfloat16, device=device
-    )
+    k_cache_ref = torch.zeros(num_blocks, block_size, HEAD_DIM, dtype=torch.bfloat16, device=device)
     k_cache_fused = torch.zeros_like(k_cache_ref)
     q_ref = _bf16_full_cache_reference(
         q,

@@ -63,9 +63,7 @@ class PromptLogprobsWorker:
         # get the maximum number in this batch
         requested_num_prompt_logprobs = num_prompt_logprobs[needs_prompt_logprobs]
         max_num_prompt_logprobs = (
-            -1
-            if np.any(requested_num_prompt_logprobs == -1)
-            else int(requested_num_prompt_logprobs.max())
+            -1 if np.any(requested_num_prompt_logprobs == -1) else int(requested_num_prompt_logprobs.max())
         )
 
         # Get the prompt logprobs token_ids.
@@ -76,13 +74,11 @@ class PromptLogprobsWorker:
             num_computed_tokens,
             all_token_ids,
         )
-        prompt_token_ids, prompt_logprobs, prompt_ranks = (
-            compute_prompt_logprobs_with_chunking(
-                prompt_logprobs_token_ids,
-                hidden_states[: input_batch.num_tokens],
-                logits_fn,
-                max_num_prompt_logprobs,
-            )
+        prompt_token_ids, prompt_logprobs, prompt_ranks = compute_prompt_logprobs_with_chunking(
+            prompt_logprobs_token_ids,
+            hidden_states[: input_batch.num_tokens],
+            logits_fn,
+            max_num_prompt_logprobs,
         )
 
         pos_after_step = computed_prefill + input_batch.num_scheduled_tokens
@@ -98,17 +94,11 @@ class PromptLogprobsWorker:
             req_num_prompt_logprobs = int(num_prompt_logprobs[i])
             start_idx = query_start_loc_np[i]
             end_idx = query_start_loc_np[i + 1]
-            assert start_idx < end_idx, (
-                f"start_idx ({start_idx}) >= end_idx ({end_idx})"
-            )
+            assert start_idx < end_idx, f"start_idx ({start_idx}) >= end_idx ({end_idx})"
             if not req_is_prompt_chunked:
                 end_idx -= 1
 
-            width = (
-                prompt_logprobs.shape[1]
-                if req_num_prompt_logprobs == -1
-                else req_num_prompt_logprobs + 1
-            )
+            width = prompt_logprobs.shape[1] if req_num_prompt_logprobs == -1 else req_num_prompt_logprobs + 1
             # no logprobs if start_idx >= end_idx
             logprobs = (
                 None
@@ -130,13 +120,9 @@ class PromptLogprobsWorker:
             if prompt_logprobs_list:
                 # Merge the in-progress logprobs.
                 logprobs = LogprobsTensors(
-                    logprob_token_ids=torch.cat(
-                        [x.logprob_token_ids for x in prompt_logprobs_list]
-                    ),
+                    logprob_token_ids=torch.cat([x.logprob_token_ids for x in prompt_logprobs_list]),
                     logprobs=torch.cat([x.logprobs for x in prompt_logprobs_list]),
-                    selected_token_ranks=torch.cat(
-                        [x.selected_token_ranks for x in prompt_logprobs_list]
-                    ),
+                    selected_token_ranks=torch.cat([x.selected_token_ranks for x in prompt_logprobs_list]),
                 )
                 prompt_logprobs_list.clear()
 
@@ -175,9 +161,7 @@ def _prompt_logprobs_token_ids_kernel(
             all_token_ids_ptr + req_state_idx * all_token_ids_stride + target_pos,
             mask=mask,
         )
-        tl.store(
-            prompt_logprobs_token_ids_ptr + query_start + block, token_ids, mask=mask
-        )
+        tl.store(prompt_logprobs_token_ids_ptr + query_start + block, token_ids, mask=mask)
 
 
 def get_prompt_logprobs_token_ids(
@@ -218,11 +202,7 @@ def compute_prompt_logprobs_with_chunking(
         end_idx = start_idx + CHUNK_SIZE
         # NOTE(woosuk): logits_fn can be slow because it involves all-gather.
         prompt_logits = logits_fn(prompt_hidden_states[start_idx:end_idx])
-        requested_num_prompt_logprobs = (
-            prompt_logits.shape[-1]
-            if num_prompt_logprobs == -1
-            else num_prompt_logprobs
-        )
+        requested_num_prompt_logprobs = prompt_logits.shape[-1] if num_prompt_logprobs == -1 else num_prompt_logprobs
         prompt_logprobs = compute_topk_logprobs(
             prompt_logits,
             requested_num_prompt_logprobs,

@@ -38,11 +38,7 @@ def get_layer_size(layer: torch.nn.Module) -> int:
     """
     from .meta import SKIP_TENSORS
 
-    return sum(
-        tensor.numel()
-        for name, tensor in get_layer_tensors(layer).items()
-        if name not in SKIP_TENSORS
-    )
+    return sum(tensor.numel() for name, tensor in get_layer_tensors(layer).items() if name not in SKIP_TENSORS)
 
 
 def has_device_tensors(bound_args: BoundArguments) -> bool:

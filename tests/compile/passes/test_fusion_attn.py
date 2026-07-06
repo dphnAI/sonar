@@ -5,9 +5,6 @@ import copy
 import pytest
 import torch._dynamo
 
-from tests.compile.backend import LazyInitPass, TestBackend
-from tests.utils import TestFP8Layer, flat_product
-from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
 from aphrodite.compilation.passes.fusion.attn_quant_fusion import (
     ATTN_OP,
@@ -18,6 +15,7 @@ from aphrodite.compilation.passes.fx_utils import find_op_nodes
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     AttentionConfig,
     CacheConfig,
     CompilationConfig,
@@ -25,7 +23,6 @@ from aphrodite.config import (
     ModelConfig,
     PassConfig,
     SchedulerConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.forward_context import get_forward_context, set_forward_context
@@ -40,6 +37,9 @@ from aphrodite.utils.flashinfer import has_flashinfer
 from aphrodite.v1.attention.backend import AttentionMetadata
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.kv_cache_interface import AttentionSpec, get_kv_quant_mode
+from tests.compile.backend import LazyInitPass, TestBackend
+from tests.utils import TestFP8Layer, flat_product
+from tests.v1.attention.utils import BatchSpec, create_common_attn_metadata
 
 DEVICE_TYPE = current_platform.device_type
 FP8_DTYPE = current_platform.fp8_dtype()
@@ -110,18 +110,14 @@ class AttentionQuantPatternModel(torch.nn.Module):
 
         # Fetch the attention backend and kv cache shape and stride order
         attn_backend = self.attn.attn_backend
-        kv_cache_shape = attn_backend.get_kv_cache_shape(
-            num_blocks, self.block_size, self.num_kv_heads, self.head_size
-        )
+        kv_cache_shape = attn_backend.get_kv_cache_shape(num_blocks, self.block_size, self.num_kv_heads, self.head_size)
         try:
             kv_cache_stride_order = attn_backend.get_kv_cache_stride_order()
         except (AttributeError, NotImplementedError):
             kv_cache_stride_order = tuple(range(len(kv_cache_shape)))
 
         kv_cache_shape = tuple(kv_cache_shape[i] for i in kv_cache_stride_order)
-        inv_order = [
-            kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))
-        ]
+        inv_order = [kv_cache_stride_order.index(i) for i in range(len(kv_cache_stride_order))]
 
         # Create dummy KV cache
         raw_tensor = torch.zeros(
@@ -135,9 +131,7 @@ class AttentionQuantPatternModel(torch.nn.Module):
         self.attn.kv_cache = kv_cache
 
         # Build attn metadata
-        self.attn_metadata = self.builder.build(
-            common_prefix_len=0, common_attn_metadata=common_attn_metadata
-        )
+        self.attn_metadata = self.builder.build(common_prefix_len=0, common_attn_metadata=common_attn_metadata)
 
         return self.attn_metadata
 
@@ -195,9 +189,7 @@ class TestAttentionNvfp4QuantPatternModel(AttentionQuantPatternModel):
                     dtype=FP4_DTYPE,
                     device=self.device,
                 ),
-                "wscale_swizzled": torch.randn(hidden_size, hidden_size // 16).to(
-                    dtype=FP8_DTYPE, device=self.device
-                ),
+                "wscale_swizzled": torch.randn(hidden_size, hidden_size // 16).to(dtype=FP8_DTYPE, device=self.device),
                 "wscale": torch.tensor([500], dtype=torch.float32, device=self.device),
                 "scale": torch.tensor([0.002], dtype=torch.float32, device=self.device),
             },
@@ -206,9 +198,7 @@ class TestAttentionNvfp4QuantPatternModel(AttentionQuantPatternModel):
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
         """Forward pass that creates the pattern to be fused."""
         attn_output = self.attn(q, k, v)
-        quant_output, output_block_scale = scaled_fp4_quant(
-            attn_output, 1 / self.w["scale"]
-        )
+        quant_output, output_block_scale = scaled_fp4_quant(attn_output, 1 / self.w["scale"])
         return cutlass_scaled_fp4_mm(
             a=quant_output,
             b=self.w["weight"],
@@ -245,9 +235,7 @@ if current_platform.is_cuda():
 
 elif current_platform.is_rocm():
     HEADS = [(32, 8), (40, 8)]
-    PATTERN_TEST_MODELS_FP8 = [
-        ("amd/Llama-3.1-8B-Instruct-FP8-KV", TestAttentionFp8StaticQuantPatternModel)
-    ]
+    PATTERN_TEST_MODELS_FP8 = [("amd/Llama-3.1-8B-Instruct-FP8-KV", TestAttentionFp8StaticQuantPatternModel)]
     BACKENDS_FP8 = [
         AttentionBackendEnum.ROCM_AITER_UNIFIED_ATTN,
         AttentionBackendEnum.ROCM_ATTN,
@@ -257,24 +245,16 @@ elif current_platform.is_rocm():
 
 @pytest.mark.parametrize("num_qo_heads, num_kv_heads", HEADS)
 @pytest.mark.parametrize("head_size", [128])
-@pytest.mark.parametrize(
-    "batch_size", [7, 256, 533] if current_platform.is_cuda() else [8]
-)
+@pytest.mark.parametrize("batch_size", [7, 256, 533] if current_platform.is_cuda() else [8])
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
 @pytest.mark.parametrize(
     "backend, model_name, model_class, custom_ops",
     # Test attention+quant_fp8 fusion with custom and torch impls of QuantFP8
-    list(
-        flat_product(
-            BACKENDS_FP8, PATTERN_TEST_MODELS_FP8, ["+quant_fp8", "-quant_fp8"]
-        )
-    )
+    list(flat_product(BACKENDS_FP8, PATTERN_TEST_MODELS_FP8, ["+quant_fp8", "-quant_fp8"]))
     # quant_fp4 only has the custom impl
     + list(flat_product(BACKENDS_FP4, PATTERN_TEST_MODELS_FP4, [""])),
 )
-@pytest.mark.skipif(
-    not current_platform.is_cuda_alike(), reason="Only test ROCm or CUDA"
-)
+@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Only test ROCm or CUDA")
 @pytest.mark.skipif(not current_platform.supports_fp8(), reason="Need FP8")
 def test_attention_quant_pattern(
     num_qo_heads: int,
@@ -369,9 +349,7 @@ def test_attention_quant_pattern(
         result_unfused = compiled_unfused(q, k, v)
 
     # Run model with attn fusion enabled
-    aphrodite_config.compilation_config.pass_config = PassConfig(
-        fuse_attn_quant=True, eliminate_noops=True
-    )
+    aphrodite_config.compilation_config.pass_config = PassConfig(fuse_attn_quant=True, eliminate_noops=True)
     with (
         set_current_aphrodite_config(aphrodite_config),
         set_forward_context(attn_metadata=None, aphrodite_config=aphrodite_config),
@@ -400,9 +378,7 @@ def test_attention_quant_pattern(
         result_fused_0 = model_fused(q, k, v)  # noqa: F841
 
         # Compile model with fusion enabled
-        compiled_fused = torch.compile(
-            model_fused, backend=test_backend, fullgraph=True
-        )
+        compiled_fused = torch.compile(model_fused, backend=test_backend, fullgraph=True)
         assert compiled_fused.attn._o_scale_float is None
 
         result_fused = compiled_fused(q, k, v)
@@ -417,9 +393,7 @@ def test_attention_quant_pattern(
 
             assert compiled_fused.attn._o_scale_float is not None
 
-            torch.testing.assert_close(
-                result_unfused, result_fused_2, atol=1e-2, rtol=1e-2
-            )
+            torch.testing.assert_close(result_unfused, result_fused_2, atol=1e-2, rtol=1e-2)
 
     # Check attn fusion support
     quant_key: QuantKey = model_class.quant_key
@@ -427,16 +401,10 @@ def test_attention_quant_pattern(
         layer.impl.fused_output_quant_supported(quant_key)
         for key, layer in aphrodite_config.compilation_config.static_forward_context.items()
     ]
-    assert sum(attn_fusion_supported) == len(attn_fusion_supported), (
-        "All layers should support attention fusion"
-    )
+    assert sum(attn_fusion_supported) == len(attn_fusion_supported), "All layers should support attention fusion"
 
     # Check quantization ops in the graph before and after fusion
-    quant_op = (
-        torch.ops.aten.reciprocal
-        if "-quant_fp8" in custom_ops_list
-        else QUANT_OPS[quant_key]
-    )
+    quant_op = torch.ops.aten.reciprocal if "-quant_fp8" in custom_ops_list else QUANT_OPS[quant_key]
 
     # Note: for fp8, fully_replaced=False because query quant ops remain in graph.
     # Only output quant ops are fused into attention.
@@ -453,23 +421,15 @@ def test_attention_quant_pattern(
     assert len(attn_nodes_pre) == len(attn_nodes_post), (
         "Should have same number of attention nodes before and after fusion"
     )
-    assert attn_nodes_pre[0].kwargs.get("output_scale") is None, (
-        "Attention should not have output_scale before fusion"
-    )
-    assert attn_nodes_post[0].kwargs.get("output_scale") is not None, (
-        "Attention should have output_scale after fusion"
-    )
+    assert attn_nodes_pre[0].kwargs.get("output_scale") is None, "Attention should not have output_scale before fusion"
+    assert attn_nodes_post[0].kwargs.get("output_scale") is not None, "Attention should have output_scale after fusion"
 
     assert attn_nodes_pre[0].kwargs.get("output_block_scale") is None, (
         "Attention should not have output_block_scale before fusion"
     )
 
-    kv_cache_dummy_dep_pre_is_none = (
-        attn_nodes_pre[0].kwargs.get("kv_cache_dummy_dep") is None
-    )
-    kv_cache_dummy_dep_post_is_none = (
-        attn_nodes_post[0].kwargs.get("kv_cache_dummy_dep") is None
-    )
+    kv_cache_dummy_dep_pre_is_none = attn_nodes_pre[0].kwargs.get("kv_cache_dummy_dep") is None
+    kv_cache_dummy_dep_post_is_none = attn_nodes_post[0].kwargs.get("kv_cache_dummy_dep") is None
     assert not (kv_cache_dummy_dep_pre_is_none ^ kv_cache_dummy_dep_post_is_none), (
         "The kv_cache_dummy_dep should be consistent before and after fusion"
     )

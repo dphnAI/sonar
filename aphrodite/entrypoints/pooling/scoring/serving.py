@@ -49,8 +49,7 @@ class ServingScores(PoolingServing):
 
         self.io_processor_name: str = score_type
         self.enable_flash_late_interaction = (
-            self.io_processor_name == "late-interaction"
-            and enable_flash_late_interaction
+            self.io_processor_name == "late-interaction" and enable_flash_late_interaction
         )
 
         if self.enable_flash_late_interaction:
@@ -155,9 +154,7 @@ class ServingScores(PoolingServing):
             if isinstance(document, str):
                 rerank_document = RerankDocument(text=document)
             else:
-                rerank_document = RerankDocument(
-                    multi_modal=document.get("content", [])
-                )
+                rerank_document = RerankDocument(multi_modal=document.get("content", []))
 
             result = RerankResult(
                 index=idx,
@@ -177,9 +174,7 @@ class ServingScores(PoolingServing):
             id=request_id,
             model=model_name,
             results=results,
-            usage=RerankUsage(
-                total_tokens=num_prompt_tokens, prompt_tokens=num_prompt_tokens
-            ),
+            usage=RerankUsage(total_tokens=num_prompt_tokens, prompt_tokens=num_prompt_tokens),
         )
 
         return JSONResponse(content=response.model_dump())
@@ -214,20 +209,13 @@ class ServingScores(PoolingServing):
         query_pooling_params_list = []
         for i in range(n_queries):
             pooling_params = ctx.pooling_params.clone()
-            pooling_params.late_interaction_params = (
-                build_late_interaction_query_params(
-                    query_key=query_keys[i],
-                    query_uses=query_uses[i],
-                )
+            pooling_params.late_interaction_params = build_late_interaction_query_params(
+                query_key=query_keys[i],
+                query_uses=query_uses[i],
             )
             query_pooling_params_list.append(pooling_params)
 
-        assert (
-            n_queries
-            == len(query_pooling_params_list)
-            == len(query_engine_inputs)
-            == len(query_keys)
-        )
+        assert n_queries == len(query_pooling_params_list) == len(query_engine_inputs) == len(query_keys)
 
         query_ctx = ScoringServeContext(
             request=ctx.request,
@@ -259,17 +247,10 @@ class ServingScores(PoolingServing):
         for i in range(n_docs):
             query_idx = 0 if n_queries == 1 else i
             pooling_params = ctx.pooling_params.clone()
-            pooling_params.late_interaction_params = build_late_interaction_doc_params(
-                query_key=query_keys[query_idx]
-            )
+            pooling_params.late_interaction_params = build_late_interaction_doc_params(query_key=query_keys[query_idx])
             doc_pooling_params_list.append(pooling_params)
 
-        assert (
-            n_docs
-            == len(doc_pooling_params_list)
-            == len(doc_engine_inputs)
-            == len(doc_keys)
-        )
+        assert n_docs == len(doc_pooling_params_list) == len(doc_engine_inputs) == len(doc_keys)
 
         doc_ctx = ScoringServeContext(
             request=ctx.request,

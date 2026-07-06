@@ -63,13 +63,9 @@ def _mamba_chunk_scan_combined_fwd(
         B = B.contiguous()
     if C.stride(-1) != 1:
         C = C.contiguous()
-    if (
-        x.stride(-1) != 1 and x.stride(0) != 1
-    ):  # Either M or K dimension should be contiguous
+    if x.stride(-1) != 1 and x.stride(0) != 1:  # Either M or K dimension should be contiguous
         x = x.contiguous()
-    if (
-        z is not None and z.stride(-1) != 1 and z.stride(0) != 1
-    ):  # Either M or K dimension should be contiguous
+    if z is not None and z.stride(-1) != 1 and z.stride(0) != 1:  # Either M or K dimension should be contiguous
         z = z.contiguous()
     if D is not None and D.stride(-1) != 1:
         D = D.contiguous()
@@ -101,9 +97,7 @@ def _mamba_chunk_scan_combined_fwd(
 
     # 2. Compute the state for each intra-chunk
     # (right term of low-rank factorization of off-diagonal blocks; B terms)
-    states = _chunk_state_fwd(
-        B, x, dt, dA_cumsum, cu_chunk_seqlens, states_in_fp32=True
-    )
+    states = _chunk_state_fwd(B, x, dt, dA_cumsum, cu_chunk_seqlens, states_in_fp32=True)
 
     # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
     # (middle term of factorization of off-diag blocks; A terms)

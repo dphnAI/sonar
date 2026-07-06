@@ -28,8 +28,7 @@ class TestSanitizeMessageCoversLeakPatterns:
                 "cannot identify image file <_io.BytesIO object>",
             ),
             (
-                "<PIL.PngImagePlugin.PngImageFile image mode=RGB "
-                "size=8x8 at 0x7f3c1a2b4d90>",
+                "<PIL.PngImagePlugin.PngImageFile image mode=RGB size=8x8 at 0x7f3c1a2b4d90>",
                 "<PIL.PngImagePlugin.PngImageFile image mode=RGB size=8x8>",
             ),
             (
@@ -73,9 +72,7 @@ class TestAffectedModulesUseSanitize:
         from pathlib import Path
 
         spec = importlib.util.find_spec(module)
-        assert spec is not None and spec.origin is not None, (
-            f"Cannot locate module {module}"
-        )
+        assert spec is not None and spec.origin is not None, f"Cannot locate module {module}"
         source = Path(spec.origin).read_text()
         assert "sanitize_message" in source, f"{module} does not call sanitize_message"
         assert "import" in source and "sanitize_message" in source

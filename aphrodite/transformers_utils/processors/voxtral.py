@@ -46,9 +46,7 @@ class MistralCommonFeatureExtractor:
 
             audios_processed.append(torch.from_numpy(audio))
 
-        return BatchFeature(
-            {"audio_arrays": audios_processed}, tensor_type=return_tensors
-        )
+        return BatchFeature({"audio_arrays": audios_processed}, tensor_type=return_tensors)
 
     def get_num_audio_tokens(self, audio_length: int) -> int:
         return ceil(audio_length / (self.sampling_rate // self.frame_rate))
@@ -88,10 +86,7 @@ class MistralCommonFeatureExtractor:
             if audio_url_or_urls and isinstance(audio_url_or_urls[0], float):
                 # A single audio represented as ``list[float]``.
                 return audio_url_or_urls
-            return [
-                self.fetch_audio(x, sampling_rate=sampling_rate)
-                for x in audio_url_or_urls
-            ]
+            return [self.fetch_audio(x, sampling_rate=sampling_rate) for x in audio_url_or_urls]
         if isinstance(audio_url_or_urls, str):
             from transformers.audio_utils import load_audio
 

@@ -52,9 +52,7 @@ class ErnieMultiTokenPredictorLayer(nn.Module):
 
         self.mtp_emb_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mtp_hidden_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mtp_linear_proj = nn.Linear(
-            config.hidden_size * 2, config.hidden_size, bias=False
-        )
+        self.mtp_linear_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
         self.mtp_block = LlamaDecoderLayer(aphrodite_config, prefix)
 
     def forward(
@@ -71,13 +69,9 @@ class ErnieMultiTokenPredictorLayer(nn.Module):
         inputs_embeds = self.mtp_emb_norm(inputs_embeds)
         previous_hidden_states = self.mtp_hidden_norm(previous_hidden_states)
 
-        hidden_states = self.mtp_linear_proj(
-            torch.cat([inputs_embeds, previous_hidden_states], dim=-1)
-        )
+        hidden_states = self.mtp_linear_proj(torch.cat([inputs_embeds, previous_hidden_states], dim=-1))
 
-        hidden_states, residual = self.mtp_block(
-            positions=positions, hidden_states=hidden_states, residual=None
-        )
+        hidden_states, residual = self.mtp_block(positions=positions, hidden_states=hidden_states, residual=None)
         hidden_states = residual + hidden_states
 
         return hidden_states
@@ -151,12 +145,8 @@ class ErnieMTP(nn.Module):
         self.hf_to_aphrodite_mapper = WeightsMapper(
             orig_to_new_substr={
                 "model.mtp_emb_norm.0.": f"model.layers.{spec_layer}.mtp_emb_norm.",
-                "model.mtp_hidden_norm.0.": (
-                    f"model.layers.{spec_layer}.mtp_hidden_norm."
-                ),
-                "model.mtp_linear_proj.0.": (
-                    f"model.layers.{spec_layer}.mtp_linear_proj."
-                ),
+                "model.mtp_hidden_norm.0.": (f"model.layers.{spec_layer}.mtp_hidden_norm."),
+                "model.mtp_linear_proj.0.": (f"model.layers.{spec_layer}.mtp_linear_proj."),
                 "model.mtp_block.0.": f"model.layers.{spec_layer}.mtp_block.",
             },
             orig_to_new_stacked={
@@ -167,9 +157,7 @@ class ErnieMTP(nn.Module):
                 ".up_proj": (".gate_up_proj", 1),
             },
         )
-        self.model = ErnieMultiTokenPredictor(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = ErnieMultiTokenPredictor(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
@@ -192,9 +180,7 @@ class ErnieMTP(nn.Module):
         spec_step_idx: int = 0,
     ) -> torch.Tensor:
         assert spec_step_idx == 0, "ernie_mtp only support predict one token"
-        hidden_states = self.model(
-            input_ids, positions, hidden_states, inputs_embeds, spec_step_idx
-        )
+        hidden_states = self.model(input_ids, positions, hidden_states, inputs_embeds, spec_step_idx)
         return hidden_states
 
     def compute_logits(

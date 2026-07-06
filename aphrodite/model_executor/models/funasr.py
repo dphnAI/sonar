@@ -13,7 +13,7 @@ from transformers import (
     Qwen3Config,
 )
 
-from aphrodite.config import ModelConfig, SpeechToTextConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, ModelConfig, SpeechToTextConfig
 from aphrodite.config.multimodal import BaseDummyOptions
 from aphrodite.config.speech_to_text import SpeechToTextParams
 from aphrodite.distributed import get_tensor_model_parallel_world_size
@@ -167,9 +167,7 @@ class MultiHeadedAttentionSANM(nn.Module):
         )
         self.attn = None
 
-        self.fsmn_block = nn.Conv1d(
-            n_feat, n_feat, kernel_size, stride=1, padding=0, groups=n_feat, bias=False
-        )
+        self.fsmn_block = nn.Conv1d(n_feat, n_feat, kernel_size, stride=1, padding=0, groups=n_feat, bias=False)
         # padding
         left_padding = (kernel_size - 1) // 2
         if sanm_shift > 0:
@@ -265,26 +263,17 @@ class SinusoidalPositionEncoder(torch.nn.Module):
         batch_size = positions.size(0)
         positions = positions.type(dtype)
         device = positions.device
-        log_timescale_increment = torch.log(
-            torch.tensor([10000], dtype=dtype, device=device)
-        ) / (depth / 2 - 1)
-        inv_timescales = torch.exp(
-            torch.arange(depth / 2, device=device).type(dtype)
-            * (-log_timescale_increment)
-        )
+        log_timescale_increment = torch.log(torch.tensor([10000], dtype=dtype, device=device)) / (depth / 2 - 1)
+        inv_timescales = torch.exp(torch.arange(depth / 2, device=device).type(dtype) * (-log_timescale_increment))
         inv_timescales = torch.reshape(inv_timescales, [batch_size, -1])
-        scaled_time = torch.reshape(positions, [1, -1, 1]) * torch.reshape(
-            inv_timescales, [1, 1, -1]
-        )
+        scaled_time = torch.reshape(positions, [1, -1, 1]) * torch.reshape(inv_timescales, [1, 1, -1])
         encoding = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=2)
         return encoding.type(dtype)
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, timesteps, input_dim = hidden_states.size()
         positions = torch.arange(1, timesteps + 1, device=hidden_states.device)[None, :]
-        position_encoding = self.encode(positions, input_dim, hidden_states.dtype).to(
-            hidden_states.device
-        )
+        position_encoding = self.encode(positions, input_dim, hidden_states.dtype).to(hidden_states.device)
 
         return hidden_states + position_encoding
 
@@ -380,9 +369,7 @@ class SenseVoiceEncoderSmall(nn.Module):
         ilens: torch.Tensor,
     ):
         maxlen = xs_pad.shape[1]
-        masks = sequence_mask(
-            ilens, maxlen=maxlen, dtype=ilens.dtype, device=ilens.device
-        )[:, None, :]
+        masks = sequence_mask(ilens, maxlen=maxlen, dtype=ilens.dtype, device=ilens.device)[:, None, :]
 
         xs_pad *= self.output_size() ** 0.5
 
@@ -625,9 +612,7 @@ class FunASREncoder(nn.Module):
         }
     )
 
-    def __init__(
-        self, *, aphrodite_config: AphroditeConfig, prefix: str = "", init_in_fp32: bool = False
-    ):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "", init_in_fp32: bool = False):
         super().__init__()
         self.audio_encoder = SenseVoiceEncoderSmall(
             input_size=560, **aphrodite_config.model_config.hf_config.audio_encoder_conf
@@ -651,12 +636,8 @@ class FunASREncoder(nn.Module):
 class FunASRModel(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
-        self.encoder = FunASREncoder(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "encoder")
-        )
-        self.decoder = Qwen3Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "decoder")
-        )
+        self.encoder = FunASREncoder(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "encoder"))
+        self.decoder = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "decoder"))
 
     def forward(
         self,
@@ -679,17 +660,11 @@ class FunASRModel(nn.Module):
         self.feat_permute = False
 
         if self.feat_permute:
-            encoder_out, encoder_out_lens = self.encoder.audio_encoder(
-                speech.permute(0, 2, 1), speech_lengths
-            )
+            encoder_out, encoder_out_lens = self.encoder.audio_encoder(speech.permute(0, 2, 1), speech_lengths)
         else:
-            encoder_out, encoder_out_lens = self.encoder.audio_encoder(
-                speech, speech_lengths
-            )
+            encoder_out, encoder_out_lens = self.encoder.audio_encoder(speech, speech_lengths)
 
-        encoder_out, encoder_out_lens = self.encoder.audio_adaptor(
-            encoder_out, encoder_out_lens
-        )
+        encoder_out, encoder_out_lens = self.encoder.audio_adaptor(encoder_out, encoder_out_lens)
         return encoder_out
 
 
@@ -819,9 +794,7 @@ class FunASRMultiModalProcessor(BaseMultiModalProcessor[FunASRProcessingInfo]):
     info=FunASRProcessingInfo,
     dummy_inputs=FunASRDummyInputsBuilder,
 )
-class FunASRForConditionalGeneration(
-    nn.Module, SupportsTranscription, SupportsMultiModal
-):
+class FunASRForConditionalGeneration(nn.Module, SupportsTranscription, SupportsMultiModal):
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_substr={
             "linear_q.": "q_proj.",
@@ -864,9 +837,7 @@ class FunASRForConditionalGeneration(
         hotwords = stt_params.hotwords
 
         if language is None:
-            raise ValueError(
-                "Language must be specified when creating the funasr prompt"
-            )
+            raise ValueError("Language must be specified when creating the funasr prompt")
 
         if hotwords is not None:
             funasr_prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n请结合上下文信息，更加准确地完成语音转写任务。如果没有相关信息，我们会留空。\n\n\n**上下文信息：**\n\n\n热词列表：[{}]\n语音转写：<|AUDIO|><|im_end|>\n<|im_start|>assistant\n".format(  # noqa: E501
@@ -884,9 +855,7 @@ class FunASRForConditionalGeneration(
         return cast(PromptType, prompt)
 
     @classmethod
-    def get_speech_to_text_config(
-        cls, model_config: ModelConfig, task_type: str
-    ) -> SpeechToTextConfig:
+    def get_speech_to_text_config(cls, model_config: ModelConfig, task_type: str) -> SpeechToTextConfig:
         processor = cached_processor_from_config(model_config)
 
         return SpeechToTextConfig(
@@ -953,9 +922,7 @@ class FunASRForConditionalGeneration(
 
         speech = audio_input["input_features"]
         speech_lengths = audio_input["speech_lengths"]
-        enc_output = self.model.get_encoder_outputs(
-            speech=speech, speech_lengths=speech_lengths
-        )
+        enc_output = self.model.get_encoder_outputs(speech=speech, speech_lengths=speech_lengths)
 
         return enc_output
 

@@ -60,9 +60,7 @@ class Lfm2ToolParser(ToolParser):
 
         if self.tool_call_start_token_id is None or self.tool_call_end_token_id is None:
             raise RuntimeError(
-                "LFM2 tool parser could not locate "
-                "<|tool_call_start|>/<|tool_call_end|> tokens in the "
-                "tokenizer!"
+                "LFM2 tool parser could not locate <|tool_call_start|>/<|tool_call_end|> tokens in the tokenizer!"
             )
 
         # Trailing content already emitted to the client. Used by the
@@ -106,9 +104,7 @@ class Lfm2ToolParser(ToolParser):
         return raw_after
 
     @classmethod
-    def _extract_tool_call_text(
-        cls, model_output: str
-    ) -> tuple[str | None, str | None]:
+    def _extract_tool_call_text(cls, model_output: str) -> tuple[str | None, str | None]:
         """Extract the pythonic call text and surrounding content.
 
         Returns (tool_text, content) where tool_text is the text between
@@ -128,9 +124,7 @@ class Lfm2ToolParser(ToolParser):
 
         tool_text = model_output[start_idx + len(TOOL_CALL_START) : end_idx]
         content_before = model_output[:start_idx].strip()
-        content_after = cls._strip_echo(
-            model_output[end_idx + len(TOOL_CALL_END) :]
-        ).strip()
+        content_after = cls._strip_echo(model_output[end_idx + len(TOOL_CALL_END) :]).strip()
 
         content_parts = []
         if content_before:
@@ -141,15 +135,11 @@ class Lfm2ToolParser(ToolParser):
 
         return tool_text, content
 
-    def extract_tool_calls(
-        self, model_output: str, request: ChatCompletionRequest
-    ) -> ExtractedToolCallInformation:
+    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
         tool_text, content = self._extract_tool_call_text(model_output)
 
         if tool_text is None:
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
         tool_text = tool_text.strip()
 
@@ -166,16 +156,12 @@ class Lfm2ToolParser(ToolParser):
             logger.warning("Regex timeout occurred when matching tool call pattern.")
 
         if not is_tool_call_pattern:
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
         try:
             module = ast.parse(tool_text)
             parsed = getattr(module.body[0], "value", None)
-            if isinstance(parsed, ast.List) and all(
-                isinstance(e, ast.Call) for e in parsed.elts
-            ):
+            if isinstance(parsed, ast.List) and all(isinstance(e, ast.Call) for e in parsed.elts):
                 return ExtractedToolCallInformation(
                     tools_called=True,
                     tool_calls=[
@@ -188,9 +174,7 @@ class Lfm2ToolParser(ToolParser):
                 raise UnexpectedAstError("Tool output must be a list of function calls")
         except Exception:
             logger.exception("Error in extracting tool call from response.")
-            return ExtractedToolCallInformation(
-                tools_called=False, tool_calls=[], content=model_output
-            )
+            return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(
         self,
@@ -278,9 +262,7 @@ class Lfm2ToolParser(ToolParser):
 
             module = ast.parse(valid_text)
             parsed = getattr(module.body[0], "value", None)
-            if not isinstance(parsed, ast.List) or not all(
-                isinstance(e, ast.Call) for e in parsed.elts
-            ):
+            if not isinstance(parsed, ast.List) or not all(isinstance(e, ast.Call) for e in parsed.elts):
                 raise UnexpectedAstError("Tool output must be a list of function calls")
             tool_calls = [
                 handle_single_tool(e)  # type: ignore
@@ -296,9 +278,7 @@ class Lfm2ToolParser(ToolParser):
                 if len(self.streamed_args_for_tool) == index:
                     self.streamed_args_for_tool.append("")
 
-                new_call_complete = (
-                    index < len(tool_calls) - 1 or ")]" not in added_text
-                )
+                new_call_complete = index < len(tool_calls) - 1 or ")]" not in added_text
                 if new_call_complete:
                     self.current_tool_index += 1
 
@@ -315,10 +295,7 @@ class Lfm2ToolParser(ToolParser):
 
                 if delta is not None:
                     tool_deltas.append(delta)
-                    if (
-                        delta.function is not None
-                        and delta.function.arguments is not None
-                    ):
+                    if delta.function is not None and delta.function.arguments is not None:
                         self.streamed_args_for_tool[index] += delta.function.arguments
 
             if tool_deltas and not self.prev_tool_call_arr:
@@ -337,7 +314,5 @@ class Lfm2ToolParser(ToolParser):
                 return None
         except Exception:
             logger.exception("Error trying to handle streaming tool call.")
-            logger.debug(
-                "Skipping chunk as a result of tool streaming extraction error"
-            )
+            logger.debug("Skipping chunk as a result of tool streaming extraction error")
             return _content_only_or_none()

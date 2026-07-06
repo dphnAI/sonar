@@ -35,9 +35,7 @@ def create_encoder_only_attention_backend(
         ) -> AttentionMetadata:
             new_common_attn_metadata = copy(common_attn_metadata)
             new_common_attn_metadata.causal = False
-            return super().build(
-                common_prefix_len, new_common_attn_metadata, fast_build
-            )
+            return super().build(common_prefix_len, new_common_attn_metadata, fast_build)
 
     attn_backend = subclass_attention_backend(
         name_prefix=prefix,

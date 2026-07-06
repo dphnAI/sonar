@@ -84,9 +84,7 @@ def quantize_and_insert_k_kernel(
 
     # Scale pointer: scales are stored after ALL token data in the block
     # Scale for this token is at offset (64 * 576) + pos_in_block * 8
-    token_scale_ptr = (
-        cache_block_ptr + cache_block_size * token_data_size + pos_in_block * scale_dim
-    )
+    token_scale_ptr = cache_block_ptr + cache_block_size * token_data_size + pos_in_block * scale_dim
 
     # Token data layout: [0:448] fp8, [448:576] bf16
     token_fp8_ptr = token_data_ptr
@@ -172,9 +170,7 @@ def quantize_and_insert_k_cache(
     platforms whose FP8 format is FNUZ. ``use_fnuz=False`` selects OCP E4M3,
     which is used by OCP-encoded caches even on gfx942.
     """
-    assert k.dim() == 2 and k.shape[1] == 512, (
-        f"K must be [num_tokens, 512], got {k.shape}"
-    )
+    assert k.dim() == 2 and k.shape[1] == 512, f"K must be [num_tokens, 512], got {k.shape}"
     assert k.dtype == torch.bfloat16, f"K must be bf16, got {k.dtype}"
     assert is_ue8m0, "Only support ue8m0 quantization."
 
@@ -272,11 +268,7 @@ def _dequantize_and_gather_k_kernel(
         token_data_ptr = cache_block_ptr + pos_in_block * token_data_size
 
         # Scale pointer: after all token data
-        token_scale_ptr = (
-            cache_block_ptr
-            + cache_block_size * token_data_size
-            + pos_in_block * scale_dim
-        )
+        token_scale_ptr = cache_block_ptr + cache_block_size * token_data_size + pos_in_block * scale_dim
 
         # Token data layout: [0:448] fp8, [448:576] bf16
         token_fp8_ptr = token_data_ptr
@@ -406,9 +398,7 @@ def dequantize_and_gather_k_cache(
             dequantize_and_gather_k_cache_cutedsl,
         )
 
-        dequantize_and_gather_k_cache_cutedsl(
-            out, k_cache, seq_lens, gather_lens, block_table, block_size, offset
-        )
+        dequantize_and_gather_k_cache_cutedsl(out, k_cache, seq_lens, gather_lens, block_table, block_size, offset)
         return
 
     dequantize_and_gather_k_cache_triton(
@@ -540,9 +530,7 @@ def combine_topk_swa_indices(
         dtype=torch.int32,
         device=topk_indices.device,
     )
-    combined_lens = torch.empty(
-        num_tokens, dtype=torch.int32, device=topk_indices.device
-    )
+    combined_lens = torch.empty(num_tokens, dtype=torch.int32, device=topk_indices.device)
 
     NUM_WORKERS = 128
     _combine_topk_swa_indices_kernel[(num_reqs, NUM_WORKERS)](
@@ -625,10 +613,7 @@ def _combine_topk_swa_indices_kernel(
         # For positions [pos - swa_len + 1, pos], the buffer indices are:
         # [N + pos - swa_len + 1 - gather_start, N + pos - gather_start]
         tl.store(
-            combined_indices_ptr
-            + token_idx * combined_indices_stride
-            + topk_len
-            + offset,
+            combined_indices_ptr + token_idx * combined_indices_stride + topk_len + offset,
             M * batch_idx + N + offset + pos - swa_len + 1 - gather_start,
             mask=offset < swa_len,
         )
@@ -719,9 +704,7 @@ def build_flashinfer_mixed_sparse_indices(
         dtype=torch.int32,
         device=decode_swa_indices.device,
     )
-    sparse_topk_lens = torch.empty(
-        num_tokens, dtype=torch.int32, device=decode_swa_indices.device
-    )
+    sparse_topk_lens = torch.empty(num_tokens, dtype=torch.int32, device=decode_swa_indices.device)
     if num_tokens == 0:
         return sparse_indices, sparse_topk_lens
 
@@ -836,9 +819,7 @@ def _build_flashinfer_mixed_sparse_indices_kernel(
             offset = i + tl.arange(0, TOPK_BLOCK_SIZE)
             mask = offset < PADDED_TOP_K
             values = tl.load(
-                decode_compressed_indices_ptr
-                + token_idx * decode_compressed_stride
-                + offset,
+                decode_compressed_indices_ptr + token_idx * decode_compressed_stride + offset,
                 mask=offset < DECODE_COMPRESSED_TOPK,
                 other=-1,
             )
@@ -848,9 +829,7 @@ def _build_flashinfer_mixed_sparse_indices_kernel(
                 req_idx = tl.load(token_to_req_indices_ptr + token_idx)
                 block_indices = values // compressed_block_size
                 block_numbers = tl.load(
-                    compressed_block_table_ptr
-                    + req_idx * compressed_block_table_stride
-                    + block_indices,
+                    compressed_block_table_ptr + req_idx * compressed_block_table_stride + block_indices,
                     mask=mask & is_valid,
                     other=-1,
                 )
@@ -859,10 +838,7 @@ def _build_flashinfer_mixed_sparse_indices_kernel(
                 values = tl.where(is_valid, values, -1)
                 compressed_len += tl.sum((is_valid & token_valid).to(tl.int32), axis=0)
             tl.store(
-                sparse_indices_ptr
-                + token_idx * sparse_indices_stride
-                + WINDOW_SIZE
-                + offset,
+                sparse_indices_ptr + token_idx * sparse_indices_stride + WINDOW_SIZE + offset,
                 values,
                 mask=mask,
             )
@@ -921,9 +897,7 @@ def _build_flashinfer_mixed_sparse_indices_kernel(
         is_valid = local_idx >= 0
         block_indices = local_idx // compressed_block_size
         block_numbers = tl.load(
-            compressed_block_table_ptr
-            + req_idx * compressed_block_table_stride
-            + block_indices,
+            compressed_block_table_ptr + req_idx * compressed_block_table_stride + block_indices,
             mask=mask & is_valid,
             other=-1,
         )
@@ -931,10 +905,7 @@ def _build_flashinfer_mixed_sparse_indices_kernel(
         slot_ids = block_numbers * compressed_block_size + block_offsets
         slot_ids = tl.where((offset < topk_len) & is_valid, slot_ids, -1)
         tl.store(
-            sparse_indices_ptr
-            + token_idx * sparse_indices_stride
-            + WINDOW_SIZE
-            + offset,
+            sparse_indices_ptr + token_idx * sparse_indices_stride + WINDOW_SIZE + offset,
             slot_ids,
             mask=mask,
         )

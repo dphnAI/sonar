@@ -47,9 +47,7 @@ def fused_indexer_q_rope_quant_mxfp4_cutedsl(
 
     # heuristic
     coarsen = 1 if num_tokens < 512 else 4
-    compiled = IndexerQMxFp4Kernel.compile(
-        head_dim, rope_dim, num_heads, rope_type, coarsen
-    )
+    compiled = IndexerQMxFp4Kernel.compile(head_dim, rope_dim, num_heads, rope_type, coarsen)
     scale = float(index_weights_softmax_scale * index_weights_head_scale)
     compiled(
         positions,
@@ -81,9 +79,7 @@ def fused_indexer_q_rope_quant_fp8_cutedsl(
         IndexerQFp8Kernel.compile(head_dim, rope_dim, num_heads, rope_type, coarsen)
 
     coarsen = 1 if num_tokens < 512 else 4
-    compiled = IndexerQFp8Kernel.compile(
-        head_dim, rope_dim, num_heads, rope_type, coarsen
-    )
+    compiled = IndexerQFp8Kernel.compile(head_dim, rope_dim, num_heads, rope_type, coarsen)
     scale = float(index_weights_softmax_scale * index_weights_head_scale)
     # The cute kernel treats the FP8 buffer as raw bytes (Uint8).
     compiled(
@@ -202,12 +198,8 @@ class IndexerQRopeQuantKernel:
             # select 8 elems from cos and sin
             cos_id = sublane - self.nope_dim // 16
             sin_id = cos_id + self.rope_dim // 16
-            cos_src = cute.local_tile(
-                cos_sin_cache[pos, None], tiler=(8,), coord=(cos_id,)
-            )
-            sin_src = cute.local_tile(
-                cos_sin_cache[pos, None], tiler=(8,), coord=(sin_id,)
-            )
+            cos_src = cute.local_tile(cos_sin_cache[pos, None], tiler=(8,), coord=(cos_id,))
+            sin_src = cute.local_tile(cos_sin_cache[pos, None], tiler=(8,), coord=(sin_id,))
 
             cp_f32x8 = cute.make_copy_atom(cp_op, Float32, num_bits_per_copy=256)
             cp_u32x4 = cute.make_copy_atom(cp_op, Uint32, num_bits_per_copy=128)
@@ -334,9 +326,7 @@ class IndexerQMxFp4Kernel(IndexerQRopeQuantKernel):
                 eps = cutlass.const_expr(float.fromhex("0x6p-126"))
                 fp4_scale = cute_utils.fmax(amax, eps) * Float32(1.0 / 6.0)
                 bits = recast_val(fp4_scale, Uint32)
-                ue8m0 = cute_utils.shr_u32(
-                    bits + Uint32(0x7FFFFF), Uint32(23)
-                ) & Uint32(0xFF)
+                ue8m0 = cute_utils.shr_u32(bits + Uint32(0x7FFFFF), Uint32(23)) & Uint32(0xFF)
 
                 # Only one of the two threads in an MXFP4 block writes the shared scale.
                 if tid % 2 == 0:
@@ -368,9 +358,7 @@ class IndexerQMxFp4Kernel(IndexerQRopeQuantKernel):
         if global_tid < num_token_heads:
             weight_token_id = global_tid // self.num_heads
             weight_head_id = global_tid % self.num_heads
-            weights_out[weight_token_id, weight_head_id] = (
-                weights[weight_token_id, weight_head_id].to(Float32) * scale
-            )
+            weights_out[weight_token_id, weight_head_id] = weights[weight_token_id, weight_head_id].to(Float32) * scale
 
     @cache
     @staticmethod
@@ -384,9 +372,7 @@ class IndexerQMxFp4Kernel(IndexerQRopeQuantKernel):
         num_tokens = cute.sym_int()
         max_pos = cute.sym_int()
 
-        q = make_fake_tensor(
-            BFloat16, (num_tokens, num_heads, head_dim), divisibility=16
-        )
+        q = make_fake_tensor(BFloat16, (num_tokens, num_heads, head_dim), divisibility=16)
         positions = make_fake_tensor(Int64, (num_tokens,), divisibility=1)
         cos_sin_cache = make_fake_tensor(
             cos_sin_dtype,
@@ -406,9 +392,7 @@ class IndexerQMxFp4Kernel(IndexerQRopeQuantKernel):
         )
         weights_out = make_fake_tensor(Float32, (num_tokens, num_heads), divisibility=4)
 
-        kernel = IndexerQMxFp4Kernel(
-            head_dim, rope_dim, num_heads, cos_sin_dtype, coarsen
-        )
+        kernel = IndexerQMxFp4Kernel(head_dim, rope_dim, num_heads, cos_sin_dtype, coarsen)
         stream = cute.runtime.make_fake_stream(use_tvm_ffi_env_stream=True)
         return cute.compile(
             kernel,
@@ -524,9 +508,7 @@ class IndexerQFp8Kernel(IndexerQRopeQuantKernel):
             # mantissa bumps the exponent whenever s isn't a pure pow2.
             fp32_scale = cute_utils.fmax(amax, Float32(1e-4)) * Float32(1.0 / 448.0)
             bits = recast_val(fp32_scale, Uint32)
-            scale_exp = cute_utils.shr_u32(
-                bits + Uint32(0x7FFFFF), Uint32(23)
-            ) & Uint32(0xFF)
+            scale_exp = cute_utils.shr_u32(bits + Uint32(0x7FFFFF), Uint32(23)) & Uint32(0xFF)
 
             # rounded scale = 2^(scale_exp - 127); bit pattern is scale_exp << 23
             fp8_scale_bits = scale_exp << Uint32(23)
@@ -541,9 +523,7 @@ class IndexerQFp8Kernel(IndexerQRopeQuantKernel):
             # weight for head `head_start + i`.
             if in_bounds and sublane == i:
                 head_id = head_start + i
-                weights_out[token_id, head_id] = (
-                    weights[token_id, head_id].to(Float32) * scale * fp8_scale
-                )
+                weights_out[token_id, head_id] = weights[token_id, head_id].to(Float32) * scale * fp8_scale
 
             if in_bounds:
                 # 16 BF16 → 16 e4m3 bytes per thread, packed into 4 b32s
@@ -575,9 +555,7 @@ class IndexerQFp8Kernel(IndexerQRopeQuantKernel):
         num_tokens = cute.sym_int()
         max_pos = cute.sym_int()
 
-        q = make_fake_tensor(
-            BFloat16, (num_tokens, num_heads, head_dim), divisibility=16
-        )
+        q = make_fake_tensor(BFloat16, (num_tokens, num_heads, head_dim), divisibility=16)
         positions = make_fake_tensor(Int64, (num_tokens,), divisibility=1)
         cos_sin_cache = make_fake_tensor(
             cos_sin_dtype,
@@ -592,9 +570,7 @@ class IndexerQFp8Kernel(IndexerQRopeQuantKernel):
         )
         weights_out = make_fake_tensor(Float32, (num_tokens, num_heads), divisibility=4)
 
-        kernel = IndexerQFp8Kernel(
-            head_dim, rope_dim, num_heads, cos_sin_dtype, coarsen
-        )
+        kernel = IndexerQFp8Kernel(head_dim, rope_dim, num_heads, cos_sin_dtype, coarsen)
         stream = cute.runtime.make_fake_stream(use_tvm_ffi_env_stream=True)
         return cute.compile(
             kernel,

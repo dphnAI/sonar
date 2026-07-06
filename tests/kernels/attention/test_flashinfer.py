@@ -11,9 +11,7 @@ try:
     import flashinfer
 except ImportError:
     if current_platform.is_rocm():
-        pytest.skip(
-            "flashinfer is not supported for Aphrodite on ROCm.", allow_module_level=True
-        )
+        pytest.skip("flashinfer is not supported for Aphrodite on ROCm.", allow_module_level=True)
 
 import torch
 
@@ -65,11 +63,7 @@ def ref_paged_attn(
         mask = torch.triu(empty_mask, diagonal=kv_len - query_len + 1).bool()
         if sliding_window is not None:
             sliding_window_mask = (
-                torch.triu(
-                    empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1
-                )
-                .bool()
-                .logical_not()
+                torch.triu(empty_mask, diagonal=kv_len - (query_len + sliding_window) + 1).bool().logical_not()
             )
             mask |= sliding_window_mask
         if soft_cap is not None:
@@ -99,9 +93,7 @@ def _make_paged_kv_metadata(
     """
     num_seqs = len(kv_lens)
     max_blocks = (max(kv_lens) + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, num_blocks, (num_seqs, max_blocks), dtype=torch.int32, device="cuda"
-    )
+    block_tables = torch.randint(0, num_blocks, (num_seqs, max_blocks), dtype=torch.int32, device="cuda")
 
     indptr_list = [0]
     indices_list: list[int] = []
@@ -135,13 +127,9 @@ def _make_cg_decode_wrapper(
         workspace_buffer,
         "NHD",
         use_cuda_graph=True,
-        paged_kv_indptr_buffer=torch.zeros(
-            num_seqs + 1, dtype=torch.int32, device="cuda"
-        ),
+        paged_kv_indptr_buffer=torch.zeros(num_seqs + 1, dtype=torch.int32, device="cuda"),
         paged_kv_indices_buffer=kv_indices_buffer,
-        paged_kv_last_page_len_buffer=torch.zeros(
-            num_seqs, dtype=torch.int32, device="cuda"
-        ),
+        paged_kv_last_page_len_buffer=torch.zeros(num_seqs, dtype=torch.int32, device="cuda"),
         use_tensor_cores=use_tensor_cores,
     )
 
@@ -175,9 +163,7 @@ def test_fast_plan_decode_warmup_uses_full_plan(dtype: torch.dtype) -> None:
     num_query_heads, num_kv_heads = 8, 2
     head_size = 128
 
-    kv_indptr, kv_indices, kv_last_page_lens, _ = _make_paged_kv_metadata(
-        kv_lens, block_size, NUM_BLOCKS
-    )
+    kv_indptr, kv_indices, kv_last_page_lens, _ = _make_paged_kv_metadata(kv_lens, block_size, NUM_BLOCKS)
 
     workspace = torch.empty(128 * 1024 * 1024, dtype=torch.int8)
     wrapper = _make_cg_decode_wrapper(num_seqs, kv_indices.clone(), workspace)
@@ -232,19 +218,13 @@ def test_fast_plan_decode_matches_full_plan(
     num_query_heads, num_kv_heads = num_heads
 
     query = torch.randn(num_seqs, num_query_heads, head_size, dtype=dtype)
-    key_value_cache = torch.randn(
-        NUM_BLOCKS, 2, block_size, num_kv_heads, head_size, dtype=dtype
-    )
+    key_value_cache = torch.randn(NUM_BLOCKS, 2, block_size, num_kv_heads, head_size, dtype=dtype)
 
-    kv_indptr, kv_indices, kv_last_page_lens, _ = _make_paged_kv_metadata(
-        kv_lens, block_size, NUM_BLOCKS
-    )
+    kv_indptr, kv_indices, kv_last_page_lens, _ = _make_paged_kv_metadata(kv_lens, block_size, NUM_BLOCKS)
 
     # Reference output via the standard plan()
     workspace_ref = torch.empty(128 * 1024 * 1024, dtype=torch.int8)
-    ref_wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(
-        workspace_ref, "NHD", use_tensor_cores=True
-    )
+    ref_wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(workspace_ref, "NHD", use_tensor_cores=True)
     ref_wrapper.plan(
         kv_indptr,
         kv_indices,
@@ -315,16 +295,12 @@ def test_flashinfer_decode_with_paged_kv(
 
     query = torch.randn(num_seqs, num_query_heads, head_size, dtype=dtype)
 
-    key_value_cache = torch.randn(
-        NUM_BLOCKS, 2, block_size, num_kv_heads, head_size, dtype=dtype
-    )
+    key_value_cache = torch.randn(NUM_BLOCKS, 2, block_size, num_kv_heads, head_size, dtype=dtype)
     key_cache = key_value_cache[:, 0, :, :, :].squeeze(1)
     value_cache = key_value_cache[:, 1, :, :, :].squeeze(1)
 
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, NUM_BLOCKS, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, NUM_BLOCKS, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     kv_indptr = [0]
     kv_indices = []
@@ -345,9 +321,7 @@ def test_flashinfer_decode_with_paged_kv(
     kv_last_page_lens = torch.tensor(kv_last_page_lens, dtype=torch.int32)
 
     workspace_buffer = torch.empty(128 * 1024 * 1024, dtype=torch.int8)
-    wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(
-        workspace_buffer, "NHD", use_tensor_cores=True
-    )
+    wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(workspace_buffer, "NHD", use_tensor_cores=True)
     wrapper.plan(
         kv_indptr,
         kv_indices,
@@ -411,9 +385,7 @@ def test_flashinfer_prefill_with_paged_kv(
     scale = head_size**-0.5
 
     query = torch.randn(sum(query_lens), num_query_heads, head_size, dtype=dtype)
-    key_value_cache = torch.randn(
-        NUM_BLOCKS, 2, block_size, num_kv_heads, head_size, dtype=dtype
-    )
+    key_value_cache = torch.randn(NUM_BLOCKS, 2, block_size, num_kv_heads, head_size, dtype=dtype)
     key_cache = key_value_cache[:, 0, :, :, :].squeeze(1)
     value_cache = key_value_cache[:, 1, :, :, :].squeeze(1)
 
@@ -423,9 +395,7 @@ def test_flashinfer_prefill_with_paged_kv(
     value_cache /= head_size**0.5
 
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, NUM_BLOCKS, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, NUM_BLOCKS, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     qo_indptr = [0]
     kv_indptr = [0]
@@ -517,9 +487,7 @@ def test_flashinfer_prefill_with_paged_fp8_kv(
 
     query = torch.randn(sum(query_lens), num_query_heads, head_size, dtype=dtype)
     NUM_BLOCKS_FP8 = 2048
-    key_value_cache = torch.randn(
-        NUM_BLOCKS_FP8, 2, block_size, num_kv_heads, head_size, dtype=dtype
-    )
+    key_value_cache = torch.randn(NUM_BLOCKS_FP8, 2, block_size, num_kv_heads, head_size, dtype=dtype)
     key_cache, value_cache = torch.chunk(key_value_cache, 2, dim=1)
     key_cache /= head_size**0.5
     value_cache /= head_size**0.5
@@ -527,15 +495,11 @@ def test_flashinfer_prefill_with_paged_fp8_kv(
     k_scale = key_cache.amax().item() / 448.0
     v_scale = value_cache.amax().item() / 448.0
 
-    kv_cache_fp8 = torch.cat([key_cache / k_scale, value_cache / v_scale], dim=1).to(
-        kv_cache_dtype
-    )
+    kv_cache_fp8 = torch.cat([key_cache / k_scale, value_cache / v_scale], dim=1).to(kv_cache_dtype)
 
     assert kv_cache_fp8.shape == key_value_cache.shape
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, NUM_BLOCKS_FP8, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, NUM_BLOCKS_FP8, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     qo_indptr = [0]
     kv_indptr = [0]
@@ -625,9 +589,7 @@ def test_flashinfer_decode_with_paged_fp8_kv(
 
     query = torch.randn(num_seqs, num_query_heads, head_size, dtype=dtype)
     NUM_BLOCKS_FP8 = 2048
-    key_value_cache = torch.randn(
-        NUM_BLOCKS_FP8, 2, block_size, num_kv_heads, head_size, dtype=dtype
-    )
+    key_value_cache = torch.randn(NUM_BLOCKS_FP8, 2, block_size, num_kv_heads, head_size, dtype=dtype)
     key_cache, value_cache = torch.chunk(key_value_cache, 2, dim=1)
     key_cache /= head_size**0.5
     value_cache /= head_size**0.5
@@ -641,9 +603,7 @@ def test_flashinfer_decode_with_paged_fp8_kv(
     kv_cache_fp8 = torch.cat([key_cache_fp8, value_cache_fp8], dim=1)
 
     max_num_blocks_per_seq = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, NUM_BLOCKS_FP8, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, NUM_BLOCKS_FP8, (num_seqs, max_num_blocks_per_seq), dtype=torch.int32)
 
     kv_indptr = [0]
     kv_indices = []
@@ -664,9 +624,7 @@ def test_flashinfer_decode_with_paged_fp8_kv(
     kv_last_page_lens = torch.tensor(kv_last_page_lens, dtype=torch.int32)
 
     workspace_buffer = torch.empty(128 * 1024 * 1024, dtype=torch.int8)
-    wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(
-        workspace_buffer, "NHD", use_tensor_cores=use_tensor_cores
-    )
+    wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(workspace_buffer, "NHD", use_tensor_cores=use_tensor_cores)
     wrapper.plan(
         kv_indptr,
         kv_indices,

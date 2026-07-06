@@ -71,9 +71,7 @@ async def _generate(engine: AsyncLLM, prompt: str, max_tokens: int) -> int:
     )
     request_id = f"req-{id(prompt):x}-{max_tokens}"
     total = 0
-    async for out in engine.generate(
-        request_id=request_id, prompt=prompt, sampling_params=sampling_params
-    ):
+    async for out in engine.generate(request_id=request_id, prompt=prompt, sampling_params=sampling_params):
         total += len(out.outputs[0].token_ids)
     return total
 

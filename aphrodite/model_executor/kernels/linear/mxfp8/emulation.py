@@ -17,9 +17,7 @@ class EmulationMxfp8LinearKernel(Mxfp8LinearKernel):
     """Software emulation fallback for MXFP8 (dequant to BF16)."""
 
     @classmethod
-    def is_supported(
-        cls, compute_capability: int | None = None
-    ) -> tuple[bool, str | None]:
+    def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
         return True, None
 
     @classmethod
@@ -67,8 +65,7 @@ class EmulationMxfp8LinearKernel(Mxfp8LinearKernel):
         weight_scale = layer.weight_scale
         if weight_scale.dtype != MXFP8_SCALE_DTYPE:
             raise ValueError(
-                f"Emulation backend requires {MXFP8_SCALE_DTYPE} "
-                f"weight_scale dtype, got {weight_scale.dtype}."
+                f"Emulation backend requires {MXFP8_SCALE_DTYPE} weight_scale dtype, got {weight_scale.dtype}."
             )
         if weight_scale.ndim != 2:
             raise ValueError(

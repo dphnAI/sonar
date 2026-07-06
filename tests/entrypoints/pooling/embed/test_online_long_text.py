@@ -14,9 +14,9 @@ import openai
 import pytest
 import pytest_asyncio
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.embed.protocol import EmbeddingResponse
 from aphrodite.platforms import current_platform
+from tests.utils import RemoteOpenAIServer
 
 
 def _generate_random_text(word_count: int) -> str:
@@ -215,10 +215,7 @@ def server_with_chunked_processing():
         "--max-model-len",
         "512",  # Set smaller max_model_len to trigger chunking mechanism
         "--pooler-config",
-        (
-            '{"pooling_type": "MEAN", "use_activation": true, '
-            '"enable_chunked_processing": true, "max_embed_len": 10000}'
-        ),
+        ('{"pooling_type": "MEAN", "use_activation": true, "enable_chunked_processing": true, "max_embed_len": 10000}'),
         "--gpu-memory-utilization",
         "0.8",
     ]
@@ -240,9 +237,7 @@ async def client_with_chunked_processing(server_with_chunked_processing):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_long_text_embedding_1500_chars(
-    client_with_chunked_processing: openai.AsyncOpenAI, model_name: str
-):
+async def test_long_text_embedding_1500_chars(client_with_chunked_processing: openai.AsyncOpenAI, model_name: str):
     """Test embedding processing for ~1500 character long text
     (~1028 tokens, exceeding 512 token limit)."""
 
@@ -259,15 +254,11 @@ async def test_long_text_embedding_1500_chars(
     )
 
     # Verify response structure
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
-    assert (
-        len(embeddings.data[0].embedding) == 384
-    )  # multilingual-e5-small embedding dimension
+    assert len(embeddings.data[0].embedding) == 384  # multilingual-e5-small embedding dimension
     assert embeddings.usage.completion_tokens == 0
     # Due to chunked processing, token count should
     # reflect actual processed tokens
@@ -279,19 +270,13 @@ async def test_long_text_embedding_1500_chars(
 
     # Verify embedding vector validity
     embedding_vector = embeddings.data[0].embedding
-    assert all(isinstance(x, float) for x in embedding_vector), (
-        "Embedding vector should contain floats"
-    )
-    assert not all(x == 0 for x in embedding_vector), (
-        "Embedding vector should not be all zeros"
-    )
+    assert all(isinstance(x, float) for x in embedding_vector), "Embedding vector should contain floats"
+    assert not all(x == 0 for x in embedding_vector), "Embedding vector should not be all zeros"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_long_text_embedding_2500_chars(
-    client_with_chunked_processing: openai.AsyncOpenAI, model_name: str
-):
+async def test_long_text_embedding_2500_chars(client_with_chunked_processing: openai.AsyncOpenAI, model_name: str):
     """Test embedding processing for ~2500 character long text
     (~2048 tokens, requiring multiple chunks)."""
 
@@ -308,15 +293,11 @@ async def test_long_text_embedding_2500_chars(
     )
 
     # Verify response structure
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
-    assert (
-        len(embeddings.data[0].embedding) == 384
-    )  # multilingual-e5-small embedding dimension
+    assert len(embeddings.data[0].embedding) == 384  # multilingual-e5-small embedding dimension
     assert embeddings.usage.completion_tokens == 0
     # Due to chunked processing, token count should
     # reflect actual processed tokens
@@ -328,19 +309,13 @@ async def test_long_text_embedding_2500_chars(
 
     # Verify embedding vector validity
     embedding_vector = embeddings.data[0].embedding
-    assert all(isinstance(x, float) for x in embedding_vector), (
-        "Embedding vector should contain floats"
-    )
-    assert not all(x == 0 for x in embedding_vector), (
-        "Embedding vector should not be all zeros"
-    )
+    assert all(isinstance(x, float) for x in embedding_vector), "Embedding vector should contain floats"
+    assert not all(x == 0 for x in embedding_vector), "Embedding vector should not be all zeros"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_batch_long_text_embedding(
-    client_with_chunked_processing: openai.AsyncOpenAI, model_name: str
-):
+async def test_batch_long_text_embedding(client_with_chunked_processing: openai.AsyncOpenAI, model_name: str):
     """Test batch long text embedding processing."""
 
     input_texts = [
@@ -357,9 +332,7 @@ async def test_batch_long_text_embedding(
     )
 
     # Verify response structure
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 3  # Three input texts
@@ -383,16 +356,13 @@ async def test_batch_long_text_embedding(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_chunked_vs_normal_consistency(
-    client_with_chunked_processing: openai.AsyncOpenAI, model_name: str
-):
+async def test_chunked_vs_normal_consistency(client_with_chunked_processing: openai.AsyncOpenAI, model_name: str):
     """Test consistency between chunked and
     normal processing (using short text)."""
 
     # Use a short text within the 512 token limit
     short_text = (
-        "Artificial intelligence technology is changing our world, "
-        "bringing unprecedented opportunities and challenges."
+        "Artificial intelligence technology is changing our world, bringing unprecedented opportunities and challenges."
     )
 
     # Send embedding request
@@ -403,9 +373,7 @@ async def test_chunked_vs_normal_consistency(
     )
 
     # Verify response structure
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
@@ -423,9 +391,7 @@ async def test_chunked_vs_normal_consistency(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
-async def test_chunked_processing_response_format(
-    client_with_chunked_processing: openai.AsyncOpenAI, model_name: str
-):
+async def test_chunked_processing_response_format(client_with_chunked_processing: openai.AsyncOpenAI, model_name: str):
     """Test response format and structure during chunked processing."""
 
     # Test with long text to trigger chunking
@@ -436,9 +402,7 @@ async def test_chunked_processing_response_format(
     )
 
     # Verify response structure
-    embeddings = EmbeddingResponse.model_validate(
-        embedding_response.model_dump(mode="json")
-    )
+    embeddings = EmbeddingResponse.model_validate(embedding_response.model_dump(mode="json"))
 
     assert embeddings.id is not None
     assert len(embeddings.data) == 1
@@ -452,6 +416,4 @@ async def test_chunked_processing_response_format(
     vector_norm = math.sqrt(sum(x * x for x in embedding_vector))
     # Check that the vector is normalized
     # (default behavior for most embedding models)
-    assert 0.8 < vector_norm < 1.2, (
-        f"Vector norm should be reasonable, actual: {vector_norm}"
-    )
+    assert 0.8 < vector_norm < 1.2, f"Vector norm should be reasonable, actual: {vector_norm}"

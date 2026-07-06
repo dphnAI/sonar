@@ -28,9 +28,7 @@ class QuantizeMethodBase(ABC):
     """
 
     @abstractmethod
-    def create_weights(
-        self, layer: torch.nn.Module, *weight_args, **extra_weight_attrs
-    ):
+    def create_weights(self, layer: torch.nn.Module, *weight_args, **extra_weight_attrs):
         """Create weights for a layer.
 
         The weights will be set as attributes of the layer."""
@@ -164,9 +162,7 @@ class QuantizationConfig(ABC):
         for key in keys:
             if key in config:
                 return config[key]
-        raise ValueError(
-            f"Cannot find any of {keys} in the model's quantization config."
-        )
+        raise ValueError(f"Cannot find any of {keys} in the model's quantization config.")
 
     @staticmethod
     def get_from_keys_or(config: dict[str, Any], keys: list[str], default: Any) -> Any:
@@ -177,9 +173,7 @@ class QuantizationConfig(ABC):
             return default
 
     @abstractmethod
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> QuantizeMethodBase | None:
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> QuantizeMethodBase | None:
         """Get the quantize method to use for the quantized layer.
 
         Args:
@@ -205,21 +199,15 @@ class QuantizationConfig(ABC):
             # Deprecated fused kv_scale -> attn.k_scale
             re.compile(r"\.kv_scale$"): r".attn.k_scale",
             # ModelOpt: .self_attn.{k,v}_proj.{k,v}_scale -> .self_attn.attn.*
-            re.compile(r"\.self_attn\.[kv]_proj\.([kv])_scale$"): (
-                r".self_attn.attn.\1_scale"
-            ),
+            re.compile(r"\.self_attn\.[kv]_proj\.([kv])_scale$"): (r".self_attn.attn.\1_scale"),
             # Fused QKV / qkqkv proj: .self_attn.qk(qk)v_proj.{k,v}_scale -> attn
-            re.compile(r"\.self_attn\.qk(?:qk)?v_proj\.([kv])_scale$"): (
-                r".self_attn.attn.\1_scale"
-            ),
+            re.compile(r"\.self_attn\.qk(?:qk)?v_proj\.([kv])_scale$"): (r".self_attn.attn.\1_scale"),
             # NemotronH: .mixer.{k,v}_proj.{k,v}_scale -> .mixer.attn.*
             re.compile(r"\.mixer\.[kv]_proj\.([kv])_scale$"): r".mixer.attn.\1_scale",
             # HYV3: .self_attn.q.scale -> .self_attn.attn.q_scale
             re.compile(r"\.self_attn\.q\.scale$"): r".self_attn.attn.q_scale",
             # HYV3: .self_attn.{k,v}_cache.scale -> .self_attn.attn.{k,v}_scale
-            re.compile(r"\.self_attn\.([kv])_cache\.scale$"): (
-                r".self_attn.attn.\1_scale"
-            ),
+            re.compile(r"\.self_attn\.([kv])_cache\.scale$"): (r".self_attn.attn.\1_scale"),
             # Default: .{q,k,v}_scale -> .attn.{q,k,v}_scale (unless already .attn)
             re.compile(r"(?<!\.attn)\.([qkv])_scale$"): r".attn.\1_scale",
             re.compile(r"(?<!\.attn)\.([qkv])_zero_point$"): r".attn.\1_zero_point",

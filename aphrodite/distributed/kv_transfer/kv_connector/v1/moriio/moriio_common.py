@@ -13,7 +13,7 @@ import regex as re
 import torch
 import zmq
 
-from aphrodite.config import KVTransferConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, KVTransferConfig
 from aphrodite.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
 )
@@ -177,9 +177,10 @@ class TransferError(MoRIIOError):
 
 
 def get_moriio_mode(kv_transfer_config: KVTransferConfig) -> MoRIIOMode:
-    read_mode = str(
-        kv_transfer_config.kv_connector_extra_config.get("read_mode", "false")
-    ).lower().strip() in ("true", "1")
+    read_mode = str(kv_transfer_config.kv_connector_extra_config.get("read_mode", "false")).lower().strip() in (
+        "true",
+        "1",
+    )
     logger.debug("MoRIIO Connector read_mode: %s", read_mode)
     if read_mode:
         return MoRIIOMode.READ
@@ -273,9 +274,7 @@ class MoRIIOConfig:
 
         # TODO : merge notify_port and handshake_port to simplify port management
         #        supports non-contiguous ports
-        assert aphrodite_config.kv_transfer_config is not None, (
-            "kv_transfer_config must be set for MoRIIOConnector"
-        )
+        assert aphrodite_config.kv_transfer_config is not None, "kv_transfer_config must be set for MoRIIOConnector"
         _warn_deprecated_env_vars()
         kv_transfer_config = aphrodite_config.kv_transfer_config
         extra_config = kv_transfer_config.kv_connector_extra_config
@@ -288,18 +287,11 @@ class MoRIIOConfig:
         backend = str(extra_config.get("backend", "rdma")).lower()
         if backend not in ("rdma", "xgmi"):
             raise ValueError(
-                f"Invalid MoRIIO backend {backend!r} in kv_connector_extra_config; "
-                "must be one of 'rdma' or 'xgmi'."
+                f"Invalid MoRIIO backend {backend!r} in kv_connector_extra_config; must be one of 'rdma' or 'xgmi'."
             )
 
-        transfer_timeout = float(
-            extra_config.get(
-                "transfer_timeout", MoRIIOConstants.DEFAULT_TRANSFER_TIMEOUT
-            )
-        )
-        defer_timeout = float(
-            extra_config.get("defer_timeout", MoRIIOConstants.DEFAULT_DEFER_TIMEOUT)
-        )
+        transfer_timeout = float(extra_config.get("transfer_timeout", MoRIIOConstants.DEFAULT_TRANSFER_TIMEOUT))
+        defer_timeout = float(extra_config.get("defer_timeout", MoRIIOConstants.DEFAULT_DEFER_TIMEOUT))
 
         return cls(
             local_ip=resolve_host_ip(extra_config),
@@ -385,8 +377,7 @@ def parse_moriio_zmq_address(
         notify_port = int(parts["notify"])
     except (KeyError, ValueError) as e:
         raise ValueError(
-            f"Malformed zmq_address {zmq_address!r}: expected "
-            f"'host:IP,handshake:PORT,notify:PORT' format"
+            f"Malformed zmq_address {zmq_address!r}: expected 'host:IP,handshake:PORT,notify:PORT' format"
         ) from e
     return host, handshake_port, notify_port
 
@@ -402,9 +393,7 @@ def get_peer_zmq_from_request_id(request_id: str, is_producer: bool) -> str:
     else:
         m = _PREFILL_ZMQ_RE.search(request_id)
     if m is None:
-        raise ValueError(
-            f"Cannot parse peer zmq_address from request_id: {request_id!r}"
-        )
+        raise ValueError(f"Cannot parse peer zmq_address from request_id: {request_id!r}")
     return m.group(1)
 
 
@@ -451,18 +440,12 @@ class MoRIIOConnectorMetadata(KVConnectorMetadata):
         remote_host = kv_transfer_params.get("remote_host")
         remote_handshake_port = kv_transfer_params.get("remote_handshake_port")
         remote_notify_port = kv_transfer_params.get("remote_notify_port")
-        if (
-            remote_host is None
-            or remote_handshake_port is None
-            or remote_notify_port is None
-        ):
+        if remote_host is None or remote_handshake_port is None or remote_notify_port is None:
             # Parse host/ports from the request_id. The router embeds both
             # zmq_addresses in PD request IDs, but WRITE decode requests may carry
             # a plain request ID and get the remote address via kv_transfer_params.
             peer_zmq = get_peer_zmq_from_request_id(request_id, is_producer=write_mode)
-            remote_host, remote_handshake_port, remote_notify_port = (
-                parse_moriio_zmq_address(peer_zmq)
-            )
+            remote_host, remote_handshake_port, remote_notify_port = parse_moriio_zmq_address(peer_zmq)
 
         _req = ReqMeta(
             transfer_id=transfer_id,
@@ -492,9 +475,7 @@ def zmq_ctx(socket_type: Any, addr: str) -> Iterator[zmq.Socket]:
     ctx: zmq.Context | None = None
     try:
         ctx = zmq.Context()  # type: ignore[attr-defined]
-        yield make_zmq_socket(
-            ctx=ctx, path=addr, socket_type=socket_type, bind=socket_type == zmq.ROUTER
-        )
+        yield make_zmq_socket(ctx=ctx, path=addr, socket_type=socket_type, bind=socket_type == zmq.ROUTER)
     finally:
         if ctx is not None:
             ctx.destroy(linger=0)

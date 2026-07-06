@@ -146,9 +146,7 @@ class CPUExpertsFp8(mk.FusedMoEExpertsMonolithic):
             topk_group=topk_group,
             num_expert_group=num_expert_group,
             scoring_func="softmax",
-            routed_scaling_factor=(
-                routed_scaling_factor if routed_scaling_factor is not None else 1.0
-            ),
+            routed_scaling_factor=(routed_scaling_factor if routed_scaling_factor is not None else 1.0),
             e_score_correction_bias=e_score_correction_bias,
         )
 
@@ -304,9 +302,7 @@ class CPUExpertsMxfp4(mk.FusedMoEExpertsMonolithic):
             topk_group=topk_group,
             num_expert_group=num_expert_group,
             scoring_func="softmax",
-            routed_scaling_factor=(
-                routed_scaling_factor if routed_scaling_factor is not None else 1.0
-            ),
+            routed_scaling_factor=(routed_scaling_factor if routed_scaling_factor is not None else 1.0),
             e_score_correction_bias=e_score_correction_bias,
         )
 
@@ -350,9 +346,7 @@ def prepare_int4_moe_layer_for_cpu(
     quant_algo: CPUQuantAlgo = CPUQuantAlgo.GPTQ,
     w13_zeros: torch.Tensor | None = None,
     w2_zeros: torch.Tensor | None = None,
-) -> tuple[
-    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Repack INT4 MoE weights via convert_weight_packed_scale_zp for CPU.
 
     Args:
@@ -394,12 +388,8 @@ def prepare_int4_moe_layer_for_cpu(
             dtype=torch.int32,
         )
 
-    blocked_w13, blocked_z13, blocked_s13 = convert_weight_packed_scale_zp(
-        w13_packed, w13_zeros, w13_scale, quant_algo
-    )
-    blocked_w2, blocked_z2, blocked_s2 = convert_weight_packed_scale_zp(
-        w2_packed, w2_zeros, w2_scale, quant_algo
-    )
+    blocked_w13, blocked_z13, blocked_s13 = convert_weight_packed_scale_zp(w13_packed, w13_zeros, w13_scale, quant_algo)
+    blocked_w2, blocked_z2, blocked_s2 = convert_weight_packed_scale_zp(w2_packed, w2_zeros, w2_scale, quant_algo)
     return (blocked_w13, blocked_w2, blocked_s13, blocked_s2, blocked_z13, blocked_z2)
 
 
@@ -498,10 +488,7 @@ class CPUExpertsInt4(mk.FusedMoEExpertsMonolithic):
         topk_group: int | None = None,
     ) -> torch.Tensor:
         if apply_router_weight_on_input:
-            raise NotImplementedError(
-                "CPUExpertsInt4 (W4A16) does not support "
-                "apply_router_weight_on_input=True. "
-            )
+            raise NotImplementedError("CPUExpertsInt4 (W4A16) does not support apply_router_weight_on_input=True. ")
 
         from aphrodite.model_executor.layers.fused_moe.cpu_fused_moe import (
             select_experts,
@@ -520,9 +507,7 @@ class CPUExpertsInt4(mk.FusedMoEExpertsMonolithic):
             topk_group=topk_group,
             num_expert_group=num_expert_group,
             scoring_func="softmax",
-            routed_scaling_factor=(
-                routed_scaling_factor if routed_scaling_factor is not None else 1.0
-            ),
+            routed_scaling_factor=(routed_scaling_factor if routed_scaling_factor is not None else 1.0),
             e_score_correction_bias=e_score_correction_bias,
         )
 
@@ -676,9 +661,7 @@ class CPUExpertsInt8(mk.FusedMoEExpertsMonolithic):
             topk_group=topk_group,
             num_expert_group=num_expert_group,
             scoring_func="softmax",
-            routed_scaling_factor=(
-                routed_scaling_factor if routed_scaling_factor is not None else 1.0
-            ),
+            routed_scaling_factor=(routed_scaling_factor if routed_scaling_factor is not None else 1.0),
             e_score_correction_bias=e_score_correction_bias,
         )
 

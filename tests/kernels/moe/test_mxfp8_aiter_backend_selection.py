@@ -18,7 +18,6 @@ from aphrodite.platforms import current_platform
 if not current_platform.is_rocm():
     pytest.skip("This test can only run on ROCm.", allow_module_level=True)
 
-from tests.kernels.moe.utils import make_dummy_moe_config  # noqa: E402
 from aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe import (  # noqa: E402
     AiterMxfp8Experts,
 )
@@ -38,6 +37,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (  # 
     kMxfp8Dynamic,
     kMxfp8Static,
 )
+from tests.kernels.moe.utils import make_dummy_moe_config  # noqa: E402
 
 _AITER_MOD = "aphrodite.model_executor.layers.fused_moe.experts.aiter_mxfp8_moe"
 
@@ -47,9 +47,7 @@ def _config(ep_size: int = 1):
     if ep_size != 1:
         cfg = dataclasses.replace(
             cfg,
-            moe_parallel_config=dataclasses.replace(
-                cfg.moe_parallel_config, ep_size=ep_size, use_ep=True
-            ),
+            moe_parallel_config=dataclasses.replace(cfg.moe_parallel_config, ep_size=ep_size, use_ep=True),
         )
     return cfg
 
@@ -71,9 +69,7 @@ def test_aiter_mxfp8_registered():
     """The FlyDSL backend is auto-selectable and reachable via --moe-backend aiter."""
     assert Fp8MoeBackend.AITER_MXFP8 in _SUPPORTED_BACKENDS
     assert _BACKEND_NAME_MAP["aiter"] is Fp8MoeBackend.AITER_MXFP8
-    assert _mxfp8_backend_to_kernel_cls(Fp8MoeBackend.AITER_MXFP8) == [
-        AiterMxfp8Experts
-    ]
+    assert _mxfp8_backend_to_kernel_cls(Fp8MoeBackend.AITER_MXFP8) == [AiterMxfp8Experts]
 
 
 def test_triton_selectable():
@@ -85,12 +81,7 @@ def test_triton_selectable():
 @pytest.mark.parametrize("ep_size", [1, 2])
 def test_ep_supported(ep_size):
     """FlyDSL accepts both TP and EP: apply() forwards expert_map as expert_mask."""
-    assert (
-        AiterMxfp8Experts._supports_parallel_config(
-            _config(ep_size).moe_parallel_config
-        )
-        is True
-    )
+    assert AiterMxfp8Experts._supports_parallel_config(_config(ep_size).moe_parallel_config) is True
 
 
 @pytest.mark.parametrize(
@@ -119,14 +110,8 @@ def test_explicit_moe_backend_aiter():
     """--moe-backend aiter: returns FlyDSL when usable (TP or EP), else a clear
     ValueError when the flydsl package is missing."""
     with _gfx950(), _flydsl_installed(True):
-        assert (
-            _select_kernel_cls(Fp8MoeBackend.AITER_MXFP8, _config(1))
-            is AiterMxfp8Experts
-        )
-        assert (
-            _select_kernel_cls(Fp8MoeBackend.AITER_MXFP8, _config(2))
-            is AiterMxfp8Experts
-        )
+        assert _select_kernel_cls(Fp8MoeBackend.AITER_MXFP8, _config(1)) is AiterMxfp8Experts
+        assert _select_kernel_cls(Fp8MoeBackend.AITER_MXFP8, _config(2)) is AiterMxfp8Experts
     with (
         _gfx950(),
         _flydsl_installed(False),

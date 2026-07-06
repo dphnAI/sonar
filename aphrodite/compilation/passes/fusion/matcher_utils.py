@@ -148,16 +148,14 @@ class MatcherRotaryEmbedding(MatcherCustomOp):
         key: torch.Tensor | None,
         cos_sin_cache: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        result: tuple[torch.Tensor, torch.Tensor | None] = (
-            RotaryEmbedding.forward_static(
-                positions,
-                query,
-                key,
-                self.head_size,
-                self.rotary_dim,
-                cos_sin_cache,
-                self.is_neox,
-            )
+        result: tuple[torch.Tensor, torch.Tensor | None] = RotaryEmbedding.forward_static(
+            positions,
+            query,
+            key,
+            self.head_size,
+            self.rotary_dim,
+            cos_sin_cache,
+            self.is_neox,
         )
         return result
 
@@ -270,16 +268,14 @@ class MatcherDeepseekScalingRotaryEmbedding(MatcherCustomOp):
                 self.is_neox,
             )
             return query, key
-        result: tuple[torch.Tensor, torch.Tensor | None] = (
-            DeepseekScalingRotaryEmbedding.forward_static(
-                positions,
-                query,
-                key,
-                self.head_size,
-                self.rotary_dim,
-                cos_sin_cache,
-                self.is_neox,
-            )
+        result: tuple[torch.Tensor, torch.Tensor | None] = DeepseekScalingRotaryEmbedding.forward_static(
+            positions,
+            query,
+            key,
+            self.head_size,
+            self.rotary_dim,
+            cos_sin_cache,
+            self.is_neox,
         )
         return result
 
@@ -290,16 +286,14 @@ class MatcherDeepseekScalingRotaryEmbedding(MatcherCustomOp):
         key: torch.Tensor | None,
         cos_sin_cache: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        result: tuple[torch.Tensor, torch.Tensor | None] = (
-            DeepseekScalingRotaryEmbedding.forward_static(
-                positions,
-                query,
-                key,
-                self.head_size,
-                self.rotary_dim,
-                cos_sin_cache,
-                self.is_neox,
-            )
+        result: tuple[torch.Tensor, torch.Tensor | None] = DeepseekScalingRotaryEmbedding.forward_static(
+            positions,
+            query,
+            key,
+            self.head_size,
+            self.rotary_dim,
+            cos_sin_cache,
+            self.is_neox,
         )
         return result
 
@@ -332,20 +326,15 @@ class MatcherQuantFP8(MatcherCustomOp):
                 self.QUANT_OP = rocm_aiter_ops.get_per_token_quant_op()
             else:
                 assert quant_key.scale.group_shape.col == 128, (
-                    "ROCm aiter fusion pass currently supports "
-                    "quantization operation with group_size 128"
+                    "ROCm aiter fusion pass currently supports quantization operation with group_size 128"
                 )
                 self.QUANT_OP = rocm_aiter_ops.get_group_quant_op()
 
         else:
-            assert quant_key in QUANT_OPS, (
-                f"unsupported quantization scheme {quant_key}"
-            )
+            assert quant_key in QUANT_OPS, f"unsupported quantization scheme {quant_key}"
             self.QUANT_OP = QUANT_OPS[quant_key]
 
-            assert quant_key.dtype == current_platform.fp8_dtype(), (
-                "Only QuantFP8 supported by"
-            )
+            assert quant_key.dtype == current_platform.fp8_dtype(), "Only QuantFP8 supported by"
             assert quant_key.scale2 is None
 
         self.quant_fp8 = QuantFP8(
@@ -380,9 +369,7 @@ class MatcherQuantFP8(MatcherCustomOp):
         if self.match_rocm_aiter:
             return self.forward_rocm_aiter(input, scale)
 
-        result = torch.empty(
-            input.shape, device=input.device, dtype=self.quant_key.dtype
-        )
+        result = torch.empty(input.shape, device=input.device, dtype=self.quant_key.dtype)
 
         if self.quant_key.scale.group_shape.is_per_group():
             # for tma_aligned, the scale must be passed to forward_custom
@@ -412,9 +399,7 @@ class MatcherQuantFP8(MatcherCustomOp):
 
         if self.quant_key.scale.static:
             assert scale is not None
-            _, result = auto_functionalized(
-                self.QUANT_OP, result=result, input=input, scale=scale
-            )
+            _, result = auto_functionalized(self.QUANT_OP, result=result, input=input, scale=scale)
             return result, scale
         else:
             assert scale is None
@@ -432,18 +417,14 @@ class MatcherQuantFP8(MatcherCustomOp):
         return self.quant_fp8(input, scale)  # type: ignore[no-any-return]
 
     def make_scale(self, input: torch.Tensor, transposed: bool = False) -> torch.Tensor:
-        normalized_group_shape = _normalize_quant_group_shape(
-            input, self.quant_key.scale.group_shape
-        )
+        normalized_group_shape = _normalize_quant_group_shape(input, self.quant_key.scale.group_shape)
         scale_shape = (
             input.shape[0] // normalized_group_shape[0],
             input.shape[1] // normalized_group_shape[1],
         )
         if transposed:
             scale_shape = tuple(reversed(scale_shape))
-            return torch.empty(
-                scale_shape, device=input.device, dtype=torch.float32
-            ).permute(-1, -2)
+            return torch.empty(scale_shape, device=input.device, dtype=torch.float32).permute(-1, -2)
 
         return torch.empty(scale_shape, device=input.device, dtype=torch.float32)
 

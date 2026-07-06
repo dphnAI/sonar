@@ -37,9 +37,7 @@ def awq_dequantize_kernel(
     # Compute offsets and masks for result output ptr.
     result_offsets_y = pid_y * BLOCK_SIZE_Y + tl.arange(0, BLOCK_SIZE_Y)
     result_offsets_x = pid_x * BLOCK_SIZE_X * 8 + tl.arange(0, BLOCK_SIZE_X * 8)
-    result_offsets = (
-        8 * num_cols * result_offsets_y[:, None] + result_offsets_x[None, :]
-    )
+    result_offsets = 8 * num_cols * result_offsets_y[:, None] + result_offsets_x[None, :]
 
     result_masks_y = result_offsets_y < num_rows
     result_masks_x = result_offsets_x < num_cols * 8
@@ -53,9 +51,7 @@ def awq_dequantize_kernel(
 
     # Create reverse AWQ order as tensor: [0, 4, 1, 5, 2, 6, 3, 7]
     # that will map given indices to the correct order.
-    reverse_awq_order_tensor = (
-        (tl.arange(0, 2) * 4)[None, :] + tl.arange(0, 4)[:, None]
-    ).reshape(8)
+    reverse_awq_order_tensor = ((tl.arange(0, 2) * 4)[None, :] + tl.arange(0, 4)[:, None]).reshape(8)
 
     # Use this to compute a set of shifts that can be used to unpack and
     # reorder the values in iweights and zeros.
@@ -143,9 +139,7 @@ def awq_gemm_kernel(
 
     # Create reverse AWQ order as tensor: [0, 4, 1, 5, 2, 6, 3, 7]
     # that will map given indices to the correct order.
-    reverse_awq_order_tensor = (
-        (tl.arange(0, 2) * 4)[None, :] + tl.arange(0, 4)[:, None]
-    ).reshape(8)
+    reverse_awq_order_tensor = ((tl.arange(0, 2) * 4)[None, :] + tl.arange(0, 4)[:, None]).reshape(8)
 
     # Create the necessary shifts to use to unpack.
     shifts = reverse_awq_order_tensor * 4
@@ -187,9 +181,7 @@ def awq_gemm_kernel(
         b = tl.interleave(b, b)
 
         # Dequantize b.
-        offsets_szk = (
-            BLOCK_SIZE_K * SPLIT_K * k + pid_z * BLOCK_SIZE_K
-        ) // group_size + tl.arange(0, 1)
+        offsets_szk = (BLOCK_SIZE_K * SPLIT_K * k + pid_z * BLOCK_SIZE_K) // group_size + tl.arange(0, 1)
         offsets_z = (N // 8) * offsets_szk[:, None] + offsets_zn[None, :]
         masks_zk = offsets_szk < K // group_size
         masks_z = masks_zk[:, None] & masks_zn[None, :]

@@ -51,9 +51,7 @@ class GateLinear(ReplicatedLinear):
     ):
         is_hopper = current_platform.is_device_capability((9, 0))
         is_blackwell = current_platform.is_device_capability_family(100)
-        can_use_specialized_kernels = (
-            current_platform.is_cuda() and (is_hopper or is_blackwell) and not bias
-        )
+        can_use_specialized_kernels = current_platform.is_cuda() and (is_hopper or is_blackwell) and not bias
 
         # If fp32 compute is required and no specialized kernel is available,
         # store weights in fp32 so the fallback linear path computes in fp32.
@@ -89,9 +87,7 @@ class GateLinear(ReplicatedLinear):
         # enable this tier when the op is actually registered. Otherwise we
         # fall through to the F.linear fp32 path (Tier 4), which computes in
         # fp32 as well.
-        fp32_router_gemm_available = hasattr(torch.ops, "_C") and hasattr(
-            torch.ops._C, "fp32_router_gemm"
-        )
+        fp32_router_gemm_available = hasattr(torch.ops, "_C") and hasattr(torch.ops._C, "fp32_router_gemm")
         self.allow_fp32_router_gemm = (
             not bias
             and self.weight.dtype == torch.float32
@@ -118,16 +114,10 @@ class GateLinear(ReplicatedLinear):
             raise ValueError("out_dtype has already been set")
         self.out_dtype = out_dtype
 
-        if (
-            not self.allow_cublas_router_gemm
-            and self.allow_specialized_router_gemm
-            and out_dtype == torch.float32
-        ):
+        if not self.allow_cublas_router_gemm and self.allow_specialized_router_gemm and out_dtype == torch.float32:
             self.allow_cublas_router_gemm = self.weight.dtype == torch.bfloat16
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> torch.Tensor | tuple[torch.Tensor, Parameter | None]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor | tuple[torch.Tensor, Parameter | None]:
         # Tier 1: DSV3 specialized kernel
         if self.allow_dsv3_router_gemm and x.shape[0] <= self._dsv3_max_batch:
             output = ops.dsv3_router_gemm(
@@ -164,9 +154,7 @@ class GateLinear(ReplicatedLinear):
 _FP32_ROUTER_GEMM_MAX_TOKENS = GateLinear.FP32_MAX_TOKENS
 
 
-def fp32_router_gemm_dispatch_impl(
-    x: torch.Tensor, weight: torch.Tensor
-) -> torch.Tensor:
+def fp32_router_gemm_dispatch_impl(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     """
     Dynamically run fp32 specialized gemm if num_tokens <= FP32_MAX_TOKENS,
     otherwise fall back to F.linear.
@@ -179,9 +167,7 @@ def fp32_router_gemm_dispatch_impl(
         return torch.nn.functional.linear(x.float(), weight)
 
 
-def fp32_router_gemm_dispatch_fake(
-    x: torch.Tensor, weight: torch.Tensor
-) -> torch.Tensor:
+def fp32_router_gemm_dispatch_fake(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     return x.new_empty((x.shape[0], weight.shape[0]), dtype=torch.float32)
 
 

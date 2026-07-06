@@ -131,9 +131,7 @@ class _AphroditeLogger(Logger):
             return
         _print_info_once(self, msg, *args)
 
-    def warning_once(
-        self, msg: str, *args: Hashable, scope: LogScope = "local"
-    ) -> None:
+    def warning_once(self, msg: str, *args: Hashable, scope: LogScope = "local") -> None:
         """
         As [`warning`][logging.Logger.warning], but subsequent calls with
         the same message are silently dropped.

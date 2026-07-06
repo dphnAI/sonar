@@ -38,10 +38,7 @@ async def _convert_stream_to_sse_events(
     async for event in generator:
         event_type = getattr(event, "type", "unknown")
         # https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format
-        event_data = (
-            f"event: {event_type}\ndata: "
-            f"{event.model_dump_json(indent=None, by_alias=True)}\n\n"
-        )
+        event_data = f"event: {event_type}\ndata: {event.model_dump_json(indent=None, by_alias=True)}\n\n"
         yield event_data
 
 
@@ -72,9 +69,7 @@ async def create_responses(request: ResponsesRequest, raw_request: Request):
     elif isinstance(generator, ResponsesResponse):
         return JSONResponse(content=generator.model_dump(mode="json", by_alias=True))
 
-    return StreamingResponse(
-        content=_convert_stream_to_sse_events(generator), media_type="text/event-stream"
-    )
+    return StreamingResponse(content=_convert_stream_to_sse_events(generator), media_type="text/event-stream")
 
 
 @router.get("/v1/responses/{response_id}")
@@ -102,9 +97,7 @@ async def retrieve_responses(
         )
     elif isinstance(response, ResponsesResponse):
         return JSONResponse(content=response.model_dump(mode="json", by_alias=True))
-    return StreamingResponse(
-        content=_convert_stream_to_sse_events(response), media_type="text/event-stream"
-    )
+    return StreamingResponse(content=_convert_stream_to_sse_events(response), media_type="text/event-stream")
 
 
 @router.post("/v1/responses/{response_id}/cancel")

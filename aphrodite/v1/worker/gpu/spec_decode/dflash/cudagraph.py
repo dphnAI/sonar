@@ -34,9 +34,7 @@ def _prepare_dflash_inputs_to_capture(
     input_batch = InputBatch.make_dummy(num_reqs, num_tokens, input_buffers)
     input_block_tables = block_tables.get_dummy_block_tables(num_reqs)
     slot_mappings = block_tables.get_dummy_slot_mappings(num_tokens)
-    slot_mappings_by_layer = build_slot_mappings_by_layer(
-        slot_mappings, kv_cache_config
-    )
+    slot_mappings_by_layer = build_slot_mappings_by_layer(slot_mappings, kv_cache_config)
 
     attn_metadata = None
     if not skip_attn:
@@ -84,9 +82,7 @@ class DFlashCudaGraphManager(CudaGraphManager):
             num_tokens = desc.num_tokens
             num_reqs = desc.num_reqs or min(num_tokens, self.max_num_reqs)
             num_tokens_across_dp = (
-                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu")
-                if self.dp_size > 1
-                else None
+                torch.full((self.dp_size,), num_tokens, dtype=torch.int32, device="cpu") if self.dp_size > 1 else None
             )
             attn_state = _prepare_dflash_inputs_to_capture(
                 num_reqs,

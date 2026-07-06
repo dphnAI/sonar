@@ -37,9 +37,7 @@ def _make_scheduler_output(*, scheduled_spec_tokens: list[int] | None):
             resumed_req_ids=set(),
         ),
         num_scheduled_tokens={"req-0": 4},
-        scheduled_spec_decode_tokens=(
-            {"req-0": scheduled_spec_tokens} if scheduled_spec_tokens else {}
-        ),
+        scheduled_spec_decode_tokens=({"req-0": scheduled_spec_tokens} if scheduled_spec_tokens else {}),
     )
 
 
@@ -94,9 +92,7 @@ def test_cached_request_with_spec_decode_does_not_save_scheduled_drafts():
         prefill_end_tokens=48,
     )
 
-    meta = scheduler.build_connector_meta(
-        _make_scheduler_output(scheduled_spec_tokens=[101, 102, 103])
-    )
+    meta = scheduler.build_connector_meta(_make_scheduler_output(scheduled_spec_tokens=[101, 102, 103]))
 
     assert meta.requests == []
     tracker = scheduler._request_trackers["req-0"]
@@ -114,9 +110,7 @@ def test_cached_request_without_spec_decode_keeps_current_step_save_overlap():
         prefill_end_tokens=48,
     )
 
-    meta = scheduler.build_connector_meta(
-        _make_scheduler_output(scheduled_spec_tokens=None)
-    )
+    meta = scheduler.build_connector_meta(_make_scheduler_output(scheduled_spec_tokens=None))
 
     assert len(meta.requests) == 1
     req_meta = meta.requests[0]
@@ -290,9 +284,7 @@ def test_resumed_from_preemption_with_load_skips_save():
         can_load=True,
     )
 
-    meta = scheduler.build_connector_meta(
-        _make_resumed_scheduler_output(num_scheduled_tokens=48)
-    )
+    meta = scheduler.build_connector_meta(_make_resumed_scheduler_output(num_scheduled_tokens=48))
 
     assert len(meta.requests) == 1
     req_meta = meta.requests[0]
@@ -314,9 +306,7 @@ def test_resumed_from_preemption_without_load_still_saves():
         num_computed_tokens=0,
     )
 
-    meta = scheduler.build_connector_meta(
-        _make_resumed_scheduler_output(num_scheduled_tokens=48)
-    )
+    meta = scheduler.build_connector_meta(_make_resumed_scheduler_output(num_scheduled_tokens=48))
 
     assert len(meta.requests) == 1
     req_meta = meta.requests[0]
@@ -380,9 +370,7 @@ def test_resumed_request_in_resumed_req_ids_replaces_blocks():
         num_saved_tokens=0,
     )
 
-    scheduler.build_connector_meta(
-        _make_resumed_scheduler_output(num_scheduled_tokens=48)
-    )
+    scheduler.build_connector_meta(_make_resumed_scheduler_output(num_scheduled_tokens=48))
 
     tracker = scheduler._request_trackers["req-0"]
     # Replaced with the full table from new_block_ids, not appended to [7,8,9].
@@ -501,9 +489,7 @@ def test_full_external_hit_keeps_kvpool_cached_tokens_block_aligned():
         block_hashes=[b"h0", b"h1", b"h2"],
     )
 
-    need_to_allocate, load_async = scheduler.get_num_new_matched_tokens(
-        request, num_computed_tokens=16
-    )
+    need_to_allocate, load_async = scheduler.get_num_new_matched_tokens(request, num_computed_tokens=16)
 
     # 47 // 16 * 16 == 32 tokens left in external store after reserving the
     # sub-block tail for sampling. 32 - 16 (local) == 16 to load.
@@ -530,9 +516,7 @@ def test_full_external_hit_with_full_local_hit_skips_load():
         block_hashes=[b"h0", b"h1", b"h2"],
     )
 
-    need_to_allocate, load_async = scheduler.get_num_new_matched_tokens(
-        request, num_computed_tokens=32
-    )
+    need_to_allocate, load_async = scheduler.get_num_new_matched_tokens(request, num_computed_tokens=32)
 
     assert need_to_allocate == 0
     assert load_async is False

@@ -45,9 +45,7 @@ class FusedMoEMethodBase(QuantizeMethodBase):
     def mk_can_overlap_shared_experts(self) -> bool:
         # NOTE(rob): temporary attribute to indicate support for
         # completed migration to the new internal MK interface.
-        return (
-            self.moe_kernel is not None and self.moe_kernel.can_overlap_shared_experts
-        )
+        return self.moe_kernel is not None and self.moe_kernel.can_overlap_shared_experts
 
     @abstractmethod
     def create_weights(
@@ -109,9 +107,7 @@ class FusedMoEMethodBase(QuantizeMethodBase):
     ) -> FusedMoEPrepareAndFinalizeModular | None:
         from .all2all_utils import maybe_make_prepare_finalize
 
-        pf = maybe_make_prepare_finalize(
-            self.moe, self.moe_quant_config, routing_tables
-        )
+        pf = maybe_make_prepare_finalize(self.moe, self.moe_quant_config, routing_tables)
         assert pf is None or isinstance(pf, FusedMoEPrepareAndFinalizeModular)
         return pf
 
@@ -128,9 +124,7 @@ class FusedMoEMethodBase(QuantizeMethodBase):
         )
 
     @abstractmethod
-    def get_fused_moe_quant_config(
-        self, layer: "RoutedExperts"
-    ) -> FusedMoEQuantConfig | None:
+    def get_fused_moe_quant_config(self, layer: "RoutedExperts") -> FusedMoEQuantConfig | None:
         raise NotImplementedError
 
     @property

@@ -135,16 +135,13 @@ class OnlineQuantizationConfig(QuantizationConfig):
         # explicit overrides until the relevant method class opts in.
         if spec.activation is not None:
             raise ValueError(
-                f"activation override (activation={spec.activation}) is not "
-                f"yet supported for online {cls.__name__}"
+                f"activation override (activation={spec.activation}) is not yet supported for online {cls.__name__}"
             )
         if isinstance(layer, RoutedExperts):
             return cls(layer=layer)
         return cls()
 
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> "QuantizeMethodBase | None":
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         if isinstance(layer, LinearBase):
             if should_ignore_layer(
                 prefix,
@@ -162,9 +159,5 @@ class OnlineQuantizationConfig(QuantizationConfig):
             ):
                 return UnquantizedFusedMoEMethod(layer.moe_config)
             method = self._dispatch(self.args.moe, _ONLINE_MOE_METHODS, layer)
-            return (
-                method
-                if method is not None
-                else UnquantizedFusedMoEMethod(layer.moe_config)
-            )
+            return method if method is not None else UnquantizedFusedMoEMethod(layer.moe_config)
         return None

@@ -144,9 +144,7 @@ def test_extract_tool_types(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # code_interpreter and web_search_preview are allowed,
     # they would be extracted
-    monkeypatch.setenv(
-        "APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS", "code_interpreter,web_search_preview"
-    )
+    monkeypatch.setenv("APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS", "code_interpreter,web_search_preview")
     assert extract_tool_types(tools) == {
         "local_shell",
         "auto",
@@ -241,17 +239,13 @@ class TestInitializeToolSessions:
         return instance
 
     @pytest.mark.asyncio
-    async def test_initialize_tool_sessions(
-        self, serving_responses_instance, mock_context, mock_exit_stack
-    ):
+    async def test_initialize_tool_sessions(self, serving_responses_instance, mock_context, mock_exit_stack):
         """Test that method works correctly with only MCP tools"""
 
         request = ResponsesRequest(input="test input", tools=[])
 
         # Call the method
-        await serving_responses_instance._initialize_tool_sessions(
-            request, mock_context, mock_exit_stack
-        )
+        await serving_responses_instance._initialize_tool_sessions(request, mock_context, mock_exit_stack)
         assert mock_context.init_tool_sessions_called is False
 
         # Create only MCP tools
@@ -263,16 +257,12 @@ class TestInitializeToolSessions:
         request = ResponsesRequest(input="test input", tools=tools)
 
         # Call the method
-        await serving_responses_instance._initialize_tool_sessions(
-            request, mock_context, mock_exit_stack
-        )
+        await serving_responses_instance._initialize_tool_sessions(request, mock_context, mock_exit_stack)
 
         # Verify that init_tool_sessions was called
         assert mock_context.init_tool_sessions_called
 
-    def test_validate_create_responses_input(
-        self, serving_responses_instance, mock_context, mock_exit_stack
-    ):
+    def test_validate_create_responses_input(self, serving_responses_instance, mock_context, mock_exit_stack):
         request = ResponsesRequest(
             input="test input",
             previous_input_messages=[
@@ -454,9 +444,7 @@ class TestExtractAllowedToolsFromMcpRequests:
             Mcp(
                 type="mcp",
                 server_label="server2",
-                allowed_tools=McpAllowedToolsMcpToolFilter(
-                    tool_names=["tool3", "tool4"]
-                ),
+                allowed_tools=McpAllowedToolsMcpToolFilter(tool_names=["tool3", "tool4"]),
             ),
             # None (no filter)
             Mcp(
@@ -628,9 +616,7 @@ class TestHarmonyPreambleStreaming:
             emit_previous_item_done_events,
         )
 
-        previous = self._make_previous_item(
-            channel="commentary", recipient="functions.get_weather"
-        )
+        previous = self._make_previous_item(channel="commentary", recipient="functions.get_weather")
         state = StreamingState()
         state.is_first_function_call_delta = True
         state.current_item_id = "fc_test"
@@ -671,9 +657,7 @@ class TestHarmonyPreambleStreaming:
             state.current_call_id = "call_stale"
             state.current_content_index = 0
 
-            events = emit_previous_item_done_events(
-                previous, state, function_tool_names=None
-            )
+            events = emit_previous_item_done_events(previous, state, function_tool_names=None)
 
             type_names = [e.type for e in events]
             assert "response.output_item.added" in type_names
@@ -772,9 +756,7 @@ class TestStreamingReasoningToContentTransition:
     reasoning and content simultaneously."""
 
     @pytest.mark.asyncio
-    async def test_mixed_delta_reasoning_and_content_emits_reasoning_delta(
-        self, monkeypatch
-    ):
+    async def test_mixed_delta_reasoning_and_content_emits_reasoning_delta(self, monkeypatch):
         """When the reasoning parser produces a delta with both reasoning
         and content set (e.g. reasoning end and content start in the same
         chunk), the trailing reasoning text must be emitted as a
@@ -822,18 +804,14 @@ class TestStreamingReasoningToContentTransition:
             events.append(event)
 
         # The first reasoning delta should be emitted
-        reasoning_deltas = [
-            e for e in events if isinstance(e, ResponseReasoningTextDeltaEvent)
-        ]
+        reasoning_deltas = [e for e in events if isinstance(e, ResponseReasoningTextDeltaEvent)]
         assert len(reasoning_deltas) == 2
         assert reasoning_deltas[0].delta == "thinking..."
         # The trailing reasoning from the mixed delta must also be emitted
         assert reasoning_deltas[1].delta == " end"
 
         # The done event must include both reasoning parts
-        reasoning_done = [
-            e for e in events if isinstance(e, ResponseReasoningTextDoneEvent)
-        ]
+        reasoning_done = [e for e in events if isinstance(e, ResponseReasoningTextDoneEvent)]
         assert len(reasoning_done) == 1
         assert reasoning_done[0].text == "thinking... end"
 
@@ -845,9 +823,7 @@ class TestStreamingReasoningToContentTransition:
         assert text_deltas[1].delta == " world"
 
     @pytest.mark.asyncio
-    async def test_transition_without_mixed_delta_no_extra_reasoning_event(
-        self, monkeypatch
-    ):
+    async def test_transition_without_mixed_delta_no_extra_reasoning_event(self, monkeypatch):
         """When the transition from reasoning to content is clean (no mixed
         delta), no extra reasoning delta event should be emitted."""
 
@@ -889,16 +865,12 @@ class TestStreamingReasoningToContentTransition:
             events.append(event)
 
         # Exactly one reasoning delta
-        reasoning_deltas = [
-            e for e in events if isinstance(e, ResponseReasoningTextDeltaEvent)
-        ]
+        reasoning_deltas = [e for e in events if isinstance(e, ResponseReasoningTextDeltaEvent)]
         assert len(reasoning_deltas) == 1
         assert reasoning_deltas[0].delta == "thinking"
 
         # Done event has just "thinking"
-        reasoning_done = [
-            e for e in events if isinstance(e, ResponseReasoningTextDoneEvent)
-        ]
+        reasoning_done = [e for e in events if isinstance(e, ResponseReasoningTextDoneEvent)]
         assert len(reasoning_done) == 1
         assert reasoning_done[0].text == "thinking"
 
@@ -951,17 +923,13 @@ class TestStreamingReasoningToContentTransition:
             events.append(event)
 
         # Two reasoning deltas
-        reasoning_deltas = [
-            e for e in events if isinstance(e, ResponseReasoningTextDeltaEvent)
-        ]
+        reasoning_deltas = [e for e in events if isinstance(e, ResponseReasoningTextDeltaEvent)]
         assert len(reasoning_deltas) == 2
         assert reasoning_deltas[0].delta == "step 1"
         assert reasoning_deltas[1].delta == " step 2"
 
         # Done event at finalization with accumulated text
-        reasoning_done = [
-            e for e in events if isinstance(e, ResponseReasoningTextDoneEvent)
-        ]
+        reasoning_done = [e for e in events if isinstance(e, ResponseReasoningTextDoneEvent)]
         assert len(reasoning_done) == 1
         assert reasoning_done[0].text == "step 1 step 2"
 
@@ -970,9 +938,7 @@ class TestStreamingReasoningToContentTransition:
         assert len(text_deltas) == 0
 
         # Final item should be a reasoning item
-        item_done_events = [
-            e for e in events if isinstance(e, ResponseOutputItemDoneEvent)
-        ]
+        item_done_events = [e for e in events if isinstance(e, ResponseOutputItemDoneEvent)]
         assert len(item_done_events) == 1
         assert isinstance(item_done_events[0].item, ResponseReasoningItem)
 
@@ -983,10 +949,7 @@ class TestAutoToolStreaming:
         serving = _make_serving_instance_with_reasoning()
         response_parser = _mock_parser_with_reasoning(serving, delta_sequence)
 
-        contexts = [
-            _make_simple_context_with_output("chunk", [i], response_parser)
-            for i in range(len(delta_sequence))
-        ]
+        contexts = [_make_simple_context_with_output("chunk", [i], response_parser) for i in range(len(delta_sequence))]
 
         async def result_generator():
             for ctx in contexts:
@@ -1077,8 +1040,7 @@ class TestAutoToolStreaming:
         function_items = [
             event
             for event in events
-            if event.type == "response.output_item.added"
-            and getattr(event.item, "type", None) == "function_call"
+            if event.type == "response.output_item.added" and getattr(event.item, "type", None) == "function_call"
         ]
         assert len(function_items) == 2
         assert [event.item.name for event in function_items] == [
@@ -1087,21 +1049,13 @@ class TestAutoToolStreaming:
         ]
         assert [event.output_index for event in function_items] == [0, 1]
 
-        argument_deltas = [
-            event.delta
-            for event in events
-            if event.type == "response.function_call_arguments.delta"
-        ]
+        argument_deltas = [event.delta for event in events if event.type == "response.function_call_arguments.delta"]
         assert argument_deltas == [
             '{"location":"Vienna"}',
             '{"location":"Berlin"}',
         ]
 
-        argument_done = [
-            event
-            for event in events
-            if event.type == "response.function_call_arguments.done"
-        ]
+        argument_done = [event for event in events if event.type == "response.function_call_arguments.done"]
         assert [event.arguments for event in argument_done] == [
             '{"location":"Vienna"}',
             '{"location":"Berlin"}',
@@ -1111,8 +1065,7 @@ class TestAutoToolStreaming:
         function_done = [
             event
             for event in events
-            if event.type == "response.output_item.done"
-            and getattr(event.item, "type", None) == "function_call"
+            if event.type == "response.output_item.done" and getattr(event.item, "type", None) == "function_call"
         ]
         assert [event.item.arguments for event in function_done] == [
             '{"location":"Vienna"}',
@@ -1122,9 +1075,7 @@ class TestAutoToolStreaming:
 
     @pytest.mark.skip_global_cleanup
     @pytest.mark.asyncio
-    async def test_auto_tool_choice_first_delta_tool_call_does_not_duplicate_item(
-        self, monkeypatch
-    ):
+    async def test_auto_tool_choice_first_delta_tool_call_does_not_duplicate_item(self, monkeypatch):
         monkeypatch.setattr(envs, "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", False)
 
         delta_sequence = [
@@ -1157,17 +1108,12 @@ class TestAutoToolStreaming:
         function_items = [
             event
             for event in events
-            if event.type == "response.output_item.added"
-            and getattr(event.item, "type", None) == "function_call"
+            if event.type == "response.output_item.added" and getattr(event.item, "type", None) == "function_call"
         ]
         assert len(function_items) == 1
         assert function_items[0].item.name == "get_weather"
 
-        argument_deltas = [
-            event.delta
-            for event in events
-            if event.type == "response.function_call_arguments.delta"
-        ]
+        argument_deltas = [event.delta for event in events if event.type == "response.function_call_arguments.delta"]
         assert "".join(argument_deltas) == '{"location":"Berlin"}'
 
     @pytest.mark.skip_global_cleanup
@@ -1197,37 +1143,22 @@ class TestAutoToolStreaming:
 
         events = await self._collect_events(delta_sequence)
 
-        text_deltas = [
-            event.delta
-            for event in events
-            if event.type == "response.output_text.delta"
-        ]
+        text_deltas = [event.delta for event in events if event.type == "response.output_text.delta"]
         assert text_deltas == ["Let me check."]
 
-        argument_deltas = [
-            event.delta
-            for event in events
-            if event.type == "response.function_call_arguments.delta"
-        ]
+        argument_deltas = [event.delta for event in events if event.type == "response.function_call_arguments.delta"]
         assert argument_deltas == [tool_args]
 
         types = [event.type for event in events]
-        assert types.index("response.output_text.delta") < types.index(
-            "response.function_call_arguments.delta"
-        )
+        assert types.index("response.output_text.delta") < types.index("response.function_call_arguments.delta")
 
-        argument_done = [
-            event
-            for event in events
-            if event.type == "response.function_call_arguments.done"
-        ]
+        argument_done = [event for event in events if event.type == "response.function_call_arguments.done"]
         assert [event.arguments for event in argument_done] == [tool_args]
 
         function_done = [
             event
             for event in events
-            if event.type == "response.output_item.done"
-            and getattr(event.item, "type", None) == "function_call"
+            if event.type == "response.output_item.done" and getattr(event.item, "type", None) == "function_call"
         ]
         assert len(function_done) == 1
         assert function_done[0].item.name == "get_weather"

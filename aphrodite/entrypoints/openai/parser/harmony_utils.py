@@ -116,9 +116,7 @@ def get_system_message(
         sys_msg_content = sys_msg_content.with_model_identity(model_identity)
     if instructions is not None and envs.APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS:
         current_identity = sys_msg_content.model_identity
-        new_identity = (
-            f"{current_identity}\n{instructions}" if current_identity else instructions
-        )
+        new_identity = f"{current_identity}\n{instructions}" if current_identity else instructions
         sys_msg_content = sys_msg_content.with_model_identity(new_identity)
     if reasoning_effort is not None:
         if reasoning_effort not in REASONING_EFFORT:
@@ -127,15 +125,11 @@ def get_system_message(
                 f"reasoning_effort={reasoning_effort!r} is not supported by "
                 f"Harmony. Supported values are: {supported_values}."
             )
-        sys_msg_content = sys_msg_content.with_reasoning_effort(
-            REASONING_EFFORT[reasoning_effort]
-        )
+        sys_msg_content = sys_msg_content.with_reasoning_effort(REASONING_EFFORT[reasoning_effort])
     if start_date is None:
         # NOTE(woosuk): This brings non-determinism in Aphrodite.
         # Set APHRODITE_SYSTEM_START_DATE to pin it.
-        start_date = envs.APHRODITE_SYSTEM_START_DATE or datetime.datetime.now().strftime(
-            "%Y-%m-%d"
-        )
+        start_date = envs.APHRODITE_SYSTEM_START_DATE or datetime.datetime.now().strftime("%Y-%m-%d")
     sys_msg_content = sys_msg_content.with_conversation_start_date(start_date)
     if browser_description is not None:
         sys_msg_content = sys_msg_content.with_tools(browser_description)
@@ -183,12 +177,8 @@ def get_developer_message(
             else:
                 raise ValueError(f"tool type {tool.type} not supported")
         if function_tools:
-            function_tool_descriptions = [
-                create_tool_definition(tool) for tool in function_tools
-            ]
-            dev_msg_content = dev_msg_content.with_function_tools(
-                function_tool_descriptions
-            )
+            function_tool_descriptions = [create_tool_definition(tool) for tool in function_tools]
+            dev_msg_content = dev_msg_content.with_function_tools(function_tool_descriptions)
     dev_msg = Message.from_role_and_content(Role.DEVELOPER, dev_msg_content)
     return dev_msg
 
@@ -214,9 +204,7 @@ def parse_chat_inputs_to_harmony_messages(chat_msgs: list) -> list[Message]:
     # Collect tool id to name mappings for tool response recipient values
     for chat_msg in chat_msgs:
         for tool_call in chat_msg.get("tool_calls", []):
-            tool_id_names[tool_call.get("id")] = tool_call.get("function", {}).get(
-                "name"
-            )
+            tool_id_names[tool_call.get("id")] = tool_call.get("function", {}).get("name")
 
     for chat_msg in chat_msgs:
         msgs.extend(parse_chat_input_to_harmony_message(chat_msg, tool_id_names))
@@ -348,9 +336,7 @@ def build_harmony_preamble(
     return messages
 
 
-def parse_chat_input_to_harmony_message(
-    chat_msg, tool_id_names: dict[str, str] | None = None
-) -> list[Message]:
+def parse_chat_input_to_harmony_message(chat_msg, tool_id_names: dict[str, str] | None = None) -> list[Message]:
     """
     Parse a message from request.messages in the Chat Completion API to
     Harmony messages.
@@ -401,9 +387,7 @@ def parse_chat_input_to_harmony_message(
         content = flatten_input_text_content(chat_msg.get("content")) or ""
 
         msg = (
-            Message.from_author_and_content(
-                Author.new(Role.TOOL, f"functions.{name}"), content
-            )
+            Message.from_author_and_content(Author.new(Role.TOOL, f"functions.{name}"), content)
             .with_channel("commentary")
             .with_recipient("assistant")
         )

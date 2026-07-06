@@ -4,11 +4,11 @@ import copy
 
 import pytest
 
+from aphrodite.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
+from aphrodite.v1.metrics.ray_wrappers import RayPrometheusStatLogger
 from tests.plugins.aphrodite_add_dummy_stat_logger.dummy_stat_logger.dummy_stat_logger import (  # noqa E501
     DummyStatLogger,
 )
-from aphrodite.v1.engine.async_llm import AsyncEngineArgs, AsyncLLM
-from aphrodite.v1.metrics.ray_wrappers import RayPrometheusStatLogger
 
 
 @pytest.fixture
@@ -31,9 +31,7 @@ async def test_async_llm_replace_default_loggers(log_stats_enabled_engine_args):
     RayPrometheusStatLogger should replace the default PrometheusStatLogger
     """
 
-    engine = AsyncLLM.from_engine_args(
-        log_stats_enabled_engine_args, stat_loggers=[RayPrometheusStatLogger]
-    )
+    engine = AsyncLLM.from_engine_args(log_stats_enabled_engine_args, stat_loggers=[RayPrometheusStatLogger])
     assert isinstance(engine.logger_manager.stat_loggers[0], RayPrometheusStatLogger)
     engine.shutdown()
 
@@ -49,9 +47,7 @@ async def test_async_llm_add_to_default_loggers(log_stats_enabled_engine_args):
     disabled_log_engine_args.disable_log_stats = True
 
     # Disable default loggers; pass custom stat logger to the constructor
-    engine = AsyncLLM.from_engine_args(
-        disabled_log_engine_args, stat_loggers=[DummyStatLogger]
-    )
+    engine = AsyncLLM.from_engine_args(disabled_log_engine_args, stat_loggers=[DummyStatLogger])
 
     assert len(engine.logger_manager.stat_loggers) == 2
     assert len(engine.logger_manager.stat_loggers[0].per_engine_stat_loggers) == 1

@@ -95,9 +95,7 @@ class Qwen2VLTester:
             for asset in images
         ]
 
-        lora_request = LoRARequest(
-            lora_name if lora_name else str(lora_id), lora_id, self.config.lora_path
-        )
+        lora_request = LoRARequest(lora_name if lora_name else str(lora_id), lora_id, self.config.lora_path)
         outputs = self.llm.generate(inputs, sampling_params, lora_request=lora_request)
         generated_texts = [output.outputs[0].text.strip() for output in outputs]
         # Validate outputs
@@ -115,9 +113,7 @@ class Qwen2VLTester:
         beam_width: int = 2,
         max_tokens: int = 5,
     ):
-        beam_search_params = BeamSearchParams(
-            beam_width=beam_width, max_tokens=max_tokens, temperature=temperature
-        )
+        beam_search_params = BeamSearchParams(beam_width=beam_width, max_tokens=max_tokens, temperature=temperature)
 
         inputs = [
             {
@@ -128,9 +124,7 @@ class Qwen2VLTester:
         ]
 
         lora_request = LoRARequest(str(lora_id), lora_id, self.config.lora_path)
-        outputs = self.llm.beam_search(
-            inputs, beam_search_params, lora_request=lora_request
-        )
+        outputs = self.llm.beam_search(inputs, beam_search_params, lora_request=lora_request)
 
         for output_obj, expected_texts in zip(outputs, expected_outputs):
             output_texts = [seq.text for seq in output_obj.sequences]
@@ -153,8 +147,7 @@ EXPECTED_OUTPUTS = [
 ]
 
 EXPECTED_OUTPUTS_LANGUAGE = [
-    "A stop sign is shown in an Asian city, with buildings and a car in the "
-    "background.",
+    "A stop sign is shown in an Asian city, with buildings and a car in the background.",
     "The Tokyo Skytree can be seen behind the pink blossoms of the cherry trees.",
 ]
 
@@ -208,9 +201,7 @@ def test_qwen2vl_lora_beam_search(qwen2vl_lora_files):
         )
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 def test_qwen25vl_lora(qwen25vl_lora_files):
     """Test Qwen 2.5 VL model with LoRA"""
     config = TestConfig(model_path=QWEN25VL_MODEL_PATH, lora_path=qwen25vl_lora_files)
@@ -221,9 +212,7 @@ def test_qwen25vl_lora(qwen25vl_lora_files):
         tester.run_test(TEST_IMAGES, expected_outputs=EXPECTED_OUTPUTS, lora_id=lora_id)
 
 
-@pytest.mark.skipif(
-    current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests"
-)
+@pytest.mark.skipif(current_platform.is_cuda_alike(), reason="Skipping to avoid redundant model tests")
 def test_qwen25vl_vision_lora(qwen25vl_vision_lora_files):
     config = TestConfig(
         model_path=QWEN25VL_MODEL_PATH,

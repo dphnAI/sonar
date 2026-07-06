@@ -46,10 +46,7 @@ def load_plugins_by_group(group: str) -> dict[str, Callable[[], Any]]:
         log_level("- %s -> %s", plugin.name, plugin.value)
 
     if allowed_plugins is None:
-        log_level(
-            "All plugins in this group will be loaded. "
-            "Set `APHRODITE_PLUGINS` to control which plugins to load."
-        )
+        log_level("All plugins in this group will be loaded. Set `APHRODITE_PLUGINS` to control which plugins to load.")
 
     plugins = dict[str, Callable[[], Any]]()
     for plugin in discovered_plugins:

@@ -13,8 +13,8 @@ import pytest_asyncio
 import torch
 from openai import BadRequestError
 
-from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 from aphrodite.platforms import current_platform
+from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
 
 MODEL_NAME = "facebook/opt-125m"
 CHAT_TEMPLATE = APHRODITE_PATH / "examples/template_chatml.jinja"
@@ -214,9 +214,7 @@ def aligned_content_and_embeds_b64(hf_runner) -> tuple[str, str]:
     """
     content = "Hello, my name is"
     with hf_runner(MODEL_NAME) as hf_model:
-        ids = hf_model.tokenizer(
-            content, add_special_tokens=False, return_tensors="pt"
-        ).input_ids
+        ids = hf_model.tokenizer(content, add_special_tokens=False, return_tensors="pt").input_ids
         ids = hf_model.wrap_device({"input_ids": ids})["input_ids"]
         embed_layer = hf_model.model.get_input_embeddings()
         embeds = embed_layer(ids).squeeze(0).to(SERVER_DTYPE).cpu()

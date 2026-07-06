@@ -23,9 +23,7 @@ def classify(request: Request) -> ServingClassification | None:
 @router.post("/classify", dependencies=[Depends(validate_json_request)])
 @with_cancellation
 @load_aware_call
-async def create_classify(
-    request: ClassificationRequest, raw_request: Request
-) -> Response:
+async def create_classify(request: ClassificationRequest, raw_request: Request) -> Response:
     handler = classify(raw_request)
     if handler is None:
         raise NotImplementedError("The model does not support Classification API")

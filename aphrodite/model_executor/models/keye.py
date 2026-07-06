@@ -106,8 +106,7 @@ def smart_resize(
 
     if max(height, width) / min(height, width) > 200:
         raise ValueError(
-            "absolute aspect ratio must be smaller than 200, got "
-            "{max(height, width) / min(height, width)}"
+            "absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
@@ -133,9 +132,7 @@ class KeyeImagePixelInputs(TensorSchema):
     """
 
     type: Literal["pixel_values"]
-    pixel_values: Annotated[
-        torch.Tensor, TensorShape("bnp", 3, "ps", "ps", dynamic_dims={"bnp"})
-    ]
+    pixel_values: Annotated[torch.Tensor, TensorShape("bnp", 3, "ps", "ps", dynamic_dims={"bnp"})]
     image_grid_thw: Annotated[torch.Tensor, TensorShape("ni", 3)]
 
 
@@ -168,9 +165,7 @@ class KeyeVideoPixelInputs(TensorSchema):
     """
 
     type: Literal["pixel_values_videos"]
-    pixel_values_videos: Annotated[
-        torch.Tensor, TensorShape("bnp", 3, "ps", "ps", dynamic_dims={"bnp"})
-    ]
+    pixel_values_videos: Annotated[torch.Tensor, TensorShape("bnp", 3, "ps", "ps", dynamic_dims={"bnp"})]
     video_grid_thw: Annotated[torch.Tensor, TensorShape("nv", 3)]
 
 
@@ -242,9 +237,7 @@ class KeyeVisionEmbeddings(nn.Module):
             new_width = width // self.patch_size
 
         sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(
-            1, sqrt_num_positions, sqrt_num_positions, dim
-        )
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
@@ -280,17 +273,14 @@ class KeyeVisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.FloatTensor,
         position_ids: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]]
-        | None = None,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
         interpolate_pos_encoding=False,
     ) -> torch.Tensor:
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.unsqueeze(0)
         if pixel_values.dim() == 5:
             if position_ids is None:
-                raise ValueError(
-                    "position_ids cannot be None when pixel_values.dim() is 5."
-                )
+                raise ValueError("position_ids cannot be None when pixel_values.dim() is 5.")
             (
                 batch_size,
                 sequence_len,
@@ -311,9 +301,7 @@ class KeyeVisionEmbeddings(nn.Module):
                     end = start + t * h * w
                     image_embeddings = embeddings[start:end, :]
                     position_embedding = (
-                        self.interpolate_pos_encoding(image_embeddings, h, w, True)
-                        .squeeze(0)
-                        .repeat(t, 1)
+                        self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(t, 1)
                     )
                     image_embeddings = image_embeddings + position_embedding
                     tmp_embeddings.append(image_embeddings)
@@ -323,10 +311,7 @@ class KeyeVisionEmbeddings(nn.Module):
                 embeddings = embeddings + self.packing_position_embedding(position_ids)
             return embeddings
         else:
-            raise ValueError(
-                "Unsupported pixel_values dimension:"
-                f" {pixel_values.dim()}. Expected 4 or 5."
-            )
+            raise ValueError(f"Unsupported pixel_values dimension: {pixel_values.dim()}. Expected 4 or 5.")
 
 
 def apply_rotary_pos_emb_flashatt(
@@ -471,9 +456,7 @@ class SigLIPRotaryEmbedding(nn.Module):
         self.rope_init()
 
     def rope_init(self):
-        inv_freq = 1.0 / (
-            self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim)
-        )
+        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:
@@ -579,8 +562,7 @@ class KeyeSiglipEncoder(nn.Module):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         cu_seqlens: list[torch.Tensor] | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]]
-        | None = None,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
         height_position_ids: torch.Tensor | None = None,
         width_position_ids: torch.Tensor | None = None,
         use_rope: bool | None = False,
@@ -665,8 +647,7 @@ class KeyeSiglipVisionTransformer(nn.Module):
         cu_seqlens: list[torch.Tensor] | None = None,
         padding_mask: torch.Tensor | None = None,
         vision_return_embed_list: bool | None = False,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]]
-        | None = None,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
         return_pooler_output: bool | None = True,
         use_rope: bool | None = False,
         window_size: bool | None = -1,
@@ -696,10 +677,7 @@ class KeyeSiglipVisionTransformer(nn.Module):
 
         sample_hidden_state = list()
         if cu_seqlens is None:
-            raise ValueError(
-                "cu_seqlens cannot be None for "
-                "SiglipVisionTransformer output processing."
-            )
+            raise ValueError("cu_seqlens cannot be None for SiglipVisionTransformer output processing.")
         for i in range(cu_seqlens.shape[0] - 1):
             start = cu_seqlens[i]
             end = cu_seqlens[i + 1]
@@ -756,8 +734,7 @@ class KeyeSiglipVisionModel(nn.Module):
         interpolate_pos_encoding: bool = False,
         position_ids: torch.Tensor | None = None,
         vision_return_embed_list: bool | None = False,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]]
-        | None = None,
+        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
         cu_seqlens: list[torch.Tensor] | None = None,
         return_pooler_output: bool | None = True,
         use_rope: bool | None = False,
@@ -796,11 +773,7 @@ class Projector(nn.Module):
         self.vision_config = vision_config
         self.merge_kernel_size = (2, 2)
 
-        self.hidden_size = (
-            self.vision_config.hidden_size
-            * self.merge_kernel_size[0]
-            * self.merge_kernel_size[1]
-        )
+        self.hidden_size = self.vision_config.hidden_size * self.merge_kernel_size[0] * self.merge_kernel_size[1]
 
         self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
         self.act = GELUActivation()
@@ -872,9 +845,7 @@ def _keye_field_config(
         pixel_values=MultiModalFieldConfig.flat_from_sizes("image", image_grid_sizes),
         image_embeds=MultiModalFieldConfig.flat_from_sizes("image", image_grid_sizes),
         image_grid_thw=MultiModalFieldConfig.batched("image"),
-        pixel_values_videos=MultiModalFieldConfig.flat_from_sizes(
-            "video", video_grid_sizes
-        ),
+        pixel_values_videos=MultiModalFieldConfig.flat_from_sizes("video", video_grid_sizes),
         video_embeds=MultiModalFieldConfig.flat_from_sizes("video", video_grid_sizes),
         video_grid_thw=MultiModalFieldConfig.batched("video"),
     )
@@ -1263,9 +1234,7 @@ class BaseKeyeModule(nn.Module, SupportsMultiModal):
                 architectures=["Qwen3ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     @abstractmethod
     def _build_projector(
@@ -1296,17 +1265,11 @@ class BaseKeyeModule(nn.Module, SupportsMultiModal):
             cu_seqlens.append(cu_seqlens[-1] + numel)
 
         if image_input["type"] == "image_embeds":
-            raise ValueError(
-                "Image embeddings are not supported for this processing path."
-            )
+            raise ValueError("Image embeddings are not supported for this processing path.")
         else:
             pixel_values = image_input["pixel_values"].type(self.visual.dtype)
-            siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(
-                pixel_values.device
-            )
-            cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(
-                pixel_values.device
-            )
+            siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+            cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
             sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
 
             image_embeds = self.visual(
@@ -1346,20 +1309,12 @@ class BaseKeyeModule(nn.Module, SupportsMultiModal):
             cu_seqlens.append(cu_seqlens[-1] + numel)
 
         if video_type == "video_embeds":
-            raise ValueError(
-                "Video embeddings are not supported for this processing path."
-            )
+            raise ValueError("Video embeddings are not supported for this processing path.")
         else:
             pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-            siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(
-                pixel_values_videos.device
-            )
-            cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(
-                pixel_values_videos.device
-            )
-            sample_indices = torch.concat(sample_indices, dim=0).to(
-                pixel_values_videos.device
-            )
+            siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
+            cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values_videos.device)
+            sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
 
             video_embeds = self.visual(
                 pixel_values=pixel_values_videos,
@@ -1379,15 +1334,9 @@ class BaseKeyeModule(nn.Module, SupportsMultiModal):
         modalities = {}
 
         for input_key in kwargs:
-            if (
-                input_key in ("pixel_values", "image_embeds")
-                and "images" not in modalities
-            ):
+            if input_key in ("pixel_values", "image_embeds") and "images" not in modalities:
                 modalities["images"] = self._parse_and_validate_image_input(**kwargs)
-            if (
-                input_key in ("pixel_values_videos", "video_embeds")
-                and "videos" not in modalities
-            ):
+            if input_key in ("pixel_values_videos", "video_embeds") and "videos" not in modalities:
                 modalities["videos"] = self._parse_and_validate_video_input(**kwargs)
 
         return modalities
@@ -1467,9 +1416,7 @@ class BaseKeyeModule(nn.Module, SupportsMultiModal):
     info=KeyeProcessingInfo,
     dummy_inputs=KeyeDummyInputsBuilder,
 )
-class KeyeForConditionalGeneration(
-    BaseKeyeModule, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE
-):
+class KeyeForConditionalGeneration(BaseKeyeModule, SupportsMultiModal, SupportsLoRA, SupportsPP, SupportsMRoPE):
     def _build_projector(
         self,
         text_config: PretrainedConfig,
@@ -1479,9 +1426,7 @@ class KeyeForConditionalGeneration(
     ) -> nn.Module:
         return Projector(text_config, vision_config, quant_config, prefix)
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> KeyeImageInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> KeyeImageInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         image_embeds = kwargs.pop("image_embeds", None)
         image_grid_thw = kwargs.pop("image_grid_thw", None)
@@ -1503,9 +1448,7 @@ class KeyeForConditionalGeneration(
                 image_grid_thw=image_grid_thw,
             )
 
-    def _parse_and_validate_video_input(
-        self, **kwargs: object
-    ) -> KeyeVideoInputs | None:
+    def _parse_and_validate_video_input(self, **kwargs: object) -> KeyeVideoInputs | None:
         pixel_values_videos = kwargs.pop("pixel_values_videos", None)
         video_embeds = kwargs.pop("video_embeds", None)
         video_grid_thw = kwargs.pop("video_grid_thw", None)
@@ -1527,16 +1470,12 @@ class KeyeForConditionalGeneration(
                 video_grid_thw=video_grid_thw,
             )
 
-    def _process_video_input(
-        self, video_input: KeyeVideoInputs
-    ) -> tuple[torch.Tensor, ...]:
+    def _process_video_input(self, video_input: KeyeVideoInputs) -> tuple[torch.Tensor, ...]:
         video_type = video_input["type"]
         video_grid_thw = video_input["video_grid_thw"]
         pixel_values_videos = video_input.get("pixel_values_videos", None)
 
-        return tuple(
-            self._process_video_embeds(video_type, video_grid_thw, pixel_values_videos)
-        )
+        return tuple(self._process_video_embeds(video_type, video_grid_thw, pixel_values_videos))
 
     @staticmethod
     def _split_video_grid_thw(
@@ -1567,9 +1506,7 @@ class KeyeForConditionalGeneration(
         out = torch.cat([ones, hw], dim=1).repeat_interleave(t, dim=0)
         return out.tolist()
 
-    def iter_mm_grid_thw(
-        self, mm_features: list[MultiModalFeatureSpec]
-    ) -> Iterator[tuple[int, int, int, int]]:
+    def iter_mm_grid_thw(self, mm_features: list[MultiModalFeatureSpec]) -> Iterator[tuple[int, int, int, int]]:
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         for mm_feature in sorted(mm_features, key=lambda f: f.mm_position.offset):
@@ -1599,9 +1536,7 @@ class KeyeForConditionalGeneration(
                 )
             elif mm_feature.modality == "video":
                 current_offset = mm_feature.mm_position.offset
-                for t, h, w in self._split_video_grid_thw(
-                    mm_feature.data["video_grid_thw"].data
-                ):
+                for t, h, w in self._split_video_grid_thw(mm_feature.data["video_grid_thw"].data):
                     llm_grid_h = h // spatial_merge_size
                     llm_grid_w = w // spatial_merge_size
                     yield (current_offset, t, llm_grid_h, llm_grid_w)
@@ -1626,43 +1561,19 @@ class KeyeForConditionalGeneration(
             text_len = offset - st
 
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-            llm_pos_ids_list.append(
-                torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx
-            )
+            llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
-            t_index = (
-                (
-                    torch.arange(llm_grid_t)
-                    .view(-1, 1)
-                    .expand(-1, llm_grid_h * llm_grid_w)
-                )
-                .long()
-                .flatten()
-            )
+            t_index = (torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w)).long().flatten()
 
-            h_index = (
-                torch.arange(llm_grid_h)
-                .view(1, -1, 1)
-                .expand(llm_grid_t, -1, llm_grid_w)
-                .flatten()
-            )
-            w_index = (
-                torch.arange(llm_grid_w)
-                .view(1, 1, -1)
-                .expand(llm_grid_t, llm_grid_h, -1)
-                .flatten()
-            )
-            llm_pos_ids_list.append(
-                torch.stack([t_index, h_index, w_index]) + text_len + st_idx
-            )
+            h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
+            w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
+            llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
             st = offset + llm_grid_t * llm_grid_h * llm_grid_w
 
         if st < len(input_tokens):
             st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
             text_len = len(input_tokens) - st
-            llm_pos_ids_list.append(
-                torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx
-            )
+            llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
         llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
         mrope_position_delta = (llm_positions.max() + 1 - len(input_tokens)).item()

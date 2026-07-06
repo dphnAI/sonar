@@ -36,21 +36,15 @@ def defer_addresses_stub_worker(listen_address, sock, args, client_config):
     endpoints back via the pipe, then exit."""
     ctx = zmq.Context()
     try:
-        in_sock = make_zmq_socket(
-            ctx, client_config["input_address"], zmq.ROUTER, bind=True
-        )
-        out_sock = make_zmq_socket(
-            ctx, client_config["output_address"], zmq.PULL, bind=True
-        )
+        in_sock = make_zmq_socket(ctx, client_config["input_address"], zmq.ROUTER, bind=True)
+        out_sock = make_zmq_socket(ctx, client_config["output_address"], zmq.PULL, bind=True)
         try:
             pipe = client_config["actual_address_pipe"]
             try:
                 pipe.send(
                     {
                         "input_address": in_sock.getsockopt(zmq.LAST_ENDPOINT).decode(),
-                        "output_address": out_sock.getsockopt(
-                            zmq.LAST_ENDPOINT
-                        ).decode(),
+                        "output_address": out_sock.getsockopt(zmq.LAST_ENDPOINT).decode(),
                     }
                 )
             finally:
@@ -233,9 +227,7 @@ def test_external_process_monitoring(api_server_args):
     # Create and start the external process
     # (simulates local_engine_manager or coordinator)
     spawn_context = multiprocessing.get_context("spawn")
-    external_proc = spawn_context.Process(
-        target=mock_run_api_server_worker, name="MockExternalProcess"
-    )
+    external_proc = spawn_context.Process(target=mock_run_api_server_worker, name="MockExternalProcess")
     external_proc.start()
 
     # Create the class to simulate a coordinator
@@ -263,9 +255,7 @@ def test_external_process_monitoring(api_server_args):
 
         def run_with_exception_capture():
             try:
-                wait_for_completion_or_failure(
-                    api_server_manager=manager, coordinator=mock_coordinator
-                )
+                wait_for_completion_or_failure(api_server_manager=manager, coordinator=mock_coordinator)
             except Exception as e:
                 result["exception"] = e
             finally:
@@ -284,19 +274,13 @@ def test_external_process_monitoring(api_server_args):
         wait_thread.join(timeout=1.0)
 
         # The wait thread should have completed
-        assert not wait_thread.is_alive(), (
-            "wait_for_completion_or_failure thread still running"
-        )
+        assert not wait_thread.is_alive(), "wait_for_completion_or_failure thread still running"
 
         # Verify that an exception was raised with appropriate error message
         assert result["exception"] is not None, "No exception was raised"
         error_message = str(result["exception"])
-        assert "died with exit code" in error_message, (
-            f"Unexpected error message: {error_message}"
-        )
-        assert "MockExternalProcess" in error_message, (
-            f"Error doesn't mention external process: {error_message}"
-        )
+        assert "died with exit code" in error_message, f"Unexpected error message: {error_message}"
+        assert "MockExternalProcess" in error_message, f"Error doesn't mention external process: {error_message}"
 
         # Verify that all API server processes were terminated as a result
         for i, proc in enumerate(manager.processes):
@@ -317,14 +301,8 @@ def test_gather_actual_addresses_end_to_end():
     host = "127.0.0.1"
     num_servers = 4
 
-    placeholder_inputs = [
-        get_engine_client_zmq_addr(local_only=False, host=host)
-        for _ in range(num_servers)
-    ]
-    placeholder_outputs = [
-        get_engine_client_zmq_addr(local_only=False, host=host)
-        for _ in range(num_servers)
-    ]
+    placeholder_inputs = [get_engine_client_zmq_addr(local_only=False, host=host) for _ in range(num_servers)]
+    placeholder_outputs = [get_engine_client_zmq_addr(local_only=False, host=host) for _ in range(num_servers)]
     for addr in placeholder_inputs + placeholder_outputs:
         assert addr == f"tcp://{host}:0", addr
 
@@ -366,14 +344,8 @@ def test_gather_actual_addresses_child_crash_before_report():
     clear ``RuntimeError`` rather than hang or return ``None`` slots."""
     host = "127.0.0.1"
     num_servers = 2
-    placeholder_inputs = [
-        get_engine_client_zmq_addr(local_only=False, host=host)
-        for _ in range(num_servers)
-    ]
-    placeholder_outputs = [
-        get_engine_client_zmq_addr(local_only=False, host=host)
-        for _ in range(num_servers)
-    ]
+    placeholder_inputs = [get_engine_client_zmq_addr(local_only=False, host=host) for _ in range(num_servers)]
+    placeholder_outputs = [get_engine_client_zmq_addr(local_only=False, host=host) for _ in range(num_servers)]
 
     sock = socket.socket()
     manager = APIServerProcessManager(

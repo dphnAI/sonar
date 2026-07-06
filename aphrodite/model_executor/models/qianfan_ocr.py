@@ -66,9 +66,7 @@ class QianfanOCRForConditionalGeneration(InternVLChatModel):
     name that appears in the model's config.json.
     """
 
-    def _patch_quant_config(
-        self, config: PretrainedConfig, quant_config: QuantizationConfig
-    ) -> None:
+    def _patch_quant_config(self, config: PretrainedConfig, quant_config: QuantizationConfig) -> None:
         super()._patch_quant_config(config, quant_config)
         # ignore vit layers to preserve model performance
         if isinstance(quant_config, Fp8Config):

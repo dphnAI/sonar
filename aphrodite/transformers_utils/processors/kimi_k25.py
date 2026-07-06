@@ -63,18 +63,13 @@ class KimiK25Processor(ProcessorMixin):
             input_ids: list[list[int]] = text_inputs["input_ids"]  # type: ignore
 
             if vision_chunks is not None:
-                num_tokens_per_chunk = [
-                    self.image_processor.media_tokens_calculator(chunk)
-                    for chunk in vision_chunks
-                ]
+                num_tokens_per_chunk = [self.image_processor.media_tokens_calculator(chunk) for chunk in vision_chunks]
 
                 for i in range(len(input_ids)):
                     new_input_ids = []
                     for token in input_ids[i]:
                         if token == self.media_token_id:
-                            new_input_ids.extend(
-                                [self.media_token_id] * num_tokens_per_chunk.pop(0)
-                            )
+                            new_input_ids.extend([self.media_token_id] * num_tokens_per_chunk.pop(0))
                         else:
                             new_input_ids.append(token)
 

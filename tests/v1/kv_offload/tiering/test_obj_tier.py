@@ -202,9 +202,7 @@ def _make_tier(
     return tier, mock_agent
 
 
-def drain(
-    tier: ObjectStoreSecondaryTierManager, max_rounds: int = 20
-) -> list[JobResult]:
+def drain(tier: ObjectStoreSecondaryTierManager, max_rounds: int = 20) -> list[JobResult]:
     """Poll get_finished_jobs() until all in-flight jobs resolve."""
     results: list[JobResult] = []
     for _ in range(max_rounds):
@@ -349,9 +347,7 @@ class TestMockObjTierMultiBlock:
 class TestMockObjTierFailures:
     def test_lookup_exception_returns_false(self):
         tier, agent = _make_tier(num_blocks=4)
-        agent.query_memory = lambda *a, **k: (_ for _ in ()).throw(
-            RuntimeError("backend error")
-        )
+        agent.query_memory = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("backend error"))
         assert lookup_and_wait(tier, [key(1)]) == [LookupResult.MISS]
 
     def test_submit_store_register_memory_failure_reported_in_get_finished(self):

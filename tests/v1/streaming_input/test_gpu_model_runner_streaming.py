@@ -93,9 +93,7 @@ def test_e2e_streaming_request_update_basic_flow(mock_model_runner_with_input_ba
     new_req_data.num_computed_tokens = 4  # 3 original prompt + 1 intermediate output
 
     # Step 3: Update the request
-    updated_req_state = GPUModelRunner._update_streaming_request(
-        runner, req_id, new_req_data
-    )
+    updated_req_state = GPUModelRunner._update_streaming_request(runner, req_id, new_req_data)
 
     # Step 4: Verify the request state was updated correctly
     assert updated_req_state.prompt_token_ids == [1, 2, 3, 10, 4, 5]
@@ -173,9 +171,7 @@ def test_e2e_streaming_with_multimodal_features(mock_model_runner_with_input_bat
     new_req_data.num_computed_tokens = 14  # 14 tokens from initial request
 
     # Step 3: Update the request
-    updated_req_state = GPUModelRunner._update_streaming_request(
-        runner, req_id, new_req_data
-    )
+    updated_req_state = GPUModelRunner._update_streaming_request(runner, req_id, new_req_data)
 
     # Step 4: Verify the request state was updated correctly
     # Verify multimodal features are preserved
@@ -187,9 +183,7 @@ def test_e2e_streaming_with_multimodal_features(mock_model_runner_with_input_bat
     # Initial: 2 + 10 (mm1) + 2 = 14 tokens
     # New: 2 + 10 (mm1) + 2 + 1 (output 100) + 5 (mm2) + 1 = 21 tokens
     assert len(updated_req_state.prompt_token_ids) == 21
-    assert updated_req_state.prompt_token_ids == [1, 2] + [0] * 10 + [3, 4, 100] + [
-        0
-    ] * 5 + [5]
+    assert updated_req_state.prompt_token_ids == [1, 2] + [0] * 10 + [3, 4, 100] + [0] * 5 + [5]
 
     # Verify output_token_ids were cleared
     # (intermediate outputs are now in prompt_token_ids)

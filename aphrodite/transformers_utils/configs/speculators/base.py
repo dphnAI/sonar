@@ -36,17 +36,13 @@ class SpeculatorsConfig(PretrainedConfig):
         **kwargs,
     ) -> "SpeculatorsConfig":
         """Load speculators Eagle config and convert to Aphrodite format."""
-        config_dict, _ = cls.get_config_dict(
-            pretrained_model_name_or_path, **without_trust_remote_code(kwargs)
-        )
+        config_dict, _ = cls.get_config_dict(pretrained_model_name_or_path, **without_trust_remote_code(kwargs))
 
         aphrodite_config = cls.extract_transformers_pre_trained_config(config_dict)
         return cls(**aphrodite_config)
 
     @classmethod
-    def extract_transformers_pre_trained_config(
-        cls, config_dict: dict[str, Any]
-    ) -> dict[str, Any]:
+    def extract_transformers_pre_trained_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
         """
         Extract standard Transformers PreTrainedConfig config from speculators config.
         """
@@ -65,9 +61,7 @@ class SpeculatorsConfig(PretrainedConfig):
         return pre_trained_config
 
     @classmethod
-    def extract_aphrodite_speculative_config(
-        cls, config_dict: dict[str, Any]
-    ) -> dict[str, Any]:
+    def extract_aphrodite_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
         """Extract Aphrodite speculative config from speculators config."""
         # validate fields
         # TODO: @dsikka - use speculators pydantic model to validate
@@ -91,14 +85,10 @@ class SpeculatorsConfig(PretrainedConfig):
             raise ValueError("Must provide transformer_layer_config")
 
         if not isinstance(config_dict["transformer_layer_config"], dict):
-            raise TypeError(
-                "'transformer_layer_config' must be a dictionary if provided"
-            )
+            raise TypeError("'transformer_layer_config' must be a dictionary if provided")
 
     @classmethod
-    def build_aphrodite_speculative_config(
-        cls, config_dict: dict[str, Any]
-    ) -> dict[str, Any]:
+    def build_aphrodite_speculative_config(cls, config_dict: dict[str, Any]) -> dict[str, Any]:
         """
         Build Aphrodite-compatible speculative configuration from speculators format.
 
@@ -123,9 +113,7 @@ class SpeculatorsConfig(PretrainedConfig):
         num_speculative_tokens = first_method.get("speculative_tokens")
 
         if num_speculative_tokens is None:
-            raise ValueError(
-                f"Missing 'speculative_tokens' in proposal method. Got: {first_method}"
-            )
+            raise ValueError(f"Missing 'speculative_tokens' in proposal method. Got: {first_method}")
 
         # Build base Aphrodite speculative configuration
         result = {

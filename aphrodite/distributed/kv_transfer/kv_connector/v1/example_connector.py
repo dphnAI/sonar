@@ -51,10 +51,7 @@ class ReqMeta:
         block_ids_tensor = torch.tensor(block_ids)
         num_blocks = block_ids_tensor.shape[0]
         block_offsets = torch.arange(0, block_size)
-        slot_mapping = (
-            block_offsets.reshape((1, block_size))
-            + block_ids_tensor.reshape((num_blocks, 1)) * block_size
-        )
+        slot_mapping = block_offsets.reshape((1, block_size)) + block_ids_tensor.reshape((num_blocks, 1)) * block_size
         slot_mapping = slot_mapping.flatten()[:valid_num_tokens]
         return ReqMeta(
             token_ids=token_ids_tensor,
@@ -76,9 +73,7 @@ class ExampleConnectorMetadata(KVConnectorMetadata):
         is_store: bool,
         mm_hashes: list[str],
     ) -> None:
-        self.requests.append(
-            ReqMeta.make_meta(token_ids, block_ids, block_size, is_store, mm_hashes)
-        )
+        self.requests.append(ReqMeta.make_meta(token_ids, block_ids, block_size, is_store, mm_hashes))
 
 
 class ExampleConnector(KVConnectorBase_V1):
@@ -100,9 +95,7 @@ class ExampleConnector(KVConnectorBase_V1):
         )
         self._block_size = aphrodite_config.cache_config.block_size
         self._requests_need_load: dict[str, Request] = {}
-        self._storage_path = self._kv_transfer_config.get_from_extra_config(
-            "shared_storage_path", "/tmp"
-        )
+        self._storage_path = self._kv_transfer_config.get_from_extra_config("shared_storage_path", "/tmp")
         logger.info(self._kv_transfer_config)
         logger.info("Shared storage path is %s", self._storage_path)
 
@@ -139,9 +132,7 @@ class ExampleConnector(KVConnectorBase_V1):
                 dst_kv_cache_layer_shape = dst_kv_cache_layer.shape
                 num_pages = dst_kv_cache_layer_shape[0]
                 page_size = dst_kv_cache_layer_shape[1]
-                dst_kv_cache_layer = dst_kv_cache_layer.reshape(
-                    num_pages * page_size, -1
-                )
+                dst_kv_cache_layer = dst_kv_cache_layer.reshape(num_pages * page_size, -1)
                 dst_kv_cache_layer[slot_mapping, ...] = src_kv_cache
             else:
                 block_idxs = slot_mapping // self._block_size
@@ -175,12 +166,8 @@ class ExampleConnector(KVConnectorBase_V1):
                 if kv_cache_layer is None:
                     continue
 
-                filename = self._generate_filename_debug(
-                    layer_name, request.token_ids, request.mm_hashes
-                )
-                kv_cache = safetensors.torch.load_file(
-                    filename, device=str(kv_cache_layer.device)
-                )["kv_cache"]
+                filename = self._generate_filename_debug(layer_name, request.token_ids, request.mm_hashes)
+                kv_cache = safetensors.torch.load_file(filename, device=str(kv_cache_layer.device))["kv_cache"]
                 if isinstance(attn_metadata, dict):
                     inject_kv_into_layer(
                         kv_cache_layer,
@@ -238,9 +225,7 @@ class ExampleConnector(KVConnectorBase_V1):
         assert isinstance(connector_metadata, ExampleConnectorMetadata)
         for request in connector_metadata.requests:
             if request.is_store:
-                filename = self._generate_filename_debug(
-                    layer_name, request.token_ids, request.mm_hashes
-                )
+                filename = self._generate_filename_debug(layer_name, request.token_ids, request.mm_hashes)
                 kv_cache = extract_kv_from_layer(kv_layer, request.slot_mapping)
                 tensors = {"kv_cache": kv_cache.detach().cpu()}
                 safetensors.torch.save_file(tensors, filename)
@@ -285,9 +270,7 @@ class ExampleConnector(KVConnectorBase_V1):
 
         return num_tokens_to_check - num_computed_tokens, False
 
-    def update_state_after_alloc(
-        self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: "Request", blocks: "KVCacheBlocks", num_external_tokens: int):
         """
         Update KVConnector state after block allocation.
 
@@ -392,9 +375,7 @@ class ExampleConnector(KVConnectorBase_V1):
         prompt_token_ids: list[int],
         mm_hashes: list[str],
     ) -> bool:
-        num_tokens_to_check = align_to_block_size(
-            len(prompt_token_ids) - 1, self._block_size
-        )
+        num_tokens_to_check = align_to_block_size(len(prompt_token_ids) - 1, self._block_size)
         foldername = self._generate_foldername_debug(
             torch.tensor(prompt_token_ids)[:num_tokens_to_check],
             mm_hashes,
@@ -433,9 +414,7 @@ class ExampleConnector(KVConnectorBase_V1):
         """Generate a file name based on the layer name and the hash
         of the bytes of the input ids.
         """
-        foldername = self._generate_foldername_debug(
-            token_ids, mm_hashes=mm_hashes, create_folder=True
-        )
+        foldername = self._generate_foldername_debug(token_ids, mm_hashes=mm_hashes, create_folder=True)
         return os.path.join(foldername, f"{layer_name}.safetensors")
 
 

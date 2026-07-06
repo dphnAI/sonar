@@ -56,12 +56,8 @@ class XDRotaryEmbedding(DynamicNTKAlphaRotaryEmbedding):
         num_tokens = positions.shape[-1]
         cos_sin = self.cos_sin_cache[positions]
         cos, sin = cos_sin.chunk(2, dim=-1)
-        cos = torch.cat(
-            [m[i] for i, m in enumerate(cos.split(self.xdrope_section, dim=-1))], dim=-1
-        )
-        sin = torch.cat(
-            [m[i] for i, m in enumerate(sin.split(self.xdrope_section, dim=-1))], dim=-1
-        )
+        cos = torch.cat([m[i] for i, m in enumerate(cos.split(self.xdrope_section, dim=-1))], dim=-1)
+        sin = torch.cat([m[i] for i, m in enumerate(sin.split(self.xdrope_section, dim=-1))], dim=-1)
 
         query_shape = query.shape
         query = query.view(num_tokens, -1, self.head_size)
@@ -107,12 +103,8 @@ class XDRotaryEmbedding(DynamicNTKAlphaRotaryEmbedding):
         num_tokens = positions.shape[-1]
         cos_sin = self.cos_sin_cache[positions]
         cos, sin = cos_sin.chunk(2, dim=-1)
-        cos = torch.cat(
-            [m[i] for i, m in enumerate(cos.split(self.xdrope_section, dim=-1))], dim=-1
-        )
-        sin = torch.cat(
-            [m[i] for i, m in enumerate(sin.split(self.xdrope_section, dim=-1))], dim=-1
-        )
+        cos = torch.cat([m[i] for i, m in enumerate(cos.split(self.xdrope_section, dim=-1))], dim=-1)
+        sin = torch.cat([m[i] for i, m in enumerate(sin.split(self.xdrope_section, dim=-1))], dim=-1)
 
         query_shape = query.shape
         query = query.view(num_tokens, -1, self.head_size)

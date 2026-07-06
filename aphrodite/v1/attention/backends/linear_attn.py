@@ -75,10 +75,8 @@ class LinearAttentionMetadataBuilder(AttentionMetadataBuilder[LinearAttentionMet
             self.aphrodite_config.cache_config.mamba_cache_mode,
         )[:, 0]
 
-        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-            split_decodes_and_prefills(
-                common_attn_metadata, decode_threshold=self.reorder_batch_threshold
-            )
+        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
+            common_attn_metadata, decode_threshold=self.reorder_batch_threshold
         )
 
         attn_metadata = LinearAttentionMetadata(

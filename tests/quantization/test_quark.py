@@ -55,9 +55,7 @@ if QUARK_MXFP4_AVAILABLE:
     from quark.torch.quantization.config.config import FP4PerGroupSpec
 
 try:
-    huggingface_hub.list_repo_refs(
-        "amd/Llama-3.3-70B-Instruct-WMXFP4-AMXFP4-KVFP8-Scale-UINT8-SQ"
-    )
+    huggingface_hub.list_repo_refs("amd/Llama-3.3-70B-Instruct-WMXFP4-AMXFP4-KVFP8-Scale-UINT8-SQ")
     HF_HUB_AMD_ORG_ACCESS = True
 except huggingface_hub.errors.RepositoryNotFoundError:
     HF_HUB_AMD_ORG_ACCESS = False
@@ -241,9 +239,7 @@ WIKITEXT_ACCURACY_CONFIGS = [
         model_name="fxmarty/qwen1.5_moe_a2.7b_chat_w_fp6_e3m2_a_fp6_e3m2",
         excepted_value=10.6,
     ),
-    AccuracyTestConfig(
-        model_name="fxmarty/qwen_1.5-moe-a2.7b-mxfp4", excepted_value=12.4
-    ),
+    AccuracyTestConfig(model_name="fxmarty/qwen_1.5-moe-a2.7b-mxfp4", excepted_value=12.4),
 ]
 
 
@@ -255,9 +251,7 @@ WIKITEXT_ACCURACY_CONFIGS = [
     "config",
     [pytest.param(val, id=f"config:{val}") for val in WIKITEXT_ACCURACY_CONFIGS],
 )
-@pytest.mark.parametrize(
-    "tp_size", [pytest.param(val, id=f"tp_size:{val}") for val in [1, 2]]
-)
+@pytest.mark.parametrize("tp_size", [pytest.param(val, id=f"tp_size:{val}") for val in [1, 2]])
 def test_ocp_mx_wikitext_correctness(config: AccuracyTestConfig, tp_size: int):
     device_count = torch.accelerator.device_count()
     if device_count < tp_size:
@@ -269,19 +263,16 @@ def test_ocp_mx_wikitext_correctness(config: AccuracyTestConfig, tp_size: int):
     # Smaller cudagraph_capture_sizes to speed up the test.
     results = lm_eval.simple_evaluate(
         model="aphrodite",
-        model_args=config.get_model_args(
-            tp_size=tp_size, kwargs={"cudagraph_capture_sizes": [16]}
-        ),
+        model_args=config.get_model_args(tp_size=tp_size, kwargs={"cudagraph_capture_sizes": [16]}),
         tasks=task,
         batch_size=64,
     )
 
     EXPECTED_VALUE = config.excepted_value
     measured_value = results["results"][task]["word_perplexity,none"]
-    assert (
-        measured_value < EXPECTED_VALUE + rtol
-        and measured_value > EXPECTED_VALUE - rtol
-    ), f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    assert measured_value < EXPECTED_VALUE + rtol and measured_value > EXPECTED_VALUE - rtol, (
+        f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    )
 
 
 @pytest.mark.skipif(
@@ -325,10 +316,9 @@ def test_nvfp4_wikitext_correctness(tp_size: int):
 
     EXPECTED_VALUE = config.excepted_value
     measured_value = results["results"][task]["word_perplexity,none"]
-    assert (
-        measured_value < EXPECTED_VALUE + rtol
-        and measured_value > EXPECTED_VALUE - rtol
-    ), f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    assert measured_value < EXPECTED_VALUE + rtol and measured_value > EXPECTED_VALUE - rtol, (
+        f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    )
 
 
 @pytest.mark.parametrize("config", GSM8K_ACCURACY_CONFIGS)
@@ -358,10 +348,9 @@ def test_mxfp4_gsm8k_correctness(config: AccuracyTestConfig):
 
     EXPECTED_VALUE = config.excepted_value
     measured_value = results["results"][task]["exact_match,strict-match"]
-    assert (
-        measured_value - rtol < EXPECTED_VALUE
-        and measured_value + rtol > EXPECTED_VALUE
-    ), f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    assert measured_value - rtol < EXPECTED_VALUE and measured_value + rtol > EXPECTED_VALUE, (
+        f"Expected: {EXPECTED_VALUE} |  Measured: {measured_value}"
+    )
 
 
 @pytest.mark.skipif(
@@ -376,9 +365,7 @@ def test_mxfp4_fused_qdq_match_quark(float_dtype: torch.dtype, scalings: list[in
     hidden_size = 64 * 32
     inp = (torch.rand(1, hidden_size, dtype=float_dtype, device=DEVICE_TYPE) - 0.5) * 2
     for i in range(hidden_size // 32):
-        inp[:, i * 32 : (i + 1) * 32] = (
-            inp[:, i * 32 : (i + 1) * 32] * scalings[i % len(scalings)]
-        )
+        inp[:, i * 32 : (i + 1) * 32] = inp[:, i * 32 : (i + 1) * 32] * scalings[i % len(scalings)]
 
     inp_kernel = inp.clone()
     inp_kernel_clone = inp_kernel.clone()
@@ -390,9 +377,7 @@ def test_mxfp4_fused_qdq_match_quark(float_dtype: torch.dtype, scalings: list[in
         assert torch.all(torch.isfinite(res_hip[:, i * 32 : (i + 1) * 32]))
         assert torch.all(torch.isfinite(res_torch[:, i * 32 : (i + 1) * 32]))
 
-        torch.testing.assert_close(
-            res_hip[:, i * 32 : (i + 1) * 32], res_torch[:, i * 32 : (i + 1) * 32]
-        )
+        torch.testing.assert_close(res_hip[:, i * 32 : (i + 1) * 32], res_torch[:, i * 32 : (i + 1) * 32])
 
 
 @pytest.mark.skipif(
@@ -401,9 +386,7 @@ def test_mxfp4_fused_qdq_match_quark(float_dtype: torch.dtype, scalings: list[in
 )
 @pytest.mark.parametrize("float_dtype", [torch.bfloat16, torch.float16])
 @pytest.mark.parametrize("scalings", [[2.3, 0.03, 7.3, 0.1, 0.004, 17.3, 1e4, 1e-4]])
-def test_mxfp4_dequant_kernel_match_quark(
-    float_dtype: torch.dtype, scalings: list[int]
-):
+def test_mxfp4_dequant_kernel_match_quark(float_dtype: torch.dtype, scalings: list[int]):
     qspec = FP4PerGroupSpec(
         ch_axis=-1,
         group_size=32,
@@ -430,9 +413,7 @@ def test_mxfp4_dequant_kernel_match_quark(
 
     # Make it so that different groups have different scales.
     for i in range(hidden_size // 32):
-        w[:, i * 32 : (i + 1) * 32] = (
-            w[:, i * 32 : (i + 1) * 32] * scalings[i % len(scalings)]
-        )
+        w[:, i * 32 : (i + 1) * 32] = w[:, i * 32 : (i + 1) * 32] * scalings[i % len(scalings)]
 
     observer(w)
     scale, _ = observer._calculate_qparams()

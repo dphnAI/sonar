@@ -93,9 +93,7 @@ class Step3p5MTPProposer(EagleProposer):
             block_size,
         )
         # Parent already produced slot_mapping for the primary gid.
-        self._per_group_slot_mappings[self.kv_cache_gid] = (
-            common_attn_metadata.slot_mapping
-        )
+        self._per_group_slot_mappings[self.kv_cache_gid] = common_attn_metadata.slot_mapping
         # Recompute slot_mapping for the remaining gids using their own block tables.
         new_positions_1d = positions[0] if self.uses_mrope else positions
         exceeds = old_positions_1d + 1 >= self.max_model_len
@@ -188,22 +186,15 @@ class Step3p5MTPProposer(EagleProposer):
                 layer_to_gid[layer_name] = gid
                 if isinstance(group_spec, UniformTypeKVCacheSpecs):
                     if layer_name in group_spec.kv_cache_specs:
-                        layer_to_spec[layer_name] = group_spec.kv_cache_specs[
-                            layer_name
-                        ]
+                        layer_to_spec[layer_name] = group_spec.kv_cache_specs[layer_name]
                     else:
                         target_layer_name = getattr(
                             all_attn_layers.get(layer_name),
                             "kv_sharing_target_layer_name",
                             None,
                         )
-                        if (
-                            target_layer_name
-                            and target_layer_name in group_spec.kv_cache_specs
-                        ):
-                            layer_to_spec[layer_name] = group_spec.kv_cache_specs[
-                                target_layer_name
-                            ]
+                        if target_layer_name and target_layer_name in group_spec.kv_cache_specs:
+                            layer_to_spec[layer_name] = group_spec.kv_cache_specs[target_layer_name]
                         else:
                             layer_to_spec[layer_name] = group_spec
                 else:
@@ -243,16 +234,10 @@ class Step3p5MTPProposer(EagleProposer):
         self.draft_attn_groups = list(attention_groups.values())
         if self.draft_attn_groups:
             self.kv_cache_gid = self.draft_attn_groups[0].kv_cache_group_id
-            self.block_size = (
-                self.draft_attn_groups[0]
-                .get_metadata_builder()
-                .kv_cache_spec.block_size
-            )
+            self.block_size = self.draft_attn_groups[0].get_metadata_builder().kv_cache_spec.block_size
         else:
             self.kv_cache_gid = 0
-            self.block_size = kv_cache_config.kv_cache_groups[
-                0
-            ].kv_cache_spec.block_size
+            self.block_size = kv_cache_config.kv_cache_groups[0].kv_cache_spec.block_size
 
     def _sample_draft_tokens_for_step(
         self,
@@ -263,9 +248,7 @@ class Step3p5MTPProposer(EagleProposer):
         if not self._enable_probabilistic_draft_probs or sampling_metadata.all_greedy:
             if self.use_local_argmax_reduction:
                 return self.model.get_top_tokens(hidden_states), None
-            logits = self.model.compute_logits(
-                hidden_states, spec_step_idx=spec_step_idx
-            )
+            logits = self.model.compute_logits(hidden_states, spec_step_idx=spec_step_idx)
             return logits.argmax(dim=-1), None
 
         logits = self.model.compute_logits(hidden_states, spec_step_idx=spec_step_idx)
@@ -283,32 +266,28 @@ class Step3p5MTPProposer(EagleProposer):
         sampling_metadata: SamplingMetadata,
         mm_embed_inputs: tuple[list[torch.Tensor], torch.Tensor] | None = None,
         num_rejected_tokens_gpu: torch.Tensor | None = None,
-        slot_mappings: dict[str, torch.Tensor]
-        | list[dict[str, torch.Tensor]]
-        | None = None,
+        slot_mappings: dict[str, torch.Tensor] | list[dict[str, torch.Tensor]] | None = None,
     ) -> torch.Tensor:
         self.num_speculative_tokens = num_speculative_tokens
         self._last_draft_probs = None
         batch_size = common_attn_metadata.batch_size()
 
-        num_tokens, token_indices_to_sample, common_attn_metadata = (
-            self.set_inputs_first_pass(
-                target_token_ids=target_token_ids,
-                next_token_ids=next_token_ids,
-                target_positions=target_positions,
-                target_hidden_states=target_hidden_states,
-                token_indices_to_sample=token_indices_to_sample,
-                cad=common_attn_metadata,
-                num_rejected_tokens_gpu=num_rejected_tokens_gpu,
-            )
+        num_tokens, token_indices_to_sample, common_attn_metadata = self.set_inputs_first_pass(
+            target_token_ids=target_token_ids,
+            next_token_ids=next_token_ids,
+            target_positions=target_positions,
+            target_hidden_states=target_hidden_states,
+            token_indices_to_sample=token_indices_to_sample,
+            cad=common_attn_metadata,
+            num_rejected_tokens_gpu=num_rejected_tokens_gpu,
         )
 
-        per_group_attn_metadata, per_layer_attn_metadata = (
-            self.build_per_group_and_layer_attn_metadata(common_attn_metadata)
+        per_group_attn_metadata, per_layer_attn_metadata = self.build_per_group_and_layer_attn_metadata(
+            common_attn_metadata
         )
 
-        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = (
-            self._determine_batch_execution_and_padding(num_tokens)
+        cudagraph_runtime_mode, num_input_tokens, num_tokens_across_dp = self._determine_batch_execution_and_padding(
+            num_tokens
         )
 
         model_kwargs, slot_mapping_size = self.build_model_inputs_first_pass(
@@ -322,9 +301,7 @@ class Step3p5MTPProposer(EagleProposer):
             num_tokens=num_input_tokens,
             num_tokens_across_dp=num_tokens_across_dp,
             cudagraph_runtime_mode=cudagraph_runtime_mode,
-            slot_mapping=self._get_slot_mapping(
-                slot_mapping_size, common_attn_metadata.slot_mapping
-            ),
+            slot_mapping=self._get_slot_mapping(slot_mapping_size, common_attn_metadata.slot_mapping),
         ):
             ret_hidden_states = self.model(**model_kwargs)
             if not self.model_returns_tuple():
@@ -371,16 +348,14 @@ class Step3p5MTPProposer(EagleProposer):
 
         draft_token_ids_list = [draft_token_ids]
 
-        cudagraph_runtime_mode, input_batch_size, batch_size_across_dp = (
-            self._determine_batch_execution_and_padding(batch_size)
+        cudagraph_runtime_mode, input_batch_size, batch_size_across_dp = self._determine_batch_execution_and_padding(
+            batch_size
         )
 
         common_attn_metadata.num_actual_tokens = batch_size
         common_attn_metadata.max_query_len = 1
         common_attn_metadata.query_start_loc = self.arange[: batch_size + 1]
-        common_attn_metadata.query_start_loc_cpu = torch.from_numpy(
-            self.token_arange_np[: batch_size + 1]
-        ).clone()
+        common_attn_metadata.query_start_loc_cpu = torch.from_numpy(self.token_arange_np[: batch_size + 1]).clone()
 
         if self.num_speculative_tokens > 1 and num_rejected_tokens_gpu is not None:
             common_attn_metadata.seq_lens -= num_rejected_tokens_gpu
@@ -403,10 +378,8 @@ class Step3p5MTPProposer(EagleProposer):
                 )
 
             if not self.constant_draft_positions or token_index == 0:
-                _, per_layer_attn_metadata = (
-                    self.build_per_group_and_layer_attn_metadata(
-                        common_attn_metadata, draft_index=spec_step_idx
-                    )
+                _, per_layer_attn_metadata = self.build_per_group_and_layer_attn_metadata(
+                    common_attn_metadata, draft_index=spec_step_idx
                 )
 
             self.input_ids[:batch_size] = input_ids

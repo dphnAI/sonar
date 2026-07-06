@@ -26,9 +26,7 @@ Many AITER ops want to remain invisible to torch.compile even after lowering.
 They are thus wrapped into torch custom ops inside the IR op implementations.
 """
 
-direct_register_aiter_op = functools.partial(
-    direct_register_custom_op, target_lib=aiter_lib
-)
+direct_register_aiter_op = functools.partial(direct_register_custom_op, target_lib=aiter_lib)
 """Syntactic sugar for registering AITER custom ops."""
 
 AITER_SUPPORTED = is_aiter_found()
@@ -43,12 +41,8 @@ rms_no_var_16bit_only = (
 and requires weight dtype to match x dtype."""
 
 
-@ir.ops.rms_norm.register_impl(
-    "aiter", supports_args=rms_no_var_16bit_only, supported=AITER_SUPPORTED
-)
-def rms_norm(
-    x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None
-) -> Tensor:
+@ir.ops.rms_norm.register_impl("aiter", supports_args=rms_no_var_16bit_only, supported=AITER_SUPPORTED)
+def rms_norm(x: Tensor, weight: Tensor | None, epsilon: float, variance_size: int | None = None) -> Tensor:
     assert variance_size is None
     assert x.dtype in (torch.float16, torch.bfloat16)
     if weight is None:
@@ -72,9 +66,7 @@ def _rms_norm_fake(x: Tensor, weight: Tensor, variance_epsilon: float) -> Tensor
     return torch.empty_like(x)
 
 
-direct_register_aiter_op(
-    op_name="rms_norm", op_func=_rms_norm_impl, fake_impl=_rms_norm_fake
-)
+direct_register_aiter_op(op_name="rms_norm", op_func=_rms_norm_impl, fake_impl=_rms_norm_fake)
 
 rms_add_no_var_16bit_only = (
     lambda x, x_residual, weight, epsilon, variance_size=None: variance_size is None
@@ -87,9 +79,7 @@ Requires weight dtype to match x dtype.
 """
 
 
-@ir.ops.fused_add_rms_norm.register_impl(
-    "aiter", supports_args=rms_add_no_var_16bit_only, supported=AITER_SUPPORTED
-)
+@ir.ops.fused_add_rms_norm.register_impl("aiter", supports_args=rms_add_no_var_16bit_only, supported=AITER_SUPPORTED)
 def fused_add_rms_norm(
     x: Tensor,
     x_residual: Tensor,

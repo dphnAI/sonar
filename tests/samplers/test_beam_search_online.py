@@ -64,9 +64,7 @@ async def test_beam_search_handles_extra_logprob_candidates() -> None:
     }
     params = BeamSearchParams(beam_width=2, max_tokens=1)
 
-    outputs = [
-        output async for output in _Serving().beam_search(prompt, "request", params)
-    ]
+    outputs = [output async for output in _Serving().beam_search(prompt, "request", params)]
 
     assert len(outputs) == 1
     assert outputs[0].outputs[0].finish_reason == "stop"

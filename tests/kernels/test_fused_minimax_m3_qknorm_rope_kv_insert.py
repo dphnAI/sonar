@@ -32,13 +32,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def make_cos_sin_cache(max_pos, rotary_dim, base, dtype, device):
-    inv_freq = 1.0 / (
-        base
-        ** (
-            torch.arange(0, rotary_dim, 2, dtype=torch.float32, device=device)
-            / rotary_dim
-        )
-    )
+    inv_freq = 1.0 / (base ** (torch.arange(0, rotary_dim, 2, dtype=torch.float32, device=device) / rotary_dim))
     t = torch.arange(max_pos, dtype=torch.float32, device=device)
     freqs = torch.einsum("i,j->ij", t, inv_freq)  # [max_pos, rotary_dim/2]
     cache = torch.cat((freqs.cos(), freqs.sin()), dim=-1)  # [max_pos, rotary_dim]
@@ -97,9 +91,7 @@ def test_dense_norm_rope(num_tokens, num_heads, num_kv_heads):
     q_w = torch.randn(HEAD_DIM, dtype=dtype, device=device) * 0.1
     k_w = torch.randn(HEAD_DIM, dtype=dtype, device=device) * 0.1
     cos_sin = make_cos_sin_cache(max_pos, ROTARY_DIM, base, dtype, device)
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), dtype=torch.int64, device=device
-    )
+    positions = torch.randint(0, max_pos, (num_tokens,), dtype=torch.int64, device=device)
 
     qsz, kvsz = num_heads * HEAD_DIM, num_kv_heads * HEAD_DIM
     qkv = torch.randn(num_tokens, qsz + 2 * kvsz, dtype=dtype, device=device)
@@ -120,9 +112,9 @@ def test_dense_norm_rope(num_tokens, num_heads, num_kv_heads):
     q_out, k_out, v_out = qkv.split([qsz, kvsz, kvsz], dim=-1)
 
     q_in, k_in, v_in = qkv_orig.split([qsz, kvsz, kvsz], dim=-1)
-    q_ref = norm_rope_ref(
-        q_in.view(num_tokens, num_heads, HEAD_DIM), q_w, positions, cos_sin, eps
-    ).view(num_tokens, qsz)
+    q_ref = norm_rope_ref(q_in.view(num_tokens, num_heads, HEAD_DIM), q_w, positions, cos_sin, eps).view(
+        num_tokens, qsz
+    )
     k_ref = norm_rope_ref(
         k_in.view(num_tokens, num_kv_heads, HEAD_DIM),
         k_w,
@@ -154,16 +146,12 @@ def test_sparse_full(num_tokens, block_size, kv_cache_dtype):
     iq_w = torch.randn(HEAD_DIM, dtype=dtype, device=device) * 0.1
     ik_w = torch.randn(HEAD_DIM, dtype=dtype, device=device) * 0.1
     cos_sin = make_cos_sin_cache(max_pos, ROTARY_DIM, base, dtype, device)
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), dtype=torch.int64, device=device
-    )
+    positions = torch.randint(0, max_pos, (num_tokens,), dtype=torch.int64, device=device)
 
     qsz, kvsz = num_heads * HEAD_DIM, num_kv_heads * HEAD_DIM
     iqsz, iksz = num_idx_heads * HEAD_DIM, HEAD_DIM
     # Single fused tensor packing [q | k | v | index_q | index_k].
-    qkv = torch.randn(
-        num_tokens, qsz + 2 * kvsz + iqsz + iksz, dtype=dtype, device=device
-    )
+    qkv = torch.randn(num_tokens, qsz + 2 * kvsz + iqsz + iksz, dtype=dtype, device=device)
     qkv_orig = qkv.clone()
     splits = [qsz, kvsz, kvsz, iqsz, iksz]
 
@@ -178,12 +166,8 @@ def test_sparse_full(num_tokens, block_size, kv_cache_dtype):
         dtype=kv_cache_storage_dtype,
         device=device,
     )
-    index_cache = torch.zeros(
-        num_blocks, block_size, HEAD_DIM, dtype=dtype, device=device
-    )
-    slot_mapping = torch.randperm(
-        num_blocks * block_size, dtype=torch.int64, device=device
-    )[:num_tokens]
+    index_cache = torch.zeros(num_blocks, block_size, HEAD_DIM, dtype=dtype, device=device)
+    slot_mapping = torch.randperm(num_blocks * block_size, dtype=torch.int64, device=device)[:num_tokens]
     index_slot_mapping = torch.roll(slot_mapping, shifts=1)
 
     # Contiguous gather targets: the kernel writes the normed/roped q and
@@ -219,9 +203,9 @@ def test_sparse_full(num_tokens, block_size, kv_cache_dtype):
     # rewritten in place inside qkv. ──
     _, k_out, v_out, _, index_k = qkv.split(splits, dim=-1)
     q_in, k_in, v_in, iq_orig, ik_orig = qkv_orig.split(splits, dim=-1)
-    q_ref = norm_rope_ref(
-        q_in.view(num_tokens, num_heads, HEAD_DIM), q_w, positions, cos_sin, eps
-    ).view(num_tokens, qsz)
+    q_ref = norm_rope_ref(q_in.view(num_tokens, num_heads, HEAD_DIM), q_w, positions, cos_sin, eps).view(
+        num_tokens, qsz
+    )
     k_ref = norm_rope_ref(
         k_in.view(num_tokens, num_kv_heads, HEAD_DIM),
         k_w,
@@ -236,9 +220,9 @@ def test_sparse_full(num_tokens, block_size, kv_cache_dtype):
         cos_sin,
         eps,
     ).view(num_tokens, num_idx_heads * HEAD_DIM)
-    ik_ref = norm_rope_ref(
-        ik_orig.view(num_tokens, 1, HEAD_DIM), ik_w, positions, cos_sin, eps
-    ).view(num_tokens, HEAD_DIM)
+    ik_ref = norm_rope_ref(ik_orig.view(num_tokens, 1, HEAD_DIM), ik_w, positions, cos_sin, eps).view(
+        num_tokens, HEAD_DIM
+    )
 
     torch.testing.assert_close(q_out, q_ref, rtol=1e-2, atol=1e-2)
     torch.testing.assert_close(k_out, k_ref, rtol=1e-2, atol=1e-2)
@@ -268,16 +252,12 @@ def test_sparse_full(num_tokens, block_size, kv_cache_dtype):
         for t in range(num_tokens):
             s = slot_mapping[t].item()
             b, pos = s // block_size, s % block_size
-            torch.testing.assert_close(
-                kv_cache[b, 0, pos], k_ref_h[t], rtol=1e-2, atol=1e-2
-            )
+            torch.testing.assert_close(kv_cache[b, 0, pos], k_ref_h[t], rtol=1e-2, atol=1e-2)
             torch.testing.assert_close(kv_cache[b, 1, pos], v_ref_h[t], rtol=0, atol=0)
 
     expected_index_cache = torch.zeros_like(index_cache).view(-1, HEAD_DIM)
     expected_index_cache[index_slot_mapping] = index_k
-    torch.testing.assert_close(
-        index_cache.view(-1, HEAD_DIM), expected_index_cache, rtol=0, atol=0
-    )
+    torch.testing.assert_close(index_cache.view(-1, HEAD_DIM), expected_index_cache, rtol=0, atol=0)
 
 
 # ── Test 3: fp8 (e4m3) index outputs ─────────────────────────────────────────
@@ -304,20 +284,14 @@ def test_sparse_full_fp8_index(num_tokens, block_size):
     iq_w = torch.randn(HEAD_DIM, dtype=dtype, device=device) * 0.1
     ik_w = torch.randn(HEAD_DIM, dtype=dtype, device=device) * 0.1
     cos_sin = make_cos_sin_cache(max_pos, ROTARY_DIM, base, dtype, device)
-    positions = torch.randint(
-        0, max_pos, (num_tokens,), dtype=torch.int64, device=device
-    )
+    positions = torch.randint(0, max_pos, (num_tokens,), dtype=torch.int64, device=device)
 
     qsz, kvsz = num_heads * HEAD_DIM, num_kv_heads * HEAD_DIM
     iqsz, iksz = num_idx_heads * HEAD_DIM, HEAD_DIM
-    qkv0 = torch.randn(
-        num_tokens, qsz + 2 * kvsz + iqsz + iksz, dtype=dtype, device=device
-    )
+    qkv0 = torch.randn(num_tokens, qsz + 2 * kvsz + iqsz + iksz, dtype=dtype, device=device)
 
     num_blocks = (num_tokens + block_size - 1) // block_size + 1
-    slot_mapping = torch.randperm(
-        num_blocks * block_size, dtype=torch.int64, device=device
-    )[:num_tokens]
+    slot_mapping = torch.randperm(num_blocks * block_size, dtype=torch.int64, device=device)[:num_tokens]
     index_slot_mapping = torch.roll(slot_mapping, shifts=1)
 
     def run(index_dtype):
@@ -331,9 +305,7 @@ def test_sparse_full_fp8_index(num_tokens, block_size):
             dtype=dtype,
             device=device,
         )
-        index_cache = torch.zeros(
-            num_blocks, block_size, HEAD_DIM, dtype=index_dtype, device=device
-        )
+        index_cache = torch.zeros(num_blocks, block_size, HEAD_DIM, dtype=index_dtype, device=device)
         q_out = torch.empty(num_tokens, qsz, dtype=dtype, device=device)
         index_q = torch.empty(num_tokens, iqsz, dtype=index_dtype, device=device)
         ops.fused_minimax_m3_qknorm_rope_kv_insert(

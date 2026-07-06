@@ -4,11 +4,6 @@
 import pytest
 import torch
 
-from tests.kernels.quantization.nvfp4_utils import (
-    dequant_nvfp4_kv_cache,
-    dequantize_nvfp4_to_dtype,
-    get_nvfp4_global_scale,
-)
 from aphrodite.platforms import current_platform
 from aphrodite.utils.math_utils import round_up
 from aphrodite.utils.torch_utils import (
@@ -16,11 +11,14 @@ from aphrodite.utils.torch_utils import (
     nvfp4_kv_cache_split_views,
     set_random_seed,
 )
+from tests.kernels.quantization.nvfp4_utils import (
+    dequant_nvfp4_kv_cache,
+    dequantize_nvfp4_to_dtype,
+    get_nvfp4_global_scale,
+)
 
 if not current_platform.is_device_capability_family(100):
-    pytest.skip(
-        "This TRTLLM kernel requires NVIDIA Blackwell.", allow_module_level=True
-    )
+    pytest.skip("This TRTLLM kernel requires NVIDIA Blackwell.", allow_module_level=True)
 else:
     import flashinfer
 
@@ -61,18 +59,14 @@ def build_paged_kv_metadata(
     )
 
 
-def make_nvfp4_kv_cache(
-    kv_bf16_hnd: torch.Tensor, block_size: int, head_size: int
-) -> tuple:
+def make_nvfp4_kv_cache(kv_bf16_hnd: torch.Tensor, block_size: int, head_size: int) -> tuple:
     """Quantize bf16 KV cache to nvfp4 via reshape_and_cache_flash.
 
     Returns (k_data, v_data), (k_scales, v_scales), kv_scale, ref_kv_bf16.
     """
     num_blocks, _, num_kv_heads, _, _ = kv_bf16_hnd.shape
     kv_scale_val = (kv_bf16_hnd.abs().amax() / 448.0).item()
-    kv_scale_tensor = torch.tensor(
-        kv_scale_val, dtype=torch.float32, device=kv_bf16_hnd.device
-    )
+    kv_scale_tensor = torch.tensor(kv_scale_val, dtype=torch.float32, device=kv_bf16_hnd.device)
 
     # Allocate in HND physical order, permute to NHD logical order.
     # hnd_order swaps dims 2↔3; it is its own inverse.
@@ -86,16 +80,8 @@ def make_nvfp4_kv_cache(
 
     # Flatten NHD [N, T, H, D] → token tensors [N*T, H, D] for the kernel.
     num_tokens = num_blocks * block_size
-    k_tokens = (
-        kv_bf16_hnd[:, 0]
-        .permute(0, 2, 1, 3)
-        .reshape(num_tokens, num_kv_heads, head_size)
-    )
-    v_tokens = (
-        kv_bf16_hnd[:, 1]
-        .permute(0, 2, 1, 3)
-        .reshape(num_tokens, num_kv_heads, head_size)
-    )
+    k_tokens = kv_bf16_hnd[:, 0].permute(0, 2, 1, 3).reshape(num_tokens, num_kv_heads, head_size)
+    v_tokens = kv_bf16_hnd[:, 1].permute(0, 2, 1, 3).reshape(num_tokens, num_kv_heads, head_size)
     slot_mapping = torch.arange(num_tokens, dtype=torch.long, device=kv_bf16_hnd.device)
 
     # reshape_and_cache_flash: kernel receives kv_cache[:, 0] and [:, 1]
@@ -116,12 +102,8 @@ def make_nvfp4_kv_cache(
     (k_data, v_data), (k_scales, v_scales) = nvfp4_kv_cache_split_views(kv_cache_hnd)
 
     # Dequantize for the FA2 reference baseline.
-    ref_k = dequant_nvfp4_kv_cache(
-        k_data, k_scales, kv_scale_val, head_size, block_size
-    ).to(torch.bfloat16)
-    ref_v = dequant_nvfp4_kv_cache(
-        v_data, v_scales, kv_scale_val, head_size, block_size
-    ).to(torch.bfloat16)
+    ref_k = dequant_nvfp4_kv_cache(k_data, k_scales, kv_scale_val, head_size, block_size).to(torch.bfloat16)
+    ref_v = dequant_nvfp4_kv_cache(v_data, v_scales, kv_scale_val, head_size, block_size).to(torch.bfloat16)
     ref_kv_bf16 = torch.stack([ref_k, ref_v], dim=1)  # [N, 2, H, T, D]
 
     return (k_data, v_data), (k_scales, v_scales), kv_scale_val, ref_kv_bf16
@@ -137,9 +119,7 @@ def make_quantized_kv_cache(
     kv_scale, ref_kv_cache, is_nvfp4_kv)."""
     is_nvfp4_kv = kv_quant_dtype == FP4_DTYPE
     if is_nvfp4_kv:
-        data, scales, kv_scale, ref = make_nvfp4_kv_cache(
-            kv_cache, block_size, head_size
-        )
+        data, scales, kv_scale, ref = make_nvfp4_kv_cache(kv_cache, block_size, head_size)
         return data, scales, kv_scale, ref, True
     elif kv_quant_dtype == FP8_DTYPE:
         kv_fp8, kv_scale = to_float8(kv_cache)
@@ -244,19 +224,15 @@ def test_flashinfer_trtllm_decode_with_baseline(
     max_seq_len = torch.max(seq_lens).item()
 
     kv_cache = torch.randn(kv_cache_shape, dtype=dtype)
-    kv_cache, kv_cache_sf, kv_scale, ref_kv_cache, is_nvfp4_kv = (
-        make_quantized_kv_cache(kv_cache, kv_quant_dtype, block_size, head_size)
+    kv_cache, kv_cache_sf, kv_scale, ref_kv_cache, is_nvfp4_kv = make_quantized_kv_cache(
+        kv_cache, kv_quant_dtype, block_size, head_size
     )
 
     k_scale = v_scale = kv_scale
 
     max_num_blocks_per_seq = (max_seq_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, NUM_BLOCKS, (batch_size, max_num_blocks_per_seq), dtype=torch.int32
-    )
-    kv_indptr, kv_indices, kv_last_page_lens = build_paged_kv_metadata(
-        seq_lens, block_tables, block_size
-    )
+    block_tables = torch.randint(0, NUM_BLOCKS, (batch_size, max_num_blocks_per_seq), dtype=torch.int32)
+    kv_indptr, kv_indices, kv_last_page_lens = build_paged_kv_metadata(seq_lens, block_tables, block_size)
     workspace_buffer = torch.zeros(128 * 1024 * 1024, dtype=torch.int8)
 
     # Baseline Decode
@@ -331,9 +307,7 @@ def test_flashinfer_trtllm_decode_with_baseline(
     if o_quant_dtype == FP8_DTYPE:
         output_trtllm = output_trtllm.to(dtype) * o_scale
     elif o_quant_dtype == FP4_DTYPE:
-        output_trtllm.data = output_trtllm.data.reshape(
-            -1, query.shape[1] * query.shape[2] // 2
-        )
+        output_trtllm.data = output_trtllm.data.reshape(-1, query.shape[1] * query.shape[2] // 2)
         output_trtllm = dequantize_nvfp4_to_dtype(
             output_trtllm.data, output_trtllm.scale, o_sf_scale, dtype, query.device
         )
@@ -394,9 +368,7 @@ def test_flashinfer_trtllm_prefill_with_baseline(
     # FP8 Q + nvfp4 KV is the required combination for the nvfp4 KV path.
     # All other mixed Q/KV dtype combinations are unsupported.
     is_nvfp4_kv = kv_quant_dtype == FP4_DTYPE
-    if q_quant_dtype != kv_quant_dtype and not (
-        q_quant_dtype == FP8_DTYPE and is_nvfp4_kv
-    ):
+    if q_quant_dtype != kv_quant_dtype and not (q_quant_dtype == FP8_DTYPE and is_nvfp4_kv):
         pytest.skip("Skipped mixed QKV dtypes for prefill")
 
     max_q_len, max_kv_len = max_seq_lens
@@ -438,19 +410,15 @@ def test_flashinfer_trtllm_prefill_with_baseline(
     max_seq_len = torch.max(seq_lens).item()
 
     kv_cache = torch.randn(kv_cache_shape, dtype=dtype)
-    kv_cache, kv_cache_sf, kv_scale, ref_kv_cache, is_nvfp4_kv = (
-        make_quantized_kv_cache(kv_cache, kv_quant_dtype, block_size, head_size)
+    kv_cache, kv_cache_sf, kv_scale, ref_kv_cache, is_nvfp4_kv = make_quantized_kv_cache(
+        kv_cache, kv_quant_dtype, block_size, head_size
     )
 
     k_scale = v_scale = kv_scale
 
     max_num_blocks_per_seq = (max_seq_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, NUM_BLOCKS, (batch_size, max_num_blocks_per_seq), dtype=torch.int32
-    )
-    kv_indptr, kv_indices, kv_last_page_lens = build_paged_kv_metadata(
-        seq_lens, block_tables, block_size
-    )
+    block_tables = torch.randint(0, NUM_BLOCKS, (batch_size, max_num_blocks_per_seq), dtype=torch.int32)
+    kv_indptr, kv_indices, kv_last_page_lens = build_paged_kv_metadata(seq_lens, block_tables, block_size)
     workspace_buffer = torch.zeros(128 * 1024 * 1024, dtype=torch.int8)
 
     # Baseline Prefill
@@ -529,9 +497,7 @@ def test_flashinfer_trtllm_prefill_with_baseline(
     if o_quant_dtype == FP8_DTYPE:
         output_trtllm = output_trtllm.to(dtype) * o_scale
     elif o_quant_dtype == FP4_DTYPE:
-        output_trtllm.data = output_trtllm.data.reshape(
-            -1, query.shape[1] * query.shape[2] // 2
-        )
+        output_trtllm.data = output_trtllm.data.reshape(-1, query.shape[1] * query.shape[2] // 2)
         output_trtllm = dequantize_nvfp4_to_dtype(
             output_trtllm.data, output_trtllm.scale, o_sf_scale, dtype, query.device
         )

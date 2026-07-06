@@ -38,8 +38,7 @@ class CPUWNA16LinearKernel(MPLinearKernel):
         if c.group_size != -1 and c.group_size % 2 != 0:
             return (
                 False,
-                f"Group size ({c.group_size}) not supported by "
-                "CPUWNA16, supported group sizes are multiples of 2",
+                f"Group size ({c.group_size}) not supported by CPUWNA16, supported group sizes are multiples of 2",
             )
 
         if c.partition_weight_shape[0] % 32 != 0:
@@ -72,9 +71,7 @@ class CPUWNA16LinearKernel(MPLinearKernel):
         layer.isa_hint = isa_hint
 
         # convert input dim packed to output dim packed
-        weight = unpack_quantized_values_into_int32(
-            packed_weight, self.config.weight_type, 0
-        )
+        weight = unpack_quantized_values_into_int32(packed_weight, self.config.weight_type, 0)
         weight = pack_quantized_values_into_int32(weight, self.config.weight_type, 1)
         # make 16 output channel as a block and transpose to the make
         # the block contiguous
@@ -109,22 +106,16 @@ class CPUWNA16LinearKernel(MPLinearKernel):
 
         # FIXME: some bugs in convert_weight_packed_scale_zp with GPTQ format,
         # repack to AWQ weight
-        weight = unpack_quantized_values_into_int32(
-            packed_weight, self.config.weight_type, 0
-        )
+        weight = unpack_quantized_values_into_int32(packed_weight, self.config.weight_type, 0)
         input_size, output_size = weight.size()
         weight = weight.view(input_size, output_size // 8, 8)
         weight = weight[:, :, (0, 2, 4, 6, 1, 3, 5, 7)].reshape(input_size, output_size)
-        weight = pack_quantized_values_into_int32(
-            weight, self.config.weight_type, 1
-        ).contiguous()
+        weight = pack_quantized_values_into_int32(weight, self.config.weight_type, 1).contiguous()
 
         zp = unpack_quantized_values_into_int32(packed_zp, self.config.weight_type, 1)
         zp = zp.view(group_num, output_size // 8, 8)
         zp = zp[:, :, (0, 2, 4, 6, 1, 3, 5, 7)].reshape(group_num, output_size)
-        zp = pack_quantized_values_into_int32(
-            zp, self.config.weight_type, 1
-        ).contiguous()
+        zp = pack_quantized_values_into_int32(zp, self.config.weight_type, 1).contiguous()
 
         blocked_w, blocked_zp, blocked_s = ops.convert_weight_packed_scale_zp(
             weight,

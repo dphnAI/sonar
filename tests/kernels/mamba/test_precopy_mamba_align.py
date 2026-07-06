@@ -53,14 +53,8 @@ def _build_state(num_blocks, device):
     """Per-layer (conv SD [nb, width, dim] bf16, ssm [nb, *shape] fp32) pools."""
     convs, ssms = [], []
     for _ in range(NUM_LAYERS):
-        convs.append(
-            torch.randn(
-                num_blocks, CONV_WIDTH, CONV_DIM, dtype=torch.bfloat16, device=device
-            )
-        )
-        ssms.append(
-            torch.randn(num_blocks, *SSM_SHAPE, dtype=torch.float32, device=device)
-        )
+        convs.append(torch.randn(num_blocks, CONV_WIDTH, CONV_DIM, dtype=torch.bfloat16, device=device))
+        ssms.append(torch.randn(num_blocks, *SSM_SHAPE, dtype=torch.float32, device=device))
     return convs, ssms
 
 
@@ -122,9 +116,7 @@ def test_precopy_matches_v1_copy_specs(num_reqs, token_bias):
     num_blocks = num_reqs * MAX_COLS + 1
     bt = torch.empty(num_reqs, MAX_COLS, dtype=torch.int32, device=device)
     for r in range(num_reqs):
-        bt[r] = torch.arange(
-            1 + r * MAX_COLS, 1 + (r + 1) * MAX_COLS, dtype=torch.int32, device=device
-        )
+        bt[r] = torch.arange(1 + r * MAX_COLS, 1 + (r + 1) * MAX_COLS, dtype=torch.int32, device=device)
 
     # Per-req columns: req 0 fresh (src=-1, skip), req 1 same block (skip),
     # the rest cross from col 1 -> col 0 with the given spec token bias.
@@ -137,13 +129,9 @@ def test_precopy_matches_v1_copy_specs(num_reqs, token_bias):
         dst_col[1] = 1  # src_col == dst_col -> no copy
 
     convs, ssms = _build_state(num_blocks, device)
-    conv_ref, ssm_ref = _reference(
-        convs, ssms, bt.cpu(), src_col.cpu(), dst_col.cpu(), bias.cpu(), num_reqs
-    )
+    conv_ref, ssm_ref = _reference(convs, ssms, bt.cpu(), src_col.cpu(), dst_col.cpu(), bias.cpu(), num_reqs)
 
-    base, blk_stride, elem, inner, width, group, drc, drs = _build_meta(
-        convs, ssms, device
-    )
+    base, blk_stride, elem, inner, width, group, drc, drs = _build_meta(convs, ssms, device)
     bt_ptrs = torch.tensor([bt.data_ptr()], dtype=torch.int64, device=device)
     idx_mapping = torch.arange(num_reqs, dtype=torch.int32, device=device)
     grid = (num_reqs, NUM_LAYERS * 2)

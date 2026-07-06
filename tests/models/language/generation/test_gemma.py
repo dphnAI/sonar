@@ -20,8 +20,6 @@ def test_dummy_loader(aphrodite_runner, monkeypatch, model: str) -> None:
                 )
                 config = llm.llm.llm_engine.model_config.hf_config.text_config
             else:
-                normalizers = llm.llm.collective_rpc(
-                    lambda self: self.model_runner.model.model.normalizer.cpu().item()
-                )
+                normalizers = llm.llm.collective_rpc(lambda self: self.model_runner.model.model.normalizer.cpu().item())
                 config = llm.llm.llm_engine.model_config.hf_config
             assert np.allclose(normalizers, config.hidden_size**0.5, rtol=2e-3)

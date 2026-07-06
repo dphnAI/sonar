@@ -33,50 +33,32 @@ class EAGLEConfig(PretrainedConfig):
         if self.model is None:
             self.truncated_vocab_size = None
         else:
-            self.truncated_vocab_size = (
-                self.model.vocab_size
-                if truncated_vocab_size is None
-                else truncated_vocab_size
-            )
+            self.truncated_vocab_size = self.model.vocab_size if truncated_vocab_size is None else truncated_vocab_size
 
         # Eagle model name should follow naming convention of
         # LlamaForCausalLM -> EagleLlamaForCausalLM
         # LlamaForCausalLM -> Eagle3LlamaForCausalLM
         # LlamaForCausalLMEagle3 -> LlamaForCausalLMEagle3
         if method == "eagle":
-            assert self.model is not None, (
-                "model should not be None when method is eagle"
-            )
+            assert self.model is not None, "model should not be None when method is eagle"
             kwargs["architectures"] = [
-                f"Eagle{arch}" if not arch.startswith("Eagle") else arch
-                for arch in self.model.architectures
+                f"Eagle{arch}" if not arch.startswith("Eagle") else arch for arch in self.model.architectures
             ]
 
         elif method == "eagle3":
-            assert self.model is not None, (
-                "model should not be None when method is eagle3"
-            )
+            assert self.model is not None, "model should not be None when method is eagle3"
             kwargs["architectures"] = [
-                arch
-                if arch.startswith("Eagle3") or arch.endswith("Eagle3")
-                else f"Eagle3{arch}"
+                arch if arch.startswith("Eagle3") or arch.endswith("Eagle3") else f"Eagle3{arch}"
                 for arch in self.model.architectures
             ]
         elif method == "dflash":
-            assert self.model is not None, (
-                "model should not be None when method is dflash"
-            )
+            assert self.model is not None, "model should not be None when method is dflash"
             kwargs["architectures"] = [
-                arch
-                if arch.startswith("DFlash") or arch.endswith("DFlash")
-                else f"DFlash{arch}"
+                arch if arch.startswith("DFlash") or arch.endswith("DFlash") else f"DFlash{arch}"
                 for arch in self.model.architectures
             ]
         else:
-            raise ValueError(
-                f"Invalid method {method}. Supported methods are "
-                "eagle, eagle3, and dflash."
-            )
+            raise ValueError(f"Invalid method {method}. Supported methods are eagle, eagle3, and dflash.")
 
         super().__init__(**kwargs)
 
@@ -91,9 +73,7 @@ class EAGLEConfig(PretrainedConfig):
         pretrained_model_name_or_path: str | os.PathLike,
         **kwargs,
     ) -> "EAGLEConfig":
-        config_dict, kwargs = cls.get_config_dict(
-            pretrained_model_name_or_path, **without_trust_remote_code(kwargs)
-        )
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **without_trust_remote_code(kwargs))
         return cls.from_dict(config_dict, **kwargs)
 
     def to_json_string(self, use_diff: bool = True) -> str:

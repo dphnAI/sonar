@@ -3,9 +3,9 @@
 
 import pytest
 
-from tests.entrypoints.multimodal.conftest import managed_llm
 from aphrodite import LLM, SamplingParams
 from aphrodite.assets.image import ImageAsset
+from tests.entrypoints.multimodal.conftest import managed_llm
 
 MODEL = "llava-hf/llava-1.5-7b-hf"
 PROMPT = "USER: <image>\nDescribe this image briefly.\nASSISTANT:"

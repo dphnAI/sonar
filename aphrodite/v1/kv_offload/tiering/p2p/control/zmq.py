@@ -61,9 +61,7 @@ class ZmqConnection(ControlConnection):
     def send(self, msg: dict) -> None:
         """Send a msgpack-encoded message to this peer."""
         if self._closed:
-            raise RuntimeError(
-                f"ZmqConnection: send on closed connection to {self.peer_id}"
-            )
+            raise RuntimeError(f"ZmqConnection: send on closed connection to {self.peer_id}")
         data = msgspec.msgpack.encode(msg)
         self._sockets.dealer.send(data)
 
@@ -128,9 +126,7 @@ class ZmqTransport(ControlTransport):
 
     def connect(self, peer_id: str) -> ZmqConnection:
         """Open an outbound connection to a remote peer."""
-        assert peer_id not in self._connections, (
-            f"ZmqConnection to {peer_id} already exists"
-        )
+        assert peer_id not in self._connections, f"ZmqConnection to {peer_id} already exists"
         logger.info(
             "ZmqTransport %s: opening OUTBOUND connection to %s",
             self._local_id,
@@ -170,9 +166,7 @@ class ZmqTransport(ControlTransport):
         for pid in [p for p, c in self._connections.items() if not c.alive]:
             self._connections.pop(pid).close()
 
-        return (
-            new_connections if new_connections is not None else _EMPTY_NEW_CONNECTIONS
-        )
+        return new_connections if new_connections is not None else _EMPTY_NEW_CONNECTIONS
 
     def close(self) -> None:
         if self._closed:
@@ -191,9 +185,7 @@ class ZmqTransport(ControlTransport):
     # Internal
     # ------------------------------------------------------------------
 
-    def _open_connection(
-        self, peer_id: str, direction: str = "outbound"
-    ) -> ZmqConnection:
+    def _open_connection(self, peer_id: str, direction: str = "outbound") -> ZmqConnection:
         """Create a DEALER socket + monitor and register the connection."""
         host, port_str = peer_id.rsplit(":", 1)
         dealer_addr = _tcp_addr(host, port_str)
@@ -284,9 +276,7 @@ class ZmqTransport(ControlTransport):
             if not conn.alive:
                 continue
             try:
-                event = zmq.utils.monitor.recv_monitor_message(
-                    conn.monitor_socket, zmq.NOBLOCK
-                )
+                event = zmq.utils.monitor.recv_monitor_message(conn.monitor_socket, zmq.NOBLOCK)
             except zmq.Again:
                 continue
             except zmq.ZMQError as exc:

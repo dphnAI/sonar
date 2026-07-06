@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Qwen3-ASR transcription policy and decode loop."""
 
 from __future__ import annotations
@@ -7,6 +8,7 @@ from typing import cast
 
 import mlx.core as mx
 from transformers import AutoTokenizer
+
 from aphrodite.tokenizers import TokenizerLike
 
 from .config import QWEN3_ASR_MAX_DECODE_TOKENS
@@ -23,9 +25,7 @@ class Qwen3ASRTranscriber:
         tokenizer: TokenizerLike | None = None,
     ) -> None:
         self.model = model
-        self.tokenizer: TokenizerLike = (
-            tokenizer if tokenizer is not None else self.load_tokenizer(model_path)
-        )
+        self.tokenizer: TokenizerLike = tokenizer if tokenizer is not None else self.load_tokenizer(model_path)
 
     @staticmethod
     def load_tokenizer(model_path: str | None) -> TokenizerLike:

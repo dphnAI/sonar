@@ -43,9 +43,7 @@ class _DummyPrefillBackend(MLAPrefillBackend):
         raise NotImplementedError
 
 
-@pytest.mark.parametrize(
-    "quant_key", [kFp8StaticTensorSym, kFp8Dynamic128Sym, kNvfp4Dynamic, None]
-)
+@pytest.mark.parametrize("quant_key", [kFp8StaticTensorSym, kFp8Dynamic128Sym, kNvfp4Dynamic, None])
 def test_base_backend_never_supports_quant_output(quant_key):
     """The base default opts every backend out unless it overrides."""
     backend = object.__new__(_DummyPrefillBackend)
@@ -80,14 +78,10 @@ def _make_fa_backend(version: int | None, is_vllm_fa: bool):
         (4, True, 10, kNvfp4Dynamic, False),
     ],
 )
-def test_flash_attn_supports_quant_output(
-    version, is_vllm_fa, dc_major, quant_key, expected
-):
+def test_flash_attn_supports_quant_output(version, is_vllm_fa, dc_major, quant_key, expected):
     backend = _make_fa_backend(version, is_vllm_fa)
     with patch(f"{_FA_MODULE}.current_platform") as plat:
-        plat.get_device_capability.return_value = DeviceCapability(
-            major=dc_major, minor=0
-        )
+        plat.get_device_capability.return_value = DeviceCapability(major=dc_major, minor=0)
         assert backend.supports_quant_output(quant_key) is expected
 
 
@@ -104,9 +98,7 @@ def test_flash_attn_prefill_backend_signature_accepts_fused_kwargs():
     (non-**kwargs) call in forward_mha type- and runtime-checks."""
     import inspect
 
-    params = inspect.signature(
-        FlashAttnPrefillBackend.run_prefill_new_tokens
-    ).parameters
+    params = inspect.signature(FlashAttnPrefillBackend.run_prefill_new_tokens).parameters
     assert "out" in params
     assert "output_scale" in params
     # The base contract must expose them too (Liskov / direct call site).
@@ -181,9 +173,7 @@ def test_fa4_fused_fp8_output_matches_post_quant(default_aphrodite_config):
     ref_fp8, _ = quant_op(out_2d, scale)
 
     # Feature: FA4 writes e4m3 into the (tokens, heads*dim) buffer directly.
-    fused_fp8 = torch.empty(
-        seqlen, num_heads * v_head_dim, dtype=fp8_dtype, device=device
-    )
+    fused_fp8 = torch.empty(seqlen, num_heads * v_head_dim, dtype=fp8_dtype, device=device)
     flash_attn_varlen_func(
         q=q,
         k=k,

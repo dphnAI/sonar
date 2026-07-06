@@ -288,7 +288,8 @@ void static_scaled_int8_quant(
                                            scale.const_data_ptr<float>(),
                                            hidden_size);
         } else {
-          aphrodite::static_scaled_int8_azp_quant_kernel<scalar_t, float, int32_t>
+          aphrodite::static_scaled_int8_azp_quant_kernel<scalar_t, float,
+                                                         int32_t>
               <<<grid, block, 0, stream>>>(
                   input.const_data_ptr<scalar_t>(),
                   out.mutable_data_ptr<int8_t>(), scale.const_data_ptr<float>(),
@@ -323,7 +324,8 @@ void dynamic_scaled_int8_quant(
                                            scales.mutable_data_ptr<float>(),
                                            hidden_size);
         } else {
-          aphrodite::dynamic_scaled_int8_azp_quant_kernel<scalar_t, float, int32_t>
+          aphrodite::dynamic_scaled_int8_azp_quant_kernel<scalar_t, float,
+                                                          int32_t>
               <<<grid, block, 0, stream>>>(input.const_data_ptr<scalar_t>(),
                                            out.mutable_data_ptr<int8_t>(),
                                            scales.mutable_data_ptr<float>(),

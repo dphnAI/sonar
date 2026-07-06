@@ -73,9 +73,7 @@ class GptOssReasoningParser(ReasoningParser):
         super().__init__(tokenizer, *args, **kwargs)
         # The model can output some special tokens between "final" and "<|message|>"
         # So we need to look for both sequences to determine the end of reasoning.
-        self.reasoning_end_token_ids_prefix = self.model_tokenizer.encode(
-            "<|channel|>final"
-        )
+        self.reasoning_end_token_ids_prefix = self.model_tokenizer.encode("<|channel|>final")
         self.reasoning_end_token_ids_suffix = self.model_tokenizer.encode("<|message|>")
         # We also need to check for the <|end|> token to avoid false positives from
         # previous messages in multi-turn conversations.
@@ -99,21 +97,14 @@ class GptOssReasoningParser(ReasoningParser):
             if input_ids[i : i + len(end_token_ids_prefix)] == end_token_ids_prefix:
                 # We have found the prefix, now we look for the suffix after the prefix.
                 suffix_start = i + len(end_token_ids_prefix)
-                for j in range(
-                    suffix_start, len(input_ids) - len(end_token_ids_suffix) + 1
-                ):
+                for j in range(suffix_start, len(input_ids) - len(end_token_ids_suffix) + 1):
                     if j - suffix_start >= self.reasoning_max_num_between_tokens:
                         break
-                    if (
-                        input_ids[j : j + len(end_token_ids_suffix)]
-                        == end_token_ids_suffix
-                    ):
+                    if input_ids[j : j + len(end_token_ids_suffix)] == end_token_ids_suffix:
                         return True
         return False
 
-    def is_reasoning_end_streaming(
-        self, input_ids: Sequence[int], delta_ids: Iterable[int]
-    ) -> bool:
+    def is_reasoning_end_streaming(self, input_ids: Sequence[int], delta_ids: Iterable[int]) -> bool:
         # The pattern window covers the end-of-reasoning marker itself.
         # We add len(delta_ids) so that under speculative decoding (where
         # a single step can accept many tokens) the entire accepted chunk
@@ -132,8 +123,7 @@ class GptOssReasoningParser(ReasoningParser):
 
     def extract_content_ids(self, input_ids: list[int]) -> list[int]:
         raise NotImplementedError(
-            "GptOssReasoningParser only provides boundary detection. "
-            "Use HarmonyParser for output parsing."
+            "GptOssReasoningParser only provides boundary detection. Use HarmonyParser for output parsing."
         )
 
     def extract_reasoning_streaming(
@@ -146,8 +136,7 @@ class GptOssReasoningParser(ReasoningParser):
         delta_token_ids: Sequence[int],
     ) -> DeltaMessage | None:
         raise NotImplementedError(
-            "GptOssReasoningParser only provides boundary detection. "
-            "Use HarmonyParser for output parsing."
+            "GptOssReasoningParser only provides boundary detection. Use HarmonyParser for output parsing."
         )
 
     def extract_reasoning(
@@ -156,14 +145,11 @@ class GptOssReasoningParser(ReasoningParser):
         request: "ChatCompletionRequest | ResponsesRequest",
     ) -> tuple[str | None, str | None]:
         raise NotImplementedError(
-            "GptOssReasoningParser only provides boundary detection. "
-            "Use HarmonyParser for output parsing."
+            "GptOssReasoningParser only provides boundary detection. Use HarmonyParser for output parsing."
         )
 
     # This function prepares the structural tag to format reasoning output
-    def prepare_structured_tag(
-        self, original_tag: str | None, tool_server: ToolServer | None
-    ) -> str | None:
+    def prepare_structured_tag(self, original_tag: str | None, tool_server: ToolServer | None) -> str | None:
         if original_tag is None:
             if tool_server is None:
                 return json.dumps(no_func_reasoning_tag)
@@ -178,9 +164,7 @@ class GptOssReasoningParser(ReasoningParser):
 
                 if len(builtin_tool_list) > 0:
                     logger.info("Builtin_tool_list: %s", builtin_tool_list)
-                    func_tag = json.dumps(
-                        tag_with_builtin_funcs(no_func_reasoning_tag, builtin_tool_list)
-                    )
+                    func_tag = json.dumps(tag_with_builtin_funcs(no_func_reasoning_tag, builtin_tool_list))
                 else:
                     logger.info("Builtin_tool_list is empty")
                     func_tag = json.dumps(no_func_reasoning_tag)

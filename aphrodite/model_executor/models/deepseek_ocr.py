@@ -144,30 +144,18 @@ class NGramPerReqLogitsProcessor(AdapterLogitsProcessor):
     def validate_params(cls, params: SamplingParams):
         ngram_size = params.extra_args and params.extra_args.get("ngram_size")
         window_size = params.extra_args and params.extra_args.get("window_size", 100)
-        whitelist_token_ids = params.extra_args and params.extra_args.get(
-            "whitelist_token_ids", None
-        )
+        whitelist_token_ids = params.extra_args and params.extra_args.get("whitelist_token_ids", None)
         # if ngram_size is not provided, skip validation because the processor
         # will not be used.
         if ngram_size is None:
             return None
 
         if not isinstance(ngram_size, int) or ngram_size <= 0:
-            raise ValueError(
-                f"`ngram_size` has to be a strictly positive integer, got {ngram_size}."
-            )
+            raise ValueError(f"`ngram_size` has to be a strictly positive integer, got {ngram_size}.")
         if not isinstance(window_size, int) or window_size <= 0:
-            raise ValueError(
-                "`window_size` has to be a strictly positive integer, "
-                f"got {window_size}."
-            )
-        if whitelist_token_ids is not None and not isinstance(
-            whitelist_token_ids, Iterable
-        ):
-            raise ValueError(
-                "`whitelist_token_ids` has to be a sequence of integers, "
-                f"got {whitelist_token_ids}."
-            )
+            raise ValueError(f"`window_size` has to be a strictly positive integer, got {window_size}.")
+        if whitelist_token_ids is not None and not isinstance(whitelist_token_ids, Iterable):
+            raise ValueError(f"`whitelist_token_ids` has to be a sequence of integers, got {whitelist_token_ids}.")
 
     def is_argmax_invariant(self) -> bool:
         return False
@@ -178,9 +166,7 @@ class NGramPerReqLogitsProcessor(AdapterLogitsProcessor):
     ) -> RequestLogitsProcessor | None:
         ngram_size = params.extra_args and params.extra_args.get("ngram_size")
         window_size = params.extra_args and params.extra_args.get("window_size", 100)
-        whitelist_token_ids = params.extra_args and params.extra_args.get(
-            "whitelist_token_ids", None
-        )
+        whitelist_token_ids = params.extra_args and params.extra_args.get("whitelist_token_ids", None)
         if ngram_size is None:
             return None
 
@@ -212,9 +198,7 @@ class DeepseekOCRProcessingInfo(BaseProcessingInfo):
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
         return {"image": None}
 
-    def get_num_image_tokens(
-        self, *, image_width: int, image_height: int, cropping: bool = True
-    ) -> int:
+    def get_num_image_tokens(self, *, image_width: int, image_height: int, cropping: bool = True) -> int:
         image_size = IMAGE_SIZE
         base_size = BASE_SIZE
         patch_size = 16
@@ -227,9 +211,7 @@ class DeepseekOCRProcessingInfo(BaseProcessingInfo):
                 crop_ratio = [1, 1]
             else:
                 # find the closest aspect ratio to the target
-                crop_ratio = count_tiles(
-                    image_width, image_height, image_size=IMAGE_SIZE
-                )
+                crop_ratio = count_tiles(image_width, image_height, image_size=IMAGE_SIZE)
 
             num_width_tiles, num_height_tiles = crop_ratio
         else:
@@ -281,9 +263,7 @@ class DeepseekOCRDummyInputsBuilder(BaseDummyInputsBuilder[DeepseekOCRProcessing
         }
 
 
-class DeepseekOCRMultiModalProcessor(
-    BaseMultiModalProcessor[DeepseekOCRProcessingInfo]
-):
+class DeepseekOCRMultiModalProcessor(BaseMultiModalProcessor[DeepseekOCRProcessingInfo]):
     def _call_hf_processor(
         self,
         prompt: str,
@@ -300,9 +280,7 @@ class DeepseekOCRMultiModalProcessor(
 
         else:
             tokenizer = self.info.get_tokenizer()
-            processed_outputs = tokenizer(
-                prompt, add_special_tokens=True, return_tensors="pt"
-            )
+            processed_outputs = tokenizer(prompt, add_special_tokens=True, return_tensors="pt")
 
         return processed_outputs
 
@@ -317,9 +295,7 @@ class DeepseekOCRMultiModalProcessor(
         return dict(
             pixel_values=MultiModalFieldConfig.batched("image"),
             images_spatial_crop=MultiModalFieldConfig.batched("image"),
-            images_crop=MultiModalFieldConfig.flat_from_sizes(
-                "image", patches_per_image
-            ),
+            images_crop=MultiModalFieldConfig.flat_from_sizes("image", patches_per_image),
         )
 
     def _get_prompt_updates(
@@ -334,9 +310,7 @@ class DeepseekOCRMultiModalProcessor(
         assert isinstance(image_token_id, int)
 
         def get_replacement_deepseek_vl2(item_idx: int):
-            images = mm_items.get_items(
-                "image", (ImageEmbeddingItems, ImageProcessorItems)
-            )
+            images = mm_items.get_items("image", (ImageEmbeddingItems, ImageProcessorItems))
 
             if isinstance(images, ImageEmbeddingItems):
                 num_image_tokens = images.get_feature_size(item_idx)
@@ -364,9 +338,7 @@ class DeepseekOCRMultiModalProcessor(
     info=DeepseekOCRProcessingInfo,
     dummy_inputs=DeepseekOCRDummyInputsBuilder,
 )
-class DeepseekOCRForCausalLM(
-    nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsEncoderCudaGraph
-):
+class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, SupportsLoRA, SupportsEncoderCudaGraph):
     hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_prefix={
             # map prefix for language backbone
@@ -436,9 +408,7 @@ class DeepseekOCRForCausalLM(
                 # This is a typo in original implementation
                 self.view_seperator = nn.Parameter(torch.randn(n_embed) * embed_std)
             else:
-                raise ValueError(
-                    f"Only 2D tile_tag is supported currently, got: {self.tile_tag}"
-                )
+                raise ValueError(f"Only 2D tile_tag is supported currently, got: {self.tile_tag}")
 
         with self._mark_language_model(aphrodite_config):
             self.language_model = init_aphrodite_registered_model(
@@ -447,13 +417,9 @@ class DeepseekOCRForCausalLM(
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> DeepseekOCRImagePixelInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> DeepseekOCRImagePixelInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         images_spatial_crop = kwargs.pop("images_spatial_crop", None)
         images_crop = kwargs.pop("images_crop", None)
@@ -499,9 +465,7 @@ class DeepseekOCRForCausalLM(
         features = torch.cat([features, newline], dim=1)
         return features.view(-1, dim)
 
-    def _encode_local_features(
-        self, patches: torch.Tensor, crop_shape: torch.Tensor
-    ) -> torch.Tensor | None:
+    def _encode_local_features(self, patches: torch.Tensor, crop_shape: torch.Tensor) -> torch.Tensor | None:
         if torch.sum(patches).item() == 0:
             return None
 
@@ -518,9 +482,7 @@ class DeepseekOCRForCausalLM(
 
         return self._assemble_patch_grid(features, crop_shape)
 
-    def _assemble_patch_grid(
-        self, features: torch.Tensor, crop_shape: torch.Tensor
-    ) -> torch.Tensor:
+    def _assemble_patch_grid(self, features: torch.Tensor, crop_shape: torch.Tensor) -> torch.Tensor:
         """Assemble projected patches into a 2-D tile grid with newline columns."""
         _, hw, dim = features.shape
         patch_side = int(hw**0.5)
@@ -532,9 +494,7 @@ class DeepseekOCRForCausalLM(
             .permute(0, 2, 1, 3, 4)
             .reshape(height_tiles * patch_side, width_tiles * patch_side, dim)
         )
-        newline = self.image_newline[None, None, :].expand(
-            height_tiles * patch_side, 1, dim
-        )
+        newline = self.image_newline[None, None, :].expand(height_tiles * patch_side, 1, dim)
         features = torch.cat([features, newline], dim=1)
         return features.view(-1, dim)
 
@@ -563,17 +523,13 @@ class DeepseekOCRForCausalLM(
                     dim=0,
                 )
             else:
-                combined = torch.cat(
-                    [global_features, self.view_seperator[None, :]], dim=0
-                )
+                combined = torch.cat([global_features, self.view_seperator[None, :]], dim=0)
 
             images_in_this_batch.append(combined)
 
         return images_in_this_batch
 
-    def _process_image_input(
-        self, image_input: DeepseekOCRImagePixelInputs
-    ) -> torch.Tensor:
+    def _process_image_input(self, image_input: DeepseekOCRImagePixelInputs) -> torch.Tensor:
         pixel_values = image_input.data
         images_crop = image_input.images_crop
         images_spatial_crop = image_input.images_spatial_crop.to(dtype=torch.long)
@@ -604,9 +560,7 @@ class DeepseekOCRForCausalLM(
         if intermediate_tensors is not None:
             inputs_embeds = None
 
-        hidden_states = self.language_model(
-            input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds
-        )
+        hidden_states = self.language_model(input_ids, positions, intermediate_tensors, inputs_embeds=inputs_embeds)
 
         return hidden_states
 
@@ -759,9 +713,7 @@ class DeepseekOCRForCausalLM(
             cum_patches.append(cum_patches[-1] + int(num_patches))
 
         selected_pv = pixel_values[indices]
-        selected_ic = torch.cat(
-            [images_crop[cum_patches[i] : cum_patches[i + 1]] for i in indices]
-        )
+        selected_ic = torch.cat([images_crop[cum_patches[i] : cum_patches[i + 1]] for i in indices])
         selected_sp = images_spatial_crop[indices]
 
         return {
@@ -948,9 +900,7 @@ class DeepseekOCRForCausalLM(
 
         images_spatial_crop = batch_mm_kwargs["images_spatial_crop"]
         is_tiled = (images_spatial_crop[:, 0] > 1) | (images_spatial_crop[:, 1] > 1)
-        num_patches = [
-            int(np) for np in torch.where(is_tiled, images_spatial_crop.prod(dim=-1), 0)
-        ]
+        num_patches = [int(np) for np in torch.where(is_tiled, images_spatial_crop.prod(dim=-1), 0)]
         total_patches = sum(num_patches)
 
         global_part = output[: bsz * self.global_image_output_token].reshape(
@@ -961,9 +911,7 @@ class DeepseekOCRForCausalLM(
         local_flat = None
         if total_patches > 0 and local_output is not None:
             local_flat = local_output[: total_patches * self.single_patch_output_token]
-            local_flat = local_flat.reshape(
-                total_patches, self.single_patch_output_token, n_embed
-            )
+            local_flat = local_flat.reshape(total_patches, self.single_patch_output_token, n_embed)
 
         cur_patch = 0
         for i, idx in enumerate(indices):
@@ -974,9 +922,7 @@ class DeepseekOCRForCausalLM(
             if num_patch > 0 and local_flat is not None:
                 patches = local_flat[cur_patch : cur_patch + num_patch]
                 cur_patch += num_patch
-                single_image_output.append(
-                    self._assemble_patch_grid(patches, images_spatial_crop[i])
-                )
+                single_image_output.append(self._assemble_patch_grid(patches, images_spatial_crop[i]))
 
             # 2. Global image: newlines already inserted.
             single_image_output.append(global_part[i])

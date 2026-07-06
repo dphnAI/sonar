@@ -23,9 +23,7 @@ NUM_HEADS = [64]
 NUM_QUERIES_PER_KV = [1, 64]
 HEAD_SIZES = [24, 128]
 DTYPES = [torch.float16]
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)
-]
+CUDA_DEVICES = [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)]
 SLIDING_WINDOW = [0, 16, 2048]
 KV_CACHE_DTYPES = ["auto", "fp8", "fp8_e5m2"]
 
@@ -43,9 +41,7 @@ def create_causal_attention_mask_for_sdpa(
     total_keys = sum(seq_lens)
 
     # Create a mask filled with -inf
-    mask = torch.full(
-        (total_queries, total_keys), float("-inf"), device=device, dtype=dtype
-    )
+    mask = torch.full((total_queries, total_keys), float("-inf"), device=device, dtype=dtype)
 
     query_start = 0
     key_start = 0
@@ -60,9 +56,7 @@ def create_causal_attention_mask_for_sdpa(
         valid_mask = k_indices[None, :] <= q_pos_in_seq[:, None]
 
         if sliding_window > 0:
-            valid_mask &= k_indices[None, :] >= (
-                q_pos_in_seq[:, None] - sliding_window + 1
-            )
+            valid_mask &= k_indices[None, :] >= (q_pos_in_seq[:, None] - sliding_window + 1)
 
         mask[query_start:query_end, key_start:key_end][valid_mask] = 0.0
 
@@ -79,9 +73,7 @@ def create_alibi_causal_mask(
     device: torch.device,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-    query_pos = torch.arange(
-        seq_len - query_len, seq_len, device=device, dtype=torch.float32
-    )
+    query_pos = torch.arange(seq_len - query_len, seq_len, device=device, dtype=torch.float32)
     key_pos = torch.arange(seq_len, device=device, dtype=torch.float32)
 
     rel_pos = key_pos[None, :] - query_pos[:, None]
@@ -121,15 +113,9 @@ def test_contexted_kv_attention(
     block_size: int = 32,
 ) -> None:
     if "fp8" in kv_cache_dtype and not current_platform.has_device_capability(89):
-        pytest.skip(
-            "Triton limitation: fp8e4nv data type is not supported on CUDA arch < 89"
-        )
+        pytest.skip("Triton limitation: fp8e4nv data type is not supported on CUDA arch < 89")
 
-    if (
-        current_platform.is_rocm()
-        and op is chunked_prefill_paged_decode
-        and kv_cache_dtype == "fp8_e5m2"
-    ):
+    if current_platform.is_rocm() and op is chunked_prefill_paged_decode and kv_cache_dtype == "fp8_e5m2":
         pytest.skip("ROCm custom paged attention does not support fp8_e5m2 KV cache")
 
     set_random_seed(0)
@@ -167,12 +153,8 @@ def test_contexted_kv_attention(
         cache_dtype = dtype
     else:
         cache_dtype = STR_DTYPE_TO_TORCH_DTYPE[kv_cache_dtype]
-    k_cache = torch.zeros(
-        cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype
-    )
-    v_cache = torch.zeros(
-        cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype
-    )
+    k_cache = torch.zeros(cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype)
+    v_cache = torch.zeros(cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype)
     k = torch.zeros(sum(query_lens), num_kv_heads, head_size, dtype=dtype)
     v = torch.zeros(sum(query_lens), num_kv_heads, head_size, dtype=dtype)
     values = torch.arange(0, cache_size, dtype=torch.int32)
@@ -183,9 +165,7 @@ def test_contexted_kv_attention(
     b_start_loc = torch.cumsum(torch.tensor([0] + query_lens), dim=0).to(torch.int32)
     max_input_len = MAX_SEQ_LEN
     # copy kv to cache
-    b_seq_start_loc = torch.cumsum(torch.tensor([0] + seq_lens[:-1]), dim=0).to(
-        torch.int32
-    )
+    b_seq_start_loc = torch.cumsum(torch.tensor([0] + seq_lens[:-1]), dim=0).to(torch.int32)
     for i in range(BS):
         for j in range(query_lens[i]):
             k[b_start_loc[i] + j].copy_(key[b_seq_start_loc[i] + b_ctx_len[i] + j])
@@ -200,28 +180,16 @@ def test_contexted_kv_attention(
                 end_loc = start_loc + block_size
             start_slot = block_table[i, block_id] * block_size
             end_slot = start_slot + end_loc - start_loc
-            k_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(
-                key[start_loc:end_loc]
-            )
-            v_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(
-                value[start_loc:end_loc]
-            )
+            k_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(key[start_loc:end_loc])
+            v_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(value[start_loc:end_loc])
             cur_ctx += block_size
             block_id += 1
     # transpose K_cache[num_blocks, block_size, num_kv_heads, head_size]
     # to K_cache[num_blocks, num_kv_heads, head_size/8, block_size, 8]
-    k_cache = (
-        k_cache.view(-1, block_size, num_kv_heads, head_size // 8, 8)
-        .permute(0, 2, 3, 1, 4)
-        .contiguous()
-    )
+    k_cache = k_cache.view(-1, block_size, num_kv_heads, head_size // 8, 8).permute(0, 2, 3, 1, 4).contiguous()
     # transpose V_cache[num_blocks, block_size, num_kv_heads, head_size]
     # to V_cache[num_blocks, num_kv_heads, head_size, block_size]
-    v_cache = (
-        v_cache.view(-1, block_size, num_kv_heads, head_size)
-        .permute(0, 2, 3, 1)
-        .contiguous()
-    )
+    v_cache = v_cache.view(-1, block_size, num_kv_heads, head_size).permute(0, 2, 3, 1).contiguous()
     k_scale = v_scale = torch.tensor(1.0, dtype=torch.float32, device=device)
 
     # Warm up the Triton kernel by calling it once before actually measuring
@@ -271,28 +239,16 @@ def test_contexted_kv_attention(
     # Reshape for SDPA: (seq_len, num_heads, head_size) ->
     # (1, num_heads, seq_len, head_size)
     query_sdpa = query.view(num_tokens, num_kv_heads, num_queries_per_kv, head_size)
-    query_sdpa = query_sdpa.permute(1, 2, 0, 3).reshape(
-        1, num_heads, num_tokens, head_size
-    )
+    query_sdpa = query_sdpa.permute(1, 2, 0, 3).reshape(1, num_heads, num_tokens, head_size)
 
     # Expand key and value for GQA/MQA to match query heads
-    key_sdpa = key[:, :, None, :].expand(
-        key.shape[0], num_kv_heads, num_queries_per_kv, key.shape[-1]
-    )
-    key_sdpa = key_sdpa.permute(1, 2, 0, 3).reshape(
-        1, num_heads, sum(seq_lens), head_size
-    )
+    key_sdpa = key[:, :, None, :].expand(key.shape[0], num_kv_heads, num_queries_per_kv, key.shape[-1])
+    key_sdpa = key_sdpa.permute(1, 2, 0, 3).reshape(1, num_heads, sum(seq_lens), head_size)
 
-    value_sdpa = value[:, :, None, :].expand(
-        value.shape[0], num_kv_heads, num_queries_per_kv, value.shape[-1]
-    )
-    value_sdpa = value_sdpa.permute(1, 2, 0, 3).reshape(
-        1, num_heads, sum(seq_lens), head_size
-    )
+    value_sdpa = value[:, :, None, :].expand(value.shape[0], num_kv_heads, num_queries_per_kv, value.shape[-1])
+    value_sdpa = value_sdpa.permute(1, 2, 0, 3).reshape(1, num_heads, sum(seq_lens), head_size)
 
-    attn_mask = create_causal_attention_mask_for_sdpa(
-        query_lens, seq_lens, sliding_window, device=device, dtype=dtype
-    )
+    attn_mask = create_causal_attention_mask_for_sdpa(query_lens, seq_lens, sliding_window, device=device, dtype=dtype)
 
     output_ref = F.scaled_dot_product_attention(
         query_sdpa,
@@ -342,15 +298,9 @@ def test_contexted_kv_attention_alibi(
     block_size: int = 32,
 ) -> None:
     if "fp8" in kv_cache_dtype and not current_platform.has_device_capability(89):
-        pytest.skip(
-            "Triton limitation: fp8e4nv data type is not supported on CUDA arch < 89"
-        )
+        pytest.skip("Triton limitation: fp8e4nv data type is not supported on CUDA arch < 89")
 
-    if (
-        current_platform.is_rocm()
-        and op is chunked_prefill_paged_decode
-        and kv_cache_dtype == "fp8_e5m2"
-    ):
+    if current_platform.is_rocm() and op is chunked_prefill_paged_decode and kv_cache_dtype == "fp8_e5m2":
         pytest.skip("ROCm custom paged attention does not support fp8_e5m2 KV cache")
 
     set_random_seed(0)
@@ -377,12 +327,8 @@ def test_contexted_kv_attention_alibi(
                 2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))),
                 dtype=torch.float32,
             )
-            num_remaining_heads = min(
-                closest_power_of_2, total_num_heads - closest_power_of_2
-            )
-            extra_powers = torch.arange(
-                start=1, end=1 + 2 * num_remaining_heads, step=2, dtype=torch.int32
-            )
+            num_remaining_heads = min(closest_power_of_2, total_num_heads - closest_power_of_2)
+            extra_powers = torch.arange(start=1, end=1 + 2 * num_remaining_heads, step=2, dtype=torch.int32)
             slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
         return slopes
 
@@ -410,12 +356,8 @@ def test_contexted_kv_attention_alibi(
         cache_dtype = dtype
     else:
         cache_dtype = STR_DTYPE_TO_TORCH_DTYPE[kv_cache_dtype]
-    k_cache = torch.zeros(
-        cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype
-    )
-    v_cache = torch.zeros(
-        cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype
-    )
+    k_cache = torch.zeros(cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype)
+    v_cache = torch.zeros(cache_size, block_size, num_kv_heads, head_size, dtype=cache_dtype)
     k = torch.zeros(sum(query_lens), num_kv_heads, head_size, dtype=dtype)
     v = torch.zeros(sum(query_lens), num_kv_heads, head_size, dtype=dtype)
     values = torch.arange(0, cache_size, dtype=torch.int32)
@@ -426,9 +368,7 @@ def test_contexted_kv_attention_alibi(
     b_start_loc = torch.cumsum(torch.tensor([0] + query_lens), dim=0).to(torch.int32)
     max_input_len = MAX_SEQ_LEN
     # copy kv to cache
-    b_seq_start_loc = torch.cumsum(torch.tensor([0] + seq_lens[:-1]), dim=0).to(
-        torch.int32
-    )
+    b_seq_start_loc = torch.cumsum(torch.tensor([0] + seq_lens[:-1]), dim=0).to(torch.int32)
     for i in range(BS):
         for j in range(query_lens[i]):
             k[b_start_loc[i] + j].copy_(key[b_seq_start_loc[i] + b_ctx_len[i] + j])
@@ -443,28 +383,16 @@ def test_contexted_kv_attention_alibi(
                 end_loc = start_loc + block_size
             start_slot = block_table[i, block_id] * block_size
             end_slot = start_slot + end_loc - start_loc
-            k_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(
-                key[start_loc:end_loc]
-            )
-            v_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(
-                value[start_loc:end_loc]
-            )
+            k_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(key[start_loc:end_loc])
+            v_cache.view(-1, num_kv_heads, head_size)[start_slot:end_slot].copy_(value[start_loc:end_loc])
             cur_ctx += block_size
             block_id += 1
     # transpose K_cache[num_blocks, block_size, num_kv_heads, head_size]
     # to K_cache[num_blocks, num_kv_heads, head_size/8, block_size, 8]
-    k_cache = (
-        k_cache.view(-1, block_size, num_kv_heads, head_size // 8, 8)
-        .permute(0, 2, 3, 1, 4)
-        .contiguous()
-    )
+    k_cache = k_cache.view(-1, block_size, num_kv_heads, head_size // 8, 8).permute(0, 2, 3, 1, 4).contiguous()
     # transpose V_cache[num_blocks, block_size, num_kv_heads, head_size]
     # to V_cache[num_blocks, num_kv_heads, head_size, block_size]
-    v_cache = (
-        v_cache.view(-1, block_size, num_kv_heads, head_size)
-        .permute(0, 2, 3, 1)
-        .contiguous()
-    )
+    v_cache = v_cache.view(-1, block_size, num_kv_heads, head_size).permute(0, 2, 3, 1).contiguous()
     k_scale = v_scale = torch.tensor(1.0, dtype=torch.float32, device=device)
 
     # Warm up the Triton kernel by calling it once before actually measuring
@@ -512,12 +440,8 @@ def test_contexted_kv_attention_alibi(
 
     # Prepare query, key, value for SDPA
     # Expand key and value for GQA/MQA to match query heads
-    key_expanded = key[:, :, None, :].expand(
-        key.shape[0], num_kv_heads, num_queries_per_kv, key.shape[-1]
-    )
-    value_expanded = value[:, :, None, :].expand(
-        value.shape[0], num_kv_heads, num_queries_per_kv, value.shape[-1]
-    )
+    key_expanded = key[:, :, None, :].expand(key.shape[0], num_kv_heads, num_queries_per_kv, key.shape[-1])
+    value_expanded = value[:, :, None, :].expand(value.shape[0], num_kv_heads, num_queries_per_kv, value.shape[-1])
 
     output_ref = torch.empty_like(output)
 
@@ -532,32 +456,18 @@ def test_contexted_kv_attention_alibi(
 
         # Get query, key, value for this sequence
         q = query[query_start:query_end]  # [query_len, num_heads, head_size]
-        k = key_expanded[
-            key_start:key_end
-        ]  # [seq_len, num_kv_heads, num_queries_per_kv, head_size]
-        v = value_expanded[
-            key_start:key_end
-        ]  # [seq_len, num_kv_heads, num_queries_per_kv, head_size]
+        k = key_expanded[key_start:key_end]  # [seq_len, num_kv_heads, num_queries_per_kv, head_size]
+        v = value_expanded[key_start:key_end]  # [seq_len, num_kv_heads, num_queries_per_kv, head_size]
 
         # Reshape for SDPA: (batch=1, num_heads, seq_len, head_size)
         q_sdpa = q.view(query_len, num_kv_heads, num_queries_per_kv, head_size)
-        q_sdpa = (
-            q_sdpa.permute(1, 2, 0, 3)
-            .reshape(1, num_heads, query_len, head_size)
-            .contiguous()
-        )
+        q_sdpa = q_sdpa.permute(1, 2, 0, 3).reshape(1, num_heads, query_len, head_size).contiguous()
 
-        k_sdpa = (
-            k.permute(1, 2, 0, 3).reshape(1, num_heads, seq_len, head_size).contiguous()
-        )
-        v_sdpa = (
-            v.permute(1, 2, 0, 3).reshape(1, num_heads, seq_len, head_size).contiguous()
-        )
+        k_sdpa = k.permute(1, 2, 0, 3).reshape(1, num_heads, seq_len, head_size).contiguous()
+        v_sdpa = v.permute(1, 2, 0, 3).reshape(1, num_heads, seq_len, head_size).contiguous()
 
         # Create ALiBi causal mask for this sequence using utility function
-        alibi_mask = create_alibi_causal_mask(
-            query_len, seq_len, alibi_slopes, device, dtype
-        )
+        alibi_mask = create_alibi_causal_mask(query_len, seq_len, alibi_slopes, device, dtype)
 
         # Compute attention. On ROCm we force use of the Math SDPA backend rather than
         # the Flash or Mem-Efficient backends for increased numerical accuracy
@@ -646,9 +556,7 @@ def test_contexted_kv_attention_alibi_f32(
     device: str,
     op: Callable,
 ) -> None:
-    test_contexted_kv_attention_alibi(
-        num_heads, num_queries_per_kv, head_size, dtype, kv_cache_dtype, device, op
-    )
+    test_contexted_kv_attention_alibi(num_heads, num_queries_per_kv, head_size, dtype, kv_cache_dtype, device, op)
 
 
 @pytest.mark.parametrize("head_size", [128])

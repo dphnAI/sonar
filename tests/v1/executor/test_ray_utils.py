@@ -19,12 +19,8 @@ def test_detach_zero_copy_from_model_runner_output_copies_only_numpy_views():
         req_ids=["req-0"],
         req_id_to_index={"req-0": 0},
         logprobs=LogprobsLists(
-            logprob_token_ids=_make_readonly(
-                np.array([[1, 2], [3, 4]], dtype=np.int32)
-            ),
-            logprobs=_make_readonly(
-                np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32)
-            ),
+            logprob_token_ids=_make_readonly(np.array([[1, 2], [3, 4]], dtype=np.int32)),
+            logprobs=_make_readonly(np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32)),
             sampled_token_ranks=_make_readonly(np.array([1, 2], dtype=np.int32)),
             cu_num_generated_tokens=cu_num_generated_tokens,
         ),
@@ -39,14 +35,9 @@ def test_detach_zero_copy_from_model_runner_output_copies_only_numpy_views():
     detached_logprobs = output.logprobs
     assert detached_logprobs is not None
     assert detached_logprobs is not original_logprobs
-    assert (
-        detached_logprobs.logprob_token_ids is not original_logprobs.logprob_token_ids
-    )
+    assert detached_logprobs.logprob_token_ids is not original_logprobs.logprob_token_ids
     assert detached_logprobs.logprobs is not original_logprobs.logprobs
-    assert (
-        detached_logprobs.sampled_token_ranks
-        is not original_logprobs.sampled_token_ranks
-    )
+    assert detached_logprobs.sampled_token_ranks is not original_logprobs.sampled_token_ranks
     assert detached_logprobs.logprob_token_ids.flags.writeable
     assert detached_logprobs.logprobs.flags.writeable
     assert detached_logprobs.sampled_token_ranks.flags.writeable

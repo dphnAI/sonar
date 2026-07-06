@@ -89,9 +89,7 @@ def create_long_gop_video(
         stream.pix_fmt = "yuv420p"
         stream.codec_context.gop_size = num_frames
         stream.codec_context.max_b_frames = 0
-        stream.codec_context.options = {
-            "x264-params": (f"scenecut=0:keyint={num_frames}:min-keyint={num_frames}")
-        }
+        stream.codec_context.options = {"x264-params": (f"scenecut=0:keyint={num_frames}:min-keyint={num_frames}")}
         for i in range(num_frames):
             img = np.zeros((height, width, 3), dtype=np.uint8)
             img[:, :, 1] = i % 256
@@ -105,9 +103,7 @@ def create_long_gop_video(
 
 def cosine_similarity(A: npt.NDArray, B: npt.NDArray, axis: int = -1) -> npt.NDArray:
     """Compute cosine similarity between two vectors."""
-    return np.sum(A * B, axis=axis) / (
-        np.linalg.norm(A, axis=axis) * np.linalg.norm(B, axis=axis)
-    )
+    return np.sum(A * B, axis=axis) / (np.linalg.norm(A, axis=axis) * np.linalg.norm(B, axis=axis))
 
 
 def normalize_image(image: npt.NDArray) -> npt.NDArray:

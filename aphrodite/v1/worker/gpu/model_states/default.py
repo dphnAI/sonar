@@ -39,9 +39,7 @@ class DefaultModelState(ModelState):
         )
 
         # Pruner is used for multimodal embedding pruning (EVS).
-        self.mm_pruner = maybe_create_mm_pruner(
-            self.model_config, model, self.rope_state, encoder_cache
-        )
+        self.mm_pruner = maybe_create_mm_pruner(self.model_config, model, self.rope_state, encoder_cache)
 
     def add_request(self, req_index: int, new_req_data: NewRequestData) -> None:
         if self.rope_state is not None:
@@ -67,9 +65,7 @@ class DefaultModelState(ModelState):
         input_batch: InputBatch,
         req_states: RequestState,
     ) -> torch.Tensor:
-        mm_hashes, mm_kwargs = self.encoder_runner.prepare_mm_inputs(
-            scheduled_encoder_inputs
-        )
+        mm_hashes, mm_kwargs = self.encoder_runner.prepare_mm_inputs(scheduled_encoder_inputs)
         if mm_kwargs:
             # Execute the multimodal encoder.
             encoder_outputs = self.encoder_runner.execute_mm_encoder(mm_kwargs)
@@ -86,25 +82,19 @@ class DefaultModelState(ModelState):
         # Use unpadded input_ids to match is_mm_embed size (num_tokens).
         # input_batch.input_ids may be padded for CUDA graphs.
         input_ids_unpadded = input_batch.input_ids[: input_batch.num_tokens]
-        inputs_embeds = self.encoder_runner.get_inputs_embeds(
-            input_ids_unpadded, mm_embeds, is_mm_embed
-        )
+        inputs_embeds = self.encoder_runner.get_inputs_embeds(input_ids_unpadded, mm_embeds, is_mm_embed)
         return inputs_embeds[: input_batch.num_tokens_after_padding]
 
     def gather_mm_embeddings(
         self, input_batch: InputBatch, draft_lookahead: int = 0
     ) -> tuple[list[torch.Tensor], torch.Tensor]:
-        mm_embeds, is_mm_embed = super().gather_mm_embeddings(
-            input_batch, draft_lookahead
-        )
+        mm_embeds, is_mm_embed = super().gather_mm_embeddings(input_batch, draft_lookahead)
         if self.mm_pruner is not None:
             # EVS: strip the appended mrope-position channels.
             mm_embeds = self.mm_pruner.strip(mm_embeds)
         return mm_embeds, is_mm_embed
 
-    def prepare_inputs(
-        self, input_batch: InputBatch, req_states: RequestState
-    ) -> dict[str, torch.Tensor | None]:
+    def prepare_inputs(self, input_batch: InputBatch, req_states: RequestState) -> dict[str, torch.Tensor | None]:
         if self.rope_state is None:
             return {}  # Common case (1D positions).
 

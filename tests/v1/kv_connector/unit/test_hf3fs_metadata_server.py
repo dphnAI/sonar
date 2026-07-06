@@ -125,9 +125,7 @@ class TestGlobalMetadataStateAllocation:
         state.initialize_rank(0, 5)  # 5 free pages: [0,1,2,3,4]
 
         # Simulate a key that has already been fully written and confirmed.
-        state.key_metadata["K_cached"] = KeyMetadata(
-            key="K_cached", rank_to_page={0: 2}, tp_world_size=1
-        )
+        state.key_metadata["K_cached"] = KeyMetadata(key="K_cached", rank_to_page={0: 2}, tp_world_size=1)
 
         free_before = state.rank_metadata[0].get_free_page_count()  # 5
 
@@ -136,17 +134,11 @@ class TestGlobalMetadataStateAllocation:
         free_after = state.rank_metadata[0].get_free_page_count()
 
         # Cache-hit key must reuse its existing page.
-        assert results["K_cached"] == 2, (
-            f"Cache-hit key should reuse page 2, got {results['K_cached']}"
-        )
+        assert results["K_cached"] == 2, f"Cache-hit key should reuse page 2, got {results['K_cached']}"
         # New key must receive a valid page.
-        assert results["K_new"] >= 0, (
-            f"New key should get a valid page, got {results['K_new']}"
-        )
+        assert results["K_new"] >= 0, f"New key should get a valid page, got {results['K_new']}"
         # Exactly one page consumed from the free pool.
-        assert free_before - free_after == 1, (
-            f"Expected 1 page consumed, got delta={free_before - free_after}"
-        )
+        assert free_before - free_after == 1, f"Expected 1 page consumed, got delta={free_before - free_after}"
 
     def test_allocate_pages_all_cache_hits_frees_all_slots(self):
         """When every key in the batch is a cache hit, no pages are consumed."""
@@ -154,9 +146,7 @@ class TestGlobalMetadataStateAllocation:
         state.initialize_rank(0, 5)
 
         for key, page in (("K1", 0), ("K2", 1)):
-            state.key_metadata[key] = KeyMetadata(
-                key=key, rank_to_page={0: page}, tp_world_size=1
-            )
+            state.key_metadata[key] = KeyMetadata(key=key, rank_to_page={0: page}, tp_world_size=1)
 
         free_before = state.rank_metadata[0].get_free_page_count()
         results = state.allocate_pages_for_keys(0, [("K1", ""), ("K2", "")])
@@ -165,8 +155,7 @@ class TestGlobalMetadataStateAllocation:
         assert results["K1"] == 0
         assert results["K2"] == 1
         assert free_after == free_before, (
-            f"All-cache-hit batch must not consume free pages; "
-            f"before={free_before}, after={free_after}"
+            f"All-cache-hit batch must not consume free pages; before={free_before}, after={free_after}"
         )
 
     def test_allocate_returns_minus_one_when_pool_exhausted(self):

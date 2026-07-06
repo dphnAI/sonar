@@ -35,10 +35,7 @@ class TopKWeightAndReduceDelegate(mk.TopKWeightAndReduce):
         topk_ids: torch.Tensor,
         apply_router_weight_on_input: bool,
     ) -> torch.Tensor:
-        raise RuntimeError(
-            "The caller is expected to choose an appropriate "
-            "TopKWeightAndReduce implementation."
-        )
+        raise RuntimeError("The caller is expected to choose an appropriate TopKWeightAndReduce implementation.")
 
 
 class TopKWeightAndReduceNoOP(mk.TopKWeightAndReduce):
@@ -100,8 +97,7 @@ class TopKWeightAndReduceContiguous(mk.TopKWeightAndReduce):
             fused_expert_output = fused_expert_output.view(m, num_topk, k)
 
         assert fused_expert_output.size() == (m, num_topk, k), (
-            f"Expected fused_expert_output size {(m, num_topk, k)}. But got "
-            f"{fused_expert_output.size()}"
+            f"Expected fused_expert_output size {(m, num_topk, k)}. But got {fused_expert_output.size()}"
         )
 
         if not apply_router_weight_on_input:
@@ -113,9 +109,7 @@ class TopKWeightAndReduceContiguous(mk.TopKWeightAndReduce):
                 device=fused_expert_output.device,
                 dtype=fused_expert_output.dtype,
             )
-        assert output.size() == (m, k), (
-            f"Expected output size {(m, k)}. But got {output.size()}"
-        )
+        assert output.size() == (m, k), f"Expected output size {(m, k)}. But got {output.size()}"
 
         ops.moe_sum(fused_expert_output, output)
         return output
@@ -131,9 +125,7 @@ class TopKWeightAndReduceNaiveBatched(mk.TopKWeightAndReduce):
         self.rank = rank
 
     def __eq__(self, other):
-        return isinstance(other, TopKWeightAndReduceNaiveBatched) and (
-            other.rank == self.rank
-        )
+        return isinstance(other, TopKWeightAndReduceNaiveBatched) and (other.rank == self.rank)
 
     def apply(
         self,
@@ -157,9 +149,7 @@ class TopKWeightAndReduceNaiveBatched(mk.TopKWeightAndReduce):
         else:
             output.fill_(0)
 
-        assert output.size() == (num_tokens, K), (
-            f"Expected output size {(num_tokens, K)}, but got {output.size()}"
-        )
+        assert output.size() == (num_tokens, K), f"Expected output size {(num_tokens, K)}, but got {output.size()}"
 
         first_expert = num_local_experts * self.rank
         last_expert = first_expert + num_local_experts

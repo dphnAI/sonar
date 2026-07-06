@@ -6,13 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from transformers import AutoTokenizer
 
+from aphrodite.entrypoints.openai.engine.protocol import FunctionCall
+from aphrodite.tokenizers import TokenizerLike
+from aphrodite.tool_parsers import ToolParser, ToolParserManager
 from tests.tool_parsers.utils import (
     run_tool_extraction,
     run_tool_extraction_streaming,
 )
-from aphrodite.entrypoints.openai.engine.protocol import FunctionCall
-from aphrodite.tokenizers import TokenizerLike
-from aphrodite.tool_parsers import ToolParser, ToolParserManager
 
 TOOL_CALL_START = "<|tool_call_start|>"
 TOOL_CALL_END = "<|tool_call_end|>"
@@ -54,9 +54,7 @@ EMPTY_LIST_FUNCTION_CALL = FunctionCall(
     name="do_something_cool",
     arguments='{"steps": []}',
 )
-ESCAPED_STRING_FUNCTION_OUTPUT = (
-    r"get_weather(city='Martha\'s Vineyard', metric='\"cool units\"')"
-)
+ESCAPED_STRING_FUNCTION_OUTPUT = r"get_weather(city='Martha\'s Vineyard', metric='\"cool units\"')"
 ESCAPED_STRING_FUNCTION_CALL = FunctionCall(
     name="get_weather",
     arguments='{"city": "Martha\'s Vineyard", "metric": "\\"cool units\\""}',
@@ -94,9 +92,7 @@ def test_no_tool_call(streaming: bool, lfm2_tokenizer: TokenizerLike):
     tool_parser: ToolParser = ToolParserManager.get_tool_parser("lfm2")(lfm2_tokenizer)
     model_output = "How can I help you today?"
 
-    content, tool_calls = run_tool_extraction(
-        tool_parser, model_output, streaming=streaming
-    )
+    content, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=streaming)
 
     assert content == model_output
     assert len(tool_calls) == 0
@@ -243,9 +239,7 @@ def test_tool_call(
 ):
     tool_parser: ToolParser = ToolParserManager.get_tool_parser("lfm2")(lfm2_tokenizer)
 
-    content, tool_calls = run_tool_extraction(
-        tool_parser, model_output, streaming=streaming
-    )
+    content, tool_calls = run_tool_extraction(tool_parser, model_output, streaming=streaming)
 
     if expected_content and not streaming:
         assert content == expected_content
@@ -263,9 +257,7 @@ def test_streaming_tool_call_with_large_steps(lfm2_tokenizer: TokenizerLike):
         f"{EMPTY_LIST_FUNCTION_OUTPUT}]{TOOL_CALL_END}",
     ]
 
-    reconstructor = run_tool_extraction_streaming(
-        tool_parser, model_output_deltas, assert_one_tool_per_delta=False
-    )
+    reconstructor = run_tool_extraction_streaming(tool_parser, model_output_deltas, assert_one_tool_per_delta=False)
 
     assert len(reconstructor.tool_calls) == 3
     assert reconstructor.tool_calls[0].function == SIMPLE_FUNCTION_CALL
@@ -295,9 +287,7 @@ def test_streaming_leading_content_and_full_block_in_single_delta(
     """Leading assistant text plus the entire tool block arrive in one
     delta. Leading content must be emitted — not silently dropped."""
     tool_parser: ToolParser = ToolParserManager.get_tool_parser("lfm2")(lfm2_tokenizer)
-    full_text = (
-        f"Let me check. {TOOL_CALL_START}[{SIMPLE_FUNCTION_OUTPUT}]{TOOL_CALL_END}"
-    )
+    full_text = f"Let me check. {TOOL_CALL_START}[{SIMPLE_FUNCTION_OUTPUT}]{TOOL_CALL_END}"
 
     reconstructor = run_tool_extraction_streaming(tool_parser, [full_text])
 
@@ -312,10 +302,7 @@ def test_streaming_leading_block_and_trailing_in_single_delta(
     """Leading text + complete tool block + trailing text in one delta.
     Both leading and trailing content must be preserved."""
     tool_parser: ToolParser = ToolParserManager.get_tool_parser("lfm2")(lfm2_tokenizer)
-    full_text = (
-        "Let me check. "
-        f"{TOOL_CALL_START}[{SIMPLE_FUNCTION_OUTPUT}]{TOOL_CALL_END}\nDone."
-    )
+    full_text = f"Let me check. {TOOL_CALL_START}[{SIMPLE_FUNCTION_OUTPUT}]{TOOL_CALL_END}\nDone."
 
     reconstructor = run_tool_extraction_streaming(tool_parser, [full_text])
 
@@ -334,25 +321,19 @@ def test_echoed_tool_call_body_not_leaked_to_content(
     streaming nor non-streaming paths."""
     tool_parser: ToolParser = ToolParserManager.get_tool_parser("lfm2")(lfm2_tokenizer)
     body = (
-        "[grocery.orderIngredients("
-        "ingredientList=[{'name': 'apple', 'quantity': '2'}], "
-        "deliveryAddress='123 Main St')]"
+        "[grocery.orderIngredients(ingredientList=[{'name': 'apple', 'quantity': '2'}], deliveryAddress='123 Main St')]"
     )
     model_output = f"{TOOL_CALL_START}{body}{TOOL_CALL_END}{body}{TOOL_CALL_END}"
 
     # Non-streaming
-    content_ns, tool_calls_ns = run_tool_extraction(
-        tool_parser, model_output, streaming=False
-    )
+    content_ns, tool_calls_ns = run_tool_extraction(tool_parser, model_output, streaming=False)
     assert len(tool_calls_ns) == 1
     assert tool_calls_ns[0].function.name == "grocery.orderIngredients"
     assert content_ns in (None, "")
 
     # Streaming: re-fetch a fresh parser since state was mutated above.
     tool_parser2: ToolParser = ToolParserManager.get_tool_parser("lfm2")(lfm2_tokenizer)
-    content_s, tool_calls_s = run_tool_extraction(
-        tool_parser2, model_output, streaming=True
-    )
+    content_s, tool_calls_s = run_tool_extraction(tool_parser2, model_output, streaming=True)
     assert len(tool_calls_s) == 1
     assert tool_calls_s[0].function.name == "grocery.orderIngredients"
     # Echoed body must not leak as content.
@@ -377,9 +358,7 @@ def test_streaming_char_by_char_multi_dict_list(lfm2_tokenizer: TokenizerLike):
     )
     deltas = [c for c in full_text]
 
-    reconstructor = run_tool_extraction_streaming(
-        tool_parser, deltas, assert_one_tool_per_delta=False
-    )
+    reconstructor = run_tool_extraction_streaming(tool_parser, deltas, assert_one_tool_per_delta=False)
 
     assert len(reconstructor.tool_calls) == 1
     assert reconstructor.tool_calls[0].function.name == "grocery.orderIngredients"
@@ -459,9 +438,7 @@ def test_regex_timeout_handling(streaming: bool, lfm2_tokenizer: TokenizerLike):
     mock_regex.match.side_effect = TimeoutError("Regex timeout")
 
     with patch.object(tool_parser, "TOOL_CALL_REGEX", mock_regex):
-        content, tool_calls = run_tool_extraction(
-            tool_parser, fake_input, streaming=streaming
-        )
+        content, tool_calls = run_tool_extraction(tool_parser, fake_input, streaming=streaming)
 
         assert content == fake_input
         assert len(tool_calls) == 0

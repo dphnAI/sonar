@@ -100,10 +100,7 @@ class DeepseekV4FlashInferMLASparseBackend(DeepseekV4FlashMLABackend):
     ) -> str | None:
         if device_capability.major == 10:
             if kv_cache_dtype == "fp8_ds_mla":
-                return (
-                    "FLASHINFER_MLA_SPARSE_DSV4 SM10x uses the plain "
-                    "per-tensor FP8 KV layout, not fp8_ds_mla"
-                )
+                return "FLASHINFER_MLA_SPARSE_DSV4 SM10x uses the plain per-tensor FP8 KV layout, not fp8_ds_mla"
             if kv_cache_dtype not in (None, "auto", "bfloat16", "fp8", "fp8_e4m3"):
                 return "kv_cache_dtype not supported"
             return None
@@ -113,10 +110,7 @@ class DeepseekV4FlashInferMLASparseBackend(DeepseekV4FlashMLABackend):
             from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120
 
             if not has_flashinfer_sparse_mla_sm120():
-                return (
-                    "FLASHINFER_MLA_SPARSE_DSV4 SM120 requires FlashInfer's "
-                    "sparse MLA decode API"
-                )
+                return "FLASHINFER_MLA_SPARSE_DSV4 SM120 requires FlashInfer's sparse MLA decode API"
             return None
         return "FLASHINFER_MLA_SPARSE_DSV4 requires SM10x or SM12x"
 
@@ -215,16 +209,11 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
         assert output.shape[0] == q.shape[0] and output.shape[-1] == q.shape[-1], (
             f"output buffer shape {output.shape} incompatible with q shape {q.shape}"
         )
-        assert output.shape[1] >= q.shape[1], (
-            f"output heads {output.shape[1]} must be >= q heads {q.shape[1]}"
-        )
+        assert output.shape[1] >= q.shape[1], f"output heads {output.shape[1]} must be >= q heads {q.shape[1]}"
         # Per-tensor FP8 q produces a bf16 attention output.
-        expected_output_dtype = (
-            torch.bfloat16 if q.dtype == torch.float8_e4m3fn else q.dtype
-        )
+        expected_output_dtype = torch.bfloat16 if q.dtype == torch.float8_e4m3fn else q.dtype
         assert output.dtype == expected_output_dtype, (
-            f"output dtype {output.dtype} must match expected {expected_output_dtype} "
-            f"for q dtype {q.dtype}"
+            f"output dtype {output.dtype} must match expected {expected_output_dtype} for q dtype {q.dtype}"
         )
 
         forward_context = get_forward_context()
@@ -236,9 +225,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
             return
 
         assert isinstance(attn_metadata, dict)
-        flashmla_metadata = cast(
-            DeepseekV4FlashMLAMetadata | None, attn_metadata.get(self.prefix)
-        )
+        flashmla_metadata = cast(DeepseekV4FlashMLAMetadata | None, attn_metadata.get(self.prefix))
         swa_metadata = cast(
             "DeepseekSparseSWAMetadata | None",
             attn_metadata.get(self.swa_cache_layer.prefix),
@@ -286,9 +273,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
         assert swa_metadata.decode_swa_indices is not None
         assert swa_metadata.block_table is not None
 
-        decode_swa_indices = swa_metadata.decode_swa_indices.reshape(
-            num_decode_tokens, self.window_size
-        )
+        decode_swa_indices = swa_metadata.decode_swa_indices.reshape(num_decode_tokens, self.window_size)
         decode_compressed_topk_lens = None
         decode_compressed_indices_are_local = False
         decode_is_valid_token = None
@@ -297,9 +282,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
             assert self.topk_indices_buffer is not None
             compressed_kv_cache = swa_k_cache
             decode_compressed_indices = None
-            prefill_topk_indices = self.topk_indices_buffer[
-                num_decode_tokens:num_tokens, :0
-            ]
+            prefill_topk_indices = self.topk_indices_buffer[num_decode_tokens:num_tokens, :0]
             compressed_block_table = None
             compressed_block_size = swa_metadata.block_size
             top_k = 0
@@ -313,9 +296,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
             if self.compress_ratio == 4:
                 assert self.topk_indices_buffer is not None
                 if num_prefill_tokens > 0:
-                    prefill_topk_indices = self.topk_indices_buffer[
-                        num_decode_tokens:num_tokens
-                    ]
+                    prefill_topk_indices = self.topk_indices_buffer[num_decode_tokens:num_tokens]
                     top_k = prefill_topk_indices.shape[-1]
                 else:
                     prefill_topk_indices = self.topk_indices_buffer[:0, :0]
@@ -325,9 +306,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
                 assert swa_metadata.is_valid_token is not None
                 decode_is_valid_token = swa_metadata.is_valid_token[:num_decode_tokens]
                 if num_decode_tokens > 0:
-                    decode_compressed_indices = self.topk_indices_buffer[
-                        :num_decode_tokens
-                    ]
+                    decode_compressed_indices = self.topk_indices_buffer[:num_decode_tokens]
                 else:
                     # Keep the logical width aligned with the mixed-batch case so
                     # pure-prefill steps reuse the same Triton specialization.
@@ -344,10 +323,8 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
                 if num_decode_tokens > 0:
                     assert attn_metadata.c128a_global_decode_topk_indices is not None
                     assert attn_metadata.c128a_decode_topk_lens is not None
-                    decode_compressed_indices = (
-                        attn_metadata.c128a_global_decode_topk_indices.view(
-                            num_decode_tokens, -1
-                        )
+                    decode_compressed_indices = attn_metadata.c128a_global_decode_topk_indices.view(
+                        num_decode_tokens, -1
                     )
                     decode_compressed_topk_lens = attn_metadata.c128a_decode_topk_lens
                     if num_prefill_tokens == 0:
@@ -361,11 +338,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
         assert seq_lens.dtype == torch.int32
         # cache for SWA-only and C128A that build the same mixed sparse indices
         # C4A stays uncached.
-        cache_key = (
-            "swa_only"
-            if swa_only
-            else ("c128a" if self.compress_ratio == 128 else "c4a")
-        )
+        cache_key = "swa_only" if swa_only else ("c128a" if self.compress_ratio == 128 else "c4a")
         cached_sparse = swa_metadata.flashinfer_sparse_index_cache.get(cache_key, None)
         if cached_sparse is None:
             sparse_indices, sparse_topk_lens = build_flashinfer_mixed_sparse_indices(
@@ -447,9 +420,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
         # to the shared KV and are sliced off downstream (output is padded too).
         padded_heads = output.shape[1]
         if query.shape[1] < padded_heads:
-            padded_query = query.new_zeros(
-                (query.shape[0], padded_heads, query.shape[2])
-            )
+            padded_query = query.new_zeros((query.shape[0], padded_heads, query.shape[2]))
             padded_query[:, : query.shape[1], :] = query
             query = padded_query
 
@@ -483,10 +454,7 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
         if num_prefill_tokens > 0:
             # The prefill query view re-anchors at offset 0, so rebase the
             # cumulative query offsets to start at 0.
-            prefill_cu = (
-                query_start_loc[num_decodes : num_reqs + 1]
-                - query_start_loc[num_decodes]
-            )
+            prefill_cu = query_start_loc[num_decodes : num_reqs + 1] - query_start_loc[num_decodes]
             prefill_cu_cpu = query_start_loc_cpu[num_decodes : num_reqs + 1]
             prefill_lens_cpu = prefill_cu_cpu[1:] - prefill_cu_cpu[:-1]
             flashinfer_trtllm_batch_decode_sparse_mla_dsv4(
@@ -560,10 +528,7 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
         from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120
 
         if not has_flashinfer_sparse_mla_sm120():
-            raise RuntimeError(
-                "FLASHINFER_MLA_SPARSE_DSV4 on SM120 requires FlashInfer's "
-                "sparse MLA decode API."
-            )
+            raise RuntimeError("FLASHINFER_MLA_SPARSE_DSV4 on SM120 requires FlashInfer's sparse MLA decode API.")
         self._einsum_recipe, self._tma_aligned_scales = compute_fp8_einsum_recipe()
         # Per-tensor FP8 cache path scales.
         if self.kv_cache_torch_dtype != torch.float8_e4m3fn:
@@ -590,9 +555,7 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
         self._flashinfer_fp8_bmm2_scale = fp8_kv_scale
 
     def _reserve_empty_forward_workspace(self) -> None:
-        self._get_workspace(
-            torch.device("cuda", torch.accelerator.current_device_index())
-        )
+        self._get_workspace(torch.device("cuda", torch.accelerator.current_device_index()))
 
     def _forward_sparse_impl(
         self,
@@ -635,16 +598,11 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
         assert output.shape[0] == q.shape[0] and output.shape[-1] == q.shape[-1], (
             f"output buffer shape {output.shape} incompatible with q shape {q.shape}"
         )
-        assert output.shape[1] >= q.shape[1], (
-            f"output heads {output.shape[1]} must be >= q heads {q.shape[1]}"
-        )
+        assert output.shape[1] >= q.shape[1], f"output heads {output.shape[1]} must be >= q heads {q.shape[1]}"
         # Per-tensor FP8 q produces a bf16 attention output.
-        expected_output_dtype = (
-            torch.bfloat16 if q.dtype == torch.float8_e4m3fn else q.dtype
-        )
+        expected_output_dtype = torch.bfloat16 if q.dtype == torch.float8_e4m3fn else q.dtype
         assert output.dtype == expected_output_dtype, (
-            f"output dtype {output.dtype} must match expected {expected_output_dtype} "
-            f"for q dtype {q.dtype}"
+            f"output dtype {output.dtype} must match expected {expected_output_dtype} for q dtype {q.dtype}"
         )
 
         forward_context = get_forward_context()
@@ -655,9 +613,7 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
             return
 
         assert isinstance(attn_metadata, dict)
-        flashmla_metadata = cast(
-            DeepseekV4FlashMLAMetadata | None, attn_metadata.get(self.prefix)
-        )
+        flashmla_metadata = cast(DeepseekV4FlashMLAMetadata | None, attn_metadata.get(self.prefix))
         swa_metadata = cast(
             "DeepseekSparseSWAMetadata | None",
             attn_metadata.get(self.swa_cache_layer.prefix),
@@ -708,28 +664,20 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
         extra_sparse_lengths = None
         if not swa_only:
             if attn_metadata is None:
-                raise RuntimeError(
-                    "Sparse MLA metadata is required for compressed layers."
-                )
+                raise RuntimeError("Sparse MLA metadata is required for compressed layers.")
             if swa_metadata.is_valid_token is None:
-                raise RuntimeError(
-                    "SWA validity metadata is required for compressed layers."
-                )
+                raise RuntimeError("SWA validity metadata is required for compressed layers.")
             is_valid = swa_metadata.is_valid_token[:num_decode_tokens]
             if self.compress_ratio == 4:
                 if self.topk_indices_buffer is None:
-                    raise RuntimeError(
-                        "C4A decode requires top-k indices from the indexer."
-                    )
+                    raise RuntimeError("C4A decode requires top-k indices from the indexer.")
                 block_size = attn_metadata.block_size // self.compress_ratio
-                global_indices, extra_sparse_lengths = (
-                    compute_global_topk_indices_and_lens(
-                        self.topk_indices_buffer[:num_decode_tokens],
-                        swa_metadata.token_to_req_indices,
-                        attn_metadata.block_table[:num_decodes],
-                        block_size,
-                        is_valid,
-                    )
+                global_indices, extra_sparse_lengths = compute_global_topk_indices_and_lens(
+                    self.topk_indices_buffer[:num_decode_tokens],
+                    swa_metadata.token_to_req_indices,
+                    attn_metadata.block_table[:num_decodes],
+                    block_size,
+                    is_valid,
                 )
                 extra_sparse_indices = global_indices.view(num_decode_tokens, 1, -1)
             else:
@@ -744,9 +692,7 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
         swa_cache = self._as_sparse_cache(self.swa_cache_layer.kv_cache)
         extra_cache = self._as_sparse_cache(kv_cache) if kv_cache is not None else None
         if extra_cache is not None and extra_sparse_indices is None:
-            raise RuntimeError(
-                "Compressed sparse MLA decode requires compressed sparse indices."
-            )
+            raise RuntimeError("Compressed sparse MLA decode requires compressed sparse indices.")
         flashinfer_trtllm_batch_decode_sparse_mla_dsv4(
             query=q,
             swa_kv_cache=swa_cache,
@@ -787,12 +733,8 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
             local_topk_indices = None
         elif self.compress_ratio == 4:
             if self.topk_indices_buffer is None:
-                raise RuntimeError(
-                    "C4A prefill requires top-k indices from the indexer."
-                )
-            local_topk_indices = self.topk_indices_buffer[
-                num_decode_tokens : num_decode_tokens + num_prefill_tokens
-            ]
+                raise RuntimeError("C4A prefill requires top-k indices from the indexer.")
+            local_topk_indices = self.topk_indices_buffer[num_decode_tokens : num_decode_tokens + num_prefill_tokens]
         else:
             if attn_metadata is None:
                 raise RuntimeError("C128A prefill metadata is missing.")
@@ -807,18 +749,14 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
                 raise RuntimeError("C4A prefill request mapping is missing.")
             if swa_metadata.is_valid_token is None:
                 raise RuntimeError("C4A prefill validity metadata is missing.")
-            prefill_token_slice = slice(
-                num_decode_tokens, num_decode_tokens + num_prefill_tokens
-            )
+            prefill_token_slice = slice(num_decode_tokens, num_decode_tokens + num_prefill_tokens)
             block_size = attn_metadata.block_size // self.compress_ratio
-            extra_sparse_indices, extra_sparse_lengths = (
-                compute_global_topk_indices_and_lens(
-                    local_topk_indices,
-                    swa_metadata.token_to_req_indices[prefill_token_slice],
-                    attn_metadata.block_table,
-                    block_size,
-                    swa_metadata.is_valid_token[prefill_token_slice],
-                )
+            extra_sparse_indices, extra_sparse_lengths = compute_global_topk_indices_and_lens(
+                local_topk_indices,
+                swa_metadata.token_to_req_indices[prefill_token_slice],
+                attn_metadata.block_table,
+                block_size,
+                swa_metadata.is_valid_token[prefill_token_slice],
             )
 
         assert swa_metadata.prefill_swa_indices is not None
@@ -830,42 +768,28 @@ class DeepseekV4FlashInferSM120Attention(DeepseekV4Attention):
             extra_kv_paged = None
         else:
             if compressed_k_cache is None:
-                raise RuntimeError(
-                    "Compressed sparse MLA layers require their compressed KV cache."
-                )
+                raise RuntimeError("Compressed sparse MLA layers require their compressed KV cache.")
             extra_kv_paged = self._as_sparse_cache(compressed_k_cache)
 
-        num_chunks = (
-            num_prefills + self.PREFILL_CHUNK_SIZE - 1
-        ) // self.PREFILL_CHUNK_SIZE
+        num_chunks = (num_prefills + self.PREFILL_CHUNK_SIZE - 1) // self.PREFILL_CHUNK_SIZE
         for chunk_idx in range(num_chunks):
             chunk_start = chunk_idx * self.PREFILL_CHUNK_SIZE
             chunk_end = min(chunk_start + self.PREFILL_CHUNK_SIZE, num_prefills)
-            query_start = (
-                query_start_loc_cpu[num_decodes + chunk_start] - prefill_token_base
-            )
-            query_end = (
-                query_start_loc_cpu[num_decodes + chunk_end] - prefill_token_base
-            )
+            query_start = query_start_loc_cpu[num_decodes + chunk_start] - prefill_token_base
+            query_end = query_start_loc_cpu[num_decodes + chunk_end] - prefill_token_base
 
             extra_sparse_indices_chunk = (
-                extra_sparse_indices[query_start:query_end]
-                if extra_sparse_indices is not None
-                else None
+                extra_sparse_indices[query_start:query_end] if extra_sparse_indices is not None else None
             )
             extra_sparse_lengths_chunk = (
-                extra_sparse_lengths[query_start:query_end]
-                if extra_sparse_lengths is not None
-                else None
+                extra_sparse_lengths[query_start:query_end] if extra_sparse_lengths is not None else None
             )
 
             q_chunk = q[query_start:query_end]
             swa_indices_chunk = swa_metadata.prefill_swa_indices[query_start:query_end]
             swa_lens_chunk = swa_metadata.prefill_swa_lens[query_start:query_end]
             if extra_kv_paged is not None and extra_sparse_indices_chunk is None:
-                raise RuntimeError(
-                    "Compressed sparse MLA prefill requires compressed sparse indices."
-                )
+                raise RuntimeError("Compressed sparse MLA prefill requires compressed sparse indices.")
             flashinfer_trtllm_batch_decode_sparse_mla_dsv4(
                 query=q_chunk,
                 swa_kv_cache=swa_kv_paged,

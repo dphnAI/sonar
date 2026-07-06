@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """PyTorch backend for model loading and tensor interop."""
 
 from aphrodite.metal.pytorch_backend.tensor_bridge import (

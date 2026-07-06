@@ -54,9 +54,7 @@ def build_response_output_items(
                 id=f"rs_{random_uuid()}",
                 summary=[],
                 type="reasoning",
-                content=[
-                    ResponseReasoningTextContent(text=reasoning, type="reasoning_text")
-                ],
+                content=[ResponseReasoningTextContent(text=reasoning, type="reasoning_text")],
                 status=None,
             )
         )
@@ -84,8 +82,7 @@ def build_response_output_items(
             outputs.append(
                 ResponseFunctionToolCall(
                     id=f"fc_{random_uuid()}",
-                    call_id=tool_call.id
-                    or make_tool_call_id(func_name=tool_call.name, idx=idx),
+                    call_id=tool_call.id or make_tool_call_id(func_name=tool_call.name, idx=idx),
                     type="function_call",
                     status="completed",
                     name=tool_call.name,
@@ -197,9 +194,7 @@ def construct_chat_messages_with_tool_call(
     """
     messages: list[ChatCompletionMessageParam] = []
     for item in input_messages:
-        message = _construct_message_from_response_item(
-            item, prev_msg=messages[-1] if messages else None
-        )
+        message = _construct_message_from_response_item(item, prev_msg=messages[-1] if messages else None)
         if message is not None:
             messages.append(message)
 
@@ -214,9 +209,7 @@ def _construct_message_from_response_item(
     Returns a new message or None. If `None`, `prev_msg` might be updated.
     If `prev_msg` is `None`, a new message is always returned.
     """
-    prev_assistant_msg = (
-        prev_msg if prev_msg and prev_msg.get("role") == "assistant" else None
-    )
+    prev_assistant_msg = prev_msg if prev_msg and prev_msg.get("role") == "assistant" else None
 
     if isinstance(item, ResponseFunctionToolCall):
         tool_call = ChatCompletionMessageToolCallParam(
@@ -235,9 +228,7 @@ def _construct_message_from_response_item(
             if isinstance(tool_calls, list):
                 tool_calls.append(tool_call)
                 return None
-            if isinstance(tool_calls, Iterable) and not isinstance(
-                tool_calls, (dict, str)
-            ):
+            if isinstance(tool_calls, Iterable) and not isinstance(tool_calls, (dict, str)):
                 tool_calls = list(tool_calls)
                 tool_calls.append(tool_call)
                 prev_assistant_msg["tool_calls"] = tool_calls
@@ -351,14 +342,9 @@ def convert_tool_responses_to_completions_format(tool: dict) -> dict:
     }
 
 
-def construct_tool_dicts(
-    tools: list[Tool], tool_choice: ToolChoice
-) -> list[dict[str, Any]] | None:
+def construct_tool_dicts(tools: list[Tool], tool_choice: ToolChoice) -> list[dict[str, Any]] | None:
     if not tools or (tool_choice == "none"):
         tool_dicts = None
     else:
-        tool_dicts = [
-            convert_tool_responses_to_completions_format(tool.model_dump())
-            for tool in tools
-        ]
+        tool_dicts = [convert_tool_responses_to_completions_format(tool.model_dump()) for tool in tools]
     return tool_dicts

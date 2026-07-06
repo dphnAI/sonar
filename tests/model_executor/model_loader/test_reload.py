@@ -53,9 +53,7 @@ class _AliasedBufferLayer(torch.nn.Module):
         super().__init__()
         weight = torch.arange(6, dtype=torch.float32).reshape(2, 3)
         self.weight = torch.nn.Parameter(weight)
-        self.register_buffer(
-            "weight_view", self.weight.detach().view(-1), persistent=False
-        )
+        self.register_buffer("weight_view", self.weight.detach().view(-1), persistent=False)
 
 
 class _ParentAliasedChildBufferLayer(torch.nn.Module):
@@ -63,21 +61,15 @@ class _ParentAliasedChildBufferLayer(torch.nn.Module):
         super().__init__()
         self.scale = torch.nn.Parameter(torch.ones(1))
         self.conv1d = torch.nn.Linear(3, 2, bias=False)
-        self.conv1d.weight.data.copy_(
-            torch.arange(6, dtype=torch.float32).reshape(2, 3)
-        )
-        self.register_buffer(
-            "conv_weights", self.conv1d.weight.detach().view(-1), persistent=False
-        )
+        self.conv1d.weight.data.copy_(torch.arange(6, dtype=torch.float32).reshape(2, 3))
+        self.register_buffer("conv_weights", self.conv1d.weight.detach().view(-1), persistent=False)
 
 
 class _AliasedBufferWithUninitializedChildLayer(_AliasedBufferLayer):
     def __init__(self):
         super().__init__()
         self.child = torch.nn.Module()
-        self.child.register_parameter(
-            "lazy_weight", UninitializedParameter(requires_grad=False)
-        )
+        self.child.register_parameter("lazy_weight", UninitializedParameter(requires_grad=False))
 
 
 def test_move_metatensors():
@@ -154,9 +146,7 @@ def test_model_cleanup(dist_init, default_aphrodite_config):
         restore_device=torch.device("cpu"),
     )
 
-    mock_info_dict: WeakKeyDictionary[torch.nn.Module, LayerReloadingInfo] = (
-        WeakKeyDictionary()
-    )
+    mock_info_dict: WeakKeyDictionary[torch.nn.Module, LayerReloadingInfo] = WeakKeyDictionary()
     mock_info_dict[layer] = info
     layer_ref = ref(layer)
 
@@ -208,9 +198,7 @@ class _ComposedLoaderLayer(torch.nn.Module):
         self.A = torch.nn.Parameter(torch.empty(4, dtype=torch.float32))
         self.D = torch.nn.Parameter(torch.ones(4))
         self.dt_bias = torch.nn.Parameter(torch.ones(4))
-        self.A.weight_loader = composed_weight_loader(
-            default_weight_loader, lambda x: -torch.exp(x.float())
-        )
+        self.A.weight_loader = composed_weight_loader(default_weight_loader, lambda x: -torch.exp(x.float()))
         self.D.weight_loader = default_weight_loader
         self.dt_bias.weight_loader = default_weight_loader
 
@@ -234,9 +222,7 @@ def test_layerwise_reload_composed_loader_does_not_drop_params(monkeypatch):
         tensor.__dict__ = meta_tensor.__dict__.copy()
         return tensor
 
-    monkeypatch.setattr(
-        reload_meta, "materialize_meta_tensor", materialize_with_sentinel
-    )
+    monkeypatch.setattr(reload_meta, "materialize_meta_tensor", materialize_with_sentinel)
 
     loaded = {
         "A": torch.full((4,), 0.5),
@@ -276,9 +262,7 @@ def test_layerwise_reload_skips_non_persistent_parameter_alias_buffers(monkeypat
         tensor.__dict__ = meta_tensor.__dict__.copy()
         return tensor
 
-    monkeypatch.setattr(
-        reload_meta, "materialize_meta_tensor", materialize_with_sentinel
-    )
+    monkeypatch.setattr(reload_meta, "materialize_meta_tensor", materialize_with_sentinel)
 
     record_metadata_for_reloading(model)
     initialize_layerwise_reload(model)
@@ -286,9 +270,7 @@ def test_layerwise_reload_skips_non_persistent_parameter_alias_buffers(monkeypat
     finalize_layerwise_reload(model, model_config=None)
 
     assert torch.equal(layer.weight, loaded_weight)
-    assert layer.weight_view.untyped_storage().data_ptr() == (
-        layer.weight.untyped_storage().data_ptr()
-    )
+    assert layer.weight_view.untyped_storage().data_ptr() == (layer.weight.untyped_storage().data_ptr())
 
 
 def test_capture_layer_to_meta_skips_uninitialized_parameter_storage_ptrs():
@@ -317,9 +299,7 @@ def test_layerwise_reload_skips_child_parameter_alias_buffers(monkeypatch):
         tensor.__dict__ = meta_tensor.__dict__.copy()
         return tensor
 
-    monkeypatch.setattr(
-        reload_meta, "materialize_meta_tensor", materialize_with_sentinel
-    )
+    monkeypatch.setattr(reload_meta, "materialize_meta_tensor", materialize_with_sentinel)
 
     record_metadata_for_reloading(model)
     initialize_layerwise_reload(model)
@@ -329,14 +309,10 @@ def test_layerwise_reload_skips_child_parameter_alias_buffers(monkeypatch):
 
     assert torch.equal(layer.conv1d.weight, loaded_conv)
     assert torch.equal(layer.conv_weights, loaded_conv.view(-1))
-    assert layer.conv_weights.untyped_storage().data_ptr() == (
-        layer.conv1d.weight.untyped_storage().data_ptr()
-    )
+    assert layer.conv_weights.untyped_storage().data_ptr() == (layer.conv1d.weight.untyped_storage().data_ptr())
 
 
-@pytest.mark.parametrize(
-    "tp_size", [pytest.param(1), pytest.param(2, marks=[pytest.mark.slow_test])]
-)
+@pytest.mark.parametrize("tp_size", [pytest.param(1), pytest.param(2, marks=[pytest.mark.slow_test])])
 @pytest.mark.parametrize(
     "base_model,mul_model,add_model",
     [
@@ -431,9 +407,7 @@ def test_kv_scale_reload(aphrodite_runner):
     assert reloaded_perp < 10
 
 
-@pytest.mark.parametrize(
-    "tp_size", [pytest.param(1), pytest.param(2, marks=[pytest.mark.slow_test])]
-)
+@pytest.mark.parametrize("tp_size", [pytest.param(1), pytest.param(2, marks=[pytest.mark.slow_test])])
 @pytest.mark.parametrize(
     "base_model,mul_model,add_model,quantization",
     [
@@ -469,9 +443,7 @@ def test_kv_scale_reload(aphrodite_runner):
         ),
     ],
 )
-def test_online_quantize_reload(
-    base_model, mul_model, add_model, quantization, tp_size, aphrodite_runner
-):
+def test_online_quantize_reload(base_model, mul_model, add_model, quantization, tp_size, aphrodite_runner):
     if current_platform.device_count() < tp_size:
         pytest.skip(reason="Not enough GPU devices")
 

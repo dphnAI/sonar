@@ -4,11 +4,11 @@
 
 import pytest
 
+from aphrodite.tokenizers import TokenizerLike, get_tokenizer
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,
 )
-from aphrodite.tokenizers import TokenizerLike, get_tokenizer
 
 
 class TestDeepSeekV3ToolParser(ToolParserTests):
@@ -21,9 +21,7 @@ class TestDeepSeekV3ToolParser(ToolParserTests):
         return ToolParserTestConfig(
             parser_name="deepseek_v3",
             # Test data
-            no_tool_calls_output=(
-                "How can I help you today? I can check weather for you."
-            ),
+            no_tool_calls_output=("How can I help you today? I can check weather for you."),
             single_tool_call_output="""<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>get_weather
 ```json
 {"city": "Tokyo", "unit": "celsius"}

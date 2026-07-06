@@ -31,9 +31,7 @@ class CompressedTensorsScheme(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def apply_weights(
-        self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None
-    ):
+    def apply_weights(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None):
         """
         Run the forward pass for the particular scheme. This is where
         scheme-specific dequant/quant steps/kernels should be applied.

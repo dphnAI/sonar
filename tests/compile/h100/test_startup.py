@@ -77,9 +77,7 @@ def test_moe_startup(monkeypatch, aphrodite_runner, fresh_aphrodite_cache, mega_
         num_compiled_artifacts_saved=0,
     ):
         _run_aphrodite(aphrodite_runner)
-    mega_aot_active = envs.APHRODITE_USE_MEGA_AOT_ARTIFACT and is_torch_equal_or_newer(
-        "2.10.0"
-    )
+    mega_aot_active = envs.APHRODITE_USE_MEGA_AOT_ARTIFACT and is_torch_equal_or_newer("2.10.0")
     if mega_aot_active:
         # MEGA_AOT_ARTIFACT is enabled, so we expect no aot_autograd running on
         # subgraphs.
@@ -87,9 +85,7 @@ def test_moe_startup(monkeypatch, aphrodite_runner, fresh_aphrodite_cache, mega_
     else:
         assert counters["aot_autograd"]["total"] == 30
     assert counters["aot_autograd"]["autograd_cache_miss"] == 0
-    assert (
-        counters["aot_autograd"]["autograd_cache_hit"] == 0
-    )  # No miss at aot_autograd level causing disk I/O.
+    assert counters["aot_autograd"]["autograd_cache_hit"] == 0  # No miss at aot_autograd level causing disk I/O.
 
 
 # ---------------------------------------------------------------------------
@@ -202,14 +198,8 @@ def _check_model_run(aphrodite_runner, spec: ModelStartupSpec, is_cold_start: bo
     """Runs a model and checks the number of compiled artifacts."""
     old = compilation_counter.clone()
     _run_model(aphrodite_runner, spec)
-    saved = (
-        compilation_counter.num_compiled_artifacts_saved
-        - old.num_compiled_artifacts_saved
-    )
-    loaded = (
-        compilation_counter.num_compiled_artifacts_loaded
-        - old.num_compiled_artifacts_loaded
-    )
+    saved = compilation_counter.num_compiled_artifacts_saved - old.num_compiled_artifacts_saved
+    loaded = compilation_counter.num_compiled_artifacts_loaded - old.num_compiled_artifacts_loaded
 
     start_type = "COLD" if is_cold_start else "WARM"
     # Print actual values for debugging — intentional, helps diagnose
@@ -226,9 +216,7 @@ def _check_model_run(aphrodite_runner, spec: ModelStartupSpec, is_cold_start: bo
         expected_loaded = spec.warm_artifacts_loaded
 
     assert saved == expected_saved, f"{start_type.lower()}_artifacts_saved: got {saved}"
-    assert loaded == expected_loaded, (
-        f"{start_type.lower()}_artifacts_loaded: got {loaded}"
-    )
+    assert loaded == expected_loaded, f"{start_type.lower()}_artifacts_loaded: got {loaded}"
 
 
 def _cold_start_model(aphrodite_runner, spec: ModelStartupSpec):

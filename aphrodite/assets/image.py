@@ -37,9 +37,7 @@ class ImageAsset:
         """
         Return s3 path for given image.
         """
-        return get_aphrodite_public_assets(
-            filename=f"{self.name}.{ext}", s3_prefix=VLM_IMAGES_DIR
-        )
+        return get_aphrodite_public_assets(filename=f"{self.name}.{ext}", s3_prefix=VLM_IMAGES_DIR)
 
     @property
     def pil_image(self) -> Image.Image:

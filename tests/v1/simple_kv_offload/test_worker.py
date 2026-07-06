@@ -118,8 +118,7 @@ def test_store_orders_after_compute_write():
         backend.shutdown()
 
     assert control > 0, (
-        "no-barrier store did not race the compute write; the test no longer "
-        "exercises the hazard it is meant to guard"
+        "no-barrier store did not race the compute write; the test no longer exercises the hazard it is meant to guard"
     )
     assert fixed == 0, f"store raced compute even with the barrier: {fixed} corrupt"
 
@@ -144,9 +143,7 @@ class _RecordingBackend:
 
 def test_get_finished_passes_wait_event_for_store_only():
     """get_finished gates stores on a compute-done event but not loads."""
-    worker = SimpleCPUOffloadWorker(
-        aphrodite_config=None, kv_cache_config=None, cpu_capacity_bytes=0
-    )
+    worker = SimpleCPUOffloadWorker(aphrodite_config=None, kv_cache_config=None, cpu_capacity_bytes=0)
     recording = _RecordingBackend()
     worker._backend = recording
     worker._connector_metadata = SimpleCPUOffloadMetadata(
@@ -177,7 +174,5 @@ def test_build_params_src_access_order():
     default = build_params(gpu, cpu, stream)
     assert default.attrs.srcAccessOrder == CU_MEMCPY_SRC_ACCESS_ORDER_ANY
 
-    ordered = build_params(
-        gpu, cpu, stream, src_access_order=CU_MEMCPY_SRC_ACCESS_ORDER_STREAM
-    )
+    ordered = build_params(gpu, cpu, stream, src_access_order=CU_MEMCPY_SRC_ACCESS_ORDER_STREAM)
     assert ordered.attrs.srcAccessOrder == CU_MEMCPY_SRC_ACCESS_ORDER_STREAM

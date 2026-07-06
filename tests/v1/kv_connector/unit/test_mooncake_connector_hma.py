@@ -23,7 +23,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connect
 )
 
 from .test_mooncake_connector import FakeMooncakeWrapper, patch_worker_dependencies
-from .utils import create_request, create_aphrodite_config, make_kv_cache_config
+from .utils import create_aphrodite_config, create_request, make_kv_cache_config
 
 
 # ---------------------------------------------------------------------------
@@ -49,9 +49,7 @@ def test_sw_sizes(swa_enabled, expected_blocks_per_sw):
     )
     # Override so HMA detection works
     aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
-    kv_cache_config = make_kv_cache_config(
-        block_size=block_size, swa_enabled=swa_enabled, sw_size=2048
-    )
+    kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=swa_enabled, sw_size=2048)
 
     scheduler = MooncakeConnectorScheduler(
         aphrodite_config=aphrodite_config,
@@ -82,9 +80,7 @@ def test_is_hma_required(swa_enabled, disable_hma, expected_is_hma):
         block_size=block_size,
     )
     aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = disable_hma
-    kv_cache_config = make_kv_cache_config(
-        block_size=block_size, swa_enabled=swa_enabled
-    )
+    kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=swa_enabled)
 
     scheduler = MooncakeConnectorScheduler(
         aphrodite_config=aphrodite_config,
@@ -108,9 +104,7 @@ def test_get_sw_clipped_blocks():
     )
     aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
     # SW=128 tokens → 128/16 = 8 blocks + 1 = 9 blocks_per_sw
-    kv_cache_config = make_kv_cache_config(
-        block_size=block_size, swa_enabled=True, sw_size=128
-    )
+    kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=True, sw_size=128)
 
     scheduler = MooncakeConnectorScheduler(
         aphrodite_config=aphrodite_config,
@@ -210,25 +204,18 @@ def test_metadata_hma_block_ids():
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake"
-    ".mooncake_connector.TransferEngine",
+    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
     FakeMooncakeWrapper,
 )
 async def test_build_transfer_params_multi_group_trimming(monkeypatch):
     """_build_transfer_params trims per-group blocks when local > remote."""
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer"
-    )
-    kv_cache_config = make_kv_cache_config(
-        block_size=aphrodite_config.cache_config.block_size, swa_enabled=True
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
+    kv_cache_config = make_kv_cache_config(block_size=aphrodite_config.cache_config.block_size, swa_enabled=True)
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
-        connector = MooncakeConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
-        )
+        connector = MooncakeConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
         worker = connector.connector_worker
 
         block_len = 4096
@@ -286,9 +273,7 @@ async def test_build_transfer_params_multi_group_trimming(monkeypatch):
             lengths,
             err_reqs,
             err_msg,
-        ) = await worker._build_transfer_params(
-            ready_reqs, xfer_meta, local_regions, remote_regions
-        )
+        ) = await worker._build_transfer_params(ready_reqs, xfer_meta, local_regions, remote_regions)
 
         # No errors
         assert err_reqs == []
@@ -307,25 +292,18 @@ async def test_build_transfer_params_multi_group_trimming(monkeypatch):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 @patch(
-    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake"
-    ".mooncake_connector.TransferEngine",
+    "aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.mooncake_connector.TransferEngine",
     FakeMooncakeWrapper,
 )
 async def test_build_transfer_params_group_count_mismatch(monkeypatch):
     """_build_transfer_params reports an error when group counts differ."""
 
     monkeypatch.setenv("APHRODITE_MOONCAKE_ABORT_REQUEST_TIMEOUT", "5")
-    aphrodite_config = create_aphrodite_config(
-        kv_connector="MooncakeConnector", kv_role="kv_producer"
-    )
-    kv_cache_config = make_kv_cache_config(
-        block_size=aphrodite_config.cache_config.block_size, swa_enabled=True
-    )
+    aphrodite_config = create_aphrodite_config(kv_connector="MooncakeConnector", kv_role="kv_producer")
+    kv_cache_config = make_kv_cache_config(block_size=aphrodite_config.cache_config.block_size, swa_enabled=True)
 
     with set_current_aphrodite_config(aphrodite_config), patch_worker_dependencies():
-        connector = MooncakeConnector(
-            aphrodite_config, KVConnectorRole.WORKER, kv_cache_config
-        )
+        connector = MooncakeConnector(aphrodite_config, KVConnectorRole.WORKER, kv_cache_config)
         worker = connector.connector_worker
 
         block_len = 4096
@@ -378,9 +356,7 @@ async def test_build_transfer_params_group_count_mismatch(monkeypatch):
             lengths,
             err_reqs,
             err_msg,
-        ) = await worker._build_transfer_params(
-            ready_reqs, xfer_meta, local_regions, remote_regions
-        )
+        ) = await worker._build_transfer_params(ready_reqs, xfer_meta, local_regions, remote_regions)
 
         # Mismatched req is reported via err_reqs/err_msg with no transfers built.
         assert err_reqs == ["d-mismatch"]
@@ -405,9 +381,7 @@ def test_request_finished_with_hma_groups():
         block_size=block_size,
     )
     aphrodite_config.scheduler_config.disable_hybrid_kv_cache_manager = False
-    kv_cache_config = make_kv_cache_config(
-        block_size=block_size, swa_enabled=True, sw_size=128
-    )
+    kv_cache_config = make_kv_cache_config(block_size=block_size, swa_enabled=True, sw_size=128)
 
     scheduler = MooncakeConnectorScheduler(
         aphrodite_config=aphrodite_config,

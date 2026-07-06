@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Paged attention shared utilities — context, prepare functions, and helpers.
 
 Provides the thread-local ``PagedAttentionContext`` and ``OffsetCache`` used by
@@ -138,9 +139,7 @@ def find_layers(model: Any) -> list[Any]:
     elif hasattr(root, "layers"):
         return root.layers
     else:
-        raise ValueError(
-            f"Cannot find transformer layers in model of type {type(model)}"
-        )
+        raise ValueError(f"Cannot find transformer layers in model of type {type(model)}")
 
 
 # Attribute names to probe on each layer, in priority order.

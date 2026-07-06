@@ -73,18 +73,10 @@ class EXAONE4_5_VisionAttention(nn.Module):
     ) -> None:
         super().__init__()
         # Per attention head and per partition values.
-        self.tp_size = (
-            1
-            if use_data_parallel
-            else parallel_state.get_tensor_model_parallel_world_size()
-        )
+        self.tp_size = 1 if use_data_parallel else parallel_state.get_tensor_model_parallel_world_size()
         self.tp_rank = parallel_state.get_tensor_model_parallel_rank()
-        self.hidden_size_per_attention_head = dist_utils.divide(
-            projection_size, num_heads
-        )
-        self.num_attention_heads_per_partition = dist_utils.divide(
-            num_heads, self.tp_size
-        )
+        self.hidden_size_per_attention_head = dist_utils.divide(projection_size, num_heads)
+        self.num_attention_heads_per_partition = dist_utils.divide(num_heads, self.tp_size)
 
         self.total_num_heads = num_heads
         self.total_num_kv_heads = num_kv_heads
@@ -152,8 +144,7 @@ class EXAONE4_5_VisionAttention(nn.Module):
         rotary_pos_emb_cos: torch.Tensor,
         rotary_pos_emb_sin: torch.Tensor,
         max_seqlen: int | None = None,
-        sequence_lengths: torch.Tensor
-        | None = None,  # Only used for FlashInfer CuDNN backend
+        sequence_lengths: torch.Tensor | None = None,  # Only used for FlashInfer CuDNN backend
     ) -> torch.Tensor:
         # [s, b, c] --> [s, b, head * 3 * head_dim]
         x, _ = self.qkv(x)
@@ -181,9 +172,7 @@ class EXAONE4_5_VisionAttention(nn.Module):
             sequence_lengths=sequence_lengths,
         )
 
-        context_layer = einops.rearrange(
-            context_layer, "b s h d -> s b (h d)", b=batch_size
-        ).contiguous()
+        context_layer = einops.rearrange(context_layer, "b s h d -> s b (h d)", b=batch_size).contiguous()
 
         output, _ = self.proj(context_layer)
         return output
@@ -327,9 +316,7 @@ class Exaone4_5_ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self.config = config
         self.multimodal_config = multimodal_config
-        self.is_multimodal_pruning_enabled = (
-            multimodal_config.is_multimodal_pruning_enabled()
-        )
+        self.is_multimodal_pruning_enabled = multimodal_config.is_multimodal_pruning_enabled()
 
         with self._mark_tower_model(aphrodite_config, {"image", "video"}):
             self.visual = EXAONE4_5_VisionTransformer(
@@ -348,9 +335,7 @@ class Exaone4_5_ForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
                 architectures=["Exaone4ForCausalLM"],
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(

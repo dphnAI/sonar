@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import aphrodite.plugins as plugins_module
-from tests.v1.core.utils import create_requests, create_scheduler
 from aphrodite.distributed.kv_transfer.kv_connector.factory import (
     KVConnectorFactory,
 )
@@ -19,6 +18,7 @@ from aphrodite.v1.core.sched.output import SchedulerOutput
 from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 from aphrodite.v1.request import Request
+from tests.v1.core.utils import create_requests, create_scheduler
 
 
 class DummyConnectorMetadata(KVConnectorMetadata):
@@ -30,23 +30,15 @@ class DummyKVConnector(KVConnectorBase_V1):
     def __init__(self, aphrodite_config, role, kv_cache_config: KVCacheConfig):
         super().__init__(aphrodite_config, role, kv_cache_config)
 
-    def get_num_new_matched_tokens(
-        self, request: Request, num_computed_tokens: int
-    ) -> tuple[int | None, bool]:
+    def get_num_new_matched_tokens(self, request: Request, num_computed_tokens: int) -> tuple[int | None, bool]:
         return (0, False)
 
-    def update_state_after_alloc(
-        self, request: Request, blocks: KVCacheBlocks, num_external_tokens: int
-    ):
+    def update_state_after_alloc(self, request: Request, blocks: KVCacheBlocks, num_external_tokens: int):
         pass
 
-    def build_connector_meta(
-        self, scheduler_output: SchedulerOutput
-    ) -> KVConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: SchedulerOutput) -> KVConnectorMetadata:
         block_hashes_by_req = getattr(scheduler_output, "block_hashes_by_req", None)
-        assert block_hashes_by_req is not None, (
-            "DummyKVConnector expected 'block_hashes_by_req' on scheduler_output"
-        )
+        assert block_hashes_by_req is not None, "DummyKVConnector expected 'block_hashes_by_req' on scheduler_output"
         return DummyConnectorMetadata(
             block_hashes_by_req=block_hashes_by_req,
         )
@@ -106,12 +98,8 @@ def _load_plugin():
 def test_connector_receives_block_hashes(_load_plugin):
     block_size = 16
     num_tokens = 48  # 3 full blocks worth of tokens
-    scheduler = create_scheduler(
-        use_kv_connector="DummyKVConnector", block_size=block_size
-    )
-    requests = create_requests(
-        num_requests=3, num_tokens=num_tokens, block_size=block_size
-    )
+    scheduler = create_scheduler(use_kv_connector="DummyKVConnector", block_size=block_size)
+    requests = create_requests(num_requests=3, num_tokens=num_tokens, block_size=block_size)
     for req in requests:
         scheduler.add_request(req)
 
@@ -125,7 +113,5 @@ def test_connector_receives_block_hashes(_load_plugin):
     for req in requests:
         assert req.request_id in meta.block_hashes_by_req
         # Each request has num_tokens / block_size = 3 full block hashes.
-        assert len(meta.block_hashes_by_req[req.request_id]) == (
-            num_tokens // block_size
-        )
+        assert len(meta.block_hashes_by_req[req.request_id]) == (num_tokens // block_size)
         assert meta.block_hashes_by_req[req.request_id] == req.block_hashes

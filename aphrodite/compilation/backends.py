@@ -27,7 +27,7 @@ from aphrodite.compilation.codegen import (
     compile_execution_fn,
     generate_execution_code,
 )
-from aphrodite.config import CompilationConfig, CUDAGraphMode, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CompilationConfig, CUDAGraphMode
 from aphrodite.config.compilation import DynamicShapesType
 from aphrodite.config.utils import Range, hash_factors
 from aphrodite.logger import init_logger
@@ -101,13 +101,9 @@ def make_compiler(compilation_config: CompilationConfig) -> CompilerInterface:
     if compilation_config.backend == "inductor":
         # Use standalone compile only if requested, version is new enough,
         # and the symbol actually exists in this PyTorch build.
-        if envs.APHRODITE_USE_STANDALONE_COMPILE and hasattr(
-            torch._inductor, "standalone_compile"
-        ):
+        if envs.APHRODITE_USE_STANDALONE_COMPILE and hasattr(torch._inductor, "standalone_compile"):
             logger.debug("Using InductorStandaloneAdaptor")
-            return InductorStandaloneAdaptor(
-                compilation_config.compile_cache_save_format
-            )
+            return InductorStandaloneAdaptor(compilation_config.compile_cache_save_format)
         else:
             logger.debug("Using InductorAdaptor")
             return InductorAdaptor()
@@ -153,16 +149,12 @@ class CompilerManager:
         compilation (e.g. partition rules, pass context)."""
         with pass_context(compile_range):
             if self.compilation_config.use_inductor_graph_partition:
-                with inductor_partition_rule_context(
-                    self.compilation_config.splitting_ops
-                ):
+                with inductor_partition_rule_context(self.compilation_config.splitting_ops):
                     yield
             else:
                 yield
 
-    def initialize_cache(
-        self, cache_dir: str, disable_cache: bool = False, prefix: str = ""
-    ) -> None:
+    def initialize_cache(self, cache_dir: str, disable_cache: bool = False, prefix: str = "") -> None:
         """
         Initialize the cache directory for the compiler.
 
@@ -202,15 +194,13 @@ class CompilerManager:
                     start, end = range_tuple
                     check_type(start, int)
                     check_type(end, int)
-                    range_tuple = Range(start=start, end=end)
+                    range_tuple = Range(start=start, end=end)  # type: ignore[call-arg]
                 check_type(range_tuple, Range)
                 return range_tuple, graph_index, compiler_name
 
             self.cache = {parse_key(key): value for key, value in cache.items()}
 
-        self.compiler.initialize_cache(
-            cache_dir=cache_dir, disable_cache=disable_cache, prefix=prefix
-        )
+        self.compiler.initialize_cache(cache_dir=cache_dir, disable_cache=disable_cache, prefix=prefix)
 
     def save_to_file(self) -> None:
         if self.disable_cache or not self.is_cache_updated:
@@ -239,17 +229,13 @@ class CompilerManager:
             return handle, cache_key
 
         try:
-            handle, cache_key = parse_value(
-                self.cache[(compile_range, graph_index, self.compiler.name)]
-            )
+            handle, cache_key = parse_value(self.cache[(compile_range, graph_index, self.compiler.name)])
         except Exception:
             # When the cache is outdated, we should ignore the existing file.
             # This should cause the correct cache to be generated again.
             return None
 
-        compiled_graph = self.compiler.load(
-            handle, graph, example_inputs, graph_index, compile_range
-        )
+        compiled_graph = self.compiler.load(handle, graph, example_inputs, graph_index, compile_range)
         self.loaded_artifacts[cache_key] = compiled_graph
         logger.debug(
             "Directly load the %s-th graph for compile range %sfrom %s via handle %s",
@@ -290,8 +276,7 @@ class CompilerManager:
                 # there can be multiple graphs due to piecewise compilation.
                 elapsed = time.perf_counter() - compilation_start_time
                 logger.debug_once(
-                    "Directly load the compiled graph(s) for compile range %s "
-                    "from the cache, took %.3f s",
+                    "Directly load the compiled graph(s) for compile range %s from the cache, took %.3f s",
                     str(compile_range),
                     elapsed,
                 )
@@ -429,9 +414,7 @@ def _is_empty_allocation_node(node: fx.Node) -> bool:
     else:
         return False
 
-    return packet_name.startswith("aten::empty") or packet_name.startswith(
-        "aten::new_empty"
-    )
+    return packet_name.startswith("aten::empty") or packet_name.startswith("aten::new_empty")
 
 
 def _merge_empty_only_subgraphs(
@@ -465,8 +448,7 @@ def _merge_empty_only_subgraphs(
             # Safety check: don't move allocation before any input producer.
             empty_node = nodes[0]
             if all(
-                input_node.op == "placeholder"
-                or node_to_subgraph_id[input_node] <= prev_non_splitting_subgraph_id
+                input_node.op == "placeholder" or node_to_subgraph_id[input_node] <= prev_non_splitting_subgraph_id
                 for input_node in empty_node.all_input_nodes
             ):
                 node_to_subgraph_id[empty_node] = prev_non_splitting_subgraph_id
@@ -492,8 +474,7 @@ def _decompose_size_nodes(graph: fx.GraphModule) -> None:
         tensor_node = node.args[0]
         ev = tensor_node.meta.get("example_value")
         assert ev is not None, (
-            f"Tensor node '{tensor_node.name}' has no example_value metadata. "
-            f"Cannot decompose size node '{node.name}'."
+            f"Tensor node '{tensor_node.name}' has no example_value metadata. Cannot decompose size node '{node.name}'."
         )
 
         # Build per-dim replacements: sym_size.int node or literal int.
@@ -502,18 +483,14 @@ def _decompose_size_nodes(graph: fx.GraphModule) -> None:
             for i in range(ev.dim()):
                 dim_val = ev.shape[i]
                 if isinstance(dim_val, torch.SymInt):
-                    dn = graph.graph.call_function(
-                        torch.ops.aten.sym_size.int, args=(tensor_node, i)
-                    )
+                    dn = graph.graph.call_function(torch.ops.aten.sym_size.int, args=(tensor_node, i))
                     dn.meta["example_value"] = dim_val
                     dims.append(dn)
                 elif isinstance(dim_val, int):
                     dims.append(dim_val)
                 else:
                     raise AssertionError(
-                        f"dim_val is either torch.SymInt or int, "
-                        f"got {type(dim_val)} for dim {i} of "
-                        f"'{node.name}'"
+                        f"dim_val is either torch.SymInt or int, got {type(dim_val)} for dim {i} of '{node.name}'"
                     )
 
         # Replace size node in each user's args.
@@ -527,8 +504,7 @@ def _decompose_size_nodes(graph: fx.GraphModule) -> None:
                 # getitem(size, idx) → replace with dims[idx] directly.
                 idx = user.args[1]
                 assert isinstance(idx, int), (
-                    f"Expected literal int index for getitem on size(), "
-                    f"got {type(idx).__name__}: {idx}"
+                    f"Expected literal int index for getitem on size(), got {type(idx).__name__}: {idx}"
                 )
                 user.replace_all_uses_with(dims[idx])
                 graph.graph.erase_node(user)
@@ -545,9 +521,7 @@ def _decompose_size_nodes(graph: fx.GraphModule) -> None:
         graph.graph.erase_node(node)
 
 
-def split_graph(
-    graph: fx.GraphModule, splitting_ops: list[str]
-) -> tuple[fx.GraphModule, list[SplitItem]]:
+def split_graph(graph: fx.GraphModule, splitting_ops: list[str]) -> tuple[fx.GraphModule, list[SplitItem]]:
     _decompose_size_nodes(graph)
 
     # split graph by ops
@@ -659,9 +633,7 @@ def wrap_with_cudagraph_if_needed(
 
     # resolve the static graph wrapper class (e.g. CUDAGraphWrapper
     # class) as platform dependent.
-    static_graph_wrapper_class = resolve_obj_by_qualname(
-        current_platform.get_static_graph_wrapper_cls()
-    )
+    static_graph_wrapper_class = resolve_obj_by_qualname(current_platform.get_static_graph_wrapper_cls())
 
     # Always assign PIECEWISE runtime mode to the
     # CUDAGraphWrapper for piecewise_backend, to distinguish
@@ -739,10 +711,7 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):  # type: ignore[misc]
                 from aphrodite.utils import get_progress_log_prefix
 
                 progress = Progress(
-                    TextColumn(
-                        get_progress_log_prefix()
-                        + " [progress.description]{task.description}"
-                    ),
+                    TextColumn(get_progress_log_prefix() + " [progress.description]{task.description}"),
                     BarColumn(),
                     MofNCompleteColumn(),
                     TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
@@ -779,17 +748,12 @@ class PiecewiseCompileInterpreter(torch.fx.Interpreter):  # type: ignore[misc]
             index = self.compile_submod_names.index(target)
             submod = self.fetch_attr(target)
 
-            sym_shape_indices = [
-                i for i, x in enumerate(args) if isinstance(x, torch.SymInt)
-            ]
+            sym_shape_indices = [i for i, x in enumerate(args) if isinstance(x, torch.SymInt)]
 
             if self.progress is not None and self.progress_task is not None:
                 self.progress.update(
                     self.progress_task,
-                    description=(
-                        f"torch.compile "
-                        f"({self.compiled_count + 1}/{self.total_to_compile})"
-                    ),
+                    description=(f"torch.compile ({self.compiled_count + 1}/{self.total_to_compile})"),
                 )
 
             # Lazy import here to avoid circular import
@@ -836,9 +800,7 @@ def set_model_tag(tag: str, is_encoder: bool = False) -> Generator[None, None, N
     """Context manager to set the model tag."""
     global model_tag
     global model_is_encoder
-    assert tag != model_tag, (
-        f"Model tag {tag} is the same as the current tag {model_tag}."
-    )
+    assert tag != model_tag, f"Model tag {tag} is the same as the current tag {model_tag}."
     old_tag = model_tag
     old_is_encoder = model_is_encoder
 
@@ -897,17 +859,13 @@ class AphroditeBackend:
         self.is_encoder = is_encoder or model_is_encoder
 
         # Passes to run on the graph post-grad.
-        self.pass_manager = resolve_obj_by_qualname(
-            current_platform.get_pass_manager_cls()
-        )()
+        self.pass_manager = resolve_obj_by_qualname(current_platform.get_pass_manager_cls())()
         self.pass_key = current_platform.pass_key
 
         self.aphrodite_config = aphrodite_config
         self.compilation_config = aphrodite_config.compilation_config
 
-        self.compiler_manager: CompilerManager = CompilerManager(
-            self.compilation_config
-        )
+        self.compiler_manager: CompilerManager = CompilerManager(self.compilation_config)
 
         # Deepcopy the inductor config to detach the post-grad custom pass
         # from CompilationConfig.
@@ -985,9 +943,7 @@ class AphroditeBackend:
         pre_grad_pass_key = "pre_grad_custom_pass"
         assert self.pass_key != pre_grad_pass_key
         assert pre_grad_pass_key not in self.inductor_config
-        self.inductor_config[pre_grad_pass_key] = AphroditeIRInplaceFunctionalizationPass(
-            self.aphrodite_config
-        )
+        self.inductor_config[pre_grad_pass_key] = AphroditeIRInplaceFunctionalizationPass(self.aphrodite_config)
 
         # Make sure pre_grad_custom_pass is not pickled
         # as part of AOTAutograd built-in cache key
@@ -1005,18 +961,14 @@ class AphroditeBackend:
         # hook. If a pass for that hook exists, add it to the pass manager.
         if self.pass_key in self.inductor_config:
             if isinstance(self.inductor_config[self.pass_key], PostGradPassManager):
-                raise ValueError(
-                    "PostGradPassManager can not be kept in CompilationConfig."
-                )
+                raise ValueError("PostGradPassManager can not be kept in CompilationConfig.")
             else:
                 # Config should automatically wrap all inductor passes
                 assert isinstance(
                     self.compilation_config.inductor_compile_config[self.pass_key],
                     InductorPass,
                 )
-                self.pass_manager.add(
-                    self.compilation_config.inductor_compile_config[self.pass_key]
-                )
+                self.pass_manager.add(self.compilation_config.inductor_compile_config[self.pass_key])
         self.inductor_config[self.pass_key] = self.pass_manager
 
     def _log_compilation_config(self):
@@ -1053,9 +1005,7 @@ class AphroditeBackend:
                     "splitting_ops": list_to_str(cc.splitting_ops),
                     "cudagraph_mode": str(cc.cudagraph_mode),
                     "compile_sizes": list_to_str(cc.compile_sizes),
-                    "compile_ranges_endpoints": list_to_str(
-                        cc.compile_ranges_endpoints
-                    ),
+                    "compile_ranges_endpoints": list_to_str(cc.compile_ranges_endpoints),
                     "use_inductor_graph_partition": cc.use_inductor_graph_partition,
                     "inductor_passes": list_to_str(list(cc.inductor_passes.keys())),
                     "enabled_passes": list_to_str(enabled_passes),
@@ -1113,9 +1063,7 @@ class AphroditeBackend:
             # Use SHA-256 for cache key hashing to be consistent across
             # compute_hash functions. Truncate for a short cache dir name.
             hash_key = hashlib.sha256(str(factors).encode()).hexdigest()[:10]
-            cache_dir = os.path.join(
-                envs.APHRODITE_CACHE_ROOT, "torch_compile_cache", hash_key
-            )
+            cache_dir = os.path.join(envs.APHRODITE_CACHE_ROOT, "torch_compile_cache", hash_key)
             self.compilation_config.cache_dir = cache_dir
 
         cache_dir = self.compilation_config.cache_dir
@@ -1132,8 +1080,7 @@ class AphroditeBackend:
 
         # TODO(patchy): ngram gpu kernel will cause aphrodite torch compile cache errors.
         is_ngram_gpu_enabled = (
-            aphrodite_config.speculative_config is not None
-            and aphrodite_config.speculative_config.use_ngram_gpu()
+            aphrodite_config.speculative_config is not None and aphrodite_config.speculative_config.use_ngram_gpu()
         )
         disable_cache = disable_cache or is_ngram_gpu_enabled
 
@@ -1145,9 +1092,7 @@ class AphroditeBackend:
                 local_cache_dir,
             )
 
-        self.compiler_manager.initialize_cache(
-            local_cache_dir, disable_cache, self.prefix
-        )
+        self.compiler_manager.initialize_cache(local_cache_dir, disable_cache, self.prefix)
 
         # Reuses existing cache key
 
@@ -1245,29 +1190,20 @@ class AphroditeBackend:
         )
 
         compilation_counter.num_piecewise_graphs_seen += len(self.piecewise_graphs)
-        submod_names_to_compile = [
-            item.submod_name
-            for item in self.piecewise_graphs
-            if not item.is_splitting_graph
-        ]
+        submod_names_to_compile = [item.submod_name for item in self.piecewise_graphs if not item.is_splitting_graph]
 
         # Extract fake values from the graph to use them when needed.
         all_fake_values = []
         for i in graph.graph.find_nodes(op="placeholder"):
             all_fake_values.append(i.meta["example_value"])
 
-        fake_args = [
-            all_fake_values[i] if isinstance(t, torch.Tensor) else t
-            for i, t in enumerate(example_inputs)
-        ]
+        fake_args = [all_fake_values[i] if isinstance(t, torch.Tensor) else t for i, t in enumerate(example_inputs)]
 
         # propagate the split graph to the piecewise backend,
         # compile submodules with symbolic shapes, and compile all ranges
         # up front so that compilation is complete before the callable
         # is returned.
-        PiecewiseCompileInterpreter(
-            self.split_gm, submod_names_to_compile, self.aphrodite_config, self
-        ).run(*fake_args)
+        PiecewiseCompileInterpreter(self.split_gm, submod_names_to_compile, self.aphrodite_config, self).run(*fake_args)
 
         # All compilation is done. Save the cache.
         time_before_saving = time.perf_counter()
@@ -1285,8 +1221,7 @@ class AphroditeBackend:
 
         if (
             self.compilation_config.dynamic_shapes_config.evaluate_guards
-            and self.compilation_config.dynamic_shapes_config.type
-            == DynamicShapesType.BACKED
+            and self.compilation_config.dynamic_shapes_config.type == DynamicShapesType.BACKED
         ):
             from torch.utils._sympy.value_ranges import ValueRanges
 
@@ -1307,9 +1242,8 @@ class AphroditeBackend:
             # code adapted from
             # https://github.com/thuml/depyf/blob/dab831108a752d1facc00acdd6d4243891845c37/depyf/explain/patched_lazy_format_graph_code.py#L30
             # use `print_readable` because it can include submodules
-            src = (
-                "from __future__ import annotations\nimport torch\n"
-                + self.split_gm.print_readable(print_output=False)
+            src = "from __future__ import annotations\nimport torch\n" + self.split_gm.print_readable(
+                print_output=False
             )
             src = src.replace("<lambda>", "GraphModule")
             with open(graph_path, "w") as f:
@@ -1318,21 +1252,14 @@ class AphroditeBackend:
             logger.debug_once("Computation graph saved to %s", graph_path)
 
         self._called = True
-        graph_to_serialize = (
-            original_split_gm if envs.APHRODITE_USE_MEGA_AOT_ARTIFACT else self.graph
-        )
+        graph_to_serialize = original_split_gm if envs.APHRODITE_USE_MEGA_AOT_ARTIFACT else self.graph
 
         execution_code, submod_names, consts = generate_execution_code(self.split_gm)
         # Use getattr to get correct callables: __dict__ has PiecewiseBackend
         # instances (from PiecewiseCompileInterpreter), _modules has originals.
         # getattr checks __dict__ first, then falls back to _modules.
-        submod_callables = {
-            name: getattr(self.split_gm, name)
-            for name, _ in self.split_gm.named_children()
-        }
-        runtime_callable = compile_execution_fn(
-            execution_code, submod_callables, submod_names, consts
-        )
+        submod_callables = {name: getattr(self.split_gm, name) for name, _ in self.split_gm.named_children()}
+        runtime_callable = compile_execution_fn(execution_code, submod_callables, submod_names, consts)
 
         if (
             self.compilation_config.cudagraph_mode == CUDAGraphMode.NONE
@@ -1358,8 +1285,7 @@ class AphroditeBackend:
         sym_tensor_indices = [
             i
             for i, x in enumerate(fake_args)
-            if isinstance(x, torch._subclasses.fake_tensor.FakeTensor)
-            and any(is_symbolic(d) for d in x.size())
+            if isinstance(x, torch._subclasses.fake_tensor.FakeTensor) and any(is_symbolic(d) for d in x.size())
         ]
 
         # compiler managed cudagraph input buffers

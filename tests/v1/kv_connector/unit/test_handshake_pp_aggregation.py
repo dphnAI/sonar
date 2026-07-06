@@ -20,9 +20,7 @@ class _Metadata(KVConnectorHandshakeMetadata):
 
 
 class _FakeExecutor:
-    handshake_metadata_src: (
-        list[dict[tuple[int, int], KVConnectorHandshakeMetadata] | None] | None
-    )
+    handshake_metadata_src: list[dict[tuple[int, int], KVConnectorHandshakeMetadata] | None] | None
     last_instance: "_FakeExecutor | None" = None
 
     def __init__(
@@ -48,9 +46,7 @@ def _run_engine_core_handshake(
     monkeypatch: pytest.MonkeyPatch,
     connector: KVConnectorBase_V1,
     *,
-    handshake_metadata: (
-        list[dict[tuple[int, int], KVConnectorHandshakeMetadata] | None] | None
-    ),
+    handshake_metadata: (list[dict[tuple[int, int], KVConnectorHandshakeMetadata] | None] | None),
 ) -> _FakeExecutor:
     class _FakeScheduler:
         def __init__(self, **kwargs: Any) -> None:
@@ -84,15 +80,11 @@ def _run_engine_core_handshake(
         SimpleNamespace(engine_receiver_cache_from_config=lambda aphrodite_config: None),
     )
     monkeypatch.setattr(engine_core_module, "freeze_gc_heap", lambda: None)
-    monkeypatch.setattr(
-        engine_core_module, "maybe_attach_gc_debug_callback", lambda: None
-    )
+    monkeypatch.setattr(engine_core_module, "maybe_attach_gc_debug_callback", lambda: None)
     monkeypatch.setattr(engine_core_module, "enable_envs_cache", lambda: None)
     monkeypatch.setattr(engine_core_module, "get_hash_fn_by_name", lambda name: None)
     monkeypatch.setattr(engine_core_module, "init_none_hash", lambda hash_fn: None)
-    monkeypatch.setattr(
-        engine_core_module, "get_request_block_hasher", lambda *args: None
-    )
+    monkeypatch.setattr(engine_core_module, "get_request_block_hasher", lambda *args: None)
 
     aphrodite_config = SimpleNamespace(
         parallel_config=SimpleNamespace(data_parallel_rank_local=0),
@@ -138,31 +130,23 @@ class _LegacyConnector(KVConnectorBase_V1):
     def wait_for_save(self) -> None:
         pass
 
-    def get_num_new_matched_tokens(
-        self, request: Any, num_computed_tokens: int
-    ) -> tuple[int | None, bool]:
+    def get_num_new_matched_tokens(self, request: Any, num_computed_tokens: int) -> tuple[int | None, bool]:
         return 0, False
 
-    def update_state_after_alloc(
-        self, request: Any, blocks: Any, num_external_tokens: int
-    ) -> None:
+    def update_state_after_alloc(self, request: Any, blocks: Any, num_external_tokens: int) -> None:
         pass
 
     def build_connector_meta(self, scheduler_output: Any) -> Any:
         raise NotImplementedError
 
-    def set_xfer_handshake_metadata(
-        self, metadata: dict[int, KVConnectorHandshakeMetadata]
-    ) -> None:
+    def set_xfer_handshake_metadata(self, metadata: dict[int, KVConnectorHandshakeMetadata]) -> None:
         self.legacy_metadata = metadata
 
 
 class _PPAwareConnector(_LegacyConnector):
     def __init__(self) -> None:
         super().__init__()
-        self.pp_aware_metadata: (
-            dict[tuple[int, int], KVConnectorHandshakeMetadata] | None
-        ) = None
+        self.pp_aware_metadata: dict[tuple[int, int], KVConnectorHandshakeMetadata] | None = None
 
     def set_xfer_handshake_metadata_pp_aware(
         self, metadata: dict[tuple[int, int], KVConnectorHandshakeMetadata]

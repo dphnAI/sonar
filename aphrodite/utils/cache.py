@@ -195,9 +195,7 @@ class LRUCache(cachetools.LRUCache[_K, _V]):
                 ALL_PINNED_SENTINEL,
             )
             if lru_key is ALL_PINNED_SENTINEL:
-                raise RuntimeError(
-                    "All items are pinned, cannot remove oldest from the cache."
-                )
+                raise RuntimeError("All items are pinned, cannot remove oldest from the cache.")
         else:
             lru_key = next(iter(self.order))
         value = self.pop(cast(_K, lru_key))

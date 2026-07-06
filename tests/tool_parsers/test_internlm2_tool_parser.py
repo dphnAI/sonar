@@ -5,11 +5,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from aphrodite.tokenizers import TokenizerLike
 from tests.tool_parsers.common_tests import (
     ToolParserTestConfig,
     ToolParserTests,
 )
-from aphrodite.tokenizers import TokenizerLike
 
 
 class TestInternLM2ToolParser(ToolParserTests):
@@ -36,13 +36,11 @@ class TestInternLM2ToolParser(ToolParserTests):
             # Test data
             no_tool_calls_output="This is a regular response without any tool calls.",
             single_tool_call_output=(
-                '<|action_start|><|plugin|>{"name": "get_weather", '
-                '"parameters": {"city": "Tokyo"}}<|action_end|>'
+                '<|action_start|><|plugin|>{"name": "get_weather", "parameters": {"city": "Tokyo"}}<|action_end|>'
             ),
             # InternLM2 doesn't support parallel calls
             parallel_tool_calls_output=(
-                '<|action_start|><|plugin|>{"name": "get_weather", '
-                '"parameters": {"city": "Tokyo"}}<|action_end|>'
+                '<|action_start|><|plugin|>{"name": "get_weather", "parameters": {"city": "Tokyo"}}<|action_end|>'
             ),
             various_data_types_output="""<|action_start|><|plugin|>{
   "name": "test_function",
@@ -58,10 +56,7 @@ class TestInternLM2ToolParser(ToolParserTests):
     "empty_object": {}
   }
 }<|action_end|>""",
-            empty_arguments_output=(
-                '<|action_start|><|plugin|>{"name": "refresh", '
-                '"parameters": {}}<|action_end|>'
-            ),
+            empty_arguments_output=('<|action_start|><|plugin|>{"name": "refresh", "parameters": {}}<|action_end|>'),
             surrounding_text_output=(
                 "Let me check the weather for you. "
                 '<|action_start|><|plugin|>{"name": "get_weather", '
@@ -78,10 +73,7 @@ class TestInternLM2ToolParser(ToolParserTests):
 }<|action_end|>""",
             malformed_input_outputs=[
                 '<|action_start|><|plugin|>{"name": "func", "parameters": {',
-                (
-                    '<|action_start|><|plugin|>{"name": "func", '
-                    '"parameters": "not a dict"}<|action_end|>'
-                ),
+                ('<|action_start|><|plugin|>{"name": "func", "parameters": "not a dict"}<|action_end|>'),
                 "<|action_start|><|plugin|>not json<|action_end|>",
                 "<|action_start|><|plugin|>",
                 '<|action_start|>{"name": "func"}',
@@ -96,15 +88,9 @@ class TestInternLM2ToolParser(ToolParserTests):
             allow_empty_or_json_empty_args=True,
             # xfail markers
             xfail_streaming={
-                "test_single_tool_call_simple_args": (
-                    "InternLM2 streaming not fully implemented"
-                ),
-                "test_parallel_tool_calls": (
-                    "InternLM2 streaming not fully implemented"
-                ),
-                "test_various_data_types": (
-                    "InternLM2 streaming not fully implemented"
-                ),
+                "test_single_tool_call_simple_args": ("InternLM2 streaming not fully implemented"),
+                "test_parallel_tool_calls": ("InternLM2 streaming not fully implemented"),
+                "test_various_data_types": ("InternLM2 streaming not fully implemented"),
                 "test_empty_arguments": ("InternLM2 streaming not fully implemented"),
                 "test_surrounding_text": ("InternLM2 streaming not fully implemented"),
                 "test_escaped_strings": ("InternLM2 streaming not fully implemented"),
@@ -115,8 +101,7 @@ class TestInternLM2ToolParser(ToolParserTests):
             },
             xfail_nonstreaming={
                 "test_malformed_input": (
-                    "InternLM2 parser raises JSONDecodeError on malformed JSON "
-                    "instead of gracefully handling it"
+                    "InternLM2 parser raises JSONDecodeError on malformed JSON instead of gracefully handling it"
                 ),
             },
         )

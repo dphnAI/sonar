@@ -155,9 +155,7 @@ class ExecutionContext:
         return self.num_prefill_requests + self.decode_num_tokens
 
     @classmethod
-    def from_single_request(
-        cls, num_tokens: int, context_len: int, is_prefill: bool
-    ) -> "ExecutionContext":
+    def from_single_request(cls, num_tokens: int, context_len: int, is_prefill: bool) -> "ExecutionContext":
         """Create an ExecutionContext from a single request.
 
         This is a convenience method primarily for testing.
@@ -272,19 +270,13 @@ class ComponentMetrics(BaseModel, ABC):
         return iter(_COMPONENT_METRICS_REGISTRY.values())
 
     @abstractmethod
-    def get_num_flops_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]: ...
+    def get_num_flops_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]: ...
 
     @abstractmethod
-    def get_read_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]: ...
+    def get_read_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]: ...
 
     @abstractmethod
-    def get_write_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]: ...
+    def get_write_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]: ...
 
     def get_num_flops(self, ctx: ExecutionContext, per_gpu: bool = True) -> int:
         return sum(self.get_num_flops_breakdown(ctx, per_gpu).values())
@@ -313,12 +305,8 @@ class BaseConfigParser(Parser):
         args.hidden_size = model_config.get_hidden_size()
         # NOTE: model_config.get_attention_heads() divide by TP
         # so we access field manually here to get total num_heads
-        args.num_attention_heads = get_required(
-            model_config.hf_text_config, "num_attention_heads"
-        )
-        args.num_hidden_layers = get_required(
-            model_config.hf_text_config, "num_hidden_layers"
-        )
+        args.num_attention_heads = get_required(model_config.hf_text_config, "num_attention_heads")
+        args.num_hidden_layers = get_required(model_config.hf_text_config, "num_hidden_layers")
 
         model_dtype = aphrodite_config.model_config.dtype
 
@@ -388,9 +376,7 @@ class AttentionQuantizationConfigParser(Parser):
         if quant_method in _QUANT_WEIGHT_BYTE_SIZE:
             args.weight_byte_size = _QUANT_WEIGHT_BYTE_SIZE[quant_method]
         else:
-            raise InvalidComponent(
-                f"Unsupported quantization method for attention metrics: {quant_method}"
-            )
+            raise InvalidComponent(f"Unsupported quantization method for attention metrics: {quant_method}")
 
         return args
 
@@ -403,9 +389,7 @@ class AttentionDetectionParser(Parser):
 
     def parse(self, args: ParsedArgs, aphrodite_config: AphroditeConfig) -> ParsedArgs:
         if aphrodite_config.model_config.is_deepseek_mla:
-            raise InvalidComponent(
-                "Model uses MLA attention; use MLAAttentionMetrics instead"
-            )
+            raise InvalidComponent("Model uses MLA attention; use MLAAttentionMetrics instead")
         return args
 
 
@@ -442,9 +426,7 @@ class AttentionMetrics(ComponentMetrics):
             AttentionQuantizationConfigParser(),
         )
 
-    def get_num_flops_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_num_flops_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         L, D, q, kv, d = (
             self.num_hidden_layers,
             self.hidden_size,
@@ -468,9 +450,7 @@ class AttentionMetrics(ComponentMetrics):
             "out_proj": 2 * T * D * q * d * L,
         }
 
-    def get_read_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_read_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         L, D, q, kv, d = (
             self.num_hidden_layers,
             self.hidden_size,
@@ -495,10 +475,7 @@ class AttentionMetrics(ComponentMetrics):
         # Prefill: read Q, K, V activations (all in activation_byte_size)
         if ctx.prefill_num_tokens > 0:
             read_bytes["attn_input"] = (
-                (ctx.prefill_num_tokens * q + 2 * ctx.prefill_context_len * kv)
-                * d
-                * self.activation_byte_size
-                * L
+                (ctx.prefill_num_tokens * q + 2 * ctx.prefill_context_len * kv) * d * self.activation_byte_size * L
             )
 
         # Decode: read Q activations + read K, V from cache (in cache_byte_size)
@@ -513,9 +490,7 @@ class AttentionMetrics(ComponentMetrics):
 
         return read_bytes
 
-    def get_write_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_write_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate write memory traffic for attention layers."""
         L, D, q, kv, d = (
             self.num_hidden_layers,
@@ -628,9 +603,7 @@ class MLAAttentionMetrics(ComponentMetrics):
             AttentionQuantizationConfigParser(),
         )
 
-    def get_num_flops_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_num_flops_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate flops breakdown for MLA attention layers.
 
         MLA projection structure:
@@ -683,9 +656,7 @@ class MLAAttentionMetrics(ComponentMetrics):
 
         return flops
 
-    def get_read_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_read_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate read memory traffic for MLA attention layers."""
         L = self.num_hidden_layers
         D = self.hidden_size
@@ -711,37 +682,25 @@ class MLAAttentionMetrics(ComponentMetrics):
             read_bytes["q_a_input"] = T * D * self.activation_byte_size * L
             read_bytes["q_a_weight"] = int(D * q_rank * self.weight_byte_size * L)
             read_bytes["q_b_input"] = T * q_rank * self.activation_byte_size * L
-            read_bytes["q_b_weight"] = int(
-                q_rank * q * qk_head_dim * self.weight_byte_size * L
-            )
+            read_bytes["q_b_weight"] = int(q_rank * q * qk_head_dim * self.weight_byte_size * L)
         else:
             read_bytes["q_input"] = T * D * self.activation_byte_size * L
-            read_bytes["q_weight"] = int(
-                D * q * qk_head_dim * self.weight_byte_size * L
-            )
+            read_bytes["q_weight"] = int(D * q * qk_head_dim * self.weight_byte_size * L)
 
         # KV projection weight + input reads
         # kv_a is replicated (not TP-sharded)
         read_bytes["kv_a_input"] = T * D * self.activation_byte_size * L
-        read_bytes["kv_a_weight"] = int(
-            D * kv_compressed_dim * self.weight_byte_size * L
-        )
+        read_bytes["kv_a_weight"] = int(D * kv_compressed_dim * self.weight_byte_size * L)
         # kv_b is TP-sharded along heads
         read_bytes["kv_b_input"] = T * c * self.activation_byte_size * L
-        read_bytes["kv_b_weight"] = int(
-            c * q * (self.qk_nope_head_dim + v_d) * self.weight_byte_size * L
-        )
+        read_bytes["kv_b_weight"] = int(c * q * (self.qk_nope_head_dim + v_d) * self.weight_byte_size * L)
 
         # Attention input reads
         # Prefill: read Q activations + K,V from kv_b_proj output
         if ctx.prefill_num_tokens > 0:
             read_bytes["attn_input"] = (
                 ctx.prefill_num_tokens * q * qk_head_dim * self.activation_byte_size * L
-                + ctx.prefill_context_len
-                * q
-                * (qk_head_dim + v_d)
-                * self.activation_byte_size
-                * L
+                + ctx.prefill_context_len * q * (qk_head_dim + v_d) * self.activation_byte_size * L
             )
 
         # Decode: read Q activations + read compressed KV from cache
@@ -757,9 +716,7 @@ class MLAAttentionMetrics(ComponentMetrics):
 
         return read_bytes
 
-    def get_write_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_write_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate write memory traffic for MLA attention layers."""
         L = self.num_hidden_layers
         D = self.hidden_size
@@ -782,21 +739,13 @@ class MLAAttentionMetrics(ComponentMetrics):
         # Q projection outputs
         if q_rank is not None:
             write_bytes["q_a_output"] = T * q_rank * self.activation_byte_size * L
-            write_bytes["q_b_output"] = (
-                T * q * qk_head_dim * self.activation_byte_size * L
-            )
+            write_bytes["q_b_output"] = T * q * qk_head_dim * self.activation_byte_size * L
         else:
-            write_bytes["q_output"] = (
-                T * q * qk_head_dim * self.activation_byte_size * L
-            )
+            write_bytes["q_output"] = T * q * qk_head_dim * self.activation_byte_size * L
 
         # KV projection outputs
-        write_bytes["kv_a_output"] = (
-            T * kv_compressed_dim * self.activation_byte_size * L
-        )
-        write_bytes["kv_b_output"] = (
-            T * q * (self.qk_nope_head_dim + v_d) * self.activation_byte_size * L
-        )
+        write_bytes["kv_a_output"] = T * kv_compressed_dim * self.activation_byte_size * L
+        write_bytes["kv_b_output"] = T * q * (self.qk_nope_head_dim + v_d) * self.activation_byte_size * L
 
         # KV cache write: one compressed vector per token
         # (kv_lora_rank + qk_rope_head_dim) instead of
@@ -828,15 +777,9 @@ class BaseFfnConfigParser(Parser):
 
         # Try different naming conventions.
         args.num_experts = aphrodite_config.model_config.get_num_experts()
-        args.num_experts_per_tok = getattr_from_list(
-            cfg, ["num_experts_per_tok", "moe_topk"], 0
-        )
-        args.moe_intermediate_size = getattr_from_list(
-            cfg, ["moe_intermediate_size", "intermediate_size"], 0
-        )
-        args.num_shared_experts = getattr_from_list(
-            cfg, ["n_shared_experts", "num_shared_experts"], 0
-        )
+        args.num_experts_per_tok = getattr_from_list(cfg, ["num_experts_per_tok", "moe_topk"], 0)
+        args.moe_intermediate_size = getattr_from_list(cfg, ["moe_intermediate_size", "intermediate_size"], 0)
+        args.num_shared_experts = getattr_from_list(cfg, ["n_shared_experts", "num_shared_experts"], 0)
 
         is_moe = args.num_experts != 0
         # Assume all MoE layers by default
@@ -878,16 +821,9 @@ class InterleaveMoeLayerStepParser(Parser):
         if hasattr(cfg, "text_config") and cfg.text_config is not None:
             cfg = cfg.text_config
 
-        if (
-            hasattr(cfg, "interleave_moe_layer_step")
-            and cfg.interleave_moe_layer_step > 0
-        ):
+        if hasattr(cfg, "interleave_moe_layer_step") and cfg.interleave_moe_layer_step > 0:
             args.num_moe_layers = len(
-                [
-                    layer
-                    for layer in range(args.num_hidden_layers)
-                    if (layer + 1) % cfg.interleave_moe_layer_step == 0
-                ]
+                [layer for layer in range(args.num_hidden_layers) if (layer + 1) % cfg.interleave_moe_layer_step == 0]
             )
 
         return args
@@ -910,8 +846,7 @@ class MoeLayerFreqParser(Parser):
                 [
                     layer
                     for layer in range(args.num_hidden_layers)
-                    if layer >= cfg.first_k_dense_replace
-                    and layer % cfg.moe_layer_freq == 0
+                    if layer >= cfg.first_k_dense_replace and layer % cfg.moe_layer_freq == 0
                 ]
             )
 
@@ -935,9 +870,7 @@ class FfnQuantizationConfigParser(Parser):
         if quant_method in _QUANT_WEIGHT_BYTE_SIZE:
             args.weight_byte_size = _QUANT_WEIGHT_BYTE_SIZE[quant_method]
         else:
-            raise InvalidComponent(
-                f"Unsupported quantization method for FFN metrics: {quant_method}"
-            )
+            raise InvalidComponent(f"Unsupported quantization method for FFN metrics: {quant_method}")
 
         return args
 
@@ -996,9 +929,7 @@ class FfnMetrics(ComponentMetrics):
             FfnQuantizationConfigParser(),
         )
 
-    def get_num_flops_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_num_flops_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate flops breakdown for FFN layers."""
         L, D, DI = self.num_hidden_layers, self.hidden_size, self.intermediate_size
         Lm, E, MI, S = (
@@ -1039,9 +970,7 @@ class FfnMetrics(ComponentMetrics):
 
         return flops
 
-    def get_read_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_read_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate read memory traffic for FFN layers."""
         L, D, DI = self.num_hidden_layers, self.hidden_size, self.intermediate_size
         Lm, E, MI, S = (
@@ -1073,18 +1002,10 @@ class FfnMetrics(ComponentMetrics):
 
         # Dense FFN layers (3 GEMMs: up, gate, down projections + SiLU activation)
         if Ld:
-            read_bytes["dense_up_gate_input"] = int(
-                T * D * self.activation_byte_size * Ld
-            )
-            read_bytes["dense_up_gate_weights"] = int(
-                2 * D * DI * self.weight_byte_size * Ld
-            )
-            read_bytes["dense_silu_input"] = int(
-                2 * T * DI * self.activation_byte_size * Ld
-            )
-            read_bytes["dense_down_input"] = int(
-                T * DI * self.activation_byte_size * Ld
-            )
+            read_bytes["dense_up_gate_input"] = int(T * D * self.activation_byte_size * Ld)
+            read_bytes["dense_up_gate_weights"] = int(2 * D * DI * self.weight_byte_size * Ld)
+            read_bytes["dense_silu_input"] = int(2 * T * DI * self.activation_byte_size * Ld)
+            read_bytes["dense_down_input"] = int(T * DI * self.activation_byte_size * Ld)
             read_bytes["dense_down_weights"] = int(D * DI * self.weight_byte_size * Ld)
 
         if Lm:
@@ -1093,45 +1014,25 @@ class FfnMetrics(ComponentMetrics):
                 # FIXME: Assume perfect load balancing for now.
                 num_activated_experts = min(num_activated_tokens, num_experts)
 
-                read_bytes["routed_up_gate_input"] = int(
-                    num_activated_tokens * D * self.activation_byte_size * Lm
-                )
+                read_bytes["routed_up_gate_input"] = int(num_activated_tokens * D * self.activation_byte_size * Lm)
                 read_bytes["routed_up_gate_weights"] = int(
                     2 * D * MI * num_activated_experts * self.weight_byte_size * Lm
                 )
-                read_bytes["routed_silu_input"] = int(
-                    2 * num_activated_tokens * MI * self.activation_byte_size * Lm
-                )
-                read_bytes["routed_down_input"] = int(
-                    num_activated_tokens * MI * self.activation_byte_size * Lm
-                )
-                read_bytes["routed_down_weights"] = int(
-                    D * MI * num_activated_experts * self.weight_byte_size * Lm
-                )
+                read_bytes["routed_silu_input"] = int(2 * num_activated_tokens * MI * self.activation_byte_size * Lm)
+                read_bytes["routed_down_input"] = int(num_activated_tokens * MI * self.activation_byte_size * Lm)
+                read_bytes["routed_down_weights"] = int(D * MI * num_activated_experts * self.weight_byte_size * Lm)
 
             # MoE shared expert reads
             if S:
-                read_bytes["shared_up_gate_input"] = int(
-                    T * D * self.activation_byte_size * Lm
-                )
-                read_bytes["shared_up_gate_weights"] = int(
-                    2 * D * MI * S * self.weight_byte_size * Lm
-                )
-                read_bytes["shared_silu_input"] = int(
-                    2 * T * MI * S * self.activation_byte_size * Lm
-                )
-                read_bytes["shared_down_input"] = int(
-                    T * MI * self.activation_byte_size * Lm
-                )
-                read_bytes["shared_down_weights"] = int(
-                    D * MI * S * self.weight_byte_size * Lm
-                )
+                read_bytes["shared_up_gate_input"] = int(T * D * self.activation_byte_size * Lm)
+                read_bytes["shared_up_gate_weights"] = int(2 * D * MI * S * self.weight_byte_size * Lm)
+                read_bytes["shared_silu_input"] = int(2 * T * MI * S * self.activation_byte_size * Lm)
+                read_bytes["shared_down_input"] = int(T * MI * self.activation_byte_size * Lm)
+                read_bytes["shared_down_weights"] = int(D * MI * S * self.weight_byte_size * Lm)
 
         return read_bytes
 
-    def get_write_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_write_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate write memory traffic for FFN layers."""
         L, D, DI = self.num_hidden_layers, self.hidden_size, self.intermediate_size
         Lm, E, MI, S = (
@@ -1160,15 +1061,9 @@ class FfnMetrics(ComponentMetrics):
 
         # Dense FFN layers
         if Ld:
-            write_bytes["dense_up_gate_output"] = int(
-                2 * T * DI * self.activation_byte_size * Ld
-            )
-            write_bytes["dense_silu_output"] = int(
-                T * DI * self.activation_byte_size * Ld
-            )
-            write_bytes["dense_down_output"] = int(
-                T * D * self.activation_byte_size * Ld
-            )
+            write_bytes["dense_up_gate_output"] = int(2 * T * DI * self.activation_byte_size * Ld)
+            write_bytes["dense_silu_output"] = int(T * DI * self.activation_byte_size * Ld)
+            write_bytes["dense_down_output"] = int(T * D * self.activation_byte_size * Ld)
 
         # MoE outputs
         if Lm:
@@ -1176,22 +1071,12 @@ class FfnMetrics(ComponentMetrics):
                 write_bytes["routed_up_gate_output"] = int(
                     2 * num_activated_tokens * MI * self.activation_byte_size * Lm
                 )
-                write_bytes["routed_silu_output"] = int(
-                    num_activated_tokens * MI * self.activation_byte_size * Lm
-                )
-                write_bytes["routed_down_output"] = int(
-                    num_activated_tokens * D * self.activation_byte_size * Lm
-                )
+                write_bytes["routed_silu_output"] = int(num_activated_tokens * MI * self.activation_byte_size * Lm)
+                write_bytes["routed_down_output"] = int(num_activated_tokens * D * self.activation_byte_size * Lm)
             if S:
-                write_bytes["shared_up_gate_output"] = int(
-                    2 * T * S * MI * self.activation_byte_size * Lm
-                )
-                write_bytes["shared_silu_output"] = int(
-                    T * S * MI * self.activation_byte_size * Lm
-                )
-                write_bytes["shared_down_output"] = int(
-                    T * S * D * self.activation_byte_size * Lm
-                )
+                write_bytes["shared_up_gate_output"] = int(2 * T * S * MI * self.activation_byte_size * Lm)
+                write_bytes["shared_silu_output"] = int(T * S * MI * self.activation_byte_size * Lm)
+                write_bytes["shared_down_output"] = int(T * S * D * self.activation_byte_size * Lm)
 
         return write_bytes
 
@@ -1218,9 +1103,7 @@ class UnembedMetrics(ComponentMetrics):
             BaseConfigParser(),
         )
 
-    def get_num_flops_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_num_flops_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate flops breakdown for unembedding layer."""
         D, V = self.hidden_size, self.vocab_size
         T = ctx.num_logits_tokens()
@@ -1232,9 +1115,7 @@ class UnembedMetrics(ComponentMetrics):
             "unembed": 2 * T * D * V,
         }
 
-    def get_read_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_read_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate read memory traffic for unembedding layer."""
         D, V = self.hidden_size, self.vocab_size
         T = ctx.num_logits_tokens()
@@ -1247,9 +1128,7 @@ class UnembedMetrics(ComponentMetrics):
             "weight": D * V * self.weight_byte_size,
         }
 
-    def get_write_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_write_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         """Calculate write memory traffic for unembedding layer."""
         V = self.vocab_size
         T = ctx.num_logits_tokens()
@@ -1303,9 +1182,7 @@ class ModelMetrics:
     def get_write_bytes(self, ctx: ExecutionContext, per_gpu: bool = True) -> int:
         return sum(metric.get_write_bytes(ctx, per_gpu) for metric in self.metrics)
 
-    def get_num_flops_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_num_flops_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         total = {}
         for metric in self.metrics:
             breakdown = metric.get_num_flops_breakdown(ctx, per_gpu)
@@ -1314,9 +1191,7 @@ class ModelMetrics:
             total.update(prefixed)
         return total
 
-    def get_read_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_read_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         total = {}
         for metric in self.metrics:
             breakdown = metric.get_read_bytes_breakdown(ctx, per_gpu)
@@ -1325,9 +1200,7 @@ class ModelMetrics:
             total.update(prefixed)
         return total
 
-    def get_write_bytes_breakdown(
-        self, ctx: ExecutionContext, per_gpu: bool = True
-    ) -> dict[str, int]:
+    def get_write_bytes_breakdown(self, ctx: ExecutionContext, per_gpu: bool = True) -> dict[str, int]:
         total = {}
         for metric in self.metrics:
             breakdown = metric.get_write_bytes_breakdown(ctx, per_gpu)
@@ -1336,9 +1209,7 @@ class ModelMetrics:
             total.update(prefixed)
         return total
 
-    def get_step_perf_stats_per_gpu(
-        self, scheduler_output: SchedulerOutput
-    ) -> PerfStats:
+    def get_step_perf_stats_per_gpu(self, scheduler_output: SchedulerOutput) -> PerfStats:
         """
         Calculate perf stats for the current step based on scheduled tokens.
         """
@@ -1443,16 +1314,13 @@ class PerfMetricsDebugLogging:
     def log(self, log_fn, log_prefix: str, delta_time: float):
         # pretty print breakdowns
         total_num_flops_per_gpu_breakdown = {
-            k: f"{v / 1e12:.1f}TF"
-            for k, v in self.total_num_flops_per_gpu_breakdown.items()
+            k: f"{v / 1e12:.1f}TF" for k, v in self.total_num_flops_per_gpu_breakdown.items()
         }
         total_read_bytes_per_gpu_breakdown = {
-            k: f"{v / 1e9:.1f}GB"
-            for k, v in self.total_read_bytes_per_gpu_breakdown.items()
+            k: f"{v / 1e9:.1f}GB" for k, v in self.total_read_bytes_per_gpu_breakdown.items()
         }
         total_write_bytes_per_gpu_breakdown = {
-            k: f"{v / 1e9:.1f}GB"
-            for k, v in self.total_write_bytes_per_gpu_breakdown.items()
+            k: f"{v / 1e9:.1f}GB" for k, v in self.total_write_bytes_per_gpu_breakdown.items()
         }
 
         logger.debug(
@@ -1468,9 +1336,7 @@ class PerfMetricsDebugLogging:
                     "num_read_bytes_breakdown": total_read_bytes_per_gpu_breakdown,
                     "num_write_bytes_breakdown": (total_write_bytes_per_gpu_breakdown),
                     "duration": f"{delta_time:.1f}s",
-                    "mfu_calc_overhead": (
-                        f"{self.total_calc_duration / delta_time:.1%}"
-                    ),
+                    "mfu_calc_overhead": (f"{self.total_calc_duration / delta_time:.1%}"),
                 },
                 indent=2,
             ),
@@ -1508,11 +1374,7 @@ class PerfMetricsLogging:
             self.debug_logging.observe(perf_stats.debug_stats)
 
     def log(self, log_fn=logger.info, log_prefix: str = "") -> None:
-        if not (
-            self.total_num_flops_per_gpu
-            or self.total_read_bytes_per_gpu
-            or self.total_write_bytes_per_gpu
-        ):
+        if not (self.total_num_flops_per_gpu or self.total_read_bytes_per_gpu or self.total_write_bytes_per_gpu):
             return
 
         now = time.monotonic()
@@ -1523,11 +1385,7 @@ class PerfMetricsLogging:
             avg_gbps_per_gpu = 0.0
         else:
             avg_tflops_per_gpu = self.total_num_flops_per_gpu / delta_time / 1e12
-            avg_gbps_per_gpu = (
-                (self.total_read_bytes_per_gpu + self.total_write_bytes_per_gpu)
-                / delta_time
-                / 1e9
-            )
+            avg_gbps_per_gpu = (self.total_read_bytes_per_gpu + self.total_write_bytes_per_gpu) / delta_time / 1e9
 
         log_fn(
             "%sMFU: %.1f TF/s/GPU %.1f GB/s/GPU",
@@ -1570,44 +1428,33 @@ class PerfMetricsProm:
         counter_flops = self._counter_cls(
             name="aphrodite:estimated_flops_per_gpu_total",
             documentation=(
-                "Estimated number of floating point operations per GPU "
-                "(for Model Flops Utilization calculations)."
+                "Estimated number of floating point operations per GPU (for Model Flops Utilization calculations)."
             ),
             labelnames=labelnames,
         )
-        self.counter_flops = create_metric_per_engine(
-            counter_flops, per_engine_labelvalues
-        )
+        self.counter_flops = create_metric_per_engine(counter_flops, per_engine_labelvalues)
 
         counter_read_bytes = self._counter_cls(
             name="aphrodite:estimated_read_bytes_per_gpu_total",
             documentation=(
-                "Estimated number of bytes read from memory per GPU "
-                "(for Model Flops Utilization calculations)."
+                "Estimated number of bytes read from memory per GPU (for Model Flops Utilization calculations)."
             ),
             labelnames=labelnames,
         )
-        self.counter_read_bytes = create_metric_per_engine(
-            counter_read_bytes, per_engine_labelvalues
-        )
+        self.counter_read_bytes = create_metric_per_engine(counter_read_bytes, per_engine_labelvalues)
 
         counter_write_bytes = self._counter_cls(
             name="aphrodite:estimated_write_bytes_per_gpu_total",
             documentation=(
-                "Estimated number of bytes written to memory per GPU "
-                "(for Model Flops Utilization calculations)."
+                "Estimated number of bytes written to memory per GPU (for Model Flops Utilization calculations)."
             ),
             labelnames=labelnames,
         )
-        self.counter_write_bytes = create_metric_per_engine(
-            counter_write_bytes, per_engine_labelvalues
-        )
+        self.counter_write_bytes = create_metric_per_engine(counter_write_bytes, per_engine_labelvalues)
 
     def observe(self, perf_stats: PerfStats, engine_idx: int = 0):
         if not (
-            perf_stats.num_flops_per_gpu
-            or perf_stats.num_read_bytes_per_gpu
-            or perf_stats.num_write_bytes_per_gpu
+            perf_stats.num_flops_per_gpu or perf_stats.num_read_bytes_per_gpu or perf_stats.num_write_bytes_per_gpu
         ):
             return
         self.counter_flops[engine_idx].inc(perf_stats.num_flops_per_gpu)

@@ -109,9 +109,7 @@ class FlashInferMLASparseTRTLLMBackend(_FlashInferMLASparseBackendBase):
 
         aphrodite_config = get_current_aphrodite_config()
         if kv_cache_dtype == "fp8_ds_mla":
-            return (
-                "FLASHINFER_MLA_SPARSE SM10 does not support fp8_ds_mla kv-cache dtype"
-            )
+            return "FLASHINFER_MLA_SPARSE SM10 does not support fp8_ds_mla kv-cache dtype"
 
         # FlashInfer MLA sparse SM10 kernel requires qk_nope_head_dim in [128, 192].
         if aphrodite_config.model_config is not None:
@@ -119,8 +117,7 @@ class FlashInferMLASparseTRTLLMBackend(_FlashInferMLASparseBackendBase):
             qk_nope_head_dim = getattr(hf_text_config, "qk_nope_head_dim", 1)
             if qk_nope_head_dim not in [128, 192]:
                 return (
-                    "FlashInfer MLA Sparse kernel requires qk_nope_head_dim "
-                    f"in [128, 192], but got {qk_nope_head_dim}"
+                    f"FlashInfer MLA Sparse kernel requires qk_nope_head_dim in [128, 192], but got {qk_nope_head_dim}"
                 )
             # Check for index_topk which indicates sparse model
             if not hasattr(hf_text_config, "index_topk"):
@@ -190,10 +187,7 @@ class FlashInferMLASparseSM120Backend(_FlashInferMLASparseBackendBase):
         from aphrodite.utils.flashinfer import has_flashinfer_sparse_mla_sm120
 
         if not has_flashinfer_sparse_mla_sm120():
-            return (
-                "FLASHINFER_MLA_SPARSE_SM120 requires FlashInfer's "
-                "sparse MLA decode API"
-            )
+            return "FLASHINFER_MLA_SPARSE_SM120 requires FlashInfer's sparse MLA decode API"
         if dtype != torch.bfloat16:
             return "dtype not supported"
         if kv_cache_dtype not in (
@@ -209,15 +203,9 @@ class FlashInferMLASparseSM120Backend(_FlashInferMLASparseBackendBase):
             hf_text_config = aphrodite_config.model_config.hf_text_config
             index_topk = getattr(hf_text_config, "index_topk", None)
             if index_topk is None:
-                return (
-                    "FLASHINFER_MLA_SPARSE_SM120 requires a model with "
-                    "index_topk config"
-                )
+                return "FLASHINFER_MLA_SPARSE_SM120 requires a model with index_topk config"
             if int(index_topk) != 2048:
-                return (
-                    "FLASHINFER_MLA_SPARSE_SM120 requires index_topk=2048; "
-                    f"got {index_topk}"
-                )
+                return f"FLASHINFER_MLA_SPARSE_SM120 requires index_topk=2048; got {index_topk}"
         return None
 
     @staticmethod
@@ -264,9 +252,7 @@ class FlashInferMLASparseMetadata(AttentionMetadata):
     cp_kv_cache_interleave_size: int = 1
 
 
-class FlashInferMLASparseMetadataBuilder(
-    AttentionMetadataBuilder[FlashInferMLASparseMetadata]
-):
+class FlashInferMLASparseMetadataBuilder(AttentionMetadataBuilder[FlashInferMLASparseMetadata]):
     """Builder for FlashInfer MLA Sparse attention metadata."""
 
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
@@ -317,9 +303,7 @@ class FlashInferMLASparseMetadataBuilder(
         # Build req_id_per_token mapping
         starts = np.asarray(cm.query_start_loc_cpu, dtype=np.int32)
         seg_lengths = np.diff(starts)
-        req_id_per_token = np.repeat(
-            np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths
-        )
+        req_id_per_token = np.repeat(np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths)
 
         # Zero-fill for cudagraphs
         self.req_id_per_token_buffer.fill_(0)
@@ -342,9 +326,7 @@ class FlashInferMLASparseMetadataBuilder(
             num_decode_tokens=num_decode_tokens,
             block_size=self.kv_cache_spec.block_size,
             topk_tokens=self.topk_tokens,
-            cp_kv_cache_interleave_size=(
-                self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size
-            ),
+            cp_kv_cache_interleave_size=(self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size),
         )
 
 
@@ -542,7 +524,6 @@ class FlashInferMLASparseImpl(SparseMLAAttentionImpl[FlashInferMLASparseMetadata
                 lse = lse.reshape(num_tokens, lse.shape[-1])
         if lse.shape != (num_tokens, num_heads):
             raise RuntimeError(
-                "Unexpected FlashInfer sparse MLA LSE shape: "
-                f"{tuple(lse.shape)}, expected ({num_tokens}, {num_heads})."
+                f"Unexpected FlashInfer sparse MLA LSE shape: {tuple(lse.shape)}, expected ({num_tokens}, {num_heads})."
             )
         return lse

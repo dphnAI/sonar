@@ -110,11 +110,7 @@ class Gemma4Speculator(AutoRegressiveSpeculator):
             if attn is None:
                 continue
 
-            draft_layer_type = (
-                draft_layer_types[draft_idx]
-                if draft_idx < len(draft_layer_types)
-                else "full_attention"
-            )
+            draft_layer_type = draft_layer_types[draft_idx] if draft_idx < len(draft_layer_types) else "full_attention"
             candidates = type_to_target_indices.get(draft_layer_type, [])
             if not candidates:
                 logger.warning(
@@ -140,9 +136,7 @@ class Gemma4Speculator(AutoRegressiveSpeculator):
         target_model: nn.Module,
     ) -> None:
         target_language_model = (
-            target_model.get_language_model()
-            if hasattr(target_model, "get_language_model")
-            else target_model
+            target_model.get_language_model() if hasattr(target_model, "get_language_model") else target_model
         )
         if get_pp_group().world_size == 1:
             target_embed = getattr(target_language_model.model, "embed_tokens", None)

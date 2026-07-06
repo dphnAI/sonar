@@ -58,9 +58,7 @@ def store_block(
         try:
             written = os.write(fd, view_slice)
             if written < len(view_slice):
-                raise OSError(
-                    f"Short write: expected {len(view_slice)} bytes, wrote {written}"
-                )
+                raise OSError(f"Short write: expected {len(view_slice)} bytes, wrote {written}")
         finally:
             os.close(fd)
         os.replace(tmp_path, dest_path)
@@ -92,9 +90,7 @@ def load_block(
         try:
             os.remove(source_path)
         except OSError as cleanup_exc:
-            logger.warning(
-                "Failed to remove unreadable file %s: %s", source_path, cleanup_exc
-            )
+            logger.warning("Failed to remove unreadable file %s: %s", source_path, cleanup_exc)
         raise
     finally:
         if fd is not None:

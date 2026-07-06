@@ -216,17 +216,13 @@ def quantize_to_fp8_blockwise(
                 amax = block.abs().max().clamp(min=1e-12)
                 s = (amax / FP8_MAX).to(torch.float32)
                 scale[m, bk] = s
-                fp8_tensor[m, k_start:k_end] = (
-                    (block / s).clamp(FP8_MIN, FP8_MAX).to(FP8_DTYPE)
-                )
+                fp8_tensor[m, k_start:k_end] = (block / s).clamp(FP8_MIN, FP8_MAX).to(FP8_DTYPE)
         return fp8_tensor, scale
     elif tensor.ndim == 3:
         L, N, K = tensor.shape
         n_blocks_n = math.ceil(N / group_n)
         n_blocks_k = math.ceil(K / group_k)
-        scale = torch.zeros(
-            L, n_blocks_n, n_blocks_k, dtype=torch.float32, device=tensor.device
-        )
+        scale = torch.zeros(L, n_blocks_n, n_blocks_k, dtype=torch.float32, device=tensor.device)
         fp8_tensor = torch.zeros_like(tensor, dtype=FP8_DTYPE)
         for li in range(L):
             for bn in range(n_blocks_n):
@@ -239,9 +235,7 @@ def quantize_to_fp8_blockwise(
                     amax = block.abs().max().clamp(min=1e-12)
                     s = (amax / FP8_MAX).to(torch.float32)
                     scale[li, bn, bk] = s
-                    fp8_tensor[li, n_start:n_end, k_start:k_end] = (
-                        (block / s).clamp(FP8_MIN, FP8_MAX).to(FP8_DTYPE)
-                    )
+                    fp8_tensor[li, n_start:n_end, k_start:k_end] = (block / s).clamp(FP8_MIN, FP8_MAX).to(FP8_DTYPE)
         return fp8_tensor, scale
     else:
         raise ValueError(f"Unsupported tensor ndim: {tensor.ndim}")
@@ -307,9 +301,7 @@ def dequantize_fp8_blockwise(
             for bk in range(n_blocks_k):
                 k_start = bk * group_k
                 k_end = min(k_start + group_k, K)
-                out[m, k_start:k_end] = (
-                    fp8_tensor[m, k_start:k_end].float() * scale[m, bk].float()
-                ).to(output_dtype)
+                out[m, k_start:k_end] = (fp8_tensor[m, k_start:k_end].float() * scale[m, bk].float()).to(output_dtype)
         return out
     elif fp8_tensor.ndim == 3:
         L, N, K = fp8_tensor.shape
@@ -324,8 +316,7 @@ def dequantize_fp8_blockwise(
                     k_start = bk * group_k
                     k_end = min(k_start + group_k, K)
                     out[l_idx, n_start:n_end, k_start:k_end] = (
-                        fp8_tensor[l_idx, n_start:n_end, k_start:k_end].float()
-                        * scale[l_idx, bn, bk].float()
+                        fp8_tensor[l_idx, n_start:n_end, k_start:k_end].float() * scale[l_idx, bn, bk].float()
                     ).to(output_dtype)
         return out
     else:
@@ -371,15 +362,11 @@ def generate_fp8_shrink_data(
 
     lora_a_weights_bf16 = []
     for _ in range(nslices):
-        lora_a_weights_bf16.append(
-            torch.randn(num_loras, rank, hidden_size, dtype=dtype, device=device)
-        )
+        lora_a_weights_bf16.append(torch.randn(num_loras, rank, hidden_size, dtype=dtype, device=device))
 
     # Quantize inputs to FP8 and dequantize back for reference
     if quant_mode == "blockwise":
-        inputs_fp8, a_scale = quantize_to_fp8_blockwise(
-            inputs_bf16, group_n=1, group_k=group_k
-        )
+        inputs_fp8, a_scale = quantize_to_fp8_blockwise(inputs_bf16, group_n=1, group_k=group_k)
         inputs_dequant = dequantize_fp8_blockwise(
             inputs_fp8,
             a_scale,
@@ -430,9 +417,7 @@ def generate_fp8_shrink_data(
             b_scales.append(w_scale)
             lora_a_weights_dequant.append(w_dequant)
         elif quant_mode == "blockwise":
-            w_fp8, w_scale = quantize_to_fp8_blockwise(
-                w, group_n=group_n, group_k=group_k
-            )
+            w_fp8, w_scale = quantize_to_fp8_blockwise(w, group_n=group_n, group_k=group_k)
             w_dequant = dequantize_fp8_blockwise(
                 w_fp8,
                 w_scale,
@@ -445,9 +430,7 @@ def generate_fp8_shrink_data(
             lora_a_weights_dequant.append(w_dequant)
 
     # Output tensor (float32 for shrink)
-    out_tensor = torch.zeros(
-        nslices, total_tokens, rank, dtype=torch.float32, device=device
-    )
+    out_tensor = torch.zeros(nslices, total_tokens, rank, dtype=torch.float32, device=device)
     ref_out_tensor = out_tensor.clone()
 
     # Token-to-lora mapping
@@ -519,9 +502,7 @@ def generate_fp8_expand_data(
         # shared across slices. Compute shared scale across slices, then quantize.
         # First compute per-token-per-block scale across all slices
         n_blocks_k = math.ceil(rank / group_k)
-        a_scale = torch.zeros(
-            total_tokens, n_blocks_k, dtype=torch.float32, device=device
-        )
+        a_scale = torch.zeros(total_tokens, n_blocks_k, dtype=torch.float32, device=device)
         for m in range(total_tokens):
             for bk in range(n_blocks_k):
                 k_start = bk * group_k
@@ -530,9 +511,7 @@ def generate_fp8_expand_data(
                 block_amax = torch.tensor(0.0, device=device)
                 for s in range(nslices):
                     block = inputs_bf16[s, m, k_start:k_end].float()
-                    block_amax = torch.max(
-                        block_amax, block.abs().max().clamp(min=1e-12)
-                    )
+                    block_amax = torch.max(block_amax, block.abs().max().clamp(min=1e-12))
                 a_scale[m, bk] = (block_amax / FP8_MAX).to(torch.float32)
 
         # Quantize all slices with the shared scale
@@ -548,12 +527,8 @@ def generate_fp8_expand_data(
                     k_end = min(k_start + group_k, rank)
                     block = slice_2d[m, k_start:k_end].float()
                     s_val = a_scale[m, bk]
-                    fp8_slice[m, k_start:k_end] = (
-                        (block / s_val).clamp(FP8_MIN, FP8_MAX).to(FP8_DTYPE)
-                    )
-                    dequant_slice[m, k_start:k_end] = (
-                        fp8_slice[m, k_start:k_end].float() * s_val.float()
-                    ).to(dtype)
+                    fp8_slice[m, k_start:k_end] = (block / s_val).clamp(FP8_MIN, FP8_MAX).to(FP8_DTYPE)
+                    dequant_slice[m, k_start:k_end] = (fp8_slice[m, k_start:k_end].float() * s_val.float()).to(dtype)
             inputs_fp8_list.append(fp8_slice)
             inputs_dequant_list.append(dequant_slice)
         inputs_fp8 = torch.stack(inputs_fp8_list, dim=0)
@@ -580,23 +555,15 @@ def generate_fp8_expand_data(
         # amax shape: (total_tokens,)
         a_scale = (amax / FP8_MAX).to(torch.float32).unsqueeze(1)  # (tokens, 1)
         # Quantize all slices with the shared scale
-        inputs_fp8_2d = (
-            (inputs_2d_all.float() / a_scale.repeat(nslices, 1))
-            .clamp(FP8_MIN, FP8_MAX)
-            .to(FP8_DTYPE)
-        )
-        inputs_dequant_2d = (
-            inputs_fp8_2d.float() * a_scale.repeat(nslices, 1).float()
-        ).to(dtype)
+        inputs_fp8_2d = (inputs_2d_all.float() / a_scale.repeat(nslices, 1)).clamp(FP8_MIN, FP8_MAX).to(FP8_DTYPE)
+        inputs_dequant_2d = (inputs_fp8_2d.float() * a_scale.repeat(nslices, 1).float()).to(dtype)
         inputs_fp8 = inputs_fp8_2d.reshape(nslices, total_tokens, rank)
         inputs_dequant = inputs_dequant_2d.reshape(nslices, total_tokens, rank)
 
     # Generate bf16 LoRA B weights
     lora_b_weights_bf16 = []
     for _ in range(nslices):
-        lora_b_weights_bf16.append(
-            torch.randn(num_loras, hidden_size, rank, dtype=dtype, device=device)
-        )
+        lora_b_weights_bf16.append(torch.randn(num_loras, hidden_size, rank, dtype=dtype, device=device))
 
     # Quantize LoRA B weights to FP8 and dequantize back for reference
     b_scales = []
@@ -623,9 +590,7 @@ def generate_fp8_expand_data(
             b_scales.append(w_scale)
             lora_b_weights_dequant.append(w_dequant)
         elif quant_mode == "blockwise":
-            w_fp8, w_scale = quantize_to_fp8_blockwise(
-                w, group_n=group_n, group_k=group_k
-            )
+            w_fp8, w_scale = quantize_to_fp8_blockwise(w, group_n=group_n, group_k=group_k)
             w_dequant = dequantize_fp8_blockwise(
                 w_fp8,
                 w_scale,
@@ -638,9 +603,7 @@ def generate_fp8_expand_data(
             lora_b_weights_dequant.append(w_dequant)
 
     # Output tensor (initialized randomly for add_inputs)
-    out_tensor = torch.randn(
-        total_tokens, hidden_size * nslices, dtype=dtype, device=device
-    )
+    out_tensor = torch.randn(total_tokens, hidden_size * nslices, dtype=dtype, device=device)
     ref_out_tensor = out_tensor.clone()
 
     # Token-to-lora mapping
@@ -720,9 +683,7 @@ def check_lora_shrink_fp8_kernel(
     total_tokens = data["total_tokens"]
 
     # Setup LoRA kernel metadata
-    lora_meta = LoRAKernelMeta.make(
-        max_loras=num_loras, max_num_tokens=total_tokens, device=device
-    )
+    lora_meta = LoRAKernelMeta.make(max_loras=num_loras, max_num_tokens=total_tokens, device=device)
     lora_meta.prepare_tensors(data["token_lora_mapping"])
 
     out_tensor = data["out_tensor"]
@@ -773,9 +734,7 @@ def check_lora_shrink_fp8_kernel(
     # Blockwise accumulation order differs from the bf16 reference, so
     # allow a slightly larger margin for sporadic rounding outliers.
     rtol, atol = 0.1, 0.25
-    torch.testing.assert_close(
-        out_tensor.to(dtype), ref_out_tensor.to(dtype), rtol=rtol, atol=atol
-    )
+    torch.testing.assert_close(out_tensor.to(dtype), ref_out_tensor.to(dtype), rtol=rtol, atol=atol)
 
 
 # ============================================================================
@@ -826,9 +785,7 @@ def check_lora_expand_fp8_kernel(
     total_tokens = data["total_tokens"]
 
     # Setup LoRA kernel metadata
-    lora_meta = LoRAKernelMeta.make(
-        max_loras=num_loras, max_num_tokens=total_tokens, device=device
-    )
+    lora_meta = LoRAKernelMeta.make(max_loras=num_loras, max_num_tokens=total_tokens, device=device)
     lora_meta.prepare_tensors(data["token_lora_mapping"])
 
     out_tensor = data["out_tensor"]

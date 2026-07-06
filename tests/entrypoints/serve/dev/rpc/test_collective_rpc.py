@@ -49,9 +49,7 @@ def server():
 
 def test_get_model_name(server):
     """Test basic response"""
-    response = requests.post(
-        server.url_for("collective_rpc"), json={"method": "get_model_name"}
-    )
+    response = requests.post(server.url_for("collective_rpc"), json={"method": "get_model_name"})
     assert response.status_code == 200
     results = response.json()
     assert "results" in results
@@ -60,9 +58,7 @@ def test_get_model_name(server):
 
 def test_return_none(server):
     """Test return none"""
-    response = requests.post(
-        server.url_for("collective_rpc"), json={"method": "return_none"}
-    )
+    response = requests.post(server.url_for("collective_rpc"), json={"method": "return_none"})
     assert response.status_code == 200
     results = response.json()
     assert results["results"] == [None]

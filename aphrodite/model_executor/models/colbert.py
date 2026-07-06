@@ -22,7 +22,7 @@ from collections.abc import Iterable
 import torch
 from torch import nn
 
-from aphrodite.config import PoolerConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, PoolerConfig
 from aphrodite.model_executor.layers.pooler import Pooler
 from aphrodite.model_executor.layers.pooler.tokwise import pooler_for_token_embed
 from aphrodite.model_executor.models.utils import AutoWeightsLoader, WeightsMapper

@@ -122,9 +122,7 @@ def collect_fields(results):
 
 def test_parse_delta_neither_parser(tokenizer, request_obj):
     parser = make_parser(tokenizer, reasoning=False, tool=False)
-    results = stream_text(
-        parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[]
-    )
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
     reasoning, content, tool_calls = collect_fields(results)
 
     assert reasoning == ""
@@ -137,9 +135,7 @@ def test_parse_delta_neither_parser(tokenizer, request_obj):
 
 def test_parse_delta_tool_parser_only(tokenizer, request_obj):
     parser = make_parser(tokenizer, reasoning=False, tool=True)
-    results = stream_text(
-        parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[]
-    )
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
     reasoning, content, tool_calls = collect_fields(results)
 
     assert reasoning == ""
@@ -149,17 +145,13 @@ def test_parse_delta_tool_parser_only(tokenizer, request_obj):
 
     assert len(tool_calls) > 0
     assert tool_calls[0].function.name == "get_weather"
-    tool_args = "".join(
-        tc.function.arguments for tc in tool_calls if tc.function.arguments
-    )
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
     assert json.loads(tool_args) == {"city": "Dallas"}
 
 
 def test_parse_delta_reasoning_parser_only(tokenizer, request_obj):
     parser = make_parser(tokenizer, reasoning=True, tool=False)
-    results = stream_text(
-        parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[]
-    )
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
     reasoning, content, tool_calls = collect_fields(results)
 
     assert "let me think about this" in reasoning
@@ -171,9 +163,7 @@ def test_parse_delta_reasoning_parser_only(tokenizer, request_obj):
 
 def test_parse_delta_both_parsers(tokenizer, request_obj):
     parser = make_parser(tokenizer, reasoning=True, tool=True)
-    results = stream_text(
-        parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[]
-    )
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
     reasoning, content, tool_calls = collect_fields(results)
 
     assert "let me think about this" in reasoning
@@ -181,9 +171,7 @@ def test_parse_delta_both_parsers(tokenizer, request_obj):
 
     assert len(tool_calls) > 0
     assert tool_calls[0].function.name == "get_weather"
-    tool_args = "".join(
-        tc.function.arguments for tc in tool_calls if tc.function.arguments
-    )
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
     assert json.loads(tool_args) == {"city": "Dallas"}
 
 
@@ -229,9 +217,7 @@ def test_parse_delta_reasoning_not_dropped_on_boundary(tokenizer, request_obj):
     assert content == ""
     assert len(tool_calls) > 0
     assert tool_calls[0].function.name == "get_weather"
-    tool_args = "".join(
-        tc.function.arguments for tc in tool_calls if tc.function.arguments
-    )
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
     assert json.loads(tool_args) == {"city": "Dallas"}
 
 
@@ -253,9 +239,7 @@ def test_parse_delta_reasoning_only_no_think_leak(tokenizer, request_obj):
     """Regression: </think> must not leak into content when streaming
     token-by-token with reasoning=True, tool=False."""
     parser = make_parser(tokenizer, reasoning=True, tool=False)
-    results = stream_text(
-        parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[]
-    )
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
     reasoning, content, tool_calls = collect_fields(results)
 
     assert "let me think about this" in reasoning
@@ -296,9 +280,7 @@ def test_parse_delta_finished_no_flush_without_tool_call_delta(tokenizer, reques
     tool-call delta, unstreamed args are not flushed."""
     parser = make_parser(tokenizer, reasoning=False, tool=True)
 
-    results = stream_text(
-        parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[]
-    )
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
     _, _, tool_calls = collect_fields(results)
     assert len(tool_calls) > 0
 
@@ -318,16 +300,12 @@ def test_parse_delta_finished_no_extra_args_when_fully_streamed(tokenizer, reque
     """When all args have been streamed, finished=True must not
     produce extra or duplicate arguments."""
     parser = make_parser(tokenizer, reasoning=False, tool=True)
-    results = stream_text(
-        parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[]
-    )
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
     _, _, tool_calls = collect_fields(results)
 
     assert len(tool_calls) > 0
     assert tool_calls[0].function.name == "get_weather"
-    tool_args = "".join(
-        tc.function.arguments for tc in tool_calls if tc.function.arguments
-    )
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
     assert json.loads(tool_args) == {"city": "Dallas"}
 
     flush_result = parser.parse_delta("", [], request_obj, finished=True)
@@ -346,9 +324,7 @@ def test_parse_delta_finished_appends_remaining_args(tokenizer, request_obj):
     for i, tid in enumerate(token_ids):
         prev = results[-1] if results else None
         prev_had_args = (
-            prev
-            and prev.tool_calls
-            and any(tc.function and tc.function.arguments for tc in prev.tool_calls)
+            prev and prev.tool_calls and any(tc.function and tc.function.arguments for tc in prev.tool_calls)
         )
 
         if prev_had_args:
@@ -368,9 +344,7 @@ def test_parse_delta_finished_appends_remaining_args(tokenizer, request_obj):
             break
 
     _, _, tool_calls = collect_fields(results)
-    tool_args = "".join(
-        tc.function.arguments for tc in tool_calls if tc.function.arguments
-    )
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
     assert tool_args.endswith(remainder)
 
 
@@ -399,9 +373,7 @@ def test_parse_delta_tool_choice_none_with_reasoning(tokenizer, request_obj):
 
 
 def test_parse_delta_required_tool_choice_kimi_k2_ids(tokenizer, request_obj):
-    parser = make_parser(
-        tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG
-    )
+    parser = make_parser(tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG)
     request = request_obj.model_copy(update={"tool_choice": "required"})
     output = json.dumps(
         [
@@ -433,15 +405,9 @@ def test_parse_delta_required_tool_choice_kimi_k2_ids(tokenizer, request_obj):
     assert all(tc.id in (None, "functions.get_current_weather:0") for tc in tool_calls)
 
 
-def test_parse_delta_required_tool_choice_kimi_k2_ids_after_history(
-    tokenizer, request_obj
-):
-    parser = make_parser(
-        tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG
-    )
-    request = request_obj.model_copy(
-        update={"messages": HISTORY_MESSAGES, "tool_choice": "required"}
-    )
+def test_parse_delta_required_tool_choice_kimi_k2_ids_after_history(tokenizer, request_obj):
+    parser = make_parser(tokenizer, reasoning=False, tool=True, model_config=KIMI_K2_MODEL_CONFIG)
+    request = request_obj.model_copy(update={"messages": HISTORY_MESSAGES, "tool_choice": "required"})
     output = json.dumps(
         [
             {

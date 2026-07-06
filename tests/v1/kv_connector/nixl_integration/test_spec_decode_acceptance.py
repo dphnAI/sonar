@@ -125,10 +125,7 @@ def _fetch_per_position_acceptance() -> dict[int, float]:
     body = urlopen(url).read().decode()
     counts: dict[int, float] = {}
     for line in body.split("\n"):
-        if (
-            "spec_decode_num_accepted_tokens_per_pos_total" in line
-            and not line.startswith("#")
-        ):
+        if "spec_decode_num_accepted_tokens_per_pos_total" in line and not line.startswith("#"):
             m = re.search(r'position="(\d+)"', line)
             if m:
                 counts[int(m.group(1))] = float(line.rsplit(" ", 1)[-1])
@@ -146,9 +143,7 @@ def test_spec_decode_acceptance_length():
     rtol = config.rtol if config.rtol is not None else DEFAULT_RTOL
 
     prompts = _get_mt_bench_prompts()
-    assert len(prompts) == DEFAULT_NUM_PROMPTS, (
-        f"Expected {DEFAULT_NUM_PROMPTS} prompts, got {len(prompts)}"
-    )
+    assert len(prompts) == DEFAULT_NUM_PROMPTS, f"Expected {DEFAULT_NUM_PROMPTS} prompts, got {len(prompts)}"
 
     client = openai.OpenAI(api_key="EMPTY", base_url=PROXY_BASE_URL)
     for i, prompt in enumerate(prompts):
@@ -176,10 +171,7 @@ def test_spec_decode_acceptance_length():
     acceptance_length = 1 + (n_accepted / n_drafts)
     expected = config.expected_acceptance_length
 
-    print(
-        f"\n{config.id}: acceptance_length={acceptance_length:.3f} "
-        f"(expected={expected:.3f})"
-    )
+    print(f"\n{config.id}: acceptance_length={acceptance_length:.3f} (expected={expected:.3f})")
     print(f"  Drafts: {n_drafts:.0f}, Accepted: {n_accepted:.0f}")
 
     # ── Assert acceptance length (all methods) ────────────────────────
@@ -195,12 +187,9 @@ def test_spec_decode_acceptance_length():
     if config.expected_acceptance_lengths_per_pos:
         per_pos_counts = _fetch_per_position_acceptance()
         per_pos_rates = [
-            per_pos_counts.get(i, 0) / n_drafts
-            for i in range(len(config.expected_acceptance_lengths_per_pos))
+            per_pos_counts.get(i, 0) / n_drafts for i in range(len(config.expected_acceptance_lengths_per_pos))
         ]
-        for i, (actual, exp) in enumerate(
-            zip(per_pos_rates, config.expected_acceptance_lengths_per_pos)
-        ):
+        for i, (actual, exp) in enumerate(zip(per_pos_rates, config.expected_acceptance_lengths_per_pos)):
             print(f"  Position {i}: {actual:.4f} (expected: {exp:.4f})")
             if exp > 0:
                 pos_err = abs(actual - exp) / exp
@@ -214,14 +203,8 @@ def test_spec_decode_acceptance_length():
     if config.expected_acceptance_rate is not None:
         n_draft_tokens = _fetch_metric("aphrodite:spec_decode_num_draft_tokens_total")
         acceptance_rate = n_accepted / n_draft_tokens if n_draft_tokens > 0 else 0.0
-        print(
-            f"  Acceptance rate: {acceptance_rate:.3f} "
-            f"(expected: {config.expected_acceptance_rate:.3f})"
-        )
-        rate_err = (
-            abs(acceptance_rate - config.expected_acceptance_rate)
-            / config.expected_acceptance_rate
-        )
+        print(f"  Acceptance rate: {acceptance_rate:.3f} (expected: {config.expected_acceptance_rate:.3f})")
+        rate_err = abs(acceptance_rate - config.expected_acceptance_rate) / config.expected_acceptance_rate
         assert rate_err <= rtol, (
             f"Acceptance rate regression for {config.id}! "
             f"Expected: {config.expected_acceptance_rate:.3f}, "
@@ -229,7 +212,4 @@ def test_spec_decode_acceptance_length():
             f"Relative error: {rate_err:.2%} (tolerance: {rtol:.0%})"
         )
 
-    print(
-        f"\n=== PASS: {config.id} acceptance length {acceptance_length:.3f} "
-        f"within {rtol:.0%} of {expected:.3f} ==="
-    )
+    print(f"\n=== PASS: {config.id} acceptance length {acceptance_length:.3f} within {rtol:.0%} of {expected:.3f} ===")

@@ -60,9 +60,7 @@ class ModelArchConfigConvertorBase:
 
         # NOTE: Some config classes may set head_dim=None or materialize a missing
         # head_dim as 0 (for example, DeepseekVLV2TextConfig).
-        if (
-            head_dim := getattr(self.hf_text_config, "head_dim", None)
-        ) is not None and head_dim > 0:
+        if (head_dim := getattr(self.hf_text_config, "head_dim", None)) is not None and head_dim > 0:
             return head_dim
 
         # NOTE: Some models (such as PLaMo2.1) use `hidden_size_per_head`
@@ -95,8 +93,7 @@ class ModelArchConfigConvertorBase:
             correct = raw["qk_rope_head_dim"]
             if correct != qk_rope_head_dim:
                 logger.info(
-                    "Fixing qk_rope_head_dim: %d -> %d "
-                    "(transformers v5.4+ attribute_map bug)",
+                    "Fixing qk_rope_head_dim: %d -> %d (transformers v5.4+ attribute_map bug)",
                     qk_rope_head_dim,
                     correct,
                 )
@@ -121,9 +118,7 @@ class ModelArchConfigConvertorBase:
         # For non-grouped-query attention models, the number of KV heads is
         # equal to the number of attention heads.
         default_factory = self.get_total_num_attention_heads
-        return getattr_iter(
-            self.hf_text_config, attributes, default_factory=default_factory
-        )
+        return getattr_iter(self.hf_text_config, attributes, default_factory=default_factory)
 
     def get_num_experts_from_block_configs(self) -> int:
         """Check block_configs for heterogeneous models (e.g., NemotronH).
@@ -140,9 +135,7 @@ class ModelArchConfigConvertorBase:
                         max_experts = max(max_experts, block.get("n_routed_experts", 0))
                 else:
                     if getattr(block, "block_type", "") == "moe":
-                        max_experts = max(
-                            max_experts, getattr(block, "n_routed_experts", 0)
-                        )
+                        max_experts = max(max_experts, getattr(block, "n_routed_experts", 0))
         return max_experts
 
     def get_num_experts(self) -> int:
@@ -194,8 +187,7 @@ class ModelArchConfigConvertorBase:
                 param_dtypes: set[torch.dtype] = {
                     _SAFETENSORS_TO_TORCH_DTYPE[dtype]
                     for info in param_mt.values()
-                    if (dtype := info.get("dtype", None))
-                    and dtype in _SAFETENSORS_TO_TORCH_DTYPE
+                    if (dtype := info.get("dtype", None)) and dtype in _SAFETENSORS_TO_TORCH_DTYPE
                 }
 
                 if param_dtypes:
@@ -235,9 +227,7 @@ class ModelArchConfigConvertorBase:
             quant_method = quant_cfg.get("quant_method", "").lower()
 
             # Normalize library names
-            quant_method = quant_method.replace(
-                "compressed_tensors", "compressed-tensors"
-            )
+            quant_method = quant_method.replace("compressed_tensors", "compressed-tensors")
 
             quant_cfg["quant_method"] = quant_method
 
@@ -245,9 +235,7 @@ class ModelArchConfigConvertorBase:
 
     def get_quantization_config(self):
         quant_cfg = self._normalize_quantization_config(self.hf_config)
-        if quant_cfg is None and (
-            text_config := getattr(self.hf_config, "text_config", None)
-        ):
+        if quant_cfg is None and (text_config := getattr(self.hf_config, "text_config", None)):
             # Check the text config as well for multi-modal models.
             quant_cfg = self._normalize_quantization_config(text_config)
         return quant_cfg
@@ -352,7 +340,7 @@ class ModelArchConfigConvertorBase:
         return derived_max_model_len, max_len_key
 
     def convert(self) -> ModelArchitectureConfig:
-        model_arch_config = ModelArchitectureConfig(
+        model_arch_config = ModelArchitectureConfig(  # type: ignore[call-arg]
             architectures=self.get_architectures(),
             model_type=self.hf_config.model_type,
             text_model_type=getattr(self.hf_text_config, "model_type", None),
@@ -379,19 +367,13 @@ class CohereAsrModelArchConfigConvertor(ModelArchConfigConvertorBase):
 
     def get_head_size(self) -> int:
         hidden_size = self.hf_text_config.transf_decoder["config_dict"]["hidden_size"]
-        num_attention_heads = self.hf_text_config.transf_decoder["config_dict"][
-            "num_attention_heads"
-        ]
+        num_attention_heads = self.hf_text_config.transf_decoder["config_dict"]["num_attention_heads"]
         return hidden_size // num_attention_heads
 
     def get_total_num_kv_heads(self) -> int:
         enc_num_kv_heads = self.hf_text_config.encoder["n_heads"]
-        dec_num_kv_heads = self.hf_text_config.transf_decoder["config_dict"][
-            "num_attention_heads"
-        ]
-        assert enc_num_kv_heads == dec_num_kv_heads, (
-            "Encoder and decoder must have the same number of kv heads"
-        )
+        dec_num_kv_heads = self.hf_text_config.transf_decoder["config_dict"]["num_attention_heads"]
+        assert enc_num_kv_heads == dec_num_kv_heads, "Encoder and decoder must have the same number of kv heads"
         return enc_num_kv_heads
 
     def is_mm_prefix_lm(self) -> bool:
@@ -432,13 +414,9 @@ class FalconModelArchConfigConvertor(ModelArchConfigConvertorBase):
         # NOTE: for falcon, when new_decoder_architecture is True, the
         # multi_query flag is ignored and we use n_head_kv for the number of
         # KV heads.
-        new_decoder_arch_falcon = getattr(
-            self.hf_text_config, "new_decoder_architecture", False
-        )
+        new_decoder_arch_falcon = getattr(self.hf_text_config, "new_decoder_architecture", False)
 
-        if not new_decoder_arch_falcon and getattr(
-            self.hf_text_config, "multi_query", False
-        ):
+        if not new_decoder_arch_falcon and getattr(self.hf_text_config, "multi_query", False):
             # Multi-query attention, only one KV head.
             return 1
 
@@ -466,10 +444,7 @@ class NemotronNasModelArchConfigConvertor(ModelArchConfigConvertorBase):
     def get_total_num_kv_heads(self) -> int:
         for block in self.hf_text_config.block_configs:
             if not block.attention.no_op:
-                return (
-                    self.hf_text_config.num_attention_heads
-                    // block.attention.n_heads_in_group
-                )
+                return self.hf_text_config.num_attention_heads // block.attention.n_heads_in_group
         raise RuntimeError(
             "Could not determine the number of key-value attention heads "
             "from model configuration. "
@@ -491,9 +466,7 @@ class MimoMTPModelArchConfigConvertor(ModelArchConfigConvertorBase):
         return getattr(self.hf_text_config, "num_nextn_predict_layers", 0)
 
 
-def _strip_mimo_v2_attention_chunk_size(
-    hf_config: PretrainedConfig, hf_text_config: PretrainedConfig
-) -> None:
+def _strip_mimo_v2_attention_chunk_size(hf_config: PretrainedConfig, hf_text_config: PretrainedConfig) -> None:
     # MiMo-V2-Flash's config.json sets `attention_chunk_size=128` but the
     # architecture does not actually use chunked local attention. Leaving it
     # set makes Aphrodite disable the hybrid KV cache manager
@@ -563,9 +536,7 @@ class Gemma4MTPModelArchConfigConvertor(ModelArchConfigConvertorBase):
     def get_hidden_size(self) -> int:
         # The speculator buffer must match the backbone (target) model's
         # hidden dimension, not the draft model's smaller dimension.
-        return getattr(
-            self.hf_config, "backbone_hidden_size", super().get_hidden_size()
-        )
+        return getattr(self.hf_config, "backbone_hidden_size", super().get_hidden_size())
 
     def get_num_hidden_layers(self) -> int:
         return getattr(self.hf_text_config, "num_hidden_layers", 0)
@@ -573,10 +544,7 @@ class Gemma4MTPModelArchConfigConvertor(ModelArchConfigConvertorBase):
 
 class Gemma4ModelArchConfigConvertor(ModelArchConfigConvertorBase):
     def is_mm_prefix_lm(self) -> bool:
-        return (
-            getattr(self.hf_text_config, "use_bidirectional_attention", None)
-            == "vision"
-        )
+        return getattr(self.hf_text_config, "use_bidirectional_attention", None) == "vision"
 
     def get_head_size(self) -> int:
         # Gemma4 uses dual head dimensions: head_dim (sliding attention)

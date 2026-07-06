@@ -38,18 +38,12 @@ class YaRNScalingRotaryEmbedding(RotaryEmbedding):
         self.truncate = truncate
         # Get n-d magnitude scaling corrected for interpolation
         self.mscale = (
-            float(yarn_get_mscale(self.scaling_factor) * attn_factor)
-            if apply_yarn_scaling
-            else float(attn_factor)
+            float(yarn_get_mscale(self.scaling_factor) * attn_factor) if apply_yarn_scaling else float(attn_factor)
         )
-        super().__init__(
-            head_size, rotary_dim, max_position_embeddings, base, is_neox_style, dtype
-        )
+        super().__init__(head_size, rotary_dim, max_position_embeddings, base, is_neox_style, dtype)
 
     def _compute_inv_freq(self, scaling_factor: float) -> torch.Tensor:
-        pos_freqs = self.base ** (
-            torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim
-        )
+        pos_freqs = self.base ** (torch.arange(0, self.rotary_dim, 2, dtype=torch.float) / self.rotary_dim)
         inv_freq_extrapolation = 1.0 / pos_freqs
         inv_freq_interpolation = 1.0 / (scaling_factor * pos_freqs)
 
@@ -63,20 +57,14 @@ class YaRNScalingRotaryEmbedding(RotaryEmbedding):
         )
         # Get n-d rotational scaling corrected for extrapolation
         inv_freq_mask = (
-            1
-            - yarn_linear_ramp_mask(low, high, self.rotary_dim // 2, dtype=torch.float)
+            1 - yarn_linear_ramp_mask(low, high, self.rotary_dim // 2, dtype=torch.float)
         ) * self.extrapolation_factor
-        inv_freq = (
-            inv_freq_interpolation * (1 - inv_freq_mask)
-            + inv_freq_extrapolation * inv_freq_mask
-        )
+        inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
         return inv_freq
 
     def _compute_cos_sin_cache(self) -> torch.Tensor:
         inv_freq = self._compute_inv_freq(self.scaling_factor)
-        t = torch.arange(
-            self.max_position_embeddings * self.scaling_factor, dtype=torch.float32
-        )
+        t = torch.arange(self.max_position_embeddings * self.scaling_factor, dtype=torch.float32)
         freqs = torch.einsum("i,j -> ij", t, inv_freq)
         cos = freqs.cos() * self.mscale
         sin = freqs.sin() * self.mscale

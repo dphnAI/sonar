@@ -30,9 +30,7 @@ def torch_topk(
 
     if e_score_correction_bias is not None:
         num_experts = gating_output.shape[-1]
-        scores_for_choice = scores.view(
-            -1, num_experts
-        ) + e_score_correction_bias.unsqueeze(0)
+        scores_for_choice = scores.view(-1, num_experts) + e_score_correction_bias.unsqueeze(0)
         _, topk_ids = torch.topk(scores_for_choice, k=topk, dim=-1)
         topk_weights = scores.gather(1, topk_ids)
     else:
@@ -44,9 +42,7 @@ def torch_topk(
     return topk_weights, topk_ids
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 @pytest.mark.parametrize("num_tokens", [1, 33, 56])
 @pytest.mark.parametrize("hidden_size", [1024, 2048])
 @pytest.mark.parametrize("num_experts", [6, 16])
@@ -82,15 +78,11 @@ def test_fused_topk(
         scoring_func=scoring_func,
     )
 
-    torch.testing.assert_close(
-        topk_weights_ref.to(torch.float32), topk_weights, atol=1e-2, rtol=1e-2
-    )
+    torch.testing.assert_close(topk_weights_ref.to(torch.float32), topk_weights, atol=1e-2, rtol=1e-2)
     torch.testing.assert_close(topk_ids_ref.to(torch.int32), topk_ids, atol=0, rtol=0)
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 @pytest.mark.parametrize("num_tokens", [1, 33, 56])
 @pytest.mark.parametrize("hidden_size", [1024, 2048])
 @pytest.mark.parametrize("num_experts", [6, 16])
@@ -110,9 +102,7 @@ def test_fused_topk_bias(
     torch.manual_seed(0)
     hidden_states = torch.randn((num_tokens, hidden_size), dtype=dtype, device="cuda")
     gating_output = torch.randn((num_tokens, num_experts), dtype=dtype, device="cuda")
-    e_score_correction_bias = torch.randn(
-        (num_experts,), dtype=torch.float32, device="cuda"
-    )
+    e_score_correction_bias = torch.randn((num_experts,), dtype=torch.float32, device="cuda")
 
     topk_weights_ref, topk_ids_ref = torch_topk(
         gating_output=gating_output,
@@ -131,15 +121,11 @@ def test_fused_topk_bias(
         scoring_func=scoring_func,
     )
 
-    torch.testing.assert_close(
-        topk_weights_ref.to(torch.float32), topk_weights, atol=1e-2, rtol=1e-2
-    )
+    torch.testing.assert_close(topk_weights_ref.to(torch.float32), topk_weights, atol=1e-2, rtol=1e-2)
     torch.testing.assert_close(topk_ids_ref.to(torch.int32), topk_ids, atol=0, rtol=0)
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 @pytest.mark.parametrize("num_experts", [6, 8, 16])
 @pytest.mark.parametrize("topk", [3, 4])
 @pytest.mark.parametrize("scoring_func", ["softmax", "sigmoid"])
@@ -185,9 +171,7 @@ def test_fused_topk_nan_inf_clamp(
         renormalize=False,
         scoring_func=scoring_func,
     )
-    torch.testing.assert_close(
-        ref_weights.to(torch.float32), topk_weights[:1], atol=1e-2, rtol=1e-2
-    )
+    torch.testing.assert_close(ref_weights.to(torch.float32), topk_weights[:1], atol=1e-2, rtol=1e-2)
     torch.testing.assert_close(ref_ids.to(torch.int32), topk_ids[:1], atol=0, rtol=0)
 
     # Poisoned rows: IDs must be unique (no duplicates) and weights must be
@@ -204,9 +188,7 @@ def test_fused_topk_nan_inf_clamp(
         )
 
 
-@pytest.mark.skipif(
-    not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform."
-)
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="This test is skipped on non-CUDA platform.")
 @pytest.mark.parametrize("num_experts", [6, 8, 16])
 @pytest.mark.parametrize("topk", [3, 4])
 @pytest.mark.parametrize("scoring_func", ["softmax", "sigmoid"])
@@ -230,9 +212,7 @@ def test_fused_topk_bias_nan_inf_clamp(
     num_tokens = 4
     hidden_size = 1024
     hidden_states = torch.randn((num_tokens, hidden_size), dtype=dtype, device="cuda")
-    e_score_correction_bias = torch.randn(
-        (num_experts,), dtype=torch.float32, device="cuda"
-    )
+    e_score_correction_bias = torch.randn((num_experts,), dtype=torch.float32, device="cuda")
 
     gating_output = torch.randn((num_tokens, num_experts), dtype=dtype, device="cuda")
     gating_output[1:, :] = bad_value
@@ -254,9 +234,7 @@ def test_fused_topk_bias_nan_inf_clamp(
         e_score_correction_bias=e_score_correction_bias,
         scoring_func=scoring_func,
     )
-    torch.testing.assert_close(
-        ref_weights.to(torch.float32), topk_weights[:1], atol=1e-2, rtol=1e-2
-    )
+    torch.testing.assert_close(ref_weights.to(torch.float32), topk_weights[:1], atol=1e-2, rtol=1e-2)
     torch.testing.assert_close(ref_ids.to(torch.int32), topk_ids[:1], atol=0, rtol=0)
 
     # Poisoned rows: IDs must be unique (no duplicates) and weights must be

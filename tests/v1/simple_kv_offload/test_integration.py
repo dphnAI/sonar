@@ -96,9 +96,7 @@ def _accuracy_test(llm: LLM, lazy: bool = False):
         if output.outputs[0].text == expected:
             success_count += 1
 
-    assert success_count >= 0.5 * test_count, (
-        f"Accuracy too low: {success_count}/{test_count} matched '{expected}'"
-    )
+    assert success_count >= 0.5 * test_count, f"Accuracy too low: {success_count}/{test_count} matched '{expected}'"
 
 
 def _latency_test(llm: LLM, lazy: bool = False):
@@ -138,9 +136,7 @@ def _latency_test(llm: LLM, lazy: bool = False):
         if cpu_time < cold_time:
             num_times_cpu_better += 1
 
-    assert num_times_cpu_better >= 0.8 * num_tests, (
-        f"CPU hit only faster {num_times_cpu_better}/{num_tests} times"
-    )
+    assert num_times_cpu_better >= 0.8 * num_tests, f"CPU hit only faster {num_times_cpu_better}/{num_tests} times"
 
 
 @pytest.mark.optional

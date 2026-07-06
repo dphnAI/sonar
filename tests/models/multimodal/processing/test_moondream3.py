@@ -283,8 +283,7 @@ def test_chat_template_content_list_uses_moondream_image_prefix(
     )
 
     expected_prompt = (
-        "<|endoftext|><image><|md_reserved_0|>query<|md_reserved_1|>"
-        "What is in this image?<|md_reserved_2|>"
+        "<|endoftext|><image><|md_reserved_0|>query<|md_reserved_1|>What is in this image?<|md_reserved_2|>"
     )
     assert prompt == expected_prompt
 
@@ -322,9 +321,7 @@ def test_bos_token_always_first(
     token_ids = processed_inputs["prompt_token_ids"]
 
     # Token ID 0 (<|endoftext|>) should be the first token
-    assert token_ids[0] == 0, (
-        f"Expected BOS token (0) at position 0, got {token_ids[0]}"
-    )
+    assert token_ids[0] == 0, f"Expected BOS token (0) at position 0, got {token_ids[0]}"
 
 
 @pytest.mark.parametrize("model_id", [MOONDREAM3_MODEL_ID])
@@ -427,27 +424,21 @@ class TestMoondream3TilingLogic:
         """Small images should use 1x1 tiling."""
         from aphrodite.transformers_utils.processors.moondream3 import select_tiling
 
-        tiling = select_tiling(
-            height=300, width=300, crop_size=CROP_SIZE, max_crops=MAX_CROPS
-        )
+        tiling = select_tiling(height=300, width=300, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         assert tiling == (1, 1)
 
     def test_exact_crop_size(self):
         """Image exactly at crop size should use 1x1."""
         from aphrodite.transformers_utils.processors.moondream3 import select_tiling
 
-        tiling = select_tiling(
-            height=CROP_SIZE, width=CROP_SIZE, crop_size=CROP_SIZE, max_crops=MAX_CROPS
-        )
+        tiling = select_tiling(height=CROP_SIZE, width=CROP_SIZE, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         assert tiling == (1, 1)
 
     def test_large_square_image(self):
         """Large square image should use multiple tiles."""
         from aphrodite.transformers_utils.processors.moondream3 import select_tiling
 
-        tiling = select_tiling(
-            height=800, width=800, crop_size=CROP_SIZE, max_crops=MAX_CROPS
-        )
+        tiling = select_tiling(height=800, width=800, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         h_tiles, w_tiles = tiling
         assert h_tiles >= 2
         assert w_tiles >= 2
@@ -457,9 +448,7 @@ class TestMoondream3TilingLogic:
         """Wide image should have more width tiles."""
         from aphrodite.transformers_utils.processors.moondream3 import select_tiling
 
-        tiling = select_tiling(
-            height=400, width=1200, crop_size=CROP_SIZE, max_crops=MAX_CROPS
-        )
+        tiling = select_tiling(height=400, width=1200, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         h_tiles, w_tiles = tiling
         assert w_tiles >= h_tiles
 
@@ -467,9 +456,7 @@ class TestMoondream3TilingLogic:
         """Tall image should have more height tiles."""
         from aphrodite.transformers_utils.processors.moondream3 import select_tiling
 
-        tiling = select_tiling(
-            height=1200, width=400, crop_size=CROP_SIZE, max_crops=MAX_CROPS
-        )
+        tiling = select_tiling(height=1200, width=400, crop_size=CROP_SIZE, max_crops=MAX_CROPS)
         h_tiles, w_tiles = tiling
         assert h_tiles >= w_tiles
 
@@ -477,9 +464,7 @@ class TestMoondream3TilingLogic:
         """Tiling should not exceed max_crops."""
         from aphrodite.transformers_utils.processors.moondream3 import select_tiling
 
-        tiling = select_tiling(
-            height=2000, width=2000, crop_size=CROP_SIZE, max_crops=4
-        )
+        tiling = select_tiling(height=2000, width=2000, crop_size=CROP_SIZE, max_crops=4)
         h_tiles, w_tiles = tiling
         assert h_tiles * w_tiles <= 4
 

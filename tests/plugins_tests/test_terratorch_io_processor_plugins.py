@@ -9,8 +9,8 @@ import pytest
 import requests
 from PIL import Image
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.entrypoints.pooling.pooling.protocol import IOProcessorResponse
+from tests.utils import RemoteOpenAIServer
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("terratorch") is None,
@@ -103,9 +103,7 @@ async def test_prithvi_mae_plugin_online(
 
     # Compute the output image hash and compare it against the expected hash
     image_hash = _compute_image_hash(plugin_data["data"])
-    assert image_hash == expected_hash, (
-        f"Image hash mismatch: expected {expected_hash}, got {image_hash}"
-    )
+    assert image_hash == expected_hash, f"Image hash mismatch: expected {expected_hash}, got {image_hash}"
 
 
 @pytest.mark.parametrize(
@@ -148,6 +146,4 @@ def test_prithvi_mae_plugin_offline(
 
     # Compute the output image hash and compare it against the expected hash
     image_hash = _compute_image_hash(output.data)
-    assert image_hash == expected_hash, (
-        f"Image hash mismatch: expected {expected_hash}, got {image_hash}"
-    )
+    assert image_hash == expected_hash, f"Image hash mismatch: expected {expected_hash}, got {image_hash}"

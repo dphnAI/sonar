@@ -37,16 +37,11 @@ from .scoring.protocol import ScoringRequest, ScoringResponse
 from .scoring.typing import ScoringData
 
 PoolingCompletionLikeRequest: TypeAlias = (
-    EmbeddingCompletionRequest
-    | ClassificationCompletionRequest
-    | PoolingCompletionRequest
+    EmbeddingCompletionRequest | ClassificationCompletionRequest | PoolingCompletionRequest
 )
 
 PoolingChatLikeRequest: TypeAlias = (
-    EmbeddingChatRequest
-    | EmbeddingChatInputRequest
-    | ClassificationChatRequest
-    | PoolingChatRequest
+    EmbeddingChatRequest | EmbeddingChatInputRequest | ClassificationChatRequest | PoolingChatRequest
 )
 
 AnyPoolingRequest: TypeAlias = (
@@ -90,9 +85,7 @@ class PoolingServeContext(Generic[PoolingRequestT]):
     engine_inputs: Sequence[EngineInput] | None = None
     prompt_request_ids: list[str] | None = None
 
-    result_generator: AsyncGenerator[tuple[int, PoolingRequestOutput], None] | None = (
-        None
-    )
+    result_generator: AsyncGenerator[tuple[int, PoolingRequestOutput], None] | None = None
     final_res_batch: list[PoolingRequestOutput] = field(default_factory=list)
 
     ## for Long Text Embedding with Chunked Processing

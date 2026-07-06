@@ -31,7 +31,7 @@ from torch import nn
 from transformers import Qwen3Config
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention.encoder_only_attention import (
@@ -130,11 +130,7 @@ class Qwen3Attention(nn.Module):
             rope_parameters=rope_parameters,
             dual_chunk_attention_config=dual_chunk_attention_config,
         )
-        attn_cls = (
-            EncoderOnlyAttention
-            if attn_type == AttentionType.ENCODER_ONLY
-            else Attention
-        )
+        attn_cls = EncoderOnlyAttention if attn_type == AttentionType.ENCODER_ONLY else Attention
         self.attn = attn_cls(
             self.num_heads,
             self.head_dim,
@@ -185,9 +181,7 @@ class Qwen3DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         set_default_rope_theta(config, default_theta=1000000)
-        dual_chunk_attention_config = getattr(
-            config, "dual_chunk_attention_config", None
-        )
+        dual_chunk_attention_config = getattr(config, "dual_chunk_attention_config", None)
 
         # By default, Qwen3 uses causal attention as it is a decoder-only model.
         # You can override the HF config with `is_causal=False` to enable
@@ -221,9 +215,7 @@ class Qwen3DecoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -265,14 +257,10 @@ ALL_DECODER_LAYER_TYPES = {
 )
 class Qwen3Model(Qwen2Model):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
-        super().__init__(
-            aphrodite_config=aphrodite_config, prefix=prefix, decoder_layer_type=Qwen3DecoderLayer
-        )
+        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix, decoder_layer_type=Qwen3DecoderLayer)
 
 
-class Qwen3ForCausalLM(
-    LocalArgmaxMixin, nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3
-):
+class Qwen3ForCausalLM(LocalArgmaxMixin, nn.Module, SupportsLoRA, SupportsPP, SupportsEagle, SupportsEagle3):
     hf_to_aphrodite_mapper = Qwen3Model.hf_to_aphrodite_mapper
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
@@ -292,9 +280,7 @@ class Qwen3ForCausalLM(
 
         self.aphrodite_config = aphrodite_config
         self.quant_config = quant_config
-        self.model = Qwen3Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Qwen3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         use_tied_lm_head = model_should_use_tied_lm_head(config, quant_config)
         if get_pp_group().is_last_rank:
@@ -312,9 +298,7 @@ class Qwen3ForCausalLM(
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -326,9 +310,7 @@ class Qwen3ForCausalLM(
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(
@@ -341,8 +323,6 @@ class Qwen3ForCausalLM(
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(
             self,
-            skip_prefixes=(
-                ["lm_head."] if self.lm_head is self.model.embed_tokens else None
-            ),
+            skip_prefixes=(["lm_head."] if self.lm_head is self.model.embed_tokens else None),
         )
         return loader.load_weights(weights)

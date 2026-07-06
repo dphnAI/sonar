@@ -13,9 +13,7 @@ from aphrodite.entrypoints.openai.responses.streaming_events import (
 )
 
 
-def _make_tool_call(
-    index: int, name: str | None = None, arguments: str | None = None
-) -> DeltaToolCall:
+def _make_tool_call(index: int, name: str | None = None, arguments: str | None = None) -> DeltaToolCall:
     fn = DeltaFunctionCall(name=name, arguments=arguments)
     return DeltaToolCall(index=index, function=fn)
 
@@ -89,9 +87,7 @@ class TestProcessorCompoundDeltas:
         events = _run_through_processor(processor, delta)
 
         added = [e for e in events if e.type == "response.output_item.added"]
-        deltas = [
-            e for e in events if e.type == "response.function_call_arguments.delta"
-        ]
+        deltas = [e for e in events if e.type == "response.function_call_arguments.delta"]
         assert len(added) == 2
         assert len(deltas) == 2
 
@@ -105,9 +101,7 @@ class TestProcessorCompoundDeltas:
         processor = SimpleStreamingEventProcessor()
         events = _run_through_processor(processor, delta)
 
-        deltas = [
-            e for e in events if e.type == "response.function_call_arguments.delta"
-        ]
+        deltas = [e for e in events if e.type == "response.function_call_arguments.delta"]
         assert len(deltas) == 1
         assert deltas[0].delta == '{"city":"SF"}'
 
@@ -118,9 +112,7 @@ class TestProcessorCompoundDeltas:
         _run_through_processor(processor, DeltaMessage(reasoning="think"))
         assert processor.state.current_state == _StateType.REASONING
 
-        events = _run_through_processor(
-            processor, DeltaMessage(reasoning="more", content="answer")
-        )
+        events = _run_through_processor(processor, DeltaMessage(reasoning="more", content="answer"))
         types = [e.type for e in events]
         assert "response.reasoning_text.delta" in types
         assert "response.output_text.delta" in types

@@ -10,12 +10,12 @@ import weakref
 import pytest
 import torch
 
-from tests.models.registry import HF_EXAMPLE_MODELS
 from aphrodite import LLM, SamplingParams
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.entrypoints.chat_utils import ChatCompletionMessageParam
 from aphrodite.platforms import current_platform
 from aphrodite.utils.mem_utils import KiB_bytes, MiB_bytes, format_mib
+from tests.models.registry import HF_EXAMPLE_MODELS
 
 MODEL_NAME = "Qwen/Qwen3-VL-4B-Instruct"
 RANDOM_PREFIX_LEN = 100
@@ -61,10 +61,7 @@ def _make_messages(image_url: str) -> list[ChatCompletionMessageParam]:
 def _build_request_batch(
     image_urls: list[str],
 ) -> list[list[ChatCompletionMessageParam]]:
-    return [
-        _make_messages(image_urls[i % len(image_urls)])
-        for i in range(REQUESTS_PER_ROUND)
-    ]
+    return [_make_messages(image_urls[i % len(image_urls)]) for i in range(REQUESTS_PER_ROUND)]
 
 
 def _ru_maxrss_bytes() -> int | None:

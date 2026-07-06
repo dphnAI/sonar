@@ -3,13 +3,13 @@
 import pytest
 from transformers import AutoTokenizer
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.reasoning import ReasoningParser, ReasoningParserManager
 from aphrodite.reasoning.deepseek_r1_reasoning_parser import DeepSeekR1ReasoningParser
 from aphrodite.reasoning.deepseek_v3_reasoning_parser import (
     DeepSeekV3ReasoningWithThinkingParser as Holo2ReasoningParser,
 )
 from aphrodite.reasoning.identity_reasoning_parser import IdentityReasoningParser
+from tests.reasoning.utils import run_reasoning_extraction
 
 REASONING_MODEL_NAME = "HCompany/Holo2-4B"
 
@@ -174,17 +174,13 @@ def test_reasoning(
     tokenizer,
 ):
     output = tokenizer.tokenize(param_dict["output"])
-    output_tokens: list[str] = [
-        tokenizer.convert_tokens_to_string([token]) for token in output
-    ]
+    output_tokens: list[str] = [tokenizer.convert_tokens_to_string([token]) for token in output]
     parser: ReasoningParser = ReasoningParserManager.get_reasoning_parser("holo2")(
         tokenizer,
         chat_template_kwargs=chat_template_kwargs,
     )
 
-    reasoning, content = run_reasoning_extraction(
-        parser, output_tokens, streaming=streaming
-    )
+    reasoning, content = run_reasoning_extraction(parser, output_tokens, streaming=streaming)
 
     assert reasoning == param_dict["reasoning"]
     assert content == param_dict["content"]

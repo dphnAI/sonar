@@ -45,9 +45,7 @@ class MiniMaxM3SparseMSAImpl(MiniMaxM3SparseImpl):
         hd = self.head_size
         q = query[:num_tokens].view(-1, self.num_heads, hd)
         out = output[:num_tokens].view(-1, self.num_heads, hd)
-        kv_cache = (
-            kv_cache.view(self.kv_cache_fp8_dtype) if self.use_fp8_kv else kv_cache
-        )
+        kv_cache = kv_cache.view(self.kv_cache_fp8_dtype) if self.use_fp8_kv else kv_cache
 
         # Decode [:nd]: Triton split-K placeholder (no MSA decode yet).
         if main_md.num_decodes > 0:

@@ -86,9 +86,7 @@ class DeepSeekMultiTokenPredictorLayer(nn.Module):
         else:
             topk_indices_buffer = None
 
-        self.shared_head = SharedHead(
-            config=config, prefix=prefix, quant_config=quant_config
-        )
+        self.shared_head = SharedHead(config=config, prefix=prefix, quant_config=quant_config)
         self.mtp_block = DeepseekV2DecoderLayer(
             aphrodite_config,
             prefix,
@@ -110,9 +108,7 @@ class DeepSeekMultiTokenPredictorLayer(nn.Module):
         inputs_embeds = self.enorm(inputs_embeds)
         previous_hidden_states = self.hnorm(previous_hidden_states)
 
-        hidden_states = self.eh_proj(
-            torch.cat([inputs_embeds, previous_hidden_states], dim=-1)
-        )
+        hidden_states = self.eh_proj(torch.cat([inputs_embeds, previous_hidden_states], dim=-1))
 
         hidden_states, residual = self.mtp_block(
             positions=positions,
@@ -137,9 +133,7 @@ class DeepSeekMultiTokenPredictor(nn.Module):
 
         self.layers = torch.nn.ModuleDict(
             {
-                str(idx): DeepSeekMultiTokenPredictorLayer(
-                    aphrodite_config, f"{prefix}.layers.{idx}"
-                )
+                str(idx): DeepSeekMultiTokenPredictorLayer(aphrodite_config, f"{prefix}.layers.{idx}")
                 for idx in range(
                     self.mtp_start_layer_idx,
                     self.mtp_start_layer_idx + self.num_mtp_layers,
@@ -178,9 +172,7 @@ class DeepSeekMultiTokenPredictor(nn.Module):
                 self_attn = getattr(mtp_block, "self_attn", None)
                 if self_attn is not None:
                     mla_attn = getattr(self_attn, "mla_attn", None)
-                    if mla_attn is not None and hasattr(
-                        mla_attn, "topk_indices_buffer"
-                    ):
+                    if mla_attn is not None and hasattr(mla_attn, "topk_indices_buffer"):
                         topk_indices_buffer = mla_attn.topk_indices_buffer
                         topk_indices_buffer[:num_slots] = topk_indices_buffer[slot_ids]
 
@@ -213,9 +205,7 @@ class DeepSeekMultiTokenPredictor(nn.Module):
     ) -> torch.Tensor:
         current_step_idx = spec_step_idx % self.num_mtp_layers
         mtp_layer = self.layers[str(self.mtp_start_layer_idx + current_step_idx)]
-        logits = self.logits_processor(
-            mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states)
-        )
+        logits = self.logits_processor(mtp_layer.shared_head.head, mtp_layer.shared_head(hidden_states))
         return logits
 
 
@@ -277,9 +267,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
         return self.model.compute_logits(hidden_states, spec_step_idx)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
-        rocm_aiter_moe_shared_expert_enabled = (
-            rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
-        )
+        rocm_aiter_moe_shared_expert_enabled = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
         stacked_params_mapping = [
             ("gate_up_proj", "gate_proj", 0),
             ("gate_up_proj", "up_proj", 1),
@@ -300,11 +288,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
             ckpt_down_proj_name="down_proj",
             ckpt_up_proj_name="up_proj",
             num_experts=self.config.n_routed_experts
-            + (
-                self.config.n_shared_experts
-                if rocm_aiter_moe_shared_expert_enabled
-                else 0
-            ),
+            + (self.config.n_shared_experts if rocm_aiter_moe_shared_expert_enabled else 0),
         )
 
         pp_missing_layer_names = get_pp_missing_layer_names(self)
@@ -323,9 +307,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
                 # the target model's embed_tokens, so load the top-level
                 # embedding into the draft directly.
                 spec_layer = self.model.mtp_start_layer_idx
-            is_fusion_moe_shared_experts_layer = (
-                rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
-            )
+            is_fusion_moe_shared_experts_layer = rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
             name = self._rewrite_spec_layer_name(spec_layer, name)
 
             if _try_load_fp8_indexer_wk(
@@ -356,9 +338,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
 
                 # QKV fusion is optional, fall back to normal
                 # weight loading if it's not enabled
-                if (
-                    param_name == "fused_qkv_a_proj"
-                ) and name_mapped not in params_dict:
+                if (param_name == "fused_qkv_a_proj") and name_mapped not in params_dict:
                     continue
                 else:
                     name = name_mapped
@@ -386,15 +366,10 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
                     # Determine split axis based on op type
                     # gate/up: ColumnParallel → split along dim 0
                     # down: RowParallel → split along dim 1
-                    split_dim = (
-                        1
-                        if ("down_proj.weight" in name and loaded_weight.ndim > 1)
-                        else 0
-                    )
+                    split_dim = 1 if ("down_proj.weight" in name and loaded_weight.ndim > 1) else 0
                     total = loaded_weight.shape[split_dim]
                     assert total % num_chunks == 0, (
-                        f"Shared expert weight dim {total} "
-                        f"not divisible by num_chunks {num_chunks}"
+                        f"Shared expert weight dim {total} not divisible by num_chunks {num_chunks}"
                     )
                     chunk_size = total // num_chunks
 
@@ -438,9 +413,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
                         # We should ask the weight loader to return success or
                         # not here since otherwise we may skip experts with
                         # other available replicas.
-                        weight_loader = typing.cast(
-                            Callable[..., bool], param.weight_loader
-                        )
+                        weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                         success = weight_loader(
                             param,
                             weight_to_load,
@@ -472,16 +445,11 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
 
                         # According to DeepSeek-V3 Technical Report, MTP modules
                         # shares embedding layer. We only load the first weights.
-                        if (
-                            spec_layer != self.model.mtp_start_layer_idx
-                            and ".layers" not in name
-                        ):
+                        if spec_layer != self.model.mtp_start_layer_idx and ".layers" not in name:
                             continue
 
                         param = params_dict[name]
-                        weight_loader = getattr(
-                            param, "weight_loader", default_weight_loader
-                        )
+                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
                         weight_loader(param, loaded_weight)
             if not is_fusion_moe_shared_experts_layer:
                 loaded_params.add(name)
@@ -531,9 +499,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
                 break
         if not spec_layer_weight:
             # treat rest weights as weights for transformer layer block
-            name = name.replace(
-                f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block."
-            )
+            name = name.replace(f"model.layers.{spec_layer}.", f"model.layers.{spec_layer}.mtp_block.")
         elif shared_weight:
             # treat shared weights as top level weights
             name = name.replace(f"model.layers.{spec_layer}.", "model.")

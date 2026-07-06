@@ -44,17 +44,12 @@ def test_moe_lora_ep2_real_qwen3moe(qwen3moe_lora_files, ep_rank):
     """ep_size=2 against the real Qwen3-MoE adapter: each rank's loaded
     LoRA has the right size, the right expert membership, and the
     right tensor values."""
-    peft_helper = PEFTHelper.from_local_dir(
-        qwen3moe_lora_files, max_position_embeddings=4096
-    )
+    peft_helper = PEFTHelper.from_local_dir(qwen3moe_lora_files, max_position_embeddings=4096)
 
     # Baseline: no spec → loads every expert × projection × layer plus
     # all non-expert LoRA modules.
     ground_truth = _load(qwen3moe_lora_files, peft_helper, moe_ep_spec=None, lora_id=1)
-    expected_baseline = (
-        GLOBAL_NUM_EXPERTS * len(EXPERT_PROJECTIONS) * NUM_LAYERS
-        + len(NON_EXPERT_MODULES) * NUM_LAYERS
-    )
+    expected_baseline = GLOBAL_NUM_EXPERTS * len(EXPERT_PROJECTIONS) * NUM_LAYERS + len(NON_EXPERT_MODULES) * NUM_LAYERS
     assert len(ground_truth.loras) == expected_baseline
 
     # Sliced load: only this rank's experts; non-expert LoRA is untouched.
@@ -70,10 +65,7 @@ def test_moe_lora_ep2_real_qwen3moe(qwen3moe_lora_files, ep_rank):
         lora_id=100 + ep_rank,
     )
 
-    expected_sliced = (
-        LOCAL_NUM_EXPERTS * len(EXPERT_PROJECTIONS) * NUM_LAYERS
-        + len(NON_EXPERT_MODULES) * NUM_LAYERS
-    )
+    expected_sliced = LOCAL_NUM_EXPERTS * len(EXPERT_PROJECTIONS) * NUM_LAYERS + len(NON_EXPERT_MODULES) * NUM_LAYERS
     assert len(sliced.loras) == expected_sliced
 
     expert_start = ep_rank * LOCAL_NUM_EXPERTS
@@ -85,6 +77,4 @@ def test_moe_lora_ep2_real_qwen3moe(qwen3moe_lora_files, ep_rank):
         torch.testing.assert_close(lora.lora_b, gt.lora_b)
         if ".experts." in name:
             expert_idx = int(name.split(".experts.")[-1].split(".")[0])
-            assert expert_start <= expert_idx < expert_end, (
-                f"non-local expert {expert_idx} leaked: {name}"
-            )
+            assert expert_start <= expert_idx < expert_end, f"non-local expert {expert_idx} leaked: {name}"

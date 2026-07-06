@@ -38,9 +38,7 @@ class _StubEngineCoreActor(EngineCoreActorMixin):
         local_dp_rank: int = 0,
     ):
         # Exercise the production Ray actor mixin without loading a model.
-        EngineCoreActorMixin.__init__(
-            self, aphrodite_config, addresses, dp_rank, local_dp_rank
-        )
+        EngineCoreActorMixin.__init__(self, aphrodite_config, addresses, dp_rank, local_dp_rank)
 
     def _set_visible_devices(self, aphrodite_config: Any, local_dp_rank: int) -> None:
         pass
@@ -71,21 +69,15 @@ def _bind_and_report_worker(listen_address, sock, args, client_config):
     endpoints back via ``actual_address_pipe``, then exit."""
     ctx = zmq.Context()
     try:
-        in_sock = make_zmq_socket(
-            ctx, client_config["input_address"], zmq.ROUTER, bind=True
-        )
-        out_sock = make_zmq_socket(
-            ctx, client_config["output_address"], zmq.PULL, bind=True
-        )
+        in_sock = make_zmq_socket(ctx, client_config["input_address"], zmq.ROUTER, bind=True)
+        out_sock = make_zmq_socket(ctx, client_config["output_address"], zmq.PULL, bind=True)
         try:
             pipe = client_config["actual_address_pipe"]
             try:
                 pipe.send(
                     {
                         "input_address": in_sock.getsockopt(zmq.LAST_ENDPOINT).decode(),
-                        "output_address": out_sock.getsockopt(
-                            zmq.LAST_ENDPOINT
-                        ).decode(),
+                        "output_address": out_sock.getsockopt(zmq.LAST_ENDPOINT).decode(),
                     }
                 )
             finally:
@@ -331,19 +323,13 @@ def test_ray_dp_addresses_resolved_before_actor_creation(
             # run_multi_api_server skips ``gather_actual_addresses`` for
             # Ray DP (addresses are already real). Mirror that.
             if not is_ray_dp:
-                actual_inputs, actual_outputs = (
-                    api_server_manager.gather_actual_addresses(timeout=15.0)
-                )
+                actual_inputs, actual_outputs = api_server_manager.gather_actual_addresses(timeout=15.0)
                 addresses.inputs = actual_inputs
                 addresses.outputs = actual_outputs
 
             # Snapshot what each Ray actor actually holds.
-            actors = (
-                engine_manager.local_engine_actors + engine_manager.remote_engine_actors
-            )
-            actor_snapshots = ray.get(
-                [actor.get_addresses.remote() for actor in actors]
-            )
+            actors = engine_manager.local_engine_actors + engine_manager.remote_engine_actors
+            actor_snapshots = ray.get([actor.get_addresses.remote() for actor in actors])
     finally:
         if api_server_manager is not None:
             api_server_manager.shutdown()

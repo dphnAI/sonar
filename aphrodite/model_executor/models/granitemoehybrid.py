@@ -10,7 +10,7 @@ from torch import nn
 from transformers import GraniteMoeHybridConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.distributed.parallel_state import get_pp_group
 from aphrodite.model_executor.layers.attention import Attention
@@ -99,15 +99,11 @@ class GraniteMoeHybridMambaDecoderLayer(nn.Module):
         self.shared_mlp = (
             None
             if getattr(config, "shared_intermediate_size", 0) == 0
-            else GraniteMoeSharedMLP(
-                config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp"
-            )
+            else GraniteMoeSharedMLP(config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp")
         )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -175,15 +171,11 @@ class GraniteMoeHybridAttentionDecoderLayer(nn.Module):
         self.shared_mlp = (
             None
             if getattr(config, "shared_intermediate_size", 0) == 0
-            else GraniteMoeSharedMLP(
-                config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp"
-            )
+            else GraniteMoeSharedMLP(config, quant_config=quant_config, prefix=f"{prefix}.shared_mlp")
         )
 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -390,14 +382,10 @@ class GraniteMoeHybridModel(nn.Module):
         for i, layer in enumerate(self.layers):
             if isinstance(layer, GraniteMoeHybridAttentionDecoderLayer):
                 num_attn += 1
-            hidden_states, residual = layer(
-                positions=positions, hidden_states=hidden_states, residual=residual
-            )
+            hidden_states, residual = layer(positions=positions, hidden_states=hidden_states, residual=residual)
 
         if not get_pp_group().is_last_rank:
-            return IntermediateTensors(
-                {"hidden_states": hidden_states, "residual": residual}
-            )
+            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
 
         hidden_states = self.norm(hidden_states)
         return hidden_states
@@ -559,9 +547,7 @@ class GraniteMoeHybridModel(nn.Module):
                 loaded = False
                 for param_name, weight_name, shard_id in stacked_params_mapping:
                     if weight_name in n:
-                        _load_shard(
-                            n.replace(weight_name, param_name), p, shard_id=shard_id
-                        )
+                        _load_shard(n.replace(weight_name, param_name), p, shard_id=shard_id)
                         loaded = True
                 if not loaded:
                     _load(n, p)
@@ -648,9 +634,7 @@ class GraniteMoeHybridForCausalLM(
         self.quant_config = aphrodite_config.quant_config
         self.config = config
         self.scheduler_config = scheduler_config
-        self.model = GraniteMoeHybridModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = GraniteMoeHybridModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         self.lm_head = ParallelLMHead(
             config.vocab_size,
@@ -666,9 +650,7 @@ class GraniteMoeHybridForCausalLM(
             scale=1 / self.config.logits_scaling,
         )
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -681,9 +663,7 @@ class GraniteMoeHybridForCausalLM(
         inputs_embeds: torch.Tensor | None = None,
         **kwargs,
     ):
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
 
         return hidden_states
 

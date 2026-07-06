@@ -15,8 +15,8 @@ import torch.nn as nn
 from huggingface_hub import hf_hub_download
 from transformers import AutoConfig, AutoTokenizer
 
-from tests.utils import RemoteOpenAIServer
 from aphrodite.utils.serial_utils import tensor2base64
+from tests.utils import RemoteOpenAIServer
 
 QWEN2AUDIO_MODEL = "Qwen/Qwen2-Audio-7B-Instruct"
 

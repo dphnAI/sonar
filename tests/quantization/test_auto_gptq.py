@@ -8,11 +8,11 @@ Run `pytest tests/quantization/test_auto_gptq.py -v -s`.
 import pytest
 import torch
 
-from tests.quantization.utils import is_quant_method_supported
 from aphrodite.model_executor.layers.quantization.auto_gptq import (
     AutoGPTQConfig,
     AutoGPTQLinearMethod,
 )
+from tests.quantization.utils import is_quant_method_supported
 
 PROMPT = "On the surface of Mars, we found"
 

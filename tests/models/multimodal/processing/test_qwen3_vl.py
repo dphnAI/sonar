@@ -89,9 +89,7 @@ def test_processor_num_frames_timestamp(
     # Verify that video placeholders were actually inserted.
     assert "mm_placeholders" in processed
     video_phs = processed["mm_placeholders"].get("video", [])
-    assert len(video_phs) == 1, (
-        f"Expected exactly 1 video placeholder, got {len(video_phs)}"
-    )
+    assert len(video_phs) == 1, f"Expected exactly 1 video placeholder, got {len(video_phs)}"
 
 
 @pytest.mark.parametrize("model_id", [MODEL_ID])
@@ -125,9 +123,7 @@ def test_processor_multi_video(
     assert len(token_ids) > 0
 
     video_phs = processed["mm_placeholders"].get("video", [])
-    assert len(video_phs) == num_videos, (
-        f"Expected {num_videos} video placeholders, got {len(video_phs)}"
-    )
+    assert len(video_phs) == num_videos, f"Expected {num_videos} video placeholders, got {len(video_phs)}"
 
     # All placeholders should have the same length (same video params)
     # and must not overlap.
@@ -135,9 +131,7 @@ def test_processor_multi_video(
     assert len(lengths) == 1, f"Placeholder lengths differ: {lengths}"
     for i in range(1, len(video_phs)):
         prev_end = video_phs[i - 1].offset + video_phs[i - 1].length
-        assert video_phs[i].offset >= prev_end, (
-            f"Placeholder {i} overlaps with placeholder {i - 1}"
-        )
+        assert video_phs[i].offset >= prev_end, f"Placeholder {i} overlaps with placeholder {i - 1}"
 
 
 @pytest.mark.parametrize("model_id", [MODEL_ID])
@@ -163,10 +157,7 @@ def test_processor_multi_video_list_kwargs(
     )
     processor = MULTIMODAL_REGISTRY.create_processor(ctx.model_config)
 
-    prompt = (
-        "<|vision_start|><|video_pad|><|vision_end|>"
-        "<|vision_start|><|video_pad|><|vision_end|>"
-    )
+    prompt = "<|vision_start|><|video_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>"
     mm_data = {
         "video": [
             _build_video_mm_data(num_frames=16)["video"][0],
@@ -181,6 +172,4 @@ def test_processor_multi_video_list_kwargs(
     )
 
     video_phs = processed["mm_placeholders"].get("video", [])
-    assert len(video_phs) == 2, (
-        f"Expected exactly 2 video placeholders, got {len(video_phs)}"
-    )
+    assert len(video_phs) == 2, f"Expected exactly 2 video placeholders, got {len(video_phs)}"

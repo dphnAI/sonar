@@ -127,9 +127,7 @@ async def async_engine():
         wait_for_rocm_memory_to_settle(threshold_ratio=1.0 - gpu_memory_utilization)
 
 
-def test_voxtral_realtime_forward(
-    audio_assets, tokenizer, aphrodite_runner, monkeypatch
-):
+def test_voxtral_realtime_forward(audio_assets, tokenizer, aphrodite_runner, monkeypatch):
     monkeypatch.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
 
     aphrodite_kwargs = {**ENGINE_CONFIG}
@@ -150,9 +148,7 @@ def test_voxtral_realtime_forward(
 
             return (tokenized.tokens, tokenized.audios[0].audio_array)
 
-        tokenized_list = [
-            from_file(audio_asset.get_local_path()) for audio_asset in audio_assets
-        ]
+        tokenized_list = [from_file(audio_asset.get_local_path()) for audio_asset in audio_assets]
 
         inputs = []
         sampling_params = []
@@ -160,9 +156,7 @@ def test_voxtral_realtime_forward(
         for tokens, audio_array in tokenized_list:
             num_samples = audio_array.shape[0]
             max_tokens = audio_config.num_audio_tokens(num_samples) - len(tokens) - 1
-            sampling_params.append(
-                SamplingParams(temperature=0.0, max_tokens=max_tokens)
-            )
+            sampling_params.append(SamplingParams(temperature=0.0, max_tokens=max_tokens))
 
             input_dict = {
                 "multi_modal_data": {"audio": [(audio_array, None)]},
@@ -177,11 +171,7 @@ def test_voxtral_realtime_forward(
 
         texts = _normalize([out.outputs[0].text for out in outputs])
         for i, (got, expected) in enumerate(zip(texts, EXPECTED_TEXT)):
-            assert got == expected, (
-                f"Output mismatch at index {i}:\n"
-                f"  got:      {got!r}\n"
-                f"  expected: {expected!r}"
-            )
+            assert got == expected, f"Output mismatch at index {i}:\n  got:      {got!r}\n  expected: {expected!r}"
 
 
 @pytest.mark.asyncio

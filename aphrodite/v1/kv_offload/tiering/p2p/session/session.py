@@ -166,9 +166,7 @@ class P2PSession:
         block_ids: Sequence[int],
     ) -> None:
         """Send fetch to the peer."""
-        self._client.request_blocks(
-            job_id, kv_request_id, keys, block_ids, send_ready=self._send_ready
-        )
+        self._client.request_blocks(job_id, kv_request_id, keys, block_ids, send_ready=self._send_ready)
 
     def add_stored_blocks(
         self,
@@ -210,9 +208,7 @@ class P2PSession:
 
         new_fetch_ids = self._new_fetch_ids
         self._new_fetch_ids = []
-        return SessionPollResult(
-            loads=loads, stores=stores, new_fetch_ids=new_fetch_ids
-        )
+        return SessionPollResult(loads=loads, stores=stores, new_fetch_ids=new_fetch_ids)
 
     def close(self) -> tuple[list[tuple[int, str]], list[int]]:
         """Shut down. Returns (failed_loads, failed_stores).
@@ -260,10 +256,7 @@ class P2PSession:
                 exc,
             )
             if self._dispatch_error_count >= _MAX_CONSECUTIVE_DISPATCH_ERRORS:
-                self._protocol_error(
-                    f"too many consecutive dispatch errors "
-                    f"({self._dispatch_error_count})"
-                )
+                self._protocol_error(f"too many consecutive dispatch errors ({self._dispatch_error_count})")
             return
         self._dispatch_error_count = 0
 
@@ -299,10 +292,7 @@ class P2PSession:
         elif msg_type == FetchMsg.TYPE:
             FetchMsg.validate(msg)
             kv_request_id = msg[FetchMsg.KV_REQUEST_ID]
-            block_hashes = [
-                OffloadKey(bh if isinstance(bh, bytes) else bytes(bh))
-                for bh in msg[FetchMsg.BLOCK_HASHES]
-            ]
+            block_hashes = [OffloadKey(bh if isinstance(bh, bytes) else bytes(bh)) for bh in msg[FetchMsg.BLOCK_HASHES]]
             block_indexes = msg[FetchMsg.BLOCK_INDEXES]
             # Run the server-role state machine inline as today —
             # add_fetch_demand records demand against any blocks we've
@@ -328,9 +318,7 @@ class P2PSession:
             if self._conn is not None:
                 self._conn.mark_dead()
         else:
-            logger.warning(
-                "P2PSession %s: unknown message type %r", self.peer_id, msg_type
-            )
+            logger.warning("P2PSession %s: unknown message type %r", self.peer_id, msg_type)
 
     # ------------------------------------------------------------------
     # Handshake
@@ -358,8 +346,7 @@ class P2PSession:
             local_fp = self._transport.config_fingerprint
             if local_fp and remote_fp and remote_fp != local_fp:
                 raise ValueError(
-                    f"config fingerprint mismatch from {self.peer_id}: "
-                    f"remote={remote_fp!r}, local={local_fp!r}"
+                    f"config fingerprint mismatch from {self.peer_id}: remote={remote_fp!r}, local={local_fp!r}"
                 )
             self._transport.add_remote_peer(
                 self.peer_id,

@@ -17,9 +17,7 @@ def test_classify_models(
     model: str,
     dtype: str,
 ) -> None:
-    with hf_runner(
-        model, dtype=dtype, auto_cls=AutoModelForSequenceClassification
-    ) as hf_model:
+    with hf_runner(model, dtype=dtype, auto_cls=AutoModelForSequenceClassification) as hf_model:
         hf_outputs = hf_model.classify(example_prompts)
 
     for head_dtype_str in ["float32", "model"]:

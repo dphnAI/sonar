@@ -5,7 +5,6 @@ import pytest
 import torch
 from torch._ops import OpOverload, OpOverloadPacket
 
-from tests.compile.backend import TestBackend
 from aphrodite.compilation.passes.fusion.matcher_utils import (
     FLASHINFER_ROTARY_OP,
     ROTARY_OP,
@@ -18,11 +17,11 @@ from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminatio
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.compilation.passes.utility.split_coalescing import SplitCoalescingPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     ModelConfig,
     PassConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.model_executor.layers.attention import Attention
@@ -30,6 +29,7 @@ from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.rotary_embedding import RotaryEmbedding
 from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backend import AttentionType
+from tests.compile.backend import TestBackend
 
 RSQRT_OP = torch.ops.aten.rsqrt.default
 INDEX_SELECT_OP = torch.ops.aten.index.Tensor

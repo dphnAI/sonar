@@ -87,19 +87,14 @@ def test_quantfp8_group_functionality(
 @pytest.mark.parametrize("seed", [42])
 @pytest.mark.parametrize("use_ue8m0", [True, False])
 @torch.inference_mode()
-def test_quantfp8_group_multidimensional(
-    default_aphrodite_config, seed: int, use_ue8m0: bool
-) -> None:
+def test_quantfp8_group_multidimensional(default_aphrodite_config, seed: int, use_ue8m0: bool) -> None:
     set_random_seed(seed)
 
     group_size = 64
 
     # Test with 3D input
     batch1, batch2, hidden_dim = 4, 8, 1024
-    x_3d = (
-        torch.randn((batch1, batch2, hidden_dim), dtype=torch.bfloat16, device="cuda")
-        * 8
-    )
+    x_3d = torch.randn((batch1, batch2, hidden_dim), dtype=torch.bfloat16, device="cuda") * 8
 
     group_shape = GroupShape(1, group_size)
     quant_op = QuantFP8(
@@ -125,12 +120,7 @@ def test_quantfp8_group_multidimensional(
 
     # Test with 4D input
     batch1, batch2, batch3, hidden_dim = 2, 3, 4, 256
-    x_4d = (
-        torch.randn(
-            (batch1, batch2, batch3, hidden_dim), dtype=torch.bfloat16, device="cuda"
-        )
-        * 8
-    )
+    x_4d = torch.randn((batch1, batch2, batch3, hidden_dim), dtype=torch.bfloat16, device="cuda") * 8
 
     x_quant_4d, scales_4d = quant_op.forward_native(x_4d.clone())
     assert x_quant_4d.shape == x_4d.shape
@@ -151,9 +141,7 @@ def test_quantfp8_group_edge_cases(default_aphrodite_config, seed: int) -> None:
     # Test with single group (group_size >= hidden_dim)
     x_small = torch.randn((batch_size, 32), dtype=torch.bfloat16, device="cuda") * 8
     group_shape = GroupShape(1, group_size)
-    quant_op = QuantFP8(
-        static=False, group_shape=group_shape, column_major_scales=False
-    )
+    quant_op = QuantFP8(static=False, group_shape=group_shape, column_major_scales=False)
 
     x_quant_small, scales_small = quant_op.forward_native(x_small.clone())
     assert x_quant_small.shape == x_small.shape

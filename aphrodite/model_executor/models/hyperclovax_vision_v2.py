@@ -251,9 +251,7 @@ class HCXVisionV2DummyInputsBuilder(BaseDummyInputsBuilder[HCXVisionV2Processing
         return result
 
 
-class HCXVisionV2MultiModalProcessor(
-    BaseMultiModalProcessor[HCXVisionV2ProcessingInfo]
-):
+class HCXVisionV2MultiModalProcessor(BaseMultiModalProcessor[HCXVisionV2ProcessingInfo]):
     """Multimodal processor for HyperCLOVAX V2 (32B Think model)."""
 
     def _call_hf_processor(
@@ -382,30 +380,18 @@ class HCXVisionV2MultiModalProcessor(
 
         image_grid_thw = hf_inputs.get("image_grid_thw", torch.empty((0, 3)))
         image_pixel_grid_sizes = image_grid_thw.prod(-1)
-        image_embed_grid_sizes = (
-            image_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
-        )
+        image_embed_grid_sizes = image_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
 
         video_grid_thw = hf_inputs.get("video_grid_thw", torch.empty((0, 3)))
         video_pixel_grid_sizes = video_grid_thw.prod(-1)
-        video_embed_grid_sizes = (
-            video_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
-        )
+        video_embed_grid_sizes = video_pixel_grid_sizes // spatial_merge_size // spatial_merge_size
 
         return dict(
-            pixel_values=MultiModalFieldConfig.flat_from_sizes(
-                "image", image_pixel_grid_sizes
-            ),
-            image_embeds=MultiModalFieldConfig.flat_from_sizes(
-                "image", image_embed_grid_sizes
-            ),
+            pixel_values=MultiModalFieldConfig.flat_from_sizes("image", image_pixel_grid_sizes),
+            image_embeds=MultiModalFieldConfig.flat_from_sizes("image", image_embed_grid_sizes),
             image_grid_thw=MultiModalFieldConfig.batched("image", keep_on_cpu=True),
-            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes(
-                "video", video_pixel_grid_sizes
-            ),
-            video_embeds=MultiModalFieldConfig.flat_from_sizes(
-                "video", video_embed_grid_sizes
-            ),
+            pixel_values_videos=MultiModalFieldConfig.flat_from_sizes("video", video_pixel_grid_sizes),
+            video_embeds=MultiModalFieldConfig.flat_from_sizes("video", video_embed_grid_sizes),
             video_grid_thw=MultiModalFieldConfig.batched("video", keep_on_cpu=True),
         )
 
@@ -499,9 +485,7 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
                 prefix=maybe_prefix(prefix, "language_model"),
             )
 
-        self.make_empty_intermediate_tensors = (
-            self.language_model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -614,15 +598,9 @@ class HCXVisionV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         modalities = {}
 
         for input_key in kwargs:
-            if (
-                input_key in ("pixel_values", "image_embeds")
-                and "image" not in modalities
-            ):
+            if input_key in ("pixel_values", "image_embeds") and "image" not in modalities:
                 modalities["image"] = self._parse_and_validate_image_input(**kwargs)
-            if (
-                input_key in ("pixel_values_videos", "video_embeds")
-                and "video" not in modalities
-            ):
+            if input_key in ("pixel_values_videos", "video_embeds") and "video" not in modalities:
                 modalities["video"] = self._parse_and_validate_video_input(**kwargs)
 
         return modalities

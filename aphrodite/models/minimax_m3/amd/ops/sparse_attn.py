@@ -63,8 +63,7 @@ def _sparse_attn_prefill_kwargs() -> dict:
         "BLOCK_SIZE_D": lambda args: triton.next_power_of_2(args["head_dim"]),
         "BLOCK_SIZE_H": lambda args: triton.next_power_of_2(args["gqa_group_size"]),
         "BLOCK_SIZE_T": lambda args: triton.next_power_of_2(args["max_topk"]),
-        "BLOCK_SIZE_QH": lambda args: args["BLOCK_SIZE_Q"]
-        * triton.next_power_of_2(args["gqa_group_size"]),
+        "BLOCK_SIZE_QH": lambda args: args["BLOCK_SIZE_Q"] * triton.next_power_of_2(args["gqa_group_size"]),
     }
 )
 @triton.jit(do_not_specialize_on_alignment=["seq_lens", "prefix_lens"])
@@ -160,21 +159,13 @@ def _gqa_sparse_fwd_kernel(
                 pos_sub = c + off_sub
                 pos_mask_sub = pos_sub < seq_len
                 k_sub = tl.load(
-                    kv_base
-                    + 0 * stride_kv_kv
-                    + off_sub[None, :] * stride_kv_pos
-                    + off_d[:, None] * stride_kv_d,
+                    kv_base + 0 * stride_kv_kv + off_sub[None, :] * stride_kv_pos + off_d[:, None] * stride_kv_d,
                     mask=d_mask[:, None] & pos_mask_sub[None, :],
                     other=0.0,
                 )
                 if USE_FP8:
                     k_sub = k_sub.to(q.dtype)
-                off_q_sub = (
-                    tl.arange(0, BLOCK_SIZE_Q)[:, None]
-                    + pid_q_j * BLOCK_SIZE_Q
-                    + prefix_len
-                    - off_sub[None, :]
-                )
+                off_q_sub = tl.arange(0, BLOCK_SIZE_Q)[:, None] + pid_q_j * BLOCK_SIZE_Q + prefix_len - off_sub[None, :]
                 qk_sub = tl.zeros((BLOCK_SIZE_Q, BLOCK_SIZE_H, SUB_K), dtype=tl.float32)
                 # causal: q_abs_pos - k_off >= block_start (c)
                 qk_sub += tl.where(off_q_sub[:, None, :] >= c, 0, float("-inf"))
@@ -186,10 +177,7 @@ def _gqa_sparse_fwd_kernel(
                 l_ij = tl.sum(p_sub, axis=1)
                 acc_o = acc_o * tl.exp2(m_i - m_ij)[:, None]
                 v_sub = tl.load(
-                    kv_base
-                    + 1 * stride_kv_kv
-                    + off_sub[:, None] * stride_kv_pos
-                    + off_d[None, :] * stride_kv_d,
+                    kv_base + 1 * stride_kv_kv + off_sub[:, None] * stride_kv_pos + off_d[None, :] * stride_kv_d,
                     mask=pos_mask_sub[:, None] & d_mask[None, :],
                     other=0.0,
                 )

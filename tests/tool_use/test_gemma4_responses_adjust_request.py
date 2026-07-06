@@ -132,9 +132,7 @@ def test_gemma4_adjust_request_sets_skip_special_tokens_on_responses() -> None:
     parser = Gemma4ToolParser(_StubTokenizer())
 
     request = _build_responses_request(tool_choice="auto")
-    assert request.skip_special_tokens is True, (
-        "Precondition: ResponsesRequest.skip_special_tokens default is True"
-    )
+    assert request.skip_special_tokens is True, "Precondition: ResponsesRequest.skip_special_tokens default is True"
 
     parser.adjust_request(request)
 
@@ -191,9 +189,7 @@ def test_gemma4_named_skips_structured_outputs_chatcompletion() -> None:
     skipped, same as ``required``.
     """
     parser = Gemma4ToolParser(_StubTokenizer())
-    request = _build_chat_request(
-        tool_choice={"type": "function", "function": {"name": "get_weather"}}
-    )
+    request = _build_chat_request(tool_choice={"type": "function", "function": {"name": "get_weather"}})
 
     parser.adjust_request(request)
 
@@ -219,9 +215,7 @@ def test_gemma4_named_skips_structured_outputs_responses() -> None:
     JSON schema must be skipped.
     """
     parser = Gemma4ToolParser(_StubTokenizer())
-    request = _build_responses_request(
-        tool_choice={"type": "function", "name": "get_weather"}
-    )
+    request = _build_responses_request(tool_choice={"type": "function", "name": "get_weather"})
 
     parser.adjust_request(request)
 
@@ -236,9 +230,7 @@ def test_gemma4_keeps_special_tokens_with_tools_thinking_disabled() -> None:
     thinking is off.
     """
     parser = Gemma4ToolParser(_StubTokenizer())
-    request = _build_chat_request(
-        tool_choice="auto", chat_template_kwargs={"enable_thinking": False}
-    )
+    request = _build_chat_request(tool_choice="auto", chat_template_kwargs={"enable_thinking": False})
 
     parser.adjust_request(request)
 
@@ -251,9 +243,7 @@ def test_gemma4_keeps_skip_special_tokens_false_when_nothing_to_preserve() -> No
     strips unconfigured special tokens automatically.
     """
     parser = Gemma4ToolParser(_StubTokenizer())
-    request = _build_chat_request(
-        tool_choice="none", chat_template_kwargs={"enable_thinking": False}
-    )
+    request = _build_chat_request(tool_choice="none", chat_template_kwargs={"enable_thinking": False})
 
     parser.adjust_request(request)
 

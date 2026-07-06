@@ -19,9 +19,7 @@ from opentelemetry.proto.common.v1.common_pb2 import AnyValue, KeyValue
 
 FAKE_TRACE_SERVER_ADDRESS = "localhost:4317"
 
-FieldName = Literal[
-    "bool_value", "string_value", "int_value", "double_value", "array_value"
-]
+FieldName = Literal["bool_value", "string_value", "int_value", "double_value", "array_value"]
 
 
 def decode_value(value: AnyValue):
@@ -31,9 +29,7 @@ def decode_value(value: AnyValue):
         "string_value": (lambda v: v.string_value),
         "int_value": (lambda v: v.int_value),
         "double_value": (lambda v: v.double_value),
-        "array_value": (
-            lambda v: [decode_value(item) for item in v.array_value.values]
-        ),
+        "array_value": (lambda v: [decode_value(item) for item in v.array_value.values]),
     }
     for field, decoder in field_decoders.items():
         if value.HasField(field):
@@ -80,9 +76,7 @@ class FakeTraceService(TraceServiceServicer):
                                     "attributes": decode_attributes(span.attributes),
                                     "trace_id": span.trace_id.hex(),
                                     "span_id": span.span_id.hex(),
-                                    "parent_span_id": span.parent_span_id.hex()
-                                    if span.parent_span_id
-                                    else None,
+                                    "parent_span_id": span.parent_span_id.hex() if span.parent_span_id else None,
                                     "start_time_unix_nano": span.start_time_unix_nano,
                                     "end_time_unix_nano": span.end_time_unix_nano,
                                 }
@@ -135,9 +129,7 @@ def trace_service() -> Generator[FakeTraceService, None, None]:
     # Wait for the server to be ready to accept connections
     if not _wait_for_server_ready(FAKE_TRACE_SERVER_ADDRESS):
         server.stop(grace=None)
-        raise RuntimeError(
-            f"Fake trace server failed to start on {FAKE_TRACE_SERVER_ADDRESS}"
-        )
+        raise RuntimeError(f"Fake trace server failed to start on {FAKE_TRACE_SERVER_ADDRESS}")
 
     yield service
 

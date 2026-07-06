@@ -74,8 +74,7 @@ def select_w4a8_moe_backend(
         last_reason = reason
 
     raise NotImplementedError(
-        f"W4A8 MoE backend {backend.value} does not support the "
-        f"deployment configuration: {last_reason}."
+        f"W4A8 MoE backend {backend.value} does not support the deployment configuration: {last_reason}."
     )
 
 
@@ -107,32 +106,20 @@ def convert_to_w4a8_moe_kernel_format(
     convert_packed_uint4b8_to_signed_int4_inplace(w13_weight_packed)
     # Mirror the sync in CutlassW4A8LinearKernel; required for TP>1 correctness.
     torch.accelerator.synchronize()
-    w13_weight_shuffled, b_strides1 = ops.cutlass_encode_and_reorder_int4b_grouped(
-        w13_weight_packed
-    )
+    w13_weight_shuffled, b_strides1 = ops.cutlass_encode_and_reorder_int4b_grouped(w13_weight_packed)
 
     convert_packed_uint4b8_to_signed_int4_inplace(w2_weight_packed)
     # Mirror the sync in CutlassW4A8LinearKernel; required for TP>1 correctness.
     torch.accelerator.synchronize()
-    w2_weight_shuffled, b_strides2 = ops.cutlass_encode_and_reorder_int4b_grouped(
-        w2_weight_packed
-    )
+    w2_weight_shuffled, b_strides2 = ops.cutlass_encode_and_reorder_int4b_grouped(w2_weight_packed)
 
-    w13_weight_scale, w13_weight_chan_scale = convert_bf16_scales_to_fp8(
-        quant_fp8, w13_weight_scale
-    )
-    w2_weight_scale, w2_weight_chan_scale = convert_bf16_scales_to_fp8(
-        quant_fp8, w2_weight_scale
-    )
+    w13_weight_scale, w13_weight_chan_scale = convert_bf16_scales_to_fp8(quant_fp8, w13_weight_scale)
+    w2_weight_scale, w2_weight_chan_scale = convert_bf16_scales_to_fp8(quant_fp8, w2_weight_scale)
 
     # Scales are stored as (E, N, K // 128), but the kernel expects
     # (E, K // 128, N) in row-major format.
-    w13_weight_scale_packed = ops.cutlass_pack_scale_fp8(
-        w13_weight_scale.permute(0, 2, 1).contiguous()
-    )
-    w2_weight_scale_packed = ops.cutlass_pack_scale_fp8(
-        w2_weight_scale.permute(0, 2, 1).contiguous()
-    )
+    w13_weight_scale_packed = ops.cutlass_pack_scale_fp8(w13_weight_scale.permute(0, 2, 1).contiguous())
+    w2_weight_scale_packed = ops.cutlass_pack_scale_fp8(w2_weight_scale.permute(0, 2, 1).contiguous())
 
     return (
         w13_weight_shuffled,

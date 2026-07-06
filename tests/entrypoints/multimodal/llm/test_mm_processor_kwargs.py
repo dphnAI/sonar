@@ -11,9 +11,7 @@ from aphrodite import LLM, SamplingParams
 
 def _make_mock_llm() -> LLM:
     llm = object.__new__(LLM)
-    llm.model_config = SimpleNamespace(
-        runner_type="generate", enable_prompt_embeds=False
-    )
+    llm.model_config = SimpleNamespace(runner_type="generate", enable_prompt_embeds=False)
     return llm
 
 
@@ -31,9 +29,7 @@ def test_generate_forwards_mm_processor_kwargs() -> None:
     )
 
     assert outputs == ["ok"]
-    assert llm._run_completion.call_args.kwargs["mm_processor_kwargs"] == (
-        mm_processor_kwargs
-    )
+    assert llm._run_completion.call_args.kwargs["mm_processor_kwargs"] == (mm_processor_kwargs)
 
 
 def test_enqueue_forwards_mm_processor_kwargs() -> None:
@@ -51,9 +47,7 @@ def test_enqueue_forwards_mm_processor_kwargs() -> None:
     )
 
     assert request_ids == ["req-0"]
-    assert llm._add_completion_requests.call_args.kwargs["mm_processor_kwargs"] == (
-        mm_processor_kwargs
-    )
+    assert llm._add_completion_requests.call_args.kwargs["mm_processor_kwargs"] == (mm_processor_kwargs)
 
 
 def test_chat_forwards_mm_processor_kwargs() -> None:
@@ -71,9 +65,7 @@ def test_chat_forwards_mm_processor_kwargs() -> None:
     )
 
     assert outputs == ["ok"]
-    assert llm._run_chat.call_args.kwargs["mm_processor_kwargs"] == (
-        mm_processor_kwargs
-    )
+    assert llm._run_chat.call_args.kwargs["mm_processor_kwargs"] == (mm_processor_kwargs)
 
 
 def test_enqueue_chat_forwards_mm_processor_kwargs() -> None:
@@ -92,9 +84,7 @@ def test_enqueue_chat_forwards_mm_processor_kwargs() -> None:
     )
 
     assert request_ids == ["req-0"]
-    assert llm._add_chat_requests.call_args.kwargs["mm_processor_kwargs"] == (
-        mm_processor_kwargs
-    )
+    assert llm._add_chat_requests.call_args.kwargs["mm_processor_kwargs"] == (mm_processor_kwargs)
 
 
 def test_run_chat_forwards_mm_processor_kwargs() -> None:
@@ -116,9 +106,7 @@ def test_run_chat_forwards_mm_processor_kwargs() -> None:
     )
 
     assert outputs == sentinel_output
-    assert llm._add_chat_requests.call_args.kwargs["mm_processor_kwargs"] == (
-        mm_processor_kwargs
-    )
+    assert llm._add_chat_requests.call_args.kwargs["mm_processor_kwargs"] == (mm_processor_kwargs)
 
 
 def test_run_completion_forwards_mm_processor_kwargs() -> None:
@@ -139,9 +127,7 @@ def test_run_completion_forwards_mm_processor_kwargs() -> None:
     )
 
     assert outputs == sentinel_output
-    assert llm._add_completion_requests.call_args.kwargs["mm_processor_kwargs"] == (
-        mm_processor_kwargs
-    )
+    assert llm._add_completion_requests.call_args.kwargs["mm_processor_kwargs"] == (mm_processor_kwargs)
 
 
 def test_add_completion_requests_forwards_mm_processor_kwargs() -> None:
@@ -262,9 +248,7 @@ def test_preprocess_chat_applies_mm_processor_kwargs_to_renderer() -> None:
     assert call_args.args[0] == messages
     assert call_args.args[1].mm_processor_kwargs == mm_processor_kwargs
     assert call_args.args[2] == "tok-params"
-    assert call_args.kwargs["prompt_extras"] == {
-        "mm_processor_kwargs": mm_processor_kwargs
-    }
+    assert call_args.kwargs["prompt_extras"] == {"mm_processor_kwargs": mm_processor_kwargs}
 
 
 def test_preprocess_chat_omits_mm_processor_kwargs_when_no_override() -> None:

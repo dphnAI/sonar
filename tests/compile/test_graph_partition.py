@@ -42,10 +42,7 @@ def test_getitem_moved_to_producer_subgraph():
     x = torch.randn(4, 3)
     gm = make_fx(model_fn)(x)
 
-    has_getitem = any(
-        node.op == "call_function" and node.target == operator.getitem
-        for node in gm.graph.nodes
-    )
+    has_getitem = any(node.op == "call_function" and node.target == operator.getitem for node in gm.graph.nodes)
     assert has_getitem, "Test setup failed: graph should contain getitem operations"
 
     # Split on tuple producer aten::split
@@ -58,11 +55,7 @@ def test_getitem_moved_to_producer_subgraph():
 
         getitem_on_placeholder = []
         for node in submodule.graph.nodes:
-            if (
-                node.op == "call_function"
-                and node.target == operator.getitem
-                and node.args[0].op == "placeholder"
-            ):
+            if node.op == "call_function" and node.target == operator.getitem and node.args[0].op == "placeholder":
                 getitem_on_placeholder.append(node)
 
         assert len(getitem_on_placeholder) == 0, (
@@ -105,10 +98,7 @@ def test_no_tuple_inputs_with_multiple_consumers():
     x = torch.randn(4, 3)
     gm = make_fx(model_fn)(x)
 
-    has_getitem = any(
-        node.op == "call_function" and node.target == operator.getitem
-        for node in gm.graph.nodes
-    )
+    has_getitem = any(node.op == "call_function" and node.target == operator.getitem for node in gm.graph.nodes)
     assert has_getitem, "Test setup failed: graph should contain getitem operations"
 
     split_ops = ["aten::split.Tensor", "aten::sigmoid"]
@@ -119,11 +109,7 @@ def test_no_tuple_inputs_with_multiple_consumers():
         submodule = split_item.graph
 
         for node in submodule.graph.nodes:
-            if (
-                node.op == "call_function"
-                and node.target == operator.getitem
-                and node.args[0].op == "placeholder"
-            ):
+            if node.op == "call_function" and node.target == operator.getitem and node.args[0].op == "placeholder":
                 pytest.fail(
                     f"Submodule {split_item.submod_name} has getitem on "
                     f"placeholder {node.args[0].name}, indicating it receives "
@@ -172,17 +158,13 @@ def test_consecutive_ops_in_split():
     split_gm, split_items = split_graph(gm, splitting_ops)
 
     # Validate the number of partitions
-    assert len(split_items) == 3, (
-        "Consecutive splitting operations were not grouped correctly."
-    )
+    assert len(split_items) == 3, "Consecutive splitting operations were not grouped correctly."
 
     # Validate that correctness is preserved
     new_x = torch.randn(8, 4)
     output_original = gm(new_x)
     output_split = split_gm(new_x)
-    assert torch.allclose(output_original, output_split), (
-        "Output mismatch after splitting."
-    )
+    assert torch.allclose(output_original, output_split), "Output mismatch after splitting."
 
     # Check the splitting item has 2 nodes exactly (relu and attn)
     splitting_items = list(s for s in split_items if s.is_splitting_graph)
@@ -190,23 +172,18 @@ def test_consecutive_ops_in_split():
     print(splitting_items[0].graph.graph)
     splitting_gm = splitting_items[0].graph
     assert len(splitting_gm.graph.nodes) == 4, "Expecting 4 nodes in splitting graph"
-    assert [node.op for node in splitting_gm.graph.nodes] == ["placeholder"] + 2 * [
-        "call_function"
-    ] + ["output"]
+    assert [node.op for node in splitting_gm.graph.nodes] == ["placeholder"] + 2 * ["call_function"] + ["output"]
 
 
 def _get_empty_nodes(split_item):
-    return [
-        node for node in split_item.graph.graph.nodes if _is_empty_allocation_node(node)
-    ]
+    return [node for node in split_item.graph.graph.nodes if _is_empty_allocation_node(node)]
 
 
 def _subgraphs_with_empty_nodes(split_items, *, is_splitting_graph):
     return [
         split_item
         for split_item in split_items
-        if split_item.is_splitting_graph == is_splitting_graph
-        and _get_empty_nodes(split_item)
+        if split_item.is_splitting_graph == is_splitting_graph and _get_empty_nodes(split_item)
     ]
 
 
@@ -230,13 +207,9 @@ def test_empty_only_partition_stays_separate_after_splitting_predecessor():
 
     # Graph partitioning for this pattern is:
     # [sin], [empty_like], [cos.out].
-    assert len(split_items) == 3, (
-        "Empty-only partition should not merge into splitting-op subgraph"
-    )
+    assert len(split_items) == 3, "Empty-only partition should not merge into splitting-op subgraph"
 
-    splitting_with_empty = _subgraphs_with_empty_nodes(
-        split_items, is_splitting_graph=True
-    )
+    splitting_with_empty = _subgraphs_with_empty_nodes(split_items, is_splitting_graph=True)
     assert len(splitting_with_empty) == 0, (
         "Splitting-op subgraphs should not contain empty allocation nodes: "
         f"{[item.submod_name for item in splitting_with_empty]}"
@@ -266,24 +239,16 @@ def test_empty_only_partition_is_merged():
 
     # Partitioning should be:
     # [add, empty_like], [sin], [cos.out], [add].
-    assert len(split_items) == 4, (
-        "Empty-only partition should be merged into non-splitting predecessor"
-    )
+    assert len(split_items) == 4, "Empty-only partition should be merged into non-splitting predecessor"
 
-    splitting_with_empty = _subgraphs_with_empty_nodes(
-        split_items, is_splitting_graph=True
-    )
+    splitting_with_empty = _subgraphs_with_empty_nodes(split_items, is_splitting_graph=True)
     assert len(splitting_with_empty) == 0, (
         "Splitting-op subgraphs should not contain empty allocation nodes: "
         f"{[item.submod_name for item in splitting_with_empty]}"
     )
 
-    non_splitting_with_empty = _subgraphs_with_empty_nodes(
-        split_items, is_splitting_graph=False
-    )
-    assert len(non_splitting_with_empty) == 1, (
-        "Exactly one non-splitting subgraph should contain the merged empty node"
-    )
+    non_splitting_with_empty = _subgraphs_with_empty_nodes(split_items, is_splitting_graph=False)
+    assert len(non_splitting_with_empty) == 1, "Exactly one non-splitting subgraph should contain the merged empty node"
     assert len(_get_empty_nodes(non_splitting_with_empty[0])) == 1, (
         "Expected exactly one empty allocation node in merged subgraph"
     )
@@ -314,20 +279,14 @@ def test_builtin_empty_only_partition_is_merged():
     # [add, empty_like], [attention], [empty_like], [attention], [add].
     assert len(split_items) == 4, "Builtin empty-only partition should be merged"
 
-    splitting_with_empty = _subgraphs_with_empty_nodes(
-        split_items, is_splitting_graph=True
-    )
+    splitting_with_empty = _subgraphs_with_empty_nodes(split_items, is_splitting_graph=True)
     assert len(splitting_with_empty) == 0, (
         "Splitting-op subgraphs should not contain empty allocation nodes: "
         f"{[item.submod_name for item in splitting_with_empty]}"
     )
 
-    non_splitting_with_empty = _subgraphs_with_empty_nodes(
-        split_items, is_splitting_graph=False
-    )
-    assert len(non_splitting_with_empty) == 1, (
-        "Exactly one non-splitting subgraph should contain merged empty nodes"
-    )
+    non_splitting_with_empty = _subgraphs_with_empty_nodes(split_items, is_splitting_graph=False)
+    assert len(non_splitting_with_empty) == 1, "Exactly one non-splitting subgraph should contain merged empty nodes"
     assert len(_get_empty_nodes(non_splitting_with_empty[0])) == 2, (
         "Expected two builtin empty_like nodes in merged non-splitting subgraph"
     )
@@ -392,9 +351,7 @@ def test_sym_size_whole_shape_boundary():
 
     submod_0 = split_gm.submod_0
     example_input = torch.randn(4, 8)
-    compiled = standalone_compile(
-        submod_0, [example_input, 4], dynamic_shapes="from_example_inputs"
-    )
+    compiled = standalone_compile(submod_0, [example_input, 4], dynamic_shapes="from_example_inputs")
     assert compiled is not None
 
 
@@ -437,24 +394,17 @@ def test_symint_crosses_split_boundary():
     symint_placeholders = [
         node
         for node in captured_graph.graph.nodes
-        if node.op == "placeholder"
-        and isinstance(node.meta.get("example_value"), torch.SymInt)
+        if node.op == "placeholder" and isinstance(node.meta.get("example_value"), torch.SymInt)
     ]
-    assert len(symint_placeholders) > 0, (
-        "Captured graph should have SymInt placeholders from mark_dynamic."
-    )
+    assert len(symint_placeholders) > 0, "Captured graph should have SymInt placeholders from mark_dynamic."
 
     # split_graph should handle SymInt placeholders without error
     split_gm, split_items = split_graph(captured_graph, ["aten::sigmoid"])
 
     # Should have 3 splitting subgraphs (3 sigmoids)
     splitting_subgraphs = [item for item in split_items if item.is_splitting_graph]
-    assert len(splitting_subgraphs) == 3, (
-        f"Expected 3 splitting subgraphs (3 sigmoids), got {len(splitting_subgraphs)}"
-    )
-    assert len(split_items) >= 6, (
-        f"Expected at least 6 total subgraphs, got {len(split_items)}"
-    )
+    assert len(splitting_subgraphs) == 3, f"Expected 3 splitting subgraphs (3 sigmoids), got {len(splitting_subgraphs)}"
+    assert len(split_items) >= 6, f"Expected at least 6 total subgraphs, got {len(split_items)}"
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -503,8 +453,7 @@ def test_shape_boundary_standalone_compile():
     symint_placeholders = [
         n
         for n in consumer.graph.graph.nodes
-        if n.op == "placeholder"
-        and isinstance(n.meta.get("example_value"), torch.SymInt)
+        if n.op == "placeholder" and isinstance(n.meta.get("example_value"), torch.SymInt)
     ]
     static_int_placeholders = [
         n
@@ -513,18 +462,12 @@ def test_shape_boundary_standalone_compile():
         and isinstance(n.meta.get("example_value"), int)
         and not isinstance(n.meta.get("example_value"), torch.SymInt)
     ]
-    assert len(symint_placeholders) >= 1, (
-        "Consumer should have a SymInt placeholder for the dynamic dim."
-    )
-    assert len(static_int_placeholders) == 0, (
-        "Static dims should be inlined as literals, not threaded as placeholders."
-    )
+    assert len(symint_placeholders) >= 1, "Consumer should have a SymInt placeholder for the dynamic dim."
+    assert len(static_int_placeholders) == 0, "Static dims should be inlined as literals, not threaded as placeholders."
 
     submod_0 = split_gm.submod_0
 
-    standalone_compile(
-        submod_0, [torch.randn(4, 8), 4], dynamic_shapes="from_example_inputs"
-    )
+    standalone_compile(submod_0, [torch.randn(4, 8), 4], dynamic_shapes="from_example_inputs")
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -664,9 +607,7 @@ def test_decompose_size_with_getitem_user():
     size_node = graph.call_method("size", args=(x,))
     getitem_node = graph.call_function(operator.getitem, args=(size_node, 1))
     relu_node = graph.call_function(torch.ops.aten.relu.default, args=(x,))
-    view_node = graph.call_function(
-        torch.ops.aten.view.default, args=(relu_node, [-1, getitem_node])
-    )
+    view_node = graph.call_function(torch.ops.aten.view.default, args=(relu_node, [-1, getitem_node]))
     graph.output(view_node)
 
     # Attach example_value metadata so _decompose_size_nodes can inspect dims.
@@ -690,14 +631,11 @@ def test_decompose_size_with_getitem_user():
 
     # Verify no size() nodes remain
     remaining_size_nodes = list(gm.graph.find_nodes(op="call_method", target="size"))
-    assert len(remaining_size_nodes) == 0, (
-        f"size() nodes should be fully decomposed, found {len(remaining_size_nodes)}"
-    )
+    assert len(remaining_size_nodes) == 0, f"size() nodes should be fully decomposed, found {len(remaining_size_nodes)}"
 
     # Verify no malformed getitem nodes (3+ args)
     for node in gm.graph.nodes:
         if node.op == "call_function" and node.target is operator.getitem:
             assert len(node.args) == 2, (
-                f"getitem node '{node.name}' has {len(node.args)} args "
-                f"(expected 2): {node.args}"
+                f"getitem node '{node.name}' has {len(node.args)} args (expected 2): {node.args}"
             )

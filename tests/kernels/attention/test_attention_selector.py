@@ -7,9 +7,9 @@ import pytest
 import torch
 
 from aphrodite.config import (
+    AphroditeConfig,
     AttentionConfig,
     CacheConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.platforms import current_platform
@@ -68,11 +68,7 @@ def generate_params():
     device_list = ["cuda", "cpu"] if not is_rocm else ["hip", "cpu"]
     for use_mla in [True, False]:
         for device in device_list:
-            backends = (
-                DEVICE_MLA_BACKENDS[device]
-                if use_mla
-                else DEVICE_REGULAR_ATTN_BACKENDS[device]
-            )
+            backends = DEVICE_MLA_BACKENDS[device] if use_mla else DEVICE_REGULAR_ATTN_BACKENDS[device]
             for name in backends:
                 block_sizes = DEVICE_MLA_BLOCK_SIZES[device] if use_mla else [16]
                 for block_size in block_sizes:
@@ -99,9 +95,7 @@ def test_backend_selection(
     # Create AttentionConfig with the specified backend
     attention_config = AttentionConfig(backend=AttentionBackendEnum[name])
     cache_config = CacheConfig(block_size=block_size)
-    aphrodite_config = AphroditeConfig(
-        attention_config=attention_config, cache_config=cache_config
-    )
+    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
 
     with set_current_aphrodite_config(aphrodite_config):
         if device == "cpu":
@@ -126,9 +120,7 @@ def test_backend_selection(
                             get_attn_backend(576, torch.float16, None, use_mla=use_mla)
                     else:
                         # Valid backend-block_size combination
-                        backend = get_attn_backend(
-                            576, torch.float16, None, use_mla=use_mla
-                        )
+                        backend = get_attn_backend(576, torch.float16, None, use_mla=use_mla)
                         expected = name
                         assert backend.get_name() == expected
                 else:
@@ -157,24 +149,16 @@ def test_backend_selection(
                             pytest.skip("CUTLASS_MLA only supports block_size 128")
                         if capability[0] != 10:
                             pytest.skip("CUTLASS MLA is not supported on this platform")
-                        backend = get_attn_backend(
-                            576, torch.float16, None, use_mla=use_mla
-                        )
+                        backend = get_attn_backend(576, torch.float16, None, use_mla=use_mla)
                         expected = "CUTLASS_MLA"
                         assert backend.get_name() == expected
                     elif name == "FLASHINFER_MLA":
                         if capability[0] != 10:
-                            pytest.skip(
-                                "FlashInfer MLA is not supported on this platform"
-                            )
+                            pytest.skip("FlashInfer MLA is not supported on this platform")
                         if block_size not in [32, 64]:
                             # FlashInfer MLA only supports block_size 32 or 64
-                            pytest.skip(
-                                "FlashInfer MLA only supports block_size 32 or 64"
-                            )
-                        backend = get_attn_backend(
-                            576, torch.float16, None, use_mla=use_mla
-                        )
+                            pytest.skip("FlashInfer MLA only supports block_size 32 or 64")
+                        backend = get_attn_backend(576, torch.float16, None, use_mla=use_mla)
                         expected = "FLASHINFER_MLA"
                         assert backend.get_name() == expected
                     elif name == "FLASHMLA":
@@ -202,19 +186,13 @@ def test_backend_selection(
                         )
 
                         if not flash_attn_supports_mla():
-                            pytest.skip(
-                                "FlashAttention MLA not supported on this platform"
-                            )
-                        backend = get_attn_backend(
-                            576, torch.float16, None, use_mla=use_mla
-                        )
+                            pytest.skip("FlashAttention MLA not supported on this platform")
+                        backend = get_attn_backend(576, torch.float16, None, use_mla=use_mla)
                         expected = "FLASH_ATTN_MLA"
                         assert backend.get_name() == expected
                     else:
                         # TRITON_MLA or other fallback
-                        backend = get_attn_backend(
-                            576, torch.float16, None, use_mla=use_mla
-                        )
+                        backend = get_attn_backend(576, torch.float16, None, use_mla=use_mla)
                         expected = "TRITON_MLA"
                         assert backend.get_name() == expected
                 elif name == "FLASHINFER":
@@ -262,16 +240,11 @@ def test_fp32_fallback(device: str):
 
 def test_flash_attn(monkeypatch: pytest.MonkeyPatch):
     """Test FlashAttn validation."""
-    pytest.skip(
-        "Skipping as current backend selector does not "
-        "handle fallbacks when a backend is explicitly set."
-    )
+    pytest.skip("Skipping as current backend selector does not handle fallbacks when a backend is explicitly set.")
 
     attention_config = AttentionConfig(backend=AttentionBackendEnum.FLASH_ATTN)
     cache_config = CacheConfig(block_size=16)
-    aphrodite_config = AphroditeConfig(
-        attention_config=attention_config, cache_config=cache_config
-    )
+    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
 
     with set_current_aphrodite_config(aphrodite_config):
         # Unsupported CUDA arch
@@ -391,9 +364,7 @@ def test_per_head_quant_scales_backend_selection(
         flash_attn_version=flash_attn_version,
     )
     cache_config = CacheConfig(block_size=64)
-    aphrodite_config = AphroditeConfig(
-        attention_config=attention_config, cache_config=cache_config
-    )
+    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
 
     if CudaPlatform is None:
         pytest.skip("CudaPlatform not available")
@@ -442,9 +413,7 @@ def test_per_head_quant_scales_backend_selection(
         else []
     ),
 )
-def test_non_causal_backend_selection(
-    backend_name: str, use_non_causal: bool, should_succeed: bool
-):
+def test_non_causal_backend_selection(backend_name: str, use_non_causal: bool, should_succeed: bool):
     """Test that use_non_causal on AttentionConfig controls backend filtering.
 
     DFlashProposer sets use_non_causal=True on the draft model's
@@ -459,9 +428,7 @@ def test_non_causal_backend_selection(
         use_non_causal=use_non_causal,
     )
     cache_config = CacheConfig(block_size=16)
-    aphrodite_config = AphroditeConfig(
-        attention_config=attention_config, cache_config=cache_config
-    )
+    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
 
     platform = CudaPlatform or RocmPlatform
     if platform is None:
@@ -503,9 +470,7 @@ def test_non_causal_autoselect_backend():
         use_non_causal=True,
     )
     cache_config = CacheConfig(block_size=16)
-    aphrodite_config = AphroditeConfig(
-        attention_config=attention_config, cache_config=cache_config
-    )
+    aphrodite_config = AphroditeConfig(attention_config=attention_config, cache_config=cache_config)
 
     if CudaPlatform is None:
         pytest.skip("CudaPlatform not available")
@@ -541,9 +506,7 @@ def test_flash_attn_rejects_unhandled_kv_cache_dtypes(kv_cache_dtype: str):
 
 
 @pytest.mark.parametrize("kv_cache_dtype", ["fp8", "fp8_e4m3"])
-def test_flash_attn_accepts_handled_fp8_variants(
-    kv_cache_dtype: str, monkeypatch: pytest.MonkeyPatch
-):
+def test_flash_attn_accepts_handled_fp8_variants(kv_cache_dtype: str, monkeypatch: pytest.MonkeyPatch):
     """FlashAttentionBackend must accept the two fp8 dtypes it can actually
     handle: 'fp8' (alias for fp8_e4m3fn) and 'fp8_e4m3'."""
     import aphrodite.v1.attention.backends.flash_attn as fa_mod

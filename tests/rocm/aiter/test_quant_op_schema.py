@@ -14,11 +14,10 @@ import importlib.util
 import pytest
 import torch
 
-from tests.kernels.utils import opcheck
-
 # this import statement is needed to ensure the ops are registered
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.platforms import current_platform
+from tests.kernels.utils import opcheck
 
 aiter_available = importlib.util.find_spec("aiter") is not None
 

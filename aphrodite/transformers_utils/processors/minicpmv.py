@@ -86,14 +86,10 @@ class MiniCPMVProcessor(ProcessorMixin):
         ``image_bound`` and ``tgt_sizes``.
         """
         if images is not None:
-            image_inputs = self.image_processor(
-                images, do_pad=do_pad, return_tensors=return_tensors
-            )
+            image_inputs = self.image_processor(images, do_pad=do_pad, return_tensors=return_tensors)
         else:
             image_inputs = {}
-        return self._convert_images_texts_to_inputs(
-            image_inputs, text, max_length=max_length
-        )
+        return self._convert_images_texts_to_inputs(image_inputs, text, max_length=max_length)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor
     # .batch_decode with CLIP->Llama
@@ -123,9 +119,7 @@ class MiniCPMVProcessor(ProcessorMixin):
                 result = result[1:]
             if len(result) > 0 and result[-1] == eos_id:
                 result = result[:-1]
-            result_text.append(
-                self.tokenizer.decode(result, *args[1:], **kwargs).strip()
-            )
+            result_text.append(self.tokenizer.decode(result, *args[1:], **kwargs).strip())
         return result_text
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor
@@ -153,9 +147,7 @@ class MiniCPMVProcessor(ProcessorMixin):
 
         if len(result) > 0 and result[0] == bos_id:
             result = result[1:]
-        if len(result) > 0 and (
-            result[-1] == eos_id or (eot_id is not None and result[-1] == eot_id)
-        ):
+        if len(result) > 0 and (result[-1] == eos_id or (eot_id is not None and result[-1] == eot_id)):
             result = result[:-1]
         return self.tokenizer.decode(result, *args[1:], **kwargs).strip()
 
@@ -237,9 +229,7 @@ class MiniCPMVProcessor(ProcessorMixin):
             text_chunks = text.split(pattern)
             final_text = ""
             for i in range(len(image_tags)):
-                placeholder = self.image_processor.get_slice_image_placeholder(
-                    image_sizes[index][i]
-                )
+                placeholder = self.image_processor.get_slice_image_placeholder(image_sizes[index][i])
                 final_text = final_text + text_chunks[i] + placeholder
             final_text += text_chunks[-1]
             input_ids, image_bounds = self._convert(final_text, max_length)
@@ -304,10 +294,7 @@ class MiniCPMVProcessor(ProcessorMixin):
                 return torch.stack([item for item in items], dim=0), [0] * batch_size
             tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
         else:
-            tensor = (
-                torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype)
-                + padding_value
-            )
+            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
 
         padding_lengths = []
         for i, item in enumerate(items):

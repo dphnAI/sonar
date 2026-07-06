@@ -4,9 +4,9 @@
 import pytest
 from transformers import AutoTokenizer
 
-from tests.reasoning.utils import run_reasoning_extraction
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
+from tests.reasoning.utils import run_reasoning_extraction
 
 
 # Create a concrete test implementation of BaseThinkingReasoningParser
@@ -82,9 +82,7 @@ class TestBaseThinkingReasoningParserInit:
             def end_token(self) -> str:
                 return "<missing:end>"
 
-        with pytest.raises(
-            RuntimeError, match="could not locate think start/end tokens"
-        ):
+        with pytest.raises(RuntimeError, match="could not locate think start/end tokens"):
             MissingTokenParser(test_tokenizer)
 
     def test_initialization_with_empty_tokens(self, test_tokenizer):
@@ -99,9 +97,7 @@ class TestBaseThinkingReasoningParserInit:
             def end_token(self) -> str:
                 return ""
 
-        with pytest.raises(
-            ValueError, match="start_token and end_token must be defined"
-        ):
+        with pytest.raises(ValueError, match="start_token and end_token must be defined"):
             EmptyTokenParser(test_tokenizer)
 
 
@@ -125,12 +121,7 @@ class TestBaseThinkingReasoningParserMethods:
         # Test with interleaved thinking
         assert parser.is_reasoning_end([1, start_token_id, 2, end_token_id]) is True
         assert parser.is_reasoning_end([1, start_token_id, 2, 3]) is False
-        assert (
-            parser.is_reasoning_end(
-                [1, start_token_id, 2, end_token_id, 2, 2, start_token_id]
-            )
-            is False
-        )
+        assert parser.is_reasoning_end([1, start_token_id, 2, end_token_id, 2, 2, start_token_id]) is False
 
     def test_is_reasoning_end_streaming(self, test_tokenizer):
         """Test the is_reasoning_end_streaming method."""
@@ -138,21 +129,11 @@ class TestBaseThinkingReasoningParserMethods:
         end_token_id = parser.end_token_id
         start_token_id = parser.start_token_id
 
-        assert (
-            parser.is_reasoning_end_streaming([1, 2, end_token_id], [end_token_id])
-            is True
-        )
+        assert parser.is_reasoning_end_streaming([1, 2, end_token_id], [end_token_id]) is True
         assert parser.is_reasoning_end_streaming([1, 2, 3, 4], [4]) is False
         assert parser.is_reasoning_end_streaming([], []) is False
-        assert (
-            parser.is_reasoning_end_streaming(
-                [1, start_token_id, 2, end_token_id], [end_token_id]
-            )
-            is True
-        )
-        assert (
-            parser.is_reasoning_end_streaming([1, start_token_id, 2, 3], [3]) is False
-        )
+        assert parser.is_reasoning_end_streaming([1, start_token_id, 2, end_token_id], [end_token_id]) is True
+        assert parser.is_reasoning_end_streaming([1, start_token_id, 2, 3], [3]) is False
         assert (
             parser.is_reasoning_end_streaming(
                 [1, start_token_id, 2, end_token_id, 2, start_token_id, 2],
@@ -160,12 +141,7 @@ class TestBaseThinkingReasoningParserMethods:
             )
             is False
         )
-        assert (
-            parser.is_reasoning_end_streaming(
-                [1, start_token_id, 2, end_token_id, 2, 2], [2]
-            )
-            is False
-        )
+        assert parser.is_reasoning_end_streaming([1, start_token_id, 2, end_token_id, 2, 2], [2]) is False
 
     def test_count_reasoning_tokens(self, test_tokenizer):
         """Count tokens between start/end markers."""
@@ -290,9 +266,7 @@ class TestBaseThinkingReasoningParserStreaming:
             "answer",
         ]
 
-        reasoning, content = run_reasoning_extraction(
-            parser, model_output, streaming=streaming
-        )
+        reasoning, content = run_reasoning_extraction(parser, model_output, streaming=streaming)
 
         assert reasoning == "Some reasoning content"
         assert content == "Final answer"

@@ -50,9 +50,7 @@ class SimpleCPUOffloadWorkerMetadata(KVConnectorWorkerMetadata):
 
     completed_store_events: dict[int, int]
 
-    def aggregate(
-        self, other: "KVConnectorWorkerMetadata"
-    ) -> "KVConnectorWorkerMetadata":
+    def aggregate(self, other: "KVConnectorWorkerMetadata") -> "KVConnectorWorkerMetadata":
         assert isinstance(other, SimpleCPUOffloadWorkerMetadata)
         merged = dict(self.completed_store_events)
         for k, v in other.completed_store_events.items():

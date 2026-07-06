@@ -90,9 +90,7 @@ def _fp8_mqa_logits_kernel(
     d_inds = tl.arange(0, HEAD_SIZE)
 
     # load Q[BLOCK_Q, NUM_HEADS, HEAD_SIZE]
-    q_ptrs = (
-        Q_ptr + row_id * stride_q_s + h_inds * stride_q_h + d_inds[None, :] * stride_q_d
-    )
+    q_ptrs = Q_ptr + row_id * stride_q_s + h_inds * stride_q_h + d_inds[None, :] * stride_q_d
 
     q_block = tl.load(q_ptrs, cache_modifier=".cg")
     w_ptrs = weights_ptr + row_id * stride_w_s + h_inds * stride_w_h
@@ -108,9 +106,7 @@ def _fp8_mqa_logits_kernel(
     shifted_unmasked_end = shifted_end // BLOCK_KV * BLOCK_KV
 
     kv_col_offsets = tl.arange(0, BLOCK_KV) + start_ind
-    kv_ptrs = (
-        KV_ptr + kv_col_offsets[None, :] * stride_kv_s + d_inds[:, None] * stride_kv_d
-    )
+    kv_ptrs = KV_ptr + kv_col_offsets[None, :] * stride_kv_s + d_inds[:, None] * stride_kv_d
 
     kv_scales_ptrs = kv_scales_ptr + kv_col_offsets
 
@@ -187,12 +183,8 @@ def fp8_mqa_logits_gfx942(
     """
     seq_len, num_heads, head_size = q.shape
     seq_len_kv = k_fp8.shape[0]
-    assert num_heads & (num_heads - 1) == 0, (
-        f"num_heads must be a power of two (got {num_heads})"
-    )
-    assert head_size & (head_size - 1) == 0, (
-        f"head_size must be a power of two (got {head_size})"
-    )
+    assert num_heads & (num_heads - 1) == 0, f"num_heads must be a power of two (got {num_heads})"
+    assert head_size & (head_size - 1) == 0, f"head_size must be a power of two (got {head_size})"
 
     # The kernel walks ``kv_scales`` as a 1-D contiguous array of size N
     # (it indexes by ``kv_scales_ptr + kv_col_offsets``). The Aphrodite caller

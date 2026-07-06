@@ -7,9 +7,6 @@ import pytest
 import torch
 
 import aphrodite.envs as envs
-from tests.compile.backend import TestBackend
-from tests.kernels.quantization.nvfp4_utils import quant_nvfp4_tensor
-from tests.utils import TestFP8Layer
 from aphrodite._aiter_ops import IS_AITER_FOUND, rocm_aiter_ops
 from aphrodite._custom_ops import cutlass_scaled_fp4_mm, scaled_fp4_quant
 from aphrodite.compilation.passes.fusion.act_quant_fusion import (
@@ -21,10 +18,10 @@ from aphrodite.compilation.passes.fusion.rms_quant_fusion import QUANT_OPS
 from aphrodite.compilation.passes.utility.noop_elimination import NoOpEliminationPass
 from aphrodite.compilation.passes.utility.post_cleanup import PostCleanupPass
 from aphrodite.config import (
+    AphroditeConfig,
     CompilationConfig,
     CompilationMode,
     PassConfig,
-    AphroditeConfig,
     set_current_aphrodite_config,
 )
 from aphrodite.model_executor.kernels.linear import (
@@ -45,6 +42,9 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 )
 from aphrodite.platforms import current_platform
 from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+from tests.compile.backend import TestBackend
+from tests.kernels.quantization.nvfp4_utils import quant_nvfp4_tensor
+from tests.utils import TestFP8Layer
 
 FP8_DTYPE = current_platform.fp8_dtype()
 FP4_DTYPE = torch.uint8
@@ -86,11 +86,7 @@ class TestSiluMulFp8QuantModel(torch.nn.Module):
     def ops_in_model_before(self):
         return [
             SILU_MUL_OP if self.enable_silu_mul_custom_op else torch.ops.aten.mul,
-            (
-                QUANT_OPS[kFp8StaticTensorSym]
-                if self.enable_quant_fp8_custom_op
-                else torch.ops.aten.reciprocal
-            ),
+            (QUANT_OPS[kFp8StaticTensorSym] if self.enable_quant_fp8_custom_op else torch.ops.aten.reciprocal),
         ]
 
     def ops_in_model_after(self):
@@ -147,9 +143,7 @@ class TestSiluMulGroupFp8QuantModel(torch.nn.Module):
     def __init__(self, hidden_size: int, dtype: torch.dtype, **kwargs):
         super().__init__()
         self.silu_and_mul = SiluAndMul()
-        self.weight_quant_key = create_fp8_quant_key(
-            static=True, group_shape=GroupShape(hidden_size, hidden_size)
-        )
+        self.weight_quant_key = create_fp8_quant_key(static=True, group_shape=GroupShape(hidden_size, hidden_size))
 
         self.w8a8_block_fp8_linear = TestFP8Layer(
             weight_shape=(hidden_size, hidden_size),
@@ -161,9 +155,7 @@ class TestSiluMulGroupFp8QuantModel(torch.nn.Module):
         if not current_platform.is_fp8_fnuz():
             kernel = self.w8a8_block_fp8_linear.kernel
             orig_quant = kernel.quant_fp8
-            kernel.quant_fp8 = lambda *a, use_triton=False, **kw: orig_quant(
-                *a, use_triton=True, **kw
-            )
+            kernel.quant_fp8 = lambda *a, use_triton=False, **kw: orig_quant(*a, use_triton=True, **kw)
 
         self.enable_silu_mul_custom_op = self.silu_and_mul.enabled()
 
@@ -215,11 +207,7 @@ class TestSiluMulBlockQuantModel(torch.nn.Module):
             ops.append(SILU_MUL_OP)
         # When silu custom op is disabled, aten.mul.Tensor also appears
         # in dequant code, so we skip checking it to avoid false positives.
-        ops.append(
-            QUANT_OPS[self.quant_key]
-            if self.enable_quant_fp8_custom_op
-            else torch.ops.aten.reciprocal.default
-        )
+        ops.append(QUANT_OPS[self.quant_key] if self.enable_quant_fp8_custom_op else torch.ops.aten.reciprocal.default)
         return ops
 
     def ops_in_model_after(self):
@@ -247,9 +235,7 @@ TEST_KERNELS = ROCM_KERNELS if current_platform.is_rocm() else CUDA_KERNELS
             TestSiluMulNvfp4QuantModel,
             False,
             None,
-            marks=pytest.mark.skipif(
-                not current_platform.is_cuda(), reason="CUDA only"
-            ),
+            marks=pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA only"),
         ),
         # GroupFP8Quant fusion only works with AITER on ROCm.
         # and the enable_quant_fp8_custom_op must be True.
@@ -257,9 +243,7 @@ TEST_KERNELS = ROCM_KERNELS if current_platform.is_rocm() else CUDA_KERNELS
             TestSiluMulGroupFp8QuantModel,
             True,
             None,
-            marks=pytest.mark.skipif(
-                not current_platform.is_rocm(), reason="ROCm only"
-            ),
+            marks=pytest.mark.skipif(not current_platform.is_rocm(), reason="ROCm only"),
         ),
         # Block quant fusion for per-group FP8 (CUDA only).
         *[
@@ -267,18 +251,14 @@ TEST_KERNELS = ROCM_KERNELS if current_platform.is_rocm() else CUDA_KERNELS
                 partial(TestSiluMulBlockQuantModel, is_scale_transposed=transposed),
                 True,
                 None,
-                marks=pytest.mark.skipif(
-                    not current_platform.is_cuda(), reason="CUDA only"
-                ),
+                marks=pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA only"),
                 id=f"TestSiluMulBlockQuant-transposed={transposed}",
             )
             for transposed in [False, True]
         ],
     ],
 )
-@pytest.mark.skipif(
-    envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm"
-)
+@pytest.mark.skipif(envs.APHRODITE_TARGET_DEVICE not in ["cuda", "rocm"], reason="Only test on CUDA and ROCm")
 def test_fusion_silu_and_mul_quant(
     num_tokens: int,
     hidden_size: int,
@@ -298,11 +278,7 @@ def test_fusion_silu_and_mul_quant(
         pytest.skip("NVFP4 is not supported on this GPU.")
     if model_class is TestSiluMulGroupFp8QuantModel and not IS_AITER_FOUND:
         pytest.skip("AITER is not supported on this GPU.")
-    if (
-        isinstance(model_class, partial)
-        and model_class.func is TestSiluMulBlockQuantModel
-        and is_deep_gemm_supported()
-    ):
+    if isinstance(model_class, partial) and model_class.func is TestSiluMulBlockQuantModel and is_deep_gemm_supported():
         pytest.skip("SiluMul+BlockQuant fusion not applicable with DeepGemm")
 
     torch.set_default_device("cuda")
@@ -338,9 +314,7 @@ def test_fusion_silu_and_mul_quant(
 
         passes = [NoOpEliminationPass(config), *fusion_passes, PostCleanupPass(config)]
         backend = TestBackend(*passes)
-        model = model_class(
-            hidden_size=hidden_size, force_kernel=force_kernel, x=x, dtype=dtype
-        )
+        model = model_class(hidden_size=hidden_size, force_kernel=force_kernel, x=x, dtype=dtype)
 
         # First dimension dynamic
         torch._dynamo.mark_dynamic(x, 0)
@@ -366,9 +340,7 @@ def test_fusion_silu_and_mul_quant(
                 # can shift by one FP8-e4m3 code (~1/8 relative step).
                 atol, rtol = 5e-2, 5e-2
 
-        torch.testing.assert_close(
-            result[0].to(dtype=dtype), result2[0].to(dtype=dtype), atol=atol, rtol=rtol
-        )
+        torch.testing.assert_close(result[0].to(dtype=dtype), result2[0].to(dtype=dtype), atol=atol, rtol=rtol)
 
         assert sum([p.matched_count for p in fusion_passes]) == 1
 

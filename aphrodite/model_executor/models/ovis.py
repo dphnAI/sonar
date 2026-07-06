@@ -102,9 +102,7 @@ class VisualTokenizer(torch.nn.Module):
         head_dim = config.vocab_size - len(IMAGE_INDICATOR_IDS)
         self.head = torch.nn.Sequential(
             ReplicatedLinear(
-                config.backbone_config.hidden_size
-                * config.hidden_stride
-                * config.hidden_stride,
+                config.backbone_config.hidden_size * config.hidden_stride * config.hidden_stride,
                 head_dim,
                 bias=False,
                 return_bias=False,
@@ -170,13 +168,9 @@ class VisualTokenizer(torch.nn.Module):
             # this `d` maybe different from the above `d`
             n, L, d = features.shape
             sqrt_l = int(L**0.5)
-            assert sqrt_l**2 == L, (
-                "The token sequence length should be a perfect square."
-            )
+            assert sqrt_l**2 == L, "The token sequence length should be a perfect square."
             features = features.reshape(n, sqrt_l, sqrt_l, d)
-            pl = (
-                self.config.hidden_stride - (sqrt_l % self.config.hidden_stride)
-            ) % self.config.hidden_stride
+            pl = (self.config.hidden_stride - (sqrt_l % self.config.hidden_stride)) % self.config.hidden_stride
             features = pad(features, (0, 0, 0, pl, 0, pl), "constant", 0)
             sqrt_l += pl
             features = features.reshape(
@@ -192,9 +186,7 @@ class VisualTokenizer(torch.nn.Module):
             # [n, sqrt_l/hs, sqrt_l/hs, hs*hs*d]
             features = features.flatten(3)
             # [n, sqrt_l/hs*sqrt_l/hs, hs*hs*d]
-            features = features.reshape(
-                n, -1, self.config.hidden_stride * self.config.hidden_stride * d
-            )
+            features = features.reshape(n, -1, self.config.hidden_stride * self.config.hidden_stride * d)
 
         return features
 
@@ -275,8 +267,7 @@ class OvisProcessingInfo(BaseProcessingInfo):
         hidden_stride = visual_tokenizer_config.hidden_stride
         patch_grid_length = math.ceil(image_size / patch_size)
         assert patch_grid_length % hidden_stride == 0, (
-            f"patch_grid_length {patch_grid_length} is not divisible by "
-            f"hidden_stride {hidden_stride}"
+            f"patch_grid_length {patch_grid_length} is not divisible by hidden_stride {hidden_stride}"
         )
         # minus 1 for presented image token
         return (patch_grid_length // hidden_stride) ** 2 - 1
@@ -362,14 +353,8 @@ class OvisMultiModalProcessor(BaseMultiModalProcessor[OvisProcessingInfo]):
         )
 
         hf_processor = self.info.get_hf_processor()
-        image_indicators = [
-            hf_processor.construct_image_indicators(grid)
-            for grid in processed_outputs["grids"]
-        ]
-        indicator_tokens = [
-            self.image_indicators_to_visual_tokens(indicator)
-            for indicator in image_indicators
-        ]
+        image_indicators = [hf_processor.construct_image_indicators(grid) for grid in processed_outputs["grids"]]
+        indicator_tokens = [self.image_indicators_to_visual_tokens(indicator) for indicator in image_indicators]
         processed_outputs["indicator_tokens"] = torch.tensor(indicator_tokens)
         return processed_outputs
 
@@ -444,20 +429,14 @@ class Ovis(nn.Module, SupportsMultiModal, SupportsPP):
                 quant_config=quant_config,
                 prefix=maybe_prefix(prefix, "visual_tokenizer"),
             )
-            self.vte = VisualEmbedding(
-                self.config.visual_tokenizer_config.vocab_size, self.config.hidden_size
-            )
+            self.vte = VisualEmbedding(self.config.visual_tokenizer_config.vocab_size, self.config.hidden_size)
 
         text_model_type = self.config.get_text_config().model_type
         self.image_pad_token_id = IMAGE_PAD_TOKEN_ID_MAP[text_model_type]
 
-        self.make_empty_intermediate_tensors = (
-            self.get_language_model().make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.get_language_model().make_empty_intermediate_tensors
 
-    def _parse_and_validate_image_input(
-        self, **kwargs: object
-    ) -> OvisImagePatchInputs | None:
+    def _parse_and_validate_image_input(self, **kwargs: object) -> OvisImagePatchInputs | None:
         pixel_values = kwargs.pop("pixel_values", None)
         indicator_tokens = kwargs.pop("indicator_tokens", None)
 
@@ -466,15 +445,10 @@ class Ovis(nn.Module, SupportsMultiModal, SupportsPP):
 
         if pixel_values is not None and indicator_tokens is not None:
             if not isinstance(pixel_values, (torch.Tensor, list)):
-                raise ValueError(
-                    f"Incorrect type of pixel values. Got type: {type(pixel_values)}"
-                )
+                raise ValueError(f"Incorrect type of pixel values. Got type: {type(pixel_values)}")
 
             if not isinstance(indicator_tokens, (torch.Tensor, list)):
-                raise ValueError(
-                    "Incorrect type of indicator_tokens. "
-                    f"Got type: {type(pixel_values)}"
-                )
+                raise ValueError(f"Incorrect type of indicator_tokens. Got type: {type(pixel_values)}")
 
             return OvisImagePatchInputs(
                 type="image_patches",
@@ -485,16 +459,12 @@ class Ovis(nn.Module, SupportsMultiModal, SupportsPP):
 
         raise AssertionError("This line should be unreachable.")
 
-    def _process_image_input(
-        self, image_input: OvisImagePatchInputs
-    ) -> MultiModalEmbeddings:
+    def _process_image_input(self, image_input: OvisImagePatchInputs) -> MultiModalEmbeddings:
         image_patches_flat = image_input["flat_data"]
         patches_per_image = image_input["patches_per_image"]
         indicator_tokens = image_input["indicator_tokens"]
 
-        indicator_per_image = list(
-            map(lambda x: x + 1 if x > 1 else x + 2, patches_per_image)
-        )
+        indicator_per_image = list(map(lambda x: x + 1 if x > 1 else x + 2, patches_per_image))
 
         target_dtype = self.visual_tokenizer.dtype
         visual_tokens = self.visual_tokenizer(image_patches_flat.to(target_dtype))
@@ -505,14 +475,10 @@ class Ovis(nn.Module, SupportsMultiModal, SupportsPP):
 
         visual_embeds_per_image = visual_embeds.split(patches_per_image, dim=0)
         vision_embeddings = []
-        for indicator, visual in zip(
-            indicator_embeds_per_image, visual_embeds_per_image
-        ):
+        for indicator, visual in zip(indicator_embeds_per_image, visual_embeds_per_image):
             vision_embeddings_per_image = []
             for i in range(visual.shape[0]):
-                vision_embeddings_per_image.append(
-                    torch.cat([indicator[i : i + 1], visual[i]], dim=0)
-                )
+                vision_embeddings_per_image.append(torch.cat([indicator[i : i + 1], visual[i]], dim=0))
             vision_embeddings_per_image.append(indicator[i + 1 :])
             vision_embeddings.append(torch.cat(vision_embeddings_per_image, dim=0))
 

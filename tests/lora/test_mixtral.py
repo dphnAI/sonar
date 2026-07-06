@@ -11,9 +11,7 @@ from aphrodite.platforms import current_platform
 MODEL_PATH = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 
 
-def do_sample(
-    llm: aphrodite.LLM, lora_path: str, lora_id: int, prompts: list[str]
-) -> list[str]:
+def do_sample(llm: aphrodite.LLM, lora_path: str, lora_id: int, prompts: list[str]) -> list[str]:
     sampling_params = aphrodite.SamplingParams(temperature=0, max_tokens=256)
     outputs = llm.generate(
         prompts,
@@ -33,11 +31,7 @@ def do_sample(
 @pytest.mark.parametrize("tp_size", [4])
 def test_mixtral_lora(mixtral_lora_files, tp_size):
     """Original test, the LoRA model has the common target modules, not all"""
-    if (
-        torch.accelerator.device_count() < tp_size
-        and tp_size > 1
-        and current_platform.is_cuda_alike()
-    ):
+    if torch.accelerator.device_count() < tp_size and tp_size > 1 and current_platform.is_cuda_alike():
         pytest.skip(f"Not enough GPUs for tensor parallelism {tp_size}")
 
     prompts = [

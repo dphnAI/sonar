@@ -68,9 +68,7 @@ def hpc_rope_norm_forward(
         output.zero_()
         return
 
-    assert kv_cache.dim() == 5, (
-        f"Expected kv_cache to have 5 dims, got {tuple(kv_cache.shape)}"
-    )
+    assert kv_cache.dim() == 5, f"Expected kv_cache to have 5 dims, got {tuple(kv_cache.shape)}"
 
     rope_norm = _hpc_rope_norm_instances[layer_name]
     rope_norm._forward_impl(qkv, kv_cache, attn_metadata, attn_layer, output)
@@ -183,16 +181,12 @@ class HpcRopeNorm(CustomOp, HpcModule):
         """Check whether HpcRopeNorm is supported for the given config."""
         # HpcRopeNorm is only enabled together with the HPC attention backend.
         aphrodite_config = get_current_aphrodite_config_or_none()
-        if (
-            aphrodite_config is None
-            or aphrodite_config.attention_config.backend != AttentionBackendEnum.HPC_ATTN
-        ):
+        if aphrodite_config is None or aphrodite_config.attention_config.backend != AttentionBackendEnum.HPC_ATTN:
             return False
 
         if kv_cache_dtype not in ("fp8_e4m3", "auto"):
             logger.warning_once(
-                f"hpc rope_norm not support kv_cache_dtype:{kv_cache_dtype}, "
-                "only support fp8_e4m3, bfloat16"
+                f"hpc rope_norm not support kv_cache_dtype:{kv_cache_dtype}, only support fp8_e4m3, bfloat16"
             )
             return False
 
@@ -297,12 +291,8 @@ class HpcRopeNorm(CustomOp, HpcModule):
         k_scale = attn_layer._k_scale.reshape(1)
         v_scale = attn_layer._v_scale.reshape(1)
 
-        q_norm_weight = (
-            self.qnorm_weight if self.qk_norm_policy != QkNormPolicy.NONE else None
-        )
-        k_norm_weight = (
-            self.knorm_weight if self.qk_norm_policy != QkNormPolicy.NONE else None
-        )
+        q_norm_weight = self.qnorm_weight if self.qk_norm_policy != QkNormPolicy.NONE else None
+        k_norm_weight = self.knorm_weight if self.qk_norm_policy != QkNormPolicy.NONE else None
 
         # Dynamic per-token-per-head Q quant + per-tensor K/V (dqskv).
         # rope_norm_store_kv_fp8 is registered as a torch op whose ``quant_policy``
@@ -317,9 +307,7 @@ class HpcRopeNorm(CustomOp, HpcModule):
             max_seqlens = attn_metadata.max_query_len
             block_table_prefill = attn_metadata.block_table_tensor[num_decode_reqs:]
             qkv_prefill = qkv[num_decode_tokens:]
-            out_q_prefill = output[
-                num_decode_tokens : num_decode_tokens + num_prefill_tokens
-            ]
+            out_q_prefill = output[num_decode_tokens : num_decode_tokens + num_prefill_tokens]
 
             if self.use_fp8:
                 _, q_scale, split_k_flag = hpc.rope_norm_store_kv_fp8(
@@ -364,9 +352,7 @@ class HpcRopeNorm(CustomOp, HpcModule):
             qkv_decode = qkv[:num_decode_tokens]
             # Single-token decode: q_index is the per-request prefix sum
             # [0, 1, ..., num_decode_reqs].
-            qo_indptr_decode = torch.arange(
-                num_decode_reqs + 1, dtype=torch.int32, device=qkv.device
-            )
+            qo_indptr_decode = torch.arange(num_decode_reqs + 1, dtype=torch.int32, device=qkv.device)
             out_q_decode = output[:num_decode_tokens]
 
             if self.use_fp8:

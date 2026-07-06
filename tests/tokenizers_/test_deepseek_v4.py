@@ -68,12 +68,8 @@ def _render_reference_case(case_id: int, **kwargs):
 
 
 def test_deepseek_v4_tokenizer_registered():
-    assert TokenizerRegistry.load_tokenizer_cls("deepseek_v4").__name__ == (
-        "DeepseekV4Tokenizer"
-    )
-    assert RENDERER_REGISTRY.load_renderer_cls("deepseek_v4").__name__ == (
-        "DeepseekV4Renderer"
-    )
+    assert TokenizerRegistry.load_tokenizer_cls("deepseek_v4").__name__ == ("DeepseekV4Tokenizer")
+    assert RENDERER_REGISTRY.load_renderer_cls("deepseek_v4").__name__ == ("DeepseekV4Renderer")
 
 
 def test_deepseek_v4_defaults_to_chat_mode():
@@ -256,9 +252,7 @@ def test_deepseek_v4_preserves_reference_max_reasoning_effort():
         reasoning_effort="max",
     )
 
-    assert prompt.startswith(
-        "<｜begin▁of▁sentence｜>Reasoning Effort: Absolute maximum"
-    )
+    assert prompt.startswith("<｜begin▁of▁sentence｜>Reasoning Effort: Absolute maximum")
 
 
 def test_deepseek_v4_maps_xhigh_to_reference_max_reasoning_effort():
@@ -269,9 +263,7 @@ def test_deepseek_v4_maps_xhigh_to_reference_max_reasoning_effort():
         reasoning_effort="xhigh",
     )
 
-    assert prompt.startswith(
-        "<｜begin▁of▁sentence｜>Reasoning Effort: Absolute maximum"
-    )
+    assert prompt.startswith("<｜begin▁of▁sentence｜>Reasoning Effort: Absolute maximum")
 
 
 @pytest.mark.parametrize(

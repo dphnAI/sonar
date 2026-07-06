@@ -50,11 +50,7 @@ def apply_lfr(inputs, lfr_m, lfr_n):
     last_idx = (T - lfr_m) // lfr_n + 1
     num_padding = lfr_m - (T - last_idx * lfr_n)
     if num_padding > 0:
-        num_padding = (
-            (2 * lfr_m - 2 * T + (T_lfr - 1 + last_idx) * lfr_n)
-            / 2
-            * (T_lfr - last_idx)
-        )
+        num_padding = (2 * lfr_m - 2 * T + (T_lfr - 1 + last_idx) * lfr_n) / 2 * (T_lfr - last_idx)
         inputs = torch.vstack([inputs] + [inputs[-1:]] * int(num_padding))
     LFR_outputs = inputs.as_strided(sizes, strides)
     return LFR_outputs.clone().type(torch.float32)
@@ -167,9 +163,7 @@ class WavFrontend(nn.Module):
             feats_pad = pad_sequence(feats, batch_first=True, padding_value=0.0)
         return feats_pad, feats_lens
 
-    def forward_fbank(
-        self, input: torch.Tensor, input_lengths: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_fbank(self, input: torch.Tensor, input_lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = input.size(0)
         feats = []
         feats_lens = []
@@ -197,9 +191,7 @@ class WavFrontend(nn.Module):
         feats_pad = pad_sequence(feats, batch_first=True, padding_value=0.0)
         return feats_pad, feats_lens
 
-    def forward_lfr_cmvn(
-        self, input: torch.Tensor, input_lengths: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_lfr_cmvn(self, input: torch.Tensor, input_lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = input.size(0)
         feats = []
         feats_lens = []
@@ -289,9 +281,7 @@ class FunASRFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.dither = dither
 
-    def extract_fbank(
-        self, data, data_len=None, data_type: str = "sound", frontend=None, **kwargs
-    ):
+    def extract_fbank(self, data, data_len=None, data_type: str = "sound", frontend=None, **kwargs):
         if isinstance(data, np.ndarray):
             data = torch.from_numpy(data)
             if len(data.shape) < 2:
@@ -399,15 +389,11 @@ class FunASRProcessor(ProcessorMixin):
         super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
-        self.audio_token = (
-            tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
-        )
+        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
-        return self.tokenizer.get_decoder_prompt_ids(
-            task=task, language=language, no_timestamps=no_timestamps
-        )
+        return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
     def __call__(self, *args, **kwargs):
         """
@@ -431,9 +417,7 @@ class FunASRProcessor(ProcessorMixin):
         elif isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError(
-                "Invalid input text. Please provide a string, or a list of strings"
-            )
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         if audio is not None:
             # ensure we have as much audios as audio tokens
@@ -443,9 +427,7 @@ class FunASRProcessor(ProcessorMixin):
                 raise ValueError(
                     f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"  # noqa: E501
                 )
-            inputs = self.feature_extractor(
-                audio, *args, sampling_rate=sampling_rate, **kwargs
-            )
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
 
             expanded_text = []
             for sample in text:

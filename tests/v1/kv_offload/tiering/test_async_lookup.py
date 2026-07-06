@@ -25,9 +25,7 @@ class InMemoryLookupManager(AsyncLookupManager):
         self._existing = existing_keys or set()
         self._results_ready = threading.Event()
 
-    def batch_lookup(
-        self, keys: list[OffloadKey], req_context: ReqContext
-    ) -> Iterable[bool]:
+    def batch_lookup(self, keys: list[OffloadKey], req_context: ReqContext) -> Iterable[bool]:
         results = [k in self._existing for k in keys]
         self._results_ready.set()
         return results

@@ -20,7 +20,7 @@ from typing import ClassVar
 import torch
 from torch import nn
 
-from aphrodite.config import CacheConfig, AphroditeConfig, get_current_aphrodite_config
+from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
 from aphrodite.config.attention import IndexerKVDType
 from aphrodite.config.cache import CacheDType
 from aphrodite.distributed import get_tensor_model_parallel_world_size
@@ -215,9 +215,7 @@ class MiniMaxM3IndexerMetadata(AttentionMetadata):
     decode: MiniMaxM3IndexerDecodeMetadata | None = None
 
 
-class MiniMaxM3IndexerMetadataBuilder(
-    AttentionMetadataBuilder[MiniMaxM3IndexerMetadata]
-):
+class MiniMaxM3IndexerMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3IndexerMetadata]):
     """Abstract base: shared setup only. The Triton and MSA builders are
     parallel subclasses that each own their full ``build`` (no shared code)."""
 
@@ -273,28 +271,22 @@ class MiniMaxM3IndexerTritonMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
         seq_lens = common_attn_metadata.seq_lens
         block_table = common_attn_metadata.block_table_tensor
 
-        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
-            split_decodes_and_prefills(
-                common_attn_metadata,
-                decode_threshold=self.reorder_batch_threshold,
-                require_uniform=True,
-            )
+        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = split_decodes_and_prefills(
+            common_attn_metadata,
+            decode_threshold=self.reorder_batch_threshold,
+            require_uniform=True,
         )
         assert num_decodes + num_prefills == num_reqs
         assert num_decode_tokens + num_prefill_tokens == num_tokens
 
         # Decode-first batch: context lengths into the stable cudagraph buffer.
         context_lens = self.context_len_buffer[:num_reqs]
-        context_lens.copy_(
-            common_attn_metadata.compute_num_computed_tokens(), non_blocking=True
-        )
+        context_lens.copy_(common_attn_metadata.compute_num_computed_tokens(), non_blocking=True)
 
         prefill_metadata: MiniMaxM3IndexerPrefillMetadata | None = None
         if num_prefills > 0:
             prefill_metadata = MiniMaxM3IndexerPrefillMetadata(
-                cu_seqlens_q=(query_start_loc[num_decodes:] - num_decode_tokens).to(
-                    torch.int32
-                ),
+                cu_seqlens_q=(query_start_loc[num_decodes:] - num_decode_tokens).to(torch.int32),
                 seq_lens=seq_lens[num_decodes:],
                 context_lens=context_lens[num_decodes:],
                 block_table=block_table[num_decodes:],
@@ -308,9 +300,7 @@ class MiniMaxM3IndexerTritonMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
             query_lens_cpu = qsl_cpu[1 : num_decodes + 1] - qsl_cpu[:num_decodes]
             decode_query_len = int(query_lens_cpu[0].item())
             assert decode_query_len > 0
-            assert torch.all(
-                (query_lens_cpu == decode_query_len) | (query_lens_cpu == 0)
-            )
+            assert torch.all((query_lens_cpu == decode_query_len) | (query_lens_cpu == 0))
             assert num_decode_tokens == num_decodes * decode_query_len
             decode_metadata = MiniMaxM3IndexerDecodeMetadata(
                 seq_lens=seq_lens[:num_decodes],
@@ -408,9 +398,7 @@ class MiniMaxM3IndexerTritonImpl(MiniMaxM3IndexerImpl):
         assert isinstance(index_md, MiniMaxM3IndexerMetadata)
         num_tokens = index_md.num_actual_tokens
         nd = index_md.num_decode_tokens
-        iq = index_query[:num_tokens].view(
-            -1, self.num_index_heads, self.index_head_dim
-        )
+        iq = index_query[:num_tokens].view(-1, self.num_index_heads, self.index_head_dim)
         kv = self.index_cache.kv_cache
 
         # Both sides write into the single shared persistent topk_indices_buffer
@@ -477,17 +465,10 @@ def select_indexer_impl_cls(
     """
     if indexer_kv_dtype in ("mxfp4", "nvfp4"):
         raise NotImplementedError(
-            f"indexer_kv_dtype={indexer_kv_dtype!r} needs the (not-yet-added) "
-            "CuteDSL indexer impl."
+            f"indexer_kv_dtype={indexer_kv_dtype!r} needs the (not-yet-added) CuteDSL indexer impl."
         )
-    is_sm100 = (
-        current_platform.is_cuda() and current_platform.is_device_capability_family(100)
-    )
-    use_msa = (
-        is_sm100
-        and topk_blocks in (4, 8, 16, 32)
-        and indexer_kv_dtype in ("bf16", "fp8", "fp8_e4m3")
-    )
+    is_sm100 = current_platform.is_cuda() and current_platform.is_device_capability_family(100)
+    use_msa = is_sm100 and topk_blocks in (4, 8, 16, 32) and indexer_kv_dtype in ("bf16", "fp8", "fp8_e4m3")
     if use_msa:
         # Lazy import so AMD / non-SM100 never import fmha_sm100.
         from aphrodite.models.minimax_m3.nvidia.indexer_msa import (
@@ -495,20 +476,15 @@ def select_indexer_impl_cls(
         )
 
         logger.info_once(
-            "MiniMax M3 indexer: selected MSA (fmha_sm100 score + Triton top-k) "
-            "[topk_blocks=%d, indexer_kv_dtype=%s]",
+            "MiniMax M3 indexer: selected MSA (fmha_sm100 score + Triton top-k) [topk_blocks=%d, indexer_kv_dtype=%s]",
             topk_blocks,
             indexer_kv_dtype,
         )
         return MiniMaxM3IndexerMSAImpl
     if indexer_kv_dtype != "bf16":
-        raise NotImplementedError(
-            f"indexer_kv_dtype={indexer_kv_dtype!r} is not supported by the "
-            "Triton indexer impl."
-        )
+        raise NotImplementedError(f"indexer_kv_dtype={indexer_kv_dtype!r} is not supported by the Triton indexer impl.")
     logger.info_once(
-        "MiniMax M3 indexer: selected Triton (no fmha_sm100) "
-        "[topk_blocks=%d, indexer_kv_dtype=%s, sm100=%s]",
+        "MiniMax M3 indexer: selected Triton (no fmha_sm100) [topk_blocks=%d, indexer_kv_dtype=%s, sm100=%s]",
         topk_blocks,
         indexer_kv_dtype,
         is_sm100,

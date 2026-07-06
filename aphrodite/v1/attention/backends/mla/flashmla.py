@@ -128,19 +128,13 @@ class FlashMLAMetadataBuilder(MLACommonMetadataBuilder[FlashMLAMetadata]):
         aphrodite_config: AphroditeConfig,
         device: torch.device,
     ):
-        super().__init__(
-            kv_cache_spec, layer_names, aphrodite_config, device, FlashMLAMetadata
-        )
+        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device, FlashMLAMetadata)
 
-        self.num_q_heads = aphrodite_config.model_config.get_num_attention_heads(
-            aphrodite_config.parallel_config
-        )
+        self.num_q_heads = aphrodite_config.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
 
         self.cg_buf_tile_scheduler_metadata = None
         self.cg_buf_num_splits = None
-        self.is_fp8_kvcache = is_quantized_kv_cache(
-            aphrodite_config.cache_config.cache_dtype
-        )
+        self.is_fp8_kvcache = is_quantized_kv_cache(aphrodite_config.cache_config.cache_dtype)
 
         num_sms = num_compute_units(self.device.index)
 
@@ -251,16 +245,12 @@ class FlashMLAImpl(MLACommonImpl[FlashMLAMetadata]):
         unsupported_features = [alibi_slopes, sliding_window, logits_soft_cap]
         if any(unsupported_features):
             raise NotImplementedError(
-                "FlashMLAImpl does not support one of the following: "
-                "alibi_slopes, sliding_window, logits_soft_cap"
+                "FlashMLAImpl does not support one of the following: alibi_slopes, sliding_window, logits_soft_cap"
             )
 
         if attn_type != AttentionType.DECODER:
             raise NotImplementedError(
-                "Encoder self-attention and "
-                "encoder/decoder cross-attention "
-                "are not implemented for "
-                "FlashMLAImpl"
+                "Encoder self-attention and encoder/decoder cross-attention are not implemented for FlashMLAImpl"
             )
 
     def forward_mqa(

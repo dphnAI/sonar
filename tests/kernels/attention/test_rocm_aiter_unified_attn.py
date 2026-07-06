@@ -11,9 +11,9 @@ from typing import Any, Literal
 import pytest
 import torch
 
-from tests.kernels.attention.test_triton_unified_attention import ref_paged_attn
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
+from tests.kernels.attention.test_triton_unified_attention import ref_paged_attn
 
 _SKIP_NON_MI3XX = True
 if current_platform.is_rocm():
@@ -104,9 +104,7 @@ def _make_case(
 
     query = torch.randn(sum(query_lens), NUM_Q_HEADS, head_size, dtype=dtype)
     if kv_cache_dtype is None:
-        key_cache = torch.randn(
-            num_blocks, block_size, NUM_KV_HEADS, head_size, dtype=dtype
-        )
+        key_cache = torch.randn(num_blocks, block_size, NUM_KV_HEADS, head_size, dtype=dtype)
         value_cache = torch.randn_like(key_cache)
     else:
         key_cache = torch.clamp(
@@ -120,15 +118,11 @@ def _make_case(
             1.0,
         ).to(kv_cache_dtype)
 
-    cu_seqlens_q = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(
-        dim=0, dtype=torch.int32
-    )
+    cu_seqlens_q = torch.tensor([0] + query_lens, dtype=torch.int32).cumsum(dim=0, dtype=torch.int32)
     seq_lens_tensor = torch.tensor(kv_lens, dtype=torch.int32)
 
     max_num_blocks = (max_kv_len + block_size - 1) // block_size
-    block_tables = torch.randint(
-        0, num_blocks, (num_seqs, max_num_blocks), dtype=torch.int32
-    )
+    block_tables = torch.randint(0, num_blocks, (num_seqs, max_num_blocks), dtype=torch.int32)
 
     descale_shape = (num_seqs, NUM_KV_HEADS)
     k_descale = torch.full(descale_shape, k_scale, dtype=torch.float32, device="cuda")

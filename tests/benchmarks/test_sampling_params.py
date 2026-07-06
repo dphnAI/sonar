@@ -116,9 +116,7 @@ class TestGetSamplingParams:
     @pytest.mark.parametrize("n", [1, 10, 100])
     def test_output_length_matches_num_requests(self, n: int):
         rng = np.random.default_rng(42)
-        input_lens, output_lens, offsets = get_sampling_params(
-            rng, n, 0.0, 64, 32, self._tok()
-        )
+        input_lens, output_lens, offsets = get_sampling_params(rng, n, 0.0, 64, 32, self._tok())
         assert input_lens.shape == (n,)
         assert output_lens.shape == (n,)
         assert offsets.shape == (n,)
@@ -127,17 +125,13 @@ class TestGetSamplingParams:
 
     def test_zero_range_ratio_gives_constant_lengths(self):
         rng = np.random.default_rng(7)
-        input_lens, output_lens, _ = get_sampling_params(
-            rng, 20, 0.0, 128, 64, self._tok()
-        )
+        input_lens, output_lens, _ = get_sampling_params(rng, 20, 0.0, 128, 64, self._tok())
         assert np.all(input_lens == 128)
         assert np.all(output_lens == 64)
 
     def test_special_tokens_subtracted_from_input_only(self):
         rng = np.random.default_rng(7)
-        input_lens, output_lens, _ = get_sampling_params(
-            rng, 10, 0.0, 100, 50, self._tok(num_special=4)
-        )
+        input_lens, output_lens, _ = get_sampling_params(rng, 10, 0.0, 100, 50, self._tok(num_special=4))
         # real_input_len = 100 - 4 = 96, range_ratio 0 → all 96
         assert np.all(input_lens == 96)
         # special tokens are not subtracted from output length
@@ -149,9 +143,7 @@ class TestGetSamplingParams:
         rng = np.random.default_rng(0)
         ratio = 0.5
         base = 200
-        input_lens, _, _ = get_sampling_params(
-            rng, 500, {"input": ratio, "output": 0.0}, base, 50, self._tok()
-        )
+        input_lens, _, _ = get_sampling_params(rng, 500, {"input": ratio, "output": 0.0}, base, 50, self._tok())
         lo = int(np.floor(base * (1 - ratio)))
         hi = int(np.ceil(base * (1 + ratio)))
         assert np.all(input_lens >= lo)
@@ -161,9 +153,7 @@ class TestGetSamplingParams:
         rng = np.random.default_rng(0)
         ratio = 0.3
         base = 100
-        _, output_lens, _ = get_sampling_params(
-            rng, 500, {"input": 0.0, "output": ratio}, 50, base, self._tok()
-        )
+        _, output_lens, _ = get_sampling_params(rng, 500, {"input": 0.0, "output": ratio}, 50, base, self._tok())
         lo = max(1, int(np.floor(base * (1 - ratio))))
         hi = int(np.ceil(base * (1 + ratio)))
         assert np.all(output_lens >= lo)
@@ -174,9 +164,7 @@ class TestGetSamplingParams:
         the function clamps it to 1."""
         rng = np.random.default_rng(0)
         # output_len=1, ratio=0.99 → floor(1*0.01)=0, should clamp to 1
-        _, output_lens, _ = get_sampling_params(
-            rng, 50, {"input": 0.0, "output": 0.99}, 100, 1, self._tok()
-        )
+        _, output_lens, _ = get_sampling_params(rng, 50, {"input": 0.0, "output": 0.99}, 100, 1, self._tok())
         assert np.all(output_lens >= 1)
 
     # -- offsets bounded by vocab_size --
@@ -184,9 +172,7 @@ class TestGetSamplingParams:
     @pytest.mark.parametrize("vocab", [100, 32000, 128256])
     def test_offsets_within_vocab(self, vocab: int):
         rng = np.random.default_rng(0)
-        _, _, offsets = get_sampling_params(
-            rng, 200, 0.0, 64, 32, self._tok(vocab_size=vocab)
-        )
+        _, _, offsets = get_sampling_params(rng, 200, 0.0, 64, 32, self._tok(vocab_size=vocab))
         assert np.all(offsets >= 0)
         assert np.all(offsets < vocab)
 
@@ -214,17 +200,13 @@ class TestGetSamplingParams:
     def test_invalid_input_range_ratio(self, bad_ratio: float):
         rng = np.random.default_rng(0)
         with pytest.raises(ValueError, match="input_range_ratio"):
-            get_sampling_params(
-                rng, 10, {"input": bad_ratio, "output": 0.0}, 100, 50, self._tok()
-            )
+            get_sampling_params(rng, 10, {"input": bad_ratio, "output": 0.0}, 100, 50, self._tok())
 
     @pytest.mark.parametrize("bad_ratio", [-0.1, 1.0, 1.5])
     def test_invalid_output_range_ratio(self, bad_ratio: float):
         rng = np.random.default_rng(0)
         with pytest.raises(ValueError, match="output_range_ratio"):
-            get_sampling_params(
-                rng, 10, {"input": 0.0, "output": bad_ratio}, 100, 50, self._tok()
-            )
+            get_sampling_params(rng, 10, {"input": 0.0, "output": bad_ratio}, 100, 50, self._tok())
 
     def test_invalid_dict_missing_keys(self):
         rng = np.random.default_rng(0)
@@ -235,9 +217,7 @@ class TestGetSamplingParams:
         """input_len < num_special_tokens → real_input_len = 0, which is fine
         (range [0, 0])."""
         rng = np.random.default_rng(0)
-        input_lens, _, _ = get_sampling_params(
-            rng, 5, 0.0, 5, 50, self._tok(num_special=10)
-        )
+        input_lens, _, _ = get_sampling_params(rng, 5, 0.0, 5, 50, self._tok(num_special=10))
         # real_input_len = max(0, 5 - 10) = 0
         assert np.all(input_lens == 0)
 

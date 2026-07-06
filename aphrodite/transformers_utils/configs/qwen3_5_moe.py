@@ -95,9 +95,7 @@ class Qwen3_5MoeTextConfig(PretrainedConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.get("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention"
-                if bool((i + 1) % interval_pattern)
-                else "full_attention"
+                "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
         kwargs["ignore_keys_at_rope_validation"] = {

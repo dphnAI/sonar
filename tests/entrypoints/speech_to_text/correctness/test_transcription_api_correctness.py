@@ -78,20 +78,14 @@ async def transcribe_audio(client, tokenizer, y, sr, extra_body=None):
         end_time = time.perf_counter()
         # NOTE there's no streaming in transcriptions, can't measure ttft
     latency = end_time - start_time
-    num_output_tokens = len(
-        tokenizer(transcription.text, add_special_tokens=False).input_ids
-    )
+    num_output_tokens = len(tokenizer(transcription.text, add_special_tokens=False).input_ids)
     return latency, num_output_tokens, transcription.text
 
 
-async def bound_transcribe(
-    sem, client, tokenizer, audio, sr, reference, extra_body=None
-):
+async def bound_transcribe(sem, client, tokenizer, audio, sr, reference, extra_body=None):
     # Use semaphore to limit concurrent requests.
     async with sem:
-        result = await transcribe_audio(
-            client, tokenizer, audio, sr, extra_body=extra_body
-        )
+        result = await transcribe_audio(client, tokenizer, audio, sr, extra_body=extra_body)
         # Normalize *english* output/reference for evaluation.
         out = normalizer(result[2])
         ref = normalizer(reference)
@@ -115,11 +109,7 @@ async def process_dataset(model, client, data, concurrent_request, extra_body=No
     tasks: list[asyncio.Task] = []
     for sample in data:
         audio, sr = load_audio_sample(sample["audio"])
-        task = asyncio.create_task(
-            bound_transcribe(
-                sem, client, tokenizer, audio, sr, sample["text"], extra_body
-            )
-        )
+        task = asyncio.create_task(bound_transcribe(sem, client, tokenizer, audio, sr, sample["text"], extra_body))
         tasks.append(task)
     return await asyncio.gather(*tasks)
 
@@ -189,11 +179,7 @@ def run_evaluation(
     if n_examples > 0:
         dataset = dataset.select(range(n_examples))
     start = time.perf_counter()
-    results = asyncio.run(
-        process_dataset(
-            model, client, dataset, max_concurrent_reqs, extra_body=extra_body
-        )
-    )
+    results = asyncio.run(process_dataset(model, client, dataset, max_concurrent_reqs, extra_body=extra_body))
     end = time.perf_counter()
     total_time = end - start
     print(f"Total Test Time: {total_time:.4f} seconds")
@@ -235,27 +221,19 @@ async def transcribe_audio_path(client, tokenizer, audio_path: str, extra_body=N
         end_time = time.perf_counter()
 
     latency = end_time - start_time
-    num_output_tokens = len(
-        tokenizer(transcription.text, add_special_tokens=False).input_ids
-    )
+    num_output_tokens = len(tokenizer(transcription.text, add_special_tokens=False).input_ids)
     return latency, num_output_tokens, transcription.text
 
 
-async def bound_transcribe_path(
-    sem, client, tokenizer, audio_path, reference, extra_body=None
-):
+async def bound_transcribe_path(sem, client, tokenizer, audio_path, reference, extra_body=None):
     async with sem:
-        result = await transcribe_audio_path(
-            client, tokenizer, audio_path, extra_body=extra_body
-        )
+        result = await transcribe_audio_path(client, tokenizer, audio_path, extra_body=extra_body)
         out = normalizer(result[2])
         ref = normalizer(reference)
         return result[:2] + (out, ref)
 
 
-async def process_longform_dataset(
-    model, client, data, concurrent_request, extra_body=None
-):
+async def process_longform_dataset(model, client, data, concurrent_request, extra_body=None):
     sem = asyncio.Semaphore(concurrent_request)
 
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
@@ -272,9 +250,7 @@ async def process_longform_dataset(
     for sample in data:
         audio_path = sample["audio"]["path"]
         task = asyncio.create_task(
-            bound_transcribe_path(
-                sem, client, tokenizer, audio_path, sample["text"], extra_body
-            )
+            bound_transcribe_path(sem, client, tokenizer, audio_path, sample["text"], extra_body)
         )
         tasks.append(task)
     return await asyncio.gather(*tasks)
@@ -289,11 +265,7 @@ def run_longform_evaluation(
     extra_body=None,
 ):
     start = time.perf_counter()
-    results = asyncio.run(
-        process_longform_dataset(
-            model, client, dataset, max_concurrent_reqs, extra_body=extra_body
-        )
-    )
+    results = asyncio.run(process_longform_dataset(model, client, dataset, max_concurrent_reqs, extra_body=extra_body))
     end = time.perf_counter()
     total_time = end - start
     print(f"Total Test Time: {total_time:.4f} seconds")
@@ -320,12 +292,8 @@ def run_longform_evaluation(
     ],
 )
 # Original dataset is 20GB+ in size, hence we use a pre-filtered slice.
-@pytest.mark.parametrize(
-    "dataset_repo", ["D4nt3/esb-datasets-earnings22-validation-tiny-filtered"]
-)
-def test_wer_correctness(
-    model_config, dataset_repo, n_examples=-1, max_concurrent_request=None
-):
+@pytest.mark.parametrize("dataset_repo", ["D4nt3/esb-datasets-earnings22-validation-tiny-filtered"])
+def test_wer_correctness(model_config, dataset_repo, n_examples=-1, max_concurrent_request=None):
     model_name, expected_wer = model_config
     model_info = HF_EXAMPLE_MODELS.find_hf_info(model_name)
     server_args = [

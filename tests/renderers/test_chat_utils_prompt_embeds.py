@@ -124,9 +124,7 @@ def test_ensure_placeholder_token_is_single_token_and_idempotent(tokenizer):
 
     # Repeating it in a string N times must produce exactly that many tokens.
     N = 5
-    ids_rep = tokenizer.encode(
-        PROMPT_EMBEDS_PLACEHOLDER_TOKEN * N, add_special_tokens=False
-    )
+    ids_rep = tokenizer.encode(PROMPT_EMBEDS_PLACEHOLDER_TOKEN * N, add_special_tokens=False)
     assert ids_rep == [tid1] * N
 
 
@@ -215,9 +213,7 @@ def test_parse_chat_messages_openai_format():
     [None, False, True],
     ids=["text-only", "interleave-off", "interleave-on"],
 )
-def test_parse_chat_messages_string_format_preserves_position(
-    layout, interleave_mm_strings
-):
+def test_parse_chat_messages_string_format_preserves_position(layout, interleave_mm_strings):
     mc = _make_mock_model_config()
     if interleave_mm_strings is not None:
         mm_cfg = mock.MagicMock()
@@ -295,9 +291,7 @@ def test_parse_chat_messages_rejects_missing_data():
 # mutated to make `<prompt_embeds>` a single unsplittable token. Any user text
 # containing that literal sequence would tokenize to the same sentinel ID and
 # be mistaken for a splice point, so we reject it at parse time.
-_PLACEHOLDER_ERROR_PATTERN: Final[str] = re.sub(
-    r"\\{[^}]*\\}", ".*", re.escape(_RESERVED_PLACEHOLDER_IN_TEXT_ERROR)
-)
+_PLACEHOLDER_ERROR_PATTERN: Final[str] = re.sub(r"\\{[^}]*\\}", ".*", re.escape(_RESERVED_PLACEHOLDER_IN_TEXT_ERROR))
 
 
 @pytest.mark.parametrize(
@@ -393,9 +387,7 @@ def test_build_positions_length_mismatch(tokenizer):
     mm_updates = _build_prompt_embeds_updates(tensors, tid)
     # The error constant is a `str.format` template, escape it and turn
     # the `{field}` placeholders into `.*` so it matches any substitution.
-    pattern = re.sub(
-        r"\\{[^}]*\\}", ".*", re.escape(_PROMPT_EMBEDS_PLACEHOLDER_SPAN_MISMATCH_ERROR)
-    )
+    pattern = re.sub(r"\\{[^}]*\\}", ".*", re.escape(_PROMPT_EMBEDS_PLACEHOLDER_SPAN_MISMATCH_ERROR))
     with pytest.raises(ValueError, match=pattern):
         _build_prompt_embeds_positions(token_ids, len(tensors), mm_updates)
 
@@ -491,9 +483,7 @@ async def test_end_to_end_expand_and_build(tokenizer, parse_fn, role):
         }
     ]
 
-    conv, mm_data, _ = await _maybe_await(
-        parse_fn, messages, mc, content_format="openai"
-    )
+    conv, mm_data, _ = await _maybe_await(parse_fn, messages, mc, content_format="openai")
     tensors = list(mm_data["prompt_embeds"])
     assert len(tensors) == NUM_TENSORS
 
@@ -550,9 +540,7 @@ async def test_end_to_end_multi_message_conversation(tokenizer, parse_fn):
         },
     ]
 
-    conv, mm_data, _ = await _maybe_await(
-        parse_fn, messages, mc, content_format="openai"
-    )
+    conv, mm_data, _ = await _maybe_await(parse_fn, messages, mc, content_format="openai")
     tensors = list(mm_data["prompt_embeds"])
     assert len(tensors) == NUM_TENSORS
 

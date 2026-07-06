@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn.parameter import Parameter
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, ModelConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig
 from aphrodite.distributed import (
     get_dp_group,
     get_ep_group,
@@ -104,9 +104,7 @@ class Step3p5MLP(nn.Module):
         )
 
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         self.act_fn = SiluAndMul()
         self.prefix = prefix
         self.hidden_size = hidden_size
@@ -214,9 +212,7 @@ class Step3p5Attention(nn.Module):
         if rope_scaling is not None and not isinstance(rope_scaling, dict):
             raise ValueError("rope_scaling must be a dict for Step3p5Attention.")
 
-        rope_parameters: dict[str, Any] = (
-            dict(rope_scaling) if rope_scaling is not None else {}
-        )
+        rope_parameters: dict[str, Any] = dict(rope_scaling) if rope_scaling is not None else {}
         rope_parameters.setdefault("rope_type", "default")
         rope_parameters["rope_theta"] = self.rope_theta
         rope_parameters["partial_rotary_factor"] = partial_rotary_factor
@@ -257,9 +253,7 @@ class Step3p5Attention(nn.Module):
 
         self.max_position_embeddings = max_position
         assert self.partial_rotary_factor == 1 or self.partial_rotary_factor == 0.5
-        self.rotary_dim = (
-            self.head_dim if self.partial_rotary_factor == 1 else self.head_dim // 2
-        )
+        self.rotary_dim = self.head_dim if self.partial_rotary_factor == 1 else self.head_dim // 2
 
     def forward(
         self,
@@ -316,14 +310,11 @@ class FusedMoEBlock(nn.Module):
         self.n_local_physical_experts = self.n_physical_experts // self.ep_size
 
         self.physical_expert_start = self.ep_rank * self.n_local_physical_experts
-        self.physical_expert_end = (
-            self.physical_expert_start + self.n_local_physical_experts
-        )
+        self.physical_expert_end = self.physical_expert_start + self.n_local_physical_experts
 
         if self.tp_size > config.moe_num_experts:
             raise ValueError(
-                f"Tensor parallel size {self.tp_size} is greater than "
-                f"the number of experts {config.moe_num_experts}."
+                f"Tensor parallel size {self.tp_size} is greater than the number of experts {config.moe_num_experts}."
             )
 
         self.gate = FP32ReplicatedLinear(
@@ -342,22 +333,14 @@ class FusedMoEBlock(nn.Module):
             requires_grad=False,
         )
         self.need_fp32_gate = config.need_fp32_gate
-        assert self.need_fp32_gate, (
-            "Router logits must use FP32 precision for numerical stability."
-        )
+        assert self.need_fp32_gate, "Router logits must use FP32 precision for numerical stability."
 
         activation = "silu"
         swiglu_limits = config.swiglu_limits or []
-        swiglu_limit = (
-            swiglu_limits[self.layer_idx]
-            if self.layer_idx < len(swiglu_limits)
-            else None
-        )
+        swiglu_limit = swiglu_limits[self.layer_idx] if self.layer_idx < len(swiglu_limits) else None
         if swiglu_limit not in (None, 0):
             swiglu_limit = float(swiglu_limit)
-            assert swiglu_limit == 7.0, (
-                "Swiglu limit in fused moe block only support 7.0 now."
-            )
+            assert swiglu_limit == 7.0, "Swiglu limit in fused moe block only support 7.0 now."
             activation = "swiglustep"
             logger.debug(
                 "step3p5 layer_idx: %s, activation: %s, limit: %s",
@@ -399,15 +382,11 @@ class FusedMoEBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
 
         if self.experts.is_internal_router:
-            final_hidden_states = self.experts(
-                hidden_states=hidden_states, router_logits=hidden_states
-            )
+            final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=hidden_states)
         else:
             # TODO(bnell): this gate could be moved into the FusedMoE?
             router_logits, _ = self.gate(hidden_states)
-            final_hidden_states = self.experts(
-                hidden_states=hidden_states, router_logits=router_logits
-            )
+            final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
         return final_hidden_states.view(num_tokens, hidden_dim)
 
@@ -434,26 +413,17 @@ class Step3p5DecoderLayer(nn.Module):
             if (
                 getattr(config, "attention_other_setting", None)
                 and getattr(config, "layer_types", [])
-                and config.layer_types[layer_idx]
-                == config.attention_other_setting["attention_type"]
+                and config.layer_types[layer_idx] == config.attention_other_setting["attention_type"]
             ):
-                num_attention_heads = config.attention_other_setting[
-                    "num_attention_heads"
-                ]
-                num_attention_groups = config.attention_other_setting[
-                    "num_attention_groups"
-                ]
+                num_attention_heads = config.attention_other_setting["num_attention_heads"]
+                num_attention_groups = config.attention_other_setting["num_attention_groups"]
                 head_dim = config.attention_other_setting["head_dim"]
             partial_rotary_factors = getattr(config, "partial_rotary_factors", [])
             self.self_attn = Step3p5Attention(
                 hidden_size=self.hidden_size,
-                num_heads=num_attention_heads
-                if num_attention_heads
-                else config.num_attention_heads,
+                num_heads=num_attention_heads if num_attention_heads else config.num_attention_heads,
                 max_position=config.max_position_embeddings,
-                num_kv_heads=num_attention_groups
-                if num_attention_groups
-                else config.num_attention_groups,
+                num_kv_heads=num_attention_groups if num_attention_groups else config.num_attention_groups,
                 rope_theta=config.rope_theta,
                 rms_norm_eps=config.rms_norm_eps,
                 qkv_bias=getattr(config, "attention_bias", False),
@@ -462,27 +432,18 @@ class Step3p5DecoderLayer(nn.Module):
                 quant_config=quant_config,
                 rope_scaling=getattr(config, "rope_scaling", None),
                 sliding_window=getattr(config, "sliding_window", None),
-                use_head_wise_attn_gate=getattr(
-                    config, "use_head_wise_attn_gate", False
-                ),
+                use_head_wise_attn_gate=getattr(config, "use_head_wise_attn_gate", False),
                 layer_types=getattr(config, "layer_types", []),
                 use_rope_layers=getattr(config, "use_rope_layers", []),
                 yarn_only_types=getattr(config, "yarn_only_types", []),
-                partial_rotary_factor=partial_rotary_factors[layer_idx]
-                if partial_rotary_factors
-                else 1.0,
+                partial_rotary_factor=partial_rotary_factors[layer_idx] if partial_rotary_factors else 1.0,
                 prefix=f"{prefix}.self_attn",
             )
         else:
-            raise ValueError(
-                f"Unsupported attention implementation: {config.att_impl_type}"
-            )
+            raise ValueError(f"Unsupported attention implementation: {config.att_impl_type}")
         self.use_moe = False
         self.tp_group = get_tp_group()
-        self.use_fused_all_reduce = (
-            get_tensor_model_parallel_world_size() > 1
-            and get_dp_group().world_size == 1
-        )
+        self.use_fused_all_reduce = get_tensor_model_parallel_world_size() > 1 and get_dp_group().world_size == 1
         if self.use_fused_all_reduce:
             logger.warning_once("Enable custom fused all reduce...")
         else:
@@ -510,21 +471,15 @@ class Step3p5DecoderLayer(nn.Module):
                 prefix=f"{prefix}.mlp",
             )
         self.input_layernorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = GemmaRMSNorm(
-            config.hidden_size, config.rms_norm_eps
-        )
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.prefix = prefix
 
-    def add_and_maybe_inplace_all_reduce(
-        self, in1: torch.Tensor, in2: torch.Tensor
-    ) -> torch.Tensor:
+    def add_and_maybe_inplace_all_reduce(self, in1: torch.Tensor, in2: torch.Tensor) -> torch.Tensor:
         if not self.use_fused_all_reduce:
             return in1 + in2
         return self.tp_group.all_reduce(in1 + in2)
 
-    def forward(
-        self, positions: torch.Tensor, hidden_states: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, positions: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -556,9 +511,7 @@ class Step3p5Model(nn.Module):
 
         self.moe_num_experts = config.moe_num_experts
 
-        if get_pp_group().is_first_rank or (
-            config.tie_word_embeddings and get_pp_group().is_last_rank
-        ):
+        if get_pp_group().is_first_rank or (config.tie_word_embeddings and get_pp_group().is_last_rank):
             self.embed_tokens = VocabParallelEmbedding(
                 self.vocab_size,
                 config.hidden_size,
@@ -629,9 +582,7 @@ class Step3p5Model(nn.Module):
 
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
-        base_layer = (
-            "base_layer." if any(".base_layer." in name for name in params_dict) else ""
-        )
+        base_layer = "base_layer." if any(".base_layer." in name for name in params_dict) else ""
 
         # Old packed 3D format: .moe.gate_proj.weight [num_experts, out, in]
         expert_params_mapping = [
@@ -747,9 +698,7 @@ class Step3p5Model(nn.Module):
                     if name_mapped not in params_dict:
                         continue
                     param = params_dict[name_mapped]
-                    weight_loader = typing.cast(
-                        Callable[..., bool], param.weight_loader
-                    )
+                    weight_loader = typing.cast(Callable[..., bool], param.weight_loader)
                     success = weight_loader(
                         param,
                         loaded_weight,
@@ -783,8 +732,7 @@ class Step3p5Model(nn.Module):
                 if weight_name not in local_name:
                     continue
                 if any(
-                    disable_moe_stacked_param in local_name
-                    for disable_moe_stacked_param in disable_moe_stacked_params
+                    disable_moe_stacked_param in local_name for disable_moe_stacked_param in disable_moe_stacked_params
                 ):
                     continue
                 replaced_name = local_name.replace(weight_name, param_name)
@@ -805,8 +753,7 @@ class Step3p5Model(nn.Module):
                     if is_pp_missing_parameter(replaced_name, self):
                         continue
                     if (
-                        replaced_name.endswith(".bias")
-                        or replaced_name.endswith("_bias")
+                        replaced_name.endswith(".bias") or replaced_name.endswith("_bias")
                     ) and replaced_name not in params_dict:
                         continue
                     if replaced_name not in params_dict:
@@ -818,16 +765,9 @@ class Step3p5Model(nn.Module):
                     # have shape [1] in compressed-tensors NVFP4 checkpoints.
                     # Expand to per-expert before the iteration loop.
                     if loaded_weight.ndim == 0:
-                        loaded_weight = loaded_weight.unsqueeze(0).expand(
-                            moe_expert_num
-                        )
-                    elif (
-                        loaded_weight.shape[0] == 1
-                        and loaded_weight.shape[0] != moe_expert_num
-                    ):
-                        loaded_weight = loaded_weight.expand(
-                            moe_expert_num, *loaded_weight.shape[1:]
-                        )
+                        loaded_weight = loaded_weight.unsqueeze(0).expand(moe_expert_num)
+                    elif loaded_weight.shape[0] == 1 and loaded_weight.shape[0] != moe_expert_num:
+                        loaded_weight = loaded_weight.expand(moe_expert_num, *loaded_weight.shape[1:])
                     assert loaded_weight.shape[0] == moe_expert_num
                     for expert_id in range(moe_expert_num):
                         loaded_weight_expert = loaded_weight[expert_id]
@@ -858,9 +798,7 @@ class Step3p5Model(nn.Module):
                         dim = param.shape[param.output_dim]
                         begin_idx = int(start_idx * dim)
                         end_idx = int(end_idx * dim)
-                        param_slice = param.narrow(
-                            param.output_dim, begin_idx, end_idx - begin_idx
-                        )
+                        param_slice = param.narrow(param.output_dim, begin_idx, end_idx - begin_idx)
                         param_slice.copy_(loaded_weight)
                         loaded_params.add(replaced_name)
                         break
@@ -873,9 +811,7 @@ class Step3p5Model(nn.Module):
                         if local_name not in params_dict:
                             continue
                         param = params_dict[local_name]
-                        weight_loader = getattr(
-                            param, "weight_loader", default_weight_loader
-                        )
+                        weight_loader = getattr(param, "weight_loader", default_weight_loader)
                         weight_loader(param, loaded_weight)
                         loaded_params.add(local_name)
         return loaded_params
@@ -888,9 +824,7 @@ class Step3p5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
         "gate_up_proj": ["gate_proj", "up_proj"],
     }
 
-    hf_to_aphrodite_mapper = WeightsMapper(
-        orig_to_new_substr={".share_expert.": ".moe.share_expert."}
-    )
+    hf_to_aphrodite_mapper = WeightsMapper(orig_to_new_substr={".share_expert.": ".moe.share_expert."})
 
     def __init__(
         self,
@@ -900,9 +834,7 @@ class Step3p5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
     ):
         super().__init__()
         config = aphrodite_config.model_config.hf_config
-        self.model = Step3p5Model(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = Step3p5Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if get_pp_group().is_last_rank:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
@@ -914,9 +846,7 @@ class Step3p5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
         else:
             self.lm_head = PPMissingLayer()
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
         # Set MoE hyperparameters
         self.moe_layers: list[MoERunner] = []
@@ -946,9 +876,7 @@ class Step3p5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ):
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -980,12 +908,8 @@ class Step3p5ForCausalLM(nn.Module, SupportsPP, MixtureOfExperts):
         return loader.load_weights(weights, mapper=self.hf_to_aphrodite_mapper)
 
 
-def get_spec_layer_idx_from_weight_name(
-    config: ModelConfig, weight_name: str
-) -> int | None:
-    if hasattr(config, "num_nextn_predict_layers") and (
-        config.num_nextn_predict_layers > 0
-    ):
+def get_spec_layer_idx_from_weight_name(config: ModelConfig, weight_name: str) -> int | None:
+    if hasattr(config, "num_nextn_predict_layers") and (config.num_nextn_predict_layers > 0):
         layer_idx = config.num_hidden_layers
         for i in range(config.num_nextn_predict_layers):
             if weight_name.startswith(

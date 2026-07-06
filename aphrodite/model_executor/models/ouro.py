@@ -34,7 +34,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import CacheConfig, AphroditeConfig
+from aphrodite.config import AphroditeConfig, CacheConfig
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
@@ -90,9 +90,7 @@ class OuroMLP(nn.Module):
             prefix=f"{prefix}.down_proj",
         )
         if hidden_act != "silu":
-            raise ValueError(
-                f"Unsupported activation: {hidden_act}. Only silu is supported for now."
-            )
+            raise ValueError(f"Unsupported activation: {hidden_act}. Only silu is supported for now.")
         self.act_fn = SiluAndMul()
 
     def forward(self, x):
@@ -172,9 +170,7 @@ class OuroAttention(nn.Module):
             base_layer_idx = extract_layer_index(prefix)
             unique_layer_idx = ut_step * total_layers + base_layer_idx
 
-            unique_prefix = prefix.replace(
-                f"layers.{base_layer_idx}", f"layers.{unique_layer_idx}"
-            )
+            unique_prefix = prefix.replace(f"layers.{base_layer_idx}", f"layers.{unique_layer_idx}")
 
             self.attn.append(
                 Attention(
@@ -219,9 +215,7 @@ class OuroDecoderLayer(nn.Module):
     ) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
-        dual_chunk_attention_config = getattr(
-            config, "dual_chunk_attention_config", None
-        )
+        dual_chunk_attention_config = getattr(config, "dual_chunk_attention_config", None)
 
         if getattr(config, "is_causal", True):
             attn_type = AttentionType.DECODER
@@ -250,12 +244,8 @@ class OuroDecoderLayer(nn.Module):
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.input_layernorm_2 = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
-        self.post_attention_layernorm_2 = RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm_2 = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -269,9 +259,7 @@ class OuroDecoderLayer(nn.Module):
             hidden_states = self.input_layernorm(hidden_states)
         else:
             hidden_states, residual = self.input_layernorm(hidden_states, residual)
-        hidden_states = self.self_attn(
-            positions=positions, hidden_states=hidden_states, current_ut=current_ut
-        )
+        hidden_states = self.self_attn(positions=positions, hidden_states=hidden_states, current_ut=current_ut)
         hidden_states = self.input_layernorm_2(hidden_states)
 
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
@@ -304,9 +292,7 @@ class OuroModel(nn.Module):
         quant_config = aphrodite_config.quant_config
 
         # TODO (@robertgshaw2): see if this can be moved out
-        if cache_config.sliding_window is not None and hasattr(
-            config, "max_window_layers"
-        ):
+        if cache_config.sliding_window is not None and hasattr(config, "max_window_layers"):
             assert config.max_window_layers == config.num_hidden_layers, (
                 "Sliding window for some but all layers is not supported. "
                 "This model uses sliding window but `max_window_layers` = {} "
@@ -367,9 +353,7 @@ class OuroModel(nn.Module):
         for current_ut in range(self.total_ut_steps):
             residual = None
             for layer in self.layers[self.start_layer : self.end_layer]:
-                hidden_states, residual = layer(
-                    positions, hidden_states, current_ut, residual
-                )
+                hidden_states, residual = layer(positions, hidden_states, current_ut, residual)
             hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
@@ -398,9 +382,7 @@ class OuroForCausalLM(nn.Module, SupportsLoRA):
         self.config = config
 
         self.quant_config = quant_config
-        self.model = OuroModel(
-            aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
-        )
+        self.model = OuroModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
 
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
@@ -414,9 +396,7 @@ class OuroForCausalLM(nn.Module, SupportsLoRA):
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
 
-        self.make_empty_intermediate_tensors = (
-            self.model.make_empty_intermediate_tensors
-        )
+        self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.model.embed_input_ids(input_ids)
@@ -428,9 +408,7 @@ class OuroForCausalLM(nn.Module, SupportsLoRA):
         intermediate_tensors: IntermediateTensors | None = None,
         inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor | IntermediateTensors:
-        hidden_states = self.model(
-            input_ids, positions, intermediate_tensors, inputs_embeds
-        )
+        hidden_states = self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
         return hidden_states
 
     def compute_logits(

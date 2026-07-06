@@ -23,11 +23,11 @@ from aphrodite.utils.func_utils import identity
 
 from ....conftest import (
     IMAGE_ASSETS,
+    AphroditeRunner,
     AudioTestAssets,
     HfRunner,
     ImageTestAssets,
     VideoTestAssets,
-    AphroditeRunner,
 )
 from ....utils import create_new_process_for_each_test, large_gpu_mark, multi_gpu_marks
 from ...utils import check_outputs_equal
@@ -100,9 +100,7 @@ def _granite4_vision_aphrodite_to_hf_output(aphrodite_output, model):
         for idx, token_id in enumerate(output_ids)
         if token_id != mm_token_id or idx == 0 or output_ids[idx - 1] != mm_token_id
     ]
-    hf_output_str = (
-        output_str[1:] if output_str and output_str[0] == " " else output_str
-    )
+    hf_output_str = output_str[1:] if output_str and output_str[0] == " " else output_str
     eos_token_id = 100257
     if hf_output_ids and hf_output_ids[-1] == eos_token_id:
         hf_output_str = hf_output_str + "<|end_of_text|>"
@@ -196,9 +194,7 @@ VLM_TEST_SETTINGS = {
         marks=[
             pytest.mark.core_model,
         ],
-        aphrodite_runner_kwargs={"attention_backend": "TRITON_ATTN"}
-        if current_platform.is_rocm()
-        else {},
+        aphrodite_runner_kwargs={"attention_backend": "TRITON_ATTN"} if current_platform.is_rocm() else {},
     ),
     "ultravox": VLMTestInfo(
         models=["fixie-ai/ultravox-v0_5-llama-3_2-1b"],
@@ -213,9 +209,7 @@ VLM_TEST_SETTINGS = {
             pytest.mark.core_model,
             pytest.mark.cpu_model,
             # TODO: Remove skip once model has been upstreamed to Transformers
-            pytest.mark.skip(
-                reason="Custom model code is not compatible with Transformers v5"
-            ),
+            pytest.mark.skip(reason="Custom model code is not compatible with Transformers v5"),
         ],
     ),
     #### Transformers fallback to test
@@ -226,9 +220,7 @@ VLM_TEST_SETTINGS = {
         test_type=VLMTestType.IMAGE,
         prompt_formatter=lambda vid_prompt: f"<|im_start|>user\n{vid_prompt}<|im_end|>\n<|im_start|>assistant\n",  # noqa: E501
         max_model_len=16384,
-        hf_model_kwargs=model_utils.llava_onevision_hf_model_kwargs(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
-        ),
+        hf_model_kwargs=model_utils.llava_onevision_hf_model_kwargs("llava-hf/llava-onevision-qwen2-0.5b-ov-hf"),
         auto_cls=AutoModelForImageTextToText,
         aphrodite_output_post_proc=model_utils.llava_onevision_aphrodite_to_hf_output,
         image_size_factors=[(0.25, 0.5, 1.0)],
@@ -585,11 +577,7 @@ VLM_TEST_SETTINGS = {
         use_tokenizer_eos=True,
         patch_hf_runner=model_utils.internvl_patch_hf_runner,
         # TODO: Remove skip once model has been upstreamed to Transformers
-        marks=[
-            pytest.mark.skip(
-                reason="Custom model code tries to access data from meta-tensor"
-            )
-        ],
+        marks=[pytest.mark.skip(reason="Custom model code tries to access data from meta-tensor")],
     ),
     "intern_vl-video": VLMTestInfo(
         models=[
@@ -603,11 +591,7 @@ VLM_TEST_SETTINGS = {
         patch_hf_runner=model_utils.internvl_patch_hf_runner,
         num_logprobs=10 if current_platform.is_rocm() else 5,
         # TODO: Remove skip once model has been upstreamed to Transformers
-        marks=[
-            pytest.mark.skip(
-                reason="Custom model code tries to access data from meta-tensor"
-            )
-        ],
+        marks=[pytest.mark.skip(reason="Custom model code tries to access data from meta-tensor")],
     ),
     "intern_vl-hf": VLMTestInfo(
         models=["OpenGVLab/InternVL3-1B-hf"],
@@ -633,9 +617,7 @@ VLM_TEST_SETTINGS = {
             "PerceptronAI/Isaac-0.2-2B-Preview",
         ],
         test_type=(VLMTestType.IMAGE, VLMTestType.MULTI_IMAGE),
-        prompt_formatter=lambda img_prompt: (
-            f"<|im_start|>User\n{img_prompt}<|im_end|>\n<|im_start|>assistant\n"
-        ),
+        prompt_formatter=lambda img_prompt: (f"<|im_start|>User\n{img_prompt}<|im_end|>\n<|im_start|>assistant\n"),
         img_idx_to_prompt=lambda idx: "<image>",
         single_image_prompts=IMAGE_ASSETS.prompts(
             {
@@ -644,9 +626,7 @@ VLM_TEST_SETTINGS = {
             }
         ),
         multi_image_prompt=(
-            "Picture 1: <vlm_image>\n"
-            "Picture 2: <vlm_image>\n"
-            "Describe these two images with one paragraph respectively."
+            "Picture 1: <vlm_image>\nPicture 2: <vlm_image>\nDescribe these two images with one paragraph respectively."
         ),
         enforce_eager=False,
         max_model_len=4096,
@@ -706,9 +686,7 @@ VLM_TEST_SETTINGS = {
         prompt_formatter=lambda vid_prompt: f"<|im_start|>user\n{vid_prompt}<|im_end|>\n<|im_start|>assistant\n",  # noqa: E501
         num_video_frames=16,
         max_model_len=16384,
-        hf_model_kwargs=model_utils.llava_onevision_hf_model_kwargs(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
-        ),
+        hf_model_kwargs=model_utils.llava_onevision_hf_model_kwargs("llava-hf/llava-onevision-qwen2-0.5b-ov-hf"),
         auto_cls=AutoModelForImageTextToText,
         aphrodite_output_post_proc=model_utils.llava_onevision_aphrodite_to_hf_output,
         custom_test_opts=[
@@ -748,9 +726,7 @@ VLM_TEST_SETTINGS = {
         img_idx_to_prompt=lambda idx: "(<image>./</image>)\n",
         max_model_len=4096,
         max_num_seqs=2,
-        get_stop_token_ids=lambda tok: tok.convert_tokens_to_ids(
-            ["<|im_end|>", "<|endoftext|>"]
-        ),
+        get_stop_token_ids=lambda tok: tok.convert_tokens_to_ids(["<|im_end|>", "<|endoftext|>"]),
         hf_output_post_proc=model_utils.minicpmv_trunc_hf_output,
         patch_hf_runner=model_utils.minicpmo_26_patch_hf_runner,
     ),
@@ -761,9 +737,7 @@ VLM_TEST_SETTINGS = {
         img_idx_to_prompt=lambda idx: "(<image>./</image>)\n",
         max_model_len=4096,
         max_num_seqs=2,
-        get_stop_token_ids=lambda tok: tok.convert_tokens_to_ids(
-            ["<|im_end|>", "<|endoftext|>"]
-        ),
+        get_stop_token_ids=lambda tok: tok.convert_tokens_to_ids(["<|im_end|>", "<|endoftext|>"]),
         hf_output_post_proc=model_utils.minicpmv_trunc_hf_output,
         patch_hf_runner=model_utils.minicpmv_26_patch_hf_runner,
     ),
@@ -843,9 +817,7 @@ VLM_TEST_SETTINGS = {
         models=["PaddlePaddle/PaddleOCR-VL"],
         test_type=(VLMTestType.IMAGE, VLMTestType.MULTI_IMAGE),
         prompt_formatter=lambda img_prompt: f"USER: {img_prompt}\nASSISTANT:",
-        img_idx_to_prompt=lambda idx: (
-            "<|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>"
-        ),
+        img_idx_to_prompt=lambda idx: ("<|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>"),
         multi_image_prompt=(
             "Image-1: <|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>\n"
             "Image-2: <|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>\n"
@@ -863,8 +835,7 @@ VLM_TEST_SETTINGS = {
             ),
             pytest.mark.skipif(
                 Version(TRANSFORMERS_VERSION) >= Version("5.0.0"),
-                reason="Model's custom code uses ROPE_INIT_FUNCTIONS"
-                "['default'] which was removed in transformers v5",
+                reason="Model's custom code uses ROPE_INIT_FUNCTIONS['default'] which was removed in transformers v5",
             ),
         ],
     ),
@@ -996,11 +967,7 @@ VLM_TEST_SETTINGS = {
             for inp in custom_inputs.different_patch_input_cases_internvl()
         ],
         # TODO: Remove skip once model has been upstreamed to Transformers
-        marks=[
-            pytest.mark.skip(
-                reason="Custom model code tries to access data from meta-tensor"
-            )
-        ],
+        marks=[pytest.mark.skip(reason="Custom model code tries to access data from meta-tensor")],
     ),
     "llava_onevision-multiple-images": VLMTestInfo(
         models=["llava-hf/llava-onevision-qwen2-0.5b-ov-hf"],
@@ -1008,9 +975,7 @@ VLM_TEST_SETTINGS = {
         max_model_len=16384,
         max_num_seqs=2,
         auto_cls=AutoModelForImageTextToText,
-        hf_model_kwargs=model_utils.llava_onevision_hf_model_kwargs(
-            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
-        ),
+        hf_model_kwargs=model_utils.llava_onevision_hf_model_kwargs("llava-hf/llava-onevision-qwen2-0.5b-ov-hf"),
         aphrodite_output_post_proc=model_utils.llava_onevision_aphrodite_to_hf_output,
         custom_test_opts=[
             CustomTestOptions(

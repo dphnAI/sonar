@@ -88,17 +88,13 @@ def test_pooling_params(llm: LLM):
     wo_normal = get_outputs(normalize=False)
 
     assert torch.allclose(default, w_normal, atol=1e-2), "Default should use normal."
-    assert not torch.allclose(w_normal, wo_normal, atol=1e-2), (
-        "wo_normal should not use normal."
-    )
+    assert not torch.allclose(w_normal, wo_normal, atol=1e-2), "wo_normal should not use normal."
     assert torch.allclose(w_normal, F.normalize(wo_normal, p=2, dim=-1), atol=1e-2), (
         "w_normal should be close to normal(wo_normal)."
     )
 
 
-@pytest.mark.parametrize(
-    "task", ["token_classify", "classify", "token_embed", "plugin"]
-)
+@pytest.mark.parametrize("task", ["token_classify", "classify", "token_embed", "plugin"])
 def test_unsupported_tasks(llm: LLM, task: PoolingTask):
     if task == "plugin":
         err_msg = "No IOProcessor plugin installed."

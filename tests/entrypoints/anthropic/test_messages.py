@@ -82,9 +82,7 @@ async def test_anthropic_streaming(client: anthropic.AsyncAnthropic):
     assert chunk_count > 0
     assert first_chunk is not None, "message_start chunk was never observed"
     assert first_chunk.message is not None, "first chunk should include message"
-    assert first_chunk.message.usage is not None, (
-        "first chunk should include usage stats"
-    )
+    assert first_chunk.message.usage is not None, "first chunk should include usage stats"
     assert first_chunk.message.usage.output_tokens == 0
     assert first_chunk.message.usage.input_tokens > 5
 
@@ -94,9 +92,7 @@ async def test_anthropic_tool_call(client: anthropic.AsyncAnthropic):
     resp = await client.messages.create(
         model="claude-3-7-sonnet-latest",
         max_tokens=1024,
-        messages=[
-            {"role": "user", "content": "What's the weather like in New York today?"}
-        ],
+        messages=[{"role": "user", "content": "What's the weather like in New York today?"}],
         tools=[
             {
                 "name": "get_current_weather",
@@ -106,8 +102,7 @@ async def test_anthropic_tool_call(client: anthropic.AsyncAnthropic):
                     "properties": {
                         "location": {
                             "type": "string",
-                            "description": "City or region, for example: "
-                            "New York, London, Tokyo, etc.",
+                            "description": "City or region, for example: New York, London, Tokyo, etc.",
                         }
                     },
                     "required": ["location"],
@@ -142,8 +137,7 @@ async def test_anthropic_tool_call_streaming(client: anthropic.AsyncAnthropic):
                     "properties": {
                         "location": {
                             "type": "string",
-                            "description": "City or region, for example: "
-                            "New York, London, Tokyo, etc.",
+                            "description": "City or region, for example: New York, London, Tokyo, etc.",
                         }
                     },
                     "required": ["location"],

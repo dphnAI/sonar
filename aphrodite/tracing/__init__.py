@@ -70,9 +70,7 @@ def init_tracer(
 ):
     is_available, init_tracer_fn, _, _, _ = _REGISTERED_TRACING_BACKENDS["otel"]
     if is_available():
-        return init_tracer_fn(
-            instrumenting_module_name, otlp_traces_endpoint, extra_attributes
-        )
+        return init_tracer_fn(instrumenting_module_name, otlp_traces_endpoint, extra_attributes)
 
 
 def maybe_init_worker_tracer(
@@ -82,9 +80,7 @@ def maybe_init_worker_tracer(
 ):
     is_available, _, init_worker_tracer_fn, _, _ = _REGISTERED_TRACING_BACKENDS["otel"]
     if is_available():
-        return init_worker_tracer_fn(
-            instrumenting_module_name, process_kind, process_name
-        )
+        return init_worker_tracer_fn(instrumenting_module_name, process_kind, process_name)
 
 
 def instrument(
@@ -138,9 +134,7 @@ def instrument_manual(
     """
     is_available, _, _, _, manual_instrument_fn = _REGISTERED_TRACING_BACKENDS["otel"]
     if is_available():
-        return manual_instrument_fn(
-            span_name, start_time, end_time, attributes, context, kind
-        )
+        return manual_instrument_fn(span_name, start_time, end_time, attributes, context, kind)
     else:
         return None
 
@@ -150,8 +144,5 @@ def is_tracing_available() -> bool:
     Returns True if any tracing backend (OTel, Profiler, etc.) is available.
     Use this to guard expensive tracing logic in the main code.
     """
-    check_available = [
-        is_available
-        for is_available, _, _, _, _ in _REGISTERED_TRACING_BACKENDS.values()
-    ]
+    check_available = [is_available for is_available, _, _, _, _ in _REGISTERED_TRACING_BACKENDS.values()]
     return any(check_available)

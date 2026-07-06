@@ -14,9 +14,9 @@ import openai
 import pytest
 import pytest_asyncio
 
-from tests.utils import RemoteOpenAIServer, multi_gpu_only, requires_fp8
 from aphrodite.platforms import current_platform
 from aphrodite.tokenizers import get_tokenizer
+from tests.utils import RemoteOpenAIServer, multi_gpu_only, requires_fp8
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 QWEN35_FP8_MTP_MODEL = "Qwen/Qwen3.5-35B-A3B-FP8"
@@ -203,8 +203,7 @@ async def test_thinking_token_budget_limits_reasoning(client: openai.AsyncOpenAI
             reasoning_token_count += 1
 
     assert reasoning_token_count == THINK_BUDGET, (
-        f"reasoning tokens ({reasoning_token_count}) exceeded "
-        f"thinking_token_budget ({THINK_BUDGET})"
+        f"reasoning tokens ({reasoning_token_count}) exceeded thinking_token_budget ({THINK_BUDGET})"
     )
 
 
@@ -269,28 +268,19 @@ async def test_thinking_token_budget_qwen35_fp8_mtp_concurrent_mixed_budget_and_
                 coros.append(plain_call())
         results = await asyncio.gather(*coros)
 
-    for i, (response, (kind, expected_budget)) in enumerate(
-        zip(results, _batch_spec, strict=True)
-    ):
+    for i, (response, (kind, expected_budget)) in enumerate(zip(results, _batch_spec, strict=True)):
         msg = response.choices[0].message
-        assert msg.content or getattr(msg, "reasoning", None), (
-            f"index {i} ({kind}): empty message"
-        )
+        assert msg.content or getattr(msg, "reasoning", None), f"index {i} ({kind}): empty message"
 
         if kind == "budget":
             assert expected_budget is not None
             assert response.prompt_token_ids is not None
             assert response.choices[0].token_ids is not None
-            full_ids = list(response.prompt_token_ids) + list(
-                response.choices[0].token_ids
-            )
-            n_reason = _count_reasoning_decode_token_ids_between_markers(
-                full_ids, start_ids, end_ids
-            )
+            full_ids = list(response.prompt_token_ids) + list(response.choices[0].token_ids)
+            n_reason = _count_reasoning_decode_token_ids_between_markers(full_ids, start_ids, end_ids)
             assert n_reason is not None, f"index {i}: missing reasoning start in ids"
             assert n_reason == expected_budget, (
-                f"index {i}: reasoning decode token ids ({n_reason}) != "
-                f"thinking_token_budget ({expected_budget})"
+                f"index {i}: reasoning decode token ids ({n_reason}) != thinking_token_budget ({expected_budget})"
             )
 
 
@@ -304,8 +294,7 @@ async def test_streaming_with_thinking_disabled_stays_in_content(
         "messages": [
             {
                 "role": "user",
-                "content": "Which is larger, 4 or 12?"
-                " Output exactly one token: 4 or 12.",
+                "content": "Which is larger, 4 or 12? Output exactly one token: 4 or 12.",
             }
         ],
         "max_tokens": 16,

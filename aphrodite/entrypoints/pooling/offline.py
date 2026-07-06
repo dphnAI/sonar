@@ -85,9 +85,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
         """
 
         if isinstance(prompts, dict) and "data" in prompts and pooling_task != "plugin":
-            raise ValueError(
-                "The 'data' field is only supported for the 'plugin' pooling task."
-            )
+            raise ValueError("The 'data' field is only supported for the 'plugin' pooling task.")
         self._verify_pooling_task(pooling_task)
         assert pooling_task is not None and pooling_task in self.pooling_io_processors
 
@@ -130,9 +128,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
         )
 
         outputs = self._run_engine(use_tqdm=use_tqdm, output_type=PoolingRequestOutput)
-        outputs = io_processor.post_process_offline(
-            ctx=OfflineOutputsContext(outputs=outputs)
-        )
+        outputs = io_processor.post_process_offline(ctx=OfflineOutputsContext(outputs=outputs))
         return outputs
 
     def _verify_pooling_task(self, pooling_task: PoolingTask | None):
@@ -157,19 +153,12 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
                 """  # noqa: E501
             )
 
-        if (
-            pooling_task in ("embed", "token_embed")
-            and pooling_task not in self.supported_tasks
-        ):
+        if pooling_task in ("embed", "token_embed") and pooling_task not in self.supported_tasks:
             raise ValueError(
-                "Embedding API is not supported by this model. "
-                "Try converting the model using `--convert embed`."
+                "Embedding API is not supported by this model. Try converting the model using `--convert embed`."
             )
 
-        if (
-            pooling_task in ("classify", "token_classify")
-            and pooling_task not in self.supported_tasks
-        ):
+        if pooling_task in ("classify", "token_classify") and pooling_task not in self.supported_tasks:
             raise ValueError(
                 "Classification API is not supported by this model. "
                 "Try converting the model using `--convert classify`."
@@ -178,15 +167,9 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
         # plugin task uses io_processor.parse_request to verify inputs
         if pooling_task != "plugin" and pooling_task != self.pooling_task:
             if pooling_task not in self.supported_tasks:
-                raise ValueError(
-                    f"Unsupported task: {pooling_task!r} "
-                    f"Supported tasks: {self.supported_tasks}"
-                )
+                raise ValueError(f"Unsupported task: {pooling_task!r} Supported tasks: {self.supported_tasks}")
             else:
-                raise ValueError(
-                    f"Try switching the model's pooling_task "
-                    f'via `PoolerConfig(task="{pooling_task}")`'
-                )
+                raise ValueError(f'Try switching the model\'s pooling_task via `PoolerConfig(task="{pooling_task}")`')
 
         if pooling_task == "plugin" and "plugin" not in self.pooling_io_processors:
             raise ValueError(
@@ -345,10 +328,7 @@ class PoolingOfflineMixin(OfflineInferenceMixin):
             )
 
         score_type: str | None = SCORE_TYPE_MAP.get(self.pooling_task, None)  # type: ignore[arg-type]
-        if (
-            score_type == "cross-encoder"
-            and getattr(self.model_config.hf_config, "num_labels", 0) != 1
-        ):
+        if score_type == "cross-encoder" and getattr(self.model_config.hf_config, "num_labels", 0) != 1:
             raise ValueError("Scoring API is only enabled for num_labels == 1.")
 
         if score_type is None or score_type not in self.pooling_io_processors:
