@@ -99,7 +99,7 @@ Then, install the requirements:
 ```sh
 pip install -U pip
 pip install wheel packaging ninja "setuptools>=49.4.0" numpy
-pip install -v -r requirements/cpu.txt --extra-index-url http://download.pytorch.org/whl/cpu
+uv pip install -v -r requirements/cpu.txt --torch-backend cpu
 ```
 
 Finally, install Aphrodite:
