@@ -384,6 +384,9 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                 f"(compress_ratio={self.compress_ratio})."
             )
 
+        if self.dcp_world_size > 1 and self.use_sm89_dsa:
+            self._warmup_dcp_kernels()
+
         # Pre-allocate buffers for CUDA graph compatibility when
         if self.compress_ratio > 1:
             # compress_ratio > 1 (DeepseekV4)
@@ -398,6 +401,87 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                 (scheduler_config.max_num_batched_tokens,),
                 dtype=torch.int32,
                 device=self.device,
+            )
+
+    def _warmup_dcp_kernels(self) -> None:
+        """Pre-compile the JIT kernels used by the DCP indexer prefill paths.
+
+        The startup profile/capture dummy runs never reach the real indexer
+        branches (no attention metadata), so the first real prefill would
+        otherwise pay the Triton compiles -- and the first continuation-chunk
+        prefill the multi-second CuteDSL top-k merge compile -- serialized
+        across pipeline stages. Warmed with 1-request/1-token dummies: the
+        compile keys never include the token count, so one launch per variant
+        covers every batch shape.
+        """
+        from aphrodite.utils.import_utils import has_cutedsl
+
+        try:
+            device = self.device
+            qsl_cpu = torch.tensor([0, 1], dtype=torch.int32)
+            qsl = qsl_cpu.to(device)
+            ones_cpu = torch.ones(1, dtype=torch.int32)
+            ones = ones_cpu.to(device)
+            bt = torch.zeros((1, 1), dtype=torch.int32, device=device)
+            # One launch compiles the chunk-metadata kernel for all shapes
+            # (its per-shape scalars are do_not_specialize) and both the
+            # local-prefill (dcp=1) and continuation (dcp=world) launches.
+            build_prefill_chunk_metadata(
+                0,
+                1,
+                qsl,
+                qsl_cpu,
+                ones,
+                ones,
+                ones_cpu,
+                bt,
+                self.compress_ratio,
+                dcp_rank=self.dcp_rank,
+                dcp_world_size=self.dcp_world_size,
+                cp_kv_cache_interleave_size=self.cp_kv_cache_interleave_size,
+            )
+
+            # Cross-rank top-k merge (continuation-chunk prefill and decode).
+            index_topk = getattr(
+                self.aphrodite_config.model_config.hf_config, "index_topk", None
+            )
+            if has_cutedsl() and index_topk in (512, 1024, 2048):
+                from aphrodite.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+                    StableTopKFromGatheredCandidatesKernel,
+                    pack_dcp_topk_candidates_cutedsl,
+                )
+
+                logits = torch.zeros((1, 1), dtype=torch.float32, device=device)
+                topk_idx = torch.full(
+                    (1, index_topk), -1, dtype=torch.int32, device=device
+                )
+                packed = torch.empty(
+                    (1, index_topk, 2), dtype=torch.float32, device=device
+                )
+                row_starts = torch.zeros(1, dtype=torch.int32, device=device)
+                # Prefill merge passes row_starts, decode merge does not
+                # (HAS_ROW_STARTS is part of the compile key); warm both.
+                for rs in (row_starts, None):
+                    pack_dcp_topk_candidates_cutedsl(
+                        logits,
+                        topk_idx,
+                        packed,
+                        self.dcp_rank,
+                        self.dcp_world_size,
+                        self.cp_kv_cache_interleave_size,
+                        rs,
+                    )
+                # Keyed on (topk, num_candidates) with a symbolic row count:
+                # one compile covers every batch. This is the seconds-scale
+                # CuteDSL compile.
+                StableTopKFromGatheredCandidatesKernel.compile(
+                    index_topk, self.dcp_world_size * index_topk
+                )
+        except Exception:
+            logger.warning(
+                "DCP indexer kernel warmup failed; kernels will be "
+                "JIT-compiled on first use instead.",
+                exc_info=True,
             )
 
     def _use_dcp_local_prefill(
@@ -990,7 +1074,19 @@ def build_prefill_chunk_metadata(
     )
 
 
-@triton.jit
+# The query-slice bounds vary with every batch's chunking (and the DCP
+# scalars are per-rank constants); keep them out of the specialization key so
+# the kernel compiles once instead of re-JITting per {==1, %16==0, other}
+# value bucket as prefill shapes change.
+@triton.jit(
+    do_not_specialize=[
+        "query_slice_start",
+        "query_slice_stop",
+        "DCP_RANK",
+        "DCP_WORLD",
+        "DCP_INTERLEAVE",
+    ]
+)
 def _build_prefill_chunk_metadata_kernel(
     # Inputs
     query_start_loc_ptr,

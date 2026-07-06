@@ -21,9 +21,10 @@ import aphrodite.envs as envs
 from aphrodite import _custom_ops as ops
 from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
 from aphrodite.config.cache import CacheDType
+from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.math_utils import round_up
+from aphrodite.utils.math_utils import cdiv, round_up
 from aphrodite.utils.torch_utils import np_to_pinned_tensor
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
@@ -45,6 +46,8 @@ from aphrodite.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
     from aphrodite.model_executor.models.deepseek_v2 import Indexer
+
+logger = init_logger(__name__)
 
 
 @cache
@@ -240,6 +243,76 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
                 dtype=torch.int64,
                 device=device,
             )
+        if parallel_config.decode_context_parallel_size > 1:
+            self._warmup_dcp_kernels()
+
+    def _warmup_dcp_kernels(self) -> None:
+        """Pre-compile the Triton index-conversion kernel variants used under DCP.
+
+        The startup profile/capture dummy runs never execute the sparse
+        prefill branches (they carry no attention metadata), so without this
+        the first real prefill pays the Triton JIT for each kernel variant,
+        serialized across pipeline stages. Token count only enters the launch
+        grid, never the compile key, so a single 1-token launch per variant
+        covers every batch shape. All dummy indices are -1 (invalid), so the
+        kernels write only -1 sentinels into throwaway buffers.
+        """
+        from aphrodite.distributed import get_dcp_group
+        from aphrodite.v1.worker.cp_utils import get_total_cp_world_size
+
+        try:
+            device = self.device
+            parallel_config = self.aphrodite_config.parallel_config
+            block_size = self.kv_cache_spec.block_size
+            num_topk = self.topk_tokens
+            # Mirror the runner's persistent block-table width: it is part of
+            # the compile key (constexpr max_num_blocks_per_req). See
+            # MultiGroupBlockTable.__init__ for the width formula, including
+            # the 128-token alignment round-up.
+            width = cdiv(
+                self.model_config.max_model_len,
+                block_size * get_total_cp_world_size(),
+            )
+            if block_size <= 128:
+                mult = 128 // block_size
+                width = cdiv(width, mult) * mult
+            req_id = torch.zeros(1, dtype=torch.int32, device=device)
+            block_table = torch.zeros((1, width), dtype=torch.int32, device=device)
+            indices = torch.full((1, num_topk), -1, dtype=torch.int32, device=device)
+            # Local-prefill conversion (prefill-workspace branch); mirrors
+            # forward_mqa_local_prefill.
+            triton_convert_req_index_to_global_index(
+                req_id,
+                block_table,
+                indices,
+                BLOCK_SIZE=block_size,
+                NUM_TOPK_TOKENS=num_topk,
+                HAS_PREFILL_WORKSPACE=True,
+                prefill_workspace_request_ids=req_id,
+                prefill_workspace_starts=torch.zeros(1, dtype=torch.int32, device=device),
+            )
+            # Decode/mixed DCP filter + compact conversion; mirrors forward_mqa
+            # (also warmed by CUDA graph capture, kept for enforce-eager runs).
+            block_n = num_topk if num_topk & (num_topk - 1) == 0 else 128
+            triton_filter_and_convert_dcp_index(
+                req_id,
+                block_table,
+                indices,
+                dcp_size=parallel_config.decode_context_parallel_size,
+                dcp_rank=get_dcp_group().rank_in_group,
+                cp_kv_cache_interleave_size=parallel_config.cp_kv_cache_interleave_size,
+                BLOCK_SIZE=block_size,
+                NUM_TOPK_TOKENS=num_topk,
+                BLOCK_N=block_n,
+                compact_valid_to_front=True,
+                return_valid_counts=True,
+            )
+        except Exception:
+            logger.warning(
+                "sm89 DCP Triton kernel warmup failed; kernels will be "
+                "JIT-compiled on first use instead.",
+                exc_info=True,
+            )
 
     def _build_local_prefill(
         self,
@@ -277,6 +350,13 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             prefill_query_lens.astype(np.int64),
         )
         if not all_fresh:
+            # Expected for continuation chunks (chunked prompts, preemption
+            # resumes, prefix-cache partial hits); logged once so a fast path
+            # that never engages (e.g. a gating regression) is visible.
+            logger.info_once(
+                "DCP local-prefill fast path inactive for this batch "
+                "(non-fresh prefill present); using the full-DCP prefill path."
+            )
             return num_decode_tokens, None
 
         ws_starts = (starts[num_decodes:-1] - num_decode_tokens).astype(np.int32)
