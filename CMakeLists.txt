@@ -547,8 +547,8 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
         CUDA_ARCHS "${COOPERATIVE_TOPK_ARCHS}")
     endif()
 
-    # sm89 DeepSeek sparse attention (DSA) kernels.
-    # fp8 e4m3 mma codegen for sm_89 requires CUDA 12.4+.
+    # sm89 DeepSeek sparse attention (DSA) kernels; fp8 e4m3 mma codegen for
+    # sm_89 requires CUDA 12.4+.
     if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.4)
       cuda_archs_loose_intersection(DSA_SM89_ARCHS "8.9+PTX" "${CUDA_ARCHS}")
     endif()

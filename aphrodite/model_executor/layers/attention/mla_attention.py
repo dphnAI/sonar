@@ -696,12 +696,12 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         # Sparse MLA impls only support forward_mqa (decode-style attention)
         is_sparse_impl = isinstance(self.impl, SparseMLAAttentionImpl)
 
-        # sm89 sparse local-prefill under DCP: when every prefill request is a
+        # sm89 sparse local-prefill under DCP. When every prefill request is a
         # fresh prompt, its full KV is computable on-rank from the replicated
         # activations, so prefill tokens attend locally (no q all-gather, no
         # LSE combine) and only decode tokens take the DCP path. The metadata
         # builder sets prefill_local only for Sm89MLASparseImpl batches that
-        # qualify; all other impls/metadata lack the attribute.
+        # qualify; other impls/metadata lack the attribute.
         sparse_dcp_local_prefill = (
             is_sparse_impl
             and self.impl.dcp_world_size > 1
@@ -823,8 +823,8 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                     # concatenate mqa_ql_nope and mqa_q_pe -> (B, N, L + P)
                     mqa_q = torch.cat(mqa_q, dim=-1)
                 if sparse_dcp_local_prefill:
-                    # Peel off the fresh-prompt prefill tokens (batch tail;
-                    # decode tokens come first) before the all-gather: they
+                    # Peel off the fresh-prompt prefill tokens (batch tail,
+                    # after the decode tokens) before the all-gather; they
                     # attend locally with this rank's heads only. The gate is
                     # batch-uniform across DCP ranks, so collective
                     # participation stays aligned.
@@ -834,7 +834,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                     if num_dcp_decode_tokens > 0:
                         mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
                 else:
-                    # mqa_q do allgather in head dim.
+                    # all-gather q along the head dim
                     mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
 
             # call decode attn
@@ -845,8 +845,8 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 assert mqa_prefill_q is not None
                 num_dcp_decode_tokens = attn_metadata.num_decode_tokens
                 if num_dcp_decode_tokens > 0:
-                    # Decode tokens: unchanged DCP path (all-gathered heads on
-                    # the local KV shard, then cross-rank LSE combine).
+                    # Decode tokens keep the normal DCP path, all-gathered
+                    # heads on the local KV shard then cross-rank LSE combine.
                     attn_out, lse = self.impl.forward_mqa(  # type: ignore[attr-defined]
                         mqa_q, kv_cache, attn_metadata, self
                     )
@@ -895,7 +895,6 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                             is_lse_base_on_e=self.impl.lse_base_on_e,
                         )
 
-                # v_up projection
                 self._v_up_proj(attn_out, out=mqa_output_slice)
 
         if quant_key is not None:

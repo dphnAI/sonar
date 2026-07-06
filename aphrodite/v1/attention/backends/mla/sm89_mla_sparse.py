@@ -4,10 +4,10 @@
 
 The stock DeepSeek sparse attention stack is kernel-gated to sm90+; this
 backend drives the dedicated sm89 CUDA ops instead. The KV cache must use the
-``fp8_ds_mla`` 656-byte-per-token layout (see flashmla_sparse for the format
-description): the forward kernel gathers rows directly from the fp8 pool by
-physical slot for decode and prefill-extend alike, so there is no separate
-bf16 prefill path and no upconvert workspace.
+``fp8_ds_mla`` 656-byte-per-token layout (see flashmla_sparse for the format).
+The forward kernel gathers rows directly from the fp8 pool by physical slot
+for decode and prefill-extend alike, so there is no separate bf16 prefill
+path and no upconvert workspace.
 """
 
 from dataclasses import dataclass
@@ -54,9 +54,8 @@ logger = init_logger(__name__)
 def use_sm89_dsa() -> bool:
     """Whether the sm89 DeepSeek sparse attention kernels should be used.
 
-    True only on an sm89 CUDA device with the kernels compiled in and the
-    APHRODITE_DISABLE_SM89_DSA kill switch unset; the sparse-indexer logits
-    and metadata paths key off this so a non-sm89 build is unaffected.
+    The sparse-indexer logits and metadata paths key off this, so non-sm89
+    builds are unaffected.
     """
     return (
         current_platform.is_cuda()
@@ -68,7 +67,7 @@ def use_sm89_dsa() -> bool:
 
 class Sm89MLASparseBackend(AttentionBackend):
     supported_dtypes: ClassVar[list[torch.dtype]] = [torch.bfloat16]
-    # No bf16 cache path: the forward kernel reads the fp8_ds_mla pool
+    # No bf16 cache path; the forward kernel reads the fp8_ds_mla pool
     # directly, so `--kv-cache-dtype fp8_ds_mla` (or `fp8`) is required.
     supported_kv_cache_dtypes: ClassVar[list[CacheDType]] = [
         "fp8_ds_mla",
@@ -93,7 +92,7 @@ class Sm89MLASparseBackend(AttentionBackend):
 
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
-        # DeepSeek V3.2 layout: 512 NoPE + 64 RoPE = 576.
+        # DeepSeek V3.2 layout, 512 NoPE + 64 RoPE = 576.
         return [576]
 
     @classmethod
@@ -155,22 +154,22 @@ class Sm89MLASparseBackend(AttentionBackend):
 class Sm89LocalPrefillMetadata:
     """DCP local-prefill (fresh prompts only) metadata.
 
-    Present iff every prefill request in the batch starts at context length 0
-    (no previously cached tokens). Every DCP rank then holds the complete
-    prompt activations (they are replicated across the DCP group, which reuses
-    the TP group), so each rank can build the prompt's full KV locally in a
-    per-forward shadow pool and attend with its local heads -- no q all-gather,
-    no LSE combine, and no indexer top-k merge are needed for these tokens.
+    Present iff every prefill request in the batch starts at context length 0.
+    Every DCP rank then holds the complete prompt activations (replicated
+    across the DCP group, which reuses the TP group), so each rank can build
+    the prompt's full KV locally in a per-forward shadow pool and attend with
+    its local heads, skipping the q all-gather, LSE combine, and indexer
+    top-k merge for these tokens.
     """
 
-    # int32 [num_prefill_tokens]: prefill request index (0-based within the
-    # prefill segment) for each prefill token; feeds the prefill-workspace
-    # branch of the topk index conversion kernel.
+    # int32 [num_prefill_tokens] per-token prefill request index (0-based
+    # within the prefill segment); feeds the prefill-workspace branch of the
+    # topk index conversion kernel.
     workspace_request_ids: torch.Tensor
-    # int32 [num_prefills]: row offset of each prefill request's prompt in the
-    # shadow pool (= its query start within the prefill token segment).
+    # int32 [num_prefills] row offset of each request's prompt in the shadow
+    # pool (its query start within the prefill token segment).
     workspace_starts: torch.Tensor
-    # int64 [num_prefill_tokens]: identity slots (arange) used to write the
+    # int64 [num_prefill_tokens] identity slots (arange) for writing the
     # prefill tokens' fp8_ds_mla rows into the shadow pool.
     shadow_slot_mapping: torch.Tensor
 
@@ -190,8 +189,8 @@ class Sm89MLASparseMetadata(AttentionMetadata):
     block_size: int = 64
     topk_tokens: int = 2048
     cp_kv_cache_interleave_size: int = 1
-    # Only populated under DCP when the local-prefill path is active; every
-    # other configuration leaves these at their defaults and is unaffected.
+    # Populated only under DCP when the local-prefill path is active; other
+    # configurations leave these at their defaults.
     num_decode_tokens: int = 0
     prefill_local: Sm89LocalPrefillMetadata | None = None
 
@@ -236,7 +235,7 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             and num_speculative_tokens == 0
         )
         if self.allow_local_prefill:
-            # Identity slot mapping for the local-prefill shadow pool: prefill
+            # Identity slot mapping for the local-prefill shadow pool; prefill
             # token i (in batch order) lands in shadow row i.
             self.local_prefill_slot_buffer = torch.arange(
                 aphrodite_config.scheduler_config.max_num_batched_tokens,
@@ -265,8 +264,8 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             parallel_config = self.aphrodite_config.parallel_config
             block_size = self.kv_cache_spec.block_size
             num_topk = self.topk_tokens
-            # Mirror the runner's persistent block-table width: it is part of
-            # the compile key (constexpr max_num_blocks_per_req). See
+            # Mirror the runner's persistent block-table width, which is part
+            # of the compile key (constexpr max_num_blocks_per_req). See
             # MultiGroupBlockTable.__init__ for the width formula, including
             # the 128-token alignment round-up.
             width = cdiv(
@@ -325,8 +324,8 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
         Active only when every prefill request is a fresh prompt (context
         length 0), so the whole prompt's KV is computable on-rank from the
         replicated activations. Continuation chunks (context > 0) fall back to
-        the existing full-DCP path for the entire batch: the gate must be
-        batch-uniform so every DCP rank issues the same collectives.
+        the existing full-DCP path for the entire batch, since the gate must
+        be batch-uniform for every DCP rank to issue the same collectives.
         """
         if not self.allow_local_prefill:
             return 0, None
@@ -464,7 +463,7 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
         self.prefill_local_pool: torch.Tensor | None = None
         self.prefill_local_pool_paged: torch.Tensor | None = None
         if dcp_world_size > 1:
-            # DCP local-prefill shadow pool: one fp8_ds_mla row (656 B) per
+            # DCP local-prefill shadow pool, one fp8_ds_mla row (656 B) per
             # prefill token, written each forward with an identity slot
             # mapping. Rounded up to the 64-token cache block so it can be
             # viewed with the paged shape concat_and_cache_mla expects; with
@@ -491,7 +490,6 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
         attn_metadata: Sm89MLASparseMetadata,
         layer: AttentionLayer,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        # Concatenate q if it's a tuple (ql_nope, q_pe)
         if isinstance(q, tuple):
             ql_nope, q_pe = q
             q = self.q_concat_buffer[: ql_nope.shape[0]]
@@ -514,7 +512,7 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
             # topk is not a power of two (tl.arange constraint).
             num_topk = topk_indices.shape[1]
             block_n = num_topk if num_topk & (num_topk - 1) == 0 else 128
-            # Slice req_id_per_token to the tokens covered by q: under the DCP
+            # Slice req_id_per_token to the tokens covered by q; under the DCP
             # local-prefill split q holds only the leading decode tokens (the
             # conversion grid is sized from this tensor). A full q makes this
             # slice a no-op.
@@ -569,9 +567,9 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
 
         Uses the same concat_and_cache_mla fp8_ds_mla kernel as the real cache
         write, so shadow rows are numerically identical to what the DCP path
-        would read back from the sharded cache. Identity slots: prefill token i
-        (batch order) -> shadow row i. Runs on every DCP rank with identical,
-        replicated inputs; no collective involved.
+        would read back from the sharded cache. Identity slots, prefill token
+        i (batch order) -> shadow row i. Runs on every DCP rank with
+        identical, replicated inputs; no collective involved.
         """
         prefill_local = attn_metadata.prefill_local
         assert prefill_local is not None

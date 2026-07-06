@@ -273,10 +273,8 @@ class Platform:
 
     @classmethod
     def seed_everything(cls, seed: int | None = None) -> None:
-        """
-        Set the seed of every random-number generator (Python, NumPy, torch).
-        ``torch.manual_seed`` seeds all devices; a None seed is a no-op.
-        """
+        """Seed the Python, NumPy, and torch RNGs. ``torch.manual_seed``
+        seeds all devices; a None seed is a no-op."""
         if seed is not None:
             import random
 

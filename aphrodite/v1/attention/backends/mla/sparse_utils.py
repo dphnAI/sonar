@@ -80,7 +80,7 @@ def _convert_req_index_to_global_index_kernel(
 
     # Guard block_table access. Prefill-workspace rows never consult the
     # block table (they map to workspace_start + tok below), so the block
-    # bound must not invalidate them: under DCP the per-rank block table
+    # bound must not invalidate them; under DCP the per-rank block table
     # covers only 1/dcp_world_size of the sequence, while prefill workspace
     # token ids span the full prompt.
     valid_block = (block_id < max_num_blocks_per_req) & (block_id >= 0)

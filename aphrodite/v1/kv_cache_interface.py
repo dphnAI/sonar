@@ -623,7 +623,7 @@ class SlidingWindowMLASpec(SlidingWindowSpec):
         return self.block_size // self.compress_ratio
 
     def kernel_cache_dtype_str(self, cache_dtype: str) -> str:
-        # Same contract as MLAAttentionSpec: cache_dtype_str defines the
+        # Same contract as MLAAttentionSpec; cache_dtype_str defines the
         # stored layout (e.g. DeepseekV4's 584B fp8_ds_mla rows).
         if self.cache_dtype_str is not None:
             return self.cache_dtype_str

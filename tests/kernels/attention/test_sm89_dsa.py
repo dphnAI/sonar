@@ -2,18 +2,18 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for the sm89 (Ada / RTX 4090) DeepSeek sparse attention kernels.
 
-Covers the four custom ops:
-  - sm89_paged_mqa_logits_metadata: (request, page) partition table
-  - sm89_fp8_paged_mqa_logits: paged decode indexer logits
-  - sm89_fp8_mqa_logits: ragged prefill indexer logits
-  - sm89_sparse_mla_fwd: sparse MLA forward from an fp8_ds_mla pool
+Covers the four custom ops
+  - sm89_paged_mqa_logits_metadata, the (request, page) partition table
+  - sm89_fp8_paged_mqa_logits, paged decode indexer logits
+  - sm89_fp8_mqa_logits, ragged prefill indexer logits
+  - sm89_sparse_mla_fwd, sparse MLA forward from an fp8_ds_mla pool
 
 The synthetic pool builders are byte-exact mirrors of the in-tree cache writers
-(csrc/libtorch_stable/cache_kernels.cu): the indexer K cache stores each 64-token
-page as [64x128 fp8 keys, token-major][64 fp32 per-token scales] (8448 B/page,
-scale = max(amax, 1e-4) / 448, optionally rounded up to a power of two), and the
-fp8_ds_mla cache stores each token as [512 fp8 nope][4 fp32 per-128-tile
-scales][64 bf16 rope] (656 B/token).
+in csrc/libtorch_stable/cache_kernels.cu. The indexer K cache stores each
+64-token page as [64x128 fp8 keys, token-major][64 fp32 per-token scales]
+(8448 B/page, scale = max(amax, 1e-4) / 448, optionally rounded up to a power
+of two), and the fp8_ds_mla cache stores each token as [512 fp8 nope][4 fp32
+per-128-tile scales][64 bf16 rope] (656 B/token).
 """
 
 import pytest
@@ -82,7 +82,7 @@ def _make_indexer_q(num_rows: int, num_heads: int = NUM_HEADS) -> tuple[torch.Te
 
 
 def _ke_2d(seq_bases: list[int], next_n: int) -> torch.Tensor:
-    """Per-token key windows [B, next_n] i32: token t of request b attends to
+    """Per-token key windows [B, next_n] i32. Token t of request b attends to
     seq_bases[b] - (next_n - 1) + t keys (speculative decode layout)."""
     base = torch.tensor(seq_bases, dtype=torch.int32)
     t = torch.arange(next_n, dtype=torch.int32)
@@ -290,7 +290,7 @@ def _topk_set_agreement(
 
 
 def _max_rel_err(a: torch.Tensor, b: torch.Tensor) -> float:
-    """Max |a-b| / max(|b|, 1): relative for O(1)+ logits, absolute below 1."""
+    """Max |a-b| / max(|b|, 1), relative for O(1)+ logits and absolute below 1."""
     if a.numel() == 0:
         return 0.0
     return ((a - b).abs() / b.abs().clamp_min(1.0)).max().item()
@@ -404,8 +404,8 @@ def test_sm89_paged_mqa_logits_metadata(seq_bases, next_n, num_partitions):
 
 # --------------------------------------------------------------------------- paged decode logits
 _K1_CASES = [
-    # N in {2047, 2048, 2049}: the SoA >2048 regression window around the page
-    # holding key 2048
+    # N in {2047, 2048, 2049} spans the SoA >2048 regression window around the
+    # page holding key 2048
     pytest.param([2047], True, id="n2047"),
     pytest.param([2048], True, id="n2048"),
     pytest.param([2049], True, id="n2049"),
@@ -477,7 +477,7 @@ def test_sm89_paged_mqa_logits_cuda_graph():
     weights.copy_(w_new)
     assert torch.equal(replay(), eager())
 
-    # grown seq_lens: the same graph must cover more pages (O(context) proof)
+    # with grown seq_lens the same graph must cover more pages (O(context) proof)
     seq_lens.copy_(_ke_2d(grown_bases, next_n))
     assert torch.equal(replay(), eager())
 
@@ -491,7 +491,7 @@ def test_sm89_fp8_mqa_logits(M, N, window, num_heads):
     torch.manual_seed(M * 100003 + N)
     q_fp8, weights = _make_indexer_q(M, num_heads)
     k = torch.randn(N, HEAD_DIM, device="cuda")
-    # ue8m0=False: arbitrary (non-power-of-two) fp32 scales
+    # ue8m0=False gives arbitrary (non-power-of-two) fp32 scales
     k_fp8, k_deq, k_scales = _quant_indexer_tokens(k, ue8m0=False)
 
     if window == "full":
@@ -518,8 +518,8 @@ def test_sm89_fp8_mqa_logits(M, N, window, num_heads):
     if in_window.any():
         rel = (logits - ref).abs() / ref.abs().clamp_min(1.0)
         assert rel[in_window].max().item() <= 2e-3
-    # tie_tol=5e-4: the fp32-acc kernel's summation-order noise vs the fp64
-    # oracle is ~3e-4 at the top-k boundary, so this stays tie-aware without
+    # tie_tol=5e-4 because the fp32-acc kernel's summation-order noise vs the
+    # fp64 oracle is ~3e-4 at the top-k boundary; stays tie-aware without
     # flagging benign flips (still 4x inside the 2e-3 value bound)
     assert _topk_set_agreement(logits, ref, ke, k=2048, tie_tol=5e-4) == 1.0
 
@@ -586,7 +586,7 @@ def test_sm89_sparse_mla_fwd_topk_lens(num_heads):
 
     out_full, lse_full = run(None)
     out_skip, lse_skip = run(topk_lens)
-    # bitwise, not just numeric: compare the raw bit patterns
+    # compare raw bit patterns, bitwise rather than just numeric equality
     assert torch.equal(out_skip.view(torch.int16), out_full.view(torch.int16))
     assert torch.equal(lse_skip.view(torch.int32), lse_full.view(torch.int32))
 

@@ -4,14 +4,15 @@
 // logits[m, n] = sum_h w[m, h] * relu((q[m, h, :] . k[n, :]) * k_scale[n]),  n in [0, ke_m)
 // h ranges over NUM_HEADS indexer heads (32 or 64, templated).
 //
-// Indexer K-cache page (block_size=64, 132 B/token, SoA per page):
-//   bytes [0, 8192)    : 64 keys x 128 fp8 e4m3, key(token)-major
-//   bytes [8192, 8448) : 64 fp32 per-token scales
+// An indexer K-cache page (block_size=64, 132 B/token, SoA per page) holds 64 keys x 128 fp8
+// e4m3, key(token)-major, in bytes [0, 8192), then 64 fp32 per-token scales in
+// bytes [8192, 8448).
 //
 // P persistent CTAs; the metadata kernel builds a (P+1, 2) i32 partition table splitting the
-// global page-count prefix sum. CTA p owns work units [sched[p], sched[p+1]) in (request, page)
-// order. Per page: 4-stage cp.async ring -> fp8 mma m16n8k32 (FP32 acc) -> in-register epilogue
-// (scale, relu, weight, fixed-order reduction) -> 64 fp32 stores. No float atomics; deterministic.
+// global page-count prefix sum, and CTA p owns work units [sched[p], sched[p+1]) in
+// (request, page) order. Per page a 4-stage cp.async ring feeds fp8 mma m16n8k32 (fp32
+// accumulate), then an in-register epilogue (scale, relu, weight, fixed-order reduction)
+// and 64 fp32 stores. No float atomics; deterministic.
 
 // clang-format off
 
@@ -57,10 +58,10 @@ DEVINL void mma_fp8(const uint32_t (&a)[4], const uint32_t (&b)[2], float (&c)[4
 DEVINL int swizzle_chunk(int r, int cc) { return r * HEAD_DIM + ((cc ^ (r & 7)) << 4); }
 
 // ------------------------------------------------------------- paged indexer logits
-// Block: NEXT_N*128 threads, 4 warps per token. A page's 8 n-tiles (8 keys each) are split
-// across NUM_HEADS/16 head groups x 4/(NUM_HEADS/16) key sub-bands: warp w%4 owns head group
-// (w%4) % HGROUPS and n-tiles [kg*NT, kg*NT + NT), kg = (w%4) / HGROUPS. NUM_HEADS=64 is the
-// original layout: warp w%4 -> heads [16*(w%4), 16*(w%4)+16), all 8 n-tiles (kg always 0).
+// Block of NEXT_N*128 threads, 4 warps per token. A page's 8 n-tiles (8 keys each) split
+// across NUM_HEADS/16 head groups x 4/(NUM_HEADS/16) key sub-bands, so warp w%4 owns head
+// group (w%4) % HGROUPS and n-tiles [kg*NT, kg*NT + NT) with kg = (w%4) / HGROUPS. With
+// NUM_HEADS=64 that reduces to warp w%4 -> heads [16*(w%4), 16*(w%4)+16), all 8 n-tiles.
 template <int NEXT_N, int NUM_HEADS>
 __global__ void __launch_bounds__(NEXT_N * 128, 2)
 paged_mqa_logits_kernel(const uint8_t* __restrict__ q,           // [B, NEXT_N, NUM_HEADS, 128] e4m3
@@ -85,8 +86,8 @@ paged_mqa_logits_kernel(const uint8_t* __restrict__ q,           // [B, NEXT_N, 
   const int hg = wsub % HGROUPS;
   const int kg = wsub / HGROUPS;
   const int h_base = hg * 16;
-  const int group = lane >> 2;  // 0..7
-  const int quad = lane & 3;    // 0..3
+  const int group = lane >> 2;
+  const int quad = lane & 3;
 
   const int32_t req_s = sched[2 * blockIdx.x];
   const int32_t page_s = sched[2 * blockIdx.x + 1];
@@ -113,7 +114,7 @@ paged_mqa_logits_kernel(const uint8_t* __restrict__ q,           // [B, NEXT_N, 
     const float w1 = w_row[h_base + group + 8];
     const int ke = ke_tok[tok];
 
-    // resident A fragments: q[m, h_base:h_base+16, :], 4 k-steps
+    // resident A fragments, q[m, h_base:h_base+16, :] as 4 k-steps
     uint32_t afr[4][4];
     {
       const uint8_t* qb = q + (((int64_t)m * NUM_HEADS) + h_base) * HEAD_DIM;
@@ -139,9 +140,9 @@ paged_mqa_logits_kernel(const uint8_t* __restrict__ q,           // [B, NEXT_N, 
       cp_async_commit();
     };
 
-    // Invariant: exactly STAGES + it commit groups exist before iteration `it` (empty groups
-    // pad the queue when span < STAGES or past the tail), so wait_group<STAGES-1> always
-    // guarantees the group for iteration `it` has landed.
+    // Exactly STAGES + it commit groups exist before iteration `it` (empty groups pad the
+    // queue when span < STAGES or past the tail), so wait_group<STAGES-1> always guarantees
+    // the group for iteration `it` has landed.
     const int span = p_hi - p_lo;
 #pragma unroll
     for (int s = 0; s < STAGES; ++s) {
@@ -179,7 +180,7 @@ paged_mqa_logits_kernel(const uint8_t* __restrict__ q,           // [B, NEXT_N, 
         out_cols[t][1] = fmaxf(c[1] * s1, 0.f) * w0 + fmaxf(c[3] * s1, 0.f) * w1;
       }
 
-      // sum this warp's 16 heads: each column is held by the 8 lanes with equal `quad`
+      // sum this warp's 16 heads; each column is held by the 8 lanes with equal `quad`
 #pragma unroll
       for (int t = 0; t < NT; ++t) {
 #pragma unroll
@@ -256,7 +257,7 @@ __global__ void paged_meta_kernel(const int32_t* __restrict__ seq_lens,  // [B, 
       const int64_t target = ((int64_t)p * total) / P;  // p==P -> total
       if (target >= total) {
         req = B - 1;
-        off = total - s_prefix[B - 1];  // == n_pages(B-1): exclusive end
+        off = total - s_prefix[B - 1];  // == n_pages(B-1), the exclusive end
       } else {
         int lo = 0, hi = B - 1;
         while (lo < hi) {  // first b with prefix[b+1] > target

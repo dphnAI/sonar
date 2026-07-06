@@ -66,7 +66,7 @@ def pack_dcp_topk_candidates_cutedsl(
     )
 
 
-# Strides and num_cols are runtime scalars and excluded from specialization:
+# Strides and num_cols are runtime scalars excluded from specialization.
 # logits_stride0 is the gathered-K row length, which varies with every batch's
 # prompt/context length, so folding it into the compile key (constexpr or
 # divisibility specialization) would re-JIT this kernel per prefill shape.

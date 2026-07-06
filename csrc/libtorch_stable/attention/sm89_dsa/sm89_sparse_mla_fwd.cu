@@ -3,29 +3,28 @@
 //
 //   out[t, i] = softmax_k(q[t, i, :576] . kv[idx[t, k], :576] * sm_scale) @ kv[idx[t, k], :512]
 //
-// fp8_ds_mla pool row (656 B, AoS):
-//   [0, 512)   : 512 fp8 e4m3 "nope"
-//   [512, 528) : 4 x fp32 per-128-tile scales
-//   [528, 656) : 64 x bf16 rope
+// A 656B AoS pool row is 512 fp8 e4m3 "nope" bytes at [0, 512), 4 fp32
+// per-128-tile scales at [512, 528), and 64 bf16 rope values at [528, 656).
 //
 // Grid (T, ceil(h/16)); 128 threads / 4 warps; BI=32 keys per iteration.
-//   2-stage cp.async staging ring of raw 656B rows (by slot; -1 -> slot 0 + score mask)
+//   2-stage cp.async staging ring of raw 656B rows (by slot; -1 uses slot 0 + score mask)
 //   -> dequant nope fp8->bf16 (x tile scale) + rope passthrough into sKV [32 x 584]
 //   -> QK bf16 mma m16n8k16 (warp w owns keys [8w, 8w+8); 36 k-steps over 576 dims)
 //   -> masked scaled scores to smem; redundant per-lane online softmax (fixed order)
 //   -> PV bf16 mma (warp w owns out cols [128w, 128w+128); B-frags via ldmatrix.x4.trans)
-// l==0 rows (all -1 indices) write 0 output / -inf LSE. No atomics; fixed reduction orders
-// -> bitwise run-to-run deterministic. Static shapes; -1 handling makes it CUDA-graph-safe.
+// l==0 rows (all -1 indices) write 0 output / -inf LSE. No atomics and fixed reduction
+// orders, so bitwise run-to-run deterministic. Static shapes and -1 handling keep it
+// CUDA-graph-safe.
 //
-// Optional topk_lens[T] (requires front-compacted index rows: valid slots first, then -1)
+// Optional topk_lens[T] (requires front-compacted index rows, valid slots first then -1)
 // clamps the key loop to ceil(len/BI) tiles. The skipped tiles are all-(-1) no-ops in the
 // full loop (alpha == 1, sum == 0, P == 0), so the result is identical; DCP passes its
 // per-rank valid counts here to skip the ~(1 - 1/dcp_world_size) non-owned candidates.
 // The loop bound is read from device memory under a fixed grid, so it stays graph-safe.
 //
-// cp.async invariant: exactly STAGES commit groups in the prologue (empty
-// commits pad when n_iters < STAGES) and exactly one commit per loop iteration (empty past
-// the tail), so cp_async_wait<STAGES-1> always guarantees iteration `it`'s group landed.
+// cp.async pipeline invariant. The prologue commits exactly STAGES groups (empty commits
+// pad when n_iters < STAGES) and each loop iteration commits exactly one (empty past the
+// tail), so cp_async_wait<STAGES-1> always guarantees iteration `it`'s group has landed.
 
 // clang-format off
 
@@ -48,13 +47,13 @@
 namespace sm89_dsa {
 
 constexpr int D = 576;   // 512 nope + 64 rope
-constexpr int DN = 512;  // value dims (MLA absorb: V == K nope)
+constexpr int DN = 512;  // value dims (MLA absorb, V == K nope)
 constexpr int ROW_BYTES = 656;
 constexpr int ROW_CHUNKS = ROW_BYTES / 16;  // 41
 constexpr int BI = 32;                      // keys per pipeline iteration
 constexpr int STAGES = 2;
 constexpr int HT = 16;                    // head tile (one m16 mma tile)
-constexpr int SKV_STRIDE = D + 8;         // halves; rows 1168B: 16B-aligned, 4-word bank skew
+constexpr int SKV_STRIDE = D + 8;         // in halves; 1168B rows stay 16B-aligned, 4-word bank skew
 constexpr int SQ_STRIDE = D + 8;
 constexpr int SS_STRIDE = BI + 1;         // fp32; +1 pad -> per-row bank skew
 
@@ -97,9 +96,8 @@ DEVINL float2 fp8x2_to_float2(uint16_t v) {
   return __half22float2(*reinterpret_cast<__half2*>(&h2));
 }
 
-// ------------------------------------------------------------- sparse MLA forward
-// HAS_LENS == false compiles the constexpr block away, leaving the original
-// full-topk loop untouched (the extra kernel param is never read).
+// HAS_LENS == false compiles the len clamp away, leaving the full-topk loop
+// untouched (the extra kernel param is never read).
 template <bool HAS_LENS>
 __global__ void __launch_bounds__(128, 1)
 sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
@@ -120,8 +118,8 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
   const int tid = threadIdx.x;
   const int warp = tid >> 5;
   const int lane = tid & 31;
-  const int group = lane >> 2;  // 0..7
-  const int quad = lane & 3;    // 0..3
+  const int group = lane >> 2;
+  const int quad = lane & 3;
   const int r0 = group, r1 = group + 8;
   const float NEG_INF = __int_as_float(0xff800000);
 
@@ -151,9 +149,9 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
 
   int n_iters = (topk + BI - 1) / BI;
   if constexpr (HAS_LENS) {
-    // Front-compacted rows: every key at/past len is -1, so the dropped tiles
-    // are exact no-ops. Clamp defensively; the per-key -1 mask still guards
-    // every key actually processed, so a wrong len can only mis-count how
+    // Rows are front-compacted, so every key at/past len is -1 and the
+    // dropped tiles are exact no-ops. Clamp defensively; the per-key -1 mask
+    // still guards every processed key, so a wrong len can only change how
     // many all-(-1) tiles get scanned, never corrupt the output.
     const int len = min(max(topk_lens[t], 0), topk);
     n_iters = min(n_iters, (len + BI - 1) / BI);
@@ -166,7 +164,7 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
 
   float m_st[2] = {NEG_INF, NEG_INF};  // online softmax state for rows r0, r1
   float l_st[2] = {0.f, 0.f};
-  float acc[16][4];  // 16 n8-tiles: out cols [128*warp, 128*warp+128)
+  float acc[16][4];  // 16 n8-tiles covering out cols [128*warp, 128*warp+128)
 #pragma unroll
   for (int i = 0; i < 16; ++i)
 #pragma unroll
@@ -206,7 +204,7 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
     if (it + STAGES < n_iters) issue_iter(it + STAGES, stage);
     else cp_async_commit();  // keep the commit-count invariant through the tail
 
-    // ---- QK: warp owns keys [8*warp, 8*warp+8); 36 k-steps over 576 dims
+    // ---- QK mma; warp owns keys [8*warp, 8*warp+8), 36 k-steps over 576 dims
     float c[4] = {0.f, 0.f, 0.f, 0.f};
     {
       const __nv_bfloat16* bk = sKV + (8 * warp + group) * SKV_STRIDE + 2 * quad;
@@ -237,7 +235,7 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
     }
     __syncthreads();
 
-    // ---- online softmax: every lane redundantly processes its two rows in fixed order
+    // ---- online softmax; every lane redundantly processes its two rows in fixed order
     uint32_t pf[2][4];  // P bf16 A-frags for the 2 PV k-steps
 #pragma unroll
     for (int rr = 0; rr < 2; ++rr) {
@@ -272,7 +270,7 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
       }
     }
 
-    // ---- PV: warp owns out cols [128*warp, 128*warp+128); B via ldmatrix.x4.trans
+    // ---- PV mma; warp owns out cols [128*warp, 128*warp+128), B-frags via ldmatrix.x4.trans
     const int mr = lane & 15;             // key row within 16-key k-step tile
     const int mc = (lane >> 4) * 8;       // col half of the 16-col chunk
 #pragma unroll
@@ -289,7 +287,7 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
   }
   cp_async_wait<0>();
 
-  // ---- epilogue: normalize, store bf16 out + fp32 lse (l==0 -> 0 / -inf)
+  // ---- epilogue; normalize and store bf16 out + fp32 lse (l==0 writes 0 / -inf)
 #pragma unroll
   for (int rr = 0; rr < 2; ++rr) {
     const int hh = h_base + (rr ? r1 : r0);

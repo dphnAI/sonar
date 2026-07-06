@@ -3076,9 +3076,9 @@ def sm89_fp8_paged_mqa_logits(
 ) -> None:
     """Paged fp8 MQA indexer logits for decode on sm89 (block size 64).
 
-    q: [B, next_n, 64, 128] fp8 e4m3 viewed as uint8; kv_cache_pool: [pool_pages, 8448]
-    uint8 (per page: 8192B fp8 keys + 256B fp32 per-token scales); weights: [B*next_n, 64]
-    fp32; sched: [(P+1), 2] int32 built by sm89_paged_mqa_logits_metadata; logits:
+    q is [B, next_n, 64, 128] fp8 e4m3 viewed as uint8; kv_cache_pool [pool_pages, 8448]
+    uint8 (per page, 8192B fp8 keys + 256B fp32 per-token scales); weights [B*next_n, 64]
+    fp32; sched [(P+1), 2] int32 built by sm89_paged_mqa_logits_metadata; logits
     [B*next_n, max_model_len] fp32, written for columns [0, seq_len) per row. With
     clean_logits, the tail columns of each row's last partial page are set to -inf.
     """
@@ -3103,9 +3103,9 @@ def sm89_fp8_mqa_logits(
 ) -> None:
     """Prefill/ragged fp8 MQA indexer logits on sm89 over a contiguous gathered kv buffer.
 
-    q: [M, 64, 128] fp8 e4m3 viewed as uint8; kv: [N, 128] fp8 e4m3 viewed as uint8;
-    kv_scales: [N] fp32; weights: [M, 64] fp32; cu_seqlen_ks/cu_seqlen_ke: [M] int32
-    per-row key windows (clamped to [0, N]); logits: [M, N] fp32, written only in the
+    q is [M, 64, 128] fp8 e4m3 viewed as uint8; kv [N, 128] fp8 e4m3 viewed as uint8;
+    kv_scales [N] fp32; weights [M, 64] fp32; cu_seqlen_ks/cu_seqlen_ke [M] int32
+    per-row key windows (clamped to [0, N]); logits [M, N] fp32, written only in the
     [ks, ke) window of each row (the caller owns the fill value outside the window).
     """
     torch.ops._C.sm89_fp8_mqa_logits(q, kv, kv_scales, weights, cu_seqlen_ks, cu_seqlen_ke, logits)
@@ -3122,14 +3122,15 @@ def sm89_sparse_mla_fwd(
 ) -> None:
     """Sparse MLA forward on sm89, gathering directly from an fp8_ds_mla pool by slot.
 
-    q: [T, h, 576] bf16; kv_cache_pool: [S, 656] uint8 (fp8_ds_mla rows); indices:
-    [T, topk] int32 physical slots, -1 padded; out: [T, h, 512] bf16; lse: [T, h] fp32.
+    q is [T, h, 576] bf16; kv_cache_pool [S, 656] uint8 (fp8_ds_mla rows); indices
+    [T, topk] int32 physical slots, -1 padded; out [T, h, 512] bf16; lse [T, h] fp32.
     Rows whose indices are all -1 produce zero output and -inf LSE.
 
-    topk_lens: optional [T] int32 per-token valid counts. Requires index rows to be
-    front-compacted (valid slots first, then -1); the kernel then stops after the last
-    valid slot instead of scanning all topk columns, with output identical to
-    topk_lens=None. DCP passes its per-rank counts here (~topk/dcp_world_size valid).
+    topk_lens is an optional [T] int32 of per-token valid counts. It requires index
+    rows to be front-compacted (valid slots first, then -1); the kernel then stops
+    after the last valid slot instead of scanning all topk columns, with output
+    identical to topk_lens=None. DCP passes its per-rank counts here
+    (~topk/dcp_world_size valid).
     """
     torch.ops._C.sm89_sparse_mla_fwd(q, kv_cache_pool, indices, out, lse, sm_scale, topk_lens)
 

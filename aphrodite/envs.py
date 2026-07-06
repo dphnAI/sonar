@@ -1892,8 +1892,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Disable logging of Aphrodite logo at server startup time.
     "APHRODITE_DISABLE_LOG_LOGO": lambda: bool(int(os.getenv("APHRODITE_DISABLE_LOG_LOGO", "0"))),
     # Kill switch for the sm89 (Ada, e.g. RTX 4090) DeepSeek sparse attention
-    # kernels. When set, the SM89_MLA_SPARSE backend and the sm89 indexer
-    # logits paths are skipped even if the kernels are compiled in.
+    # kernels. Skips the SM89_MLA_SPARSE backend and the sm89 indexer logits
+    # paths even if the kernels are compiled in.
     "APHRODITE_DISABLE_SM89_DSA": lambda: bool(int(os.getenv("APHRODITE_DISABLE_SM89_DSA", "0"))),
     # Disable PDL for LoRA, as enabling PDL with LoRA on SM100 causes
     # Triton compilation to fail.

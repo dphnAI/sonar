@@ -495,8 +495,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
 #endif
 
 #ifdef APHRODITE_ENABLE_SM89_DSA
-  // sm89 DeepSeek sparse attention kernels.
-  // conditionally compiled so impl registrations are in source files
+  // sm89 DeepSeek sparse attention; impls are registered in the kernel sources
   ops.def(
       "sm89_fp8_paged_mqa_logits(Tensor q, Tensor pool, Tensor weights, "
       "Tensor seq_lens, Tensor block_table, Tensor sched, Tensor! logits, "

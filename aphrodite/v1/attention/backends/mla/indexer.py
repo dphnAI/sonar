@@ -193,12 +193,12 @@ class DeepseekV32IndexerPrefillChunkMetadata:
 @dataclass
 class DeepseekV32IndexerPrefillMetadata:
     chunks: list[DeepseekV32IndexerPrefillChunkMetadata]
-    # sm89 DCP local-prefill mode (fresh prompts only): chunk metadata was
+    # sm89 DCP local-prefill mode (fresh prompts only). Chunk metadata was
     # built with global (dcp=1) row bounds, chunk.block_table points into a
     # per-forward shadow K cache quantized locally from this batch's k, and
     # the cross-rank top-k merge is skipped. See Sm89LocalPrefillMetadata.
     dcp_local_prefill: bool = False
-    # int64 [num_prefill_tokens]: block-aligned identity slots for writing the
+    # int64 [num_prefill_tokens] block-aligned identity slots for writing the
     # prefill tokens' quantized K into the shadow cache.
     shadow_slot_mapping: torch.Tensor | None = None
     # Number of (block_size-token) pages in the shadow cache.
@@ -408,9 +408,9 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
 
         The startup profile/capture dummy runs never reach the real indexer
         branches (no attention metadata), so the first real prefill would
-        otherwise pay the Triton compiles -- and the first continuation-chunk
-        prefill the multi-second CuteDSL top-k merge compile -- serialized
-        across pipeline stages. Warmed with 1-request/1-token dummies: the
+        otherwise pay the Triton compiles (and the first continuation-chunk
+        prefill the multi-second CuteDSL top-k merge compile), serialized
+        across pipeline stages. Warmed with 1-request/1-token dummies; the
         compile keys never include the token count, so one launch per variant
         covers every batch shape.
         """
@@ -471,8 +471,8 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                         self.cp_kv_cache_interleave_size,
                         rs,
                     )
-                # Keyed on (topk, num_candidates) with a symbolic row count:
-                # one compile covers every batch. This is the seconds-scale
+                # Keyed on (topk, num_candidates) with a symbolic row count,
+                # so one compile covers every batch. This is the seconds-scale
                 # CuteDSL compile.
                 StableTopKFromGatheredCandidatesKernel.compile(
                     index_topk, self.dcp_world_size * index_topk
@@ -493,7 +493,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
     ) -> bool:
         """Whether this batch qualifies for the sm89 DCP local-prefill path.
 
-        Fresh prompts only (context length 0 for every prefill request): the
+        Fresh prompts only (context length 0 for every prefill request). The
         full prompt K is then computable on-rank from the replicated
         activations, so top-k can be selected over the local full-prompt
         logits and the cross-rank merge skipped. Continuation chunks fall back
@@ -785,7 +785,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                 request_offset=num_decodes,
             )
 
-            # sm89 DCP local-prefill: build chunk metadata with global (dcp=1)
+            # sm89 DCP local-prefill builds chunk metadata with global (dcp=1)
             # row bounds so top-k runs over each rank's local full-prompt K
             # (quantized from this batch's replicated k into the shadow cache)
             # and the cross-rank merge is skipped.
@@ -922,7 +922,7 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             if seq_lens.dim() == 1:
                 seq_lens = seq_lens.unsqueeze(-1)
 
-            # Must be checked before the deep_gemm branch: deep_gemm may be
+            # Must be checked before the deep_gemm branch; deep_gemm may be
             # pip-installed on sm89 even though its kernels cannot run there.
             if self.use_sm89_dsa:
                 # Fills the persistent (P+1, 2) partition table in place, so

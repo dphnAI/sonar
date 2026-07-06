@@ -336,7 +336,7 @@ def sparse_attn_indexer(
             ((RADIX_TOPK_WORKSPACE_SIZE,), torch.uint8),
         ]
         if dcp_local_prefill_shadow_rows > 0:
-            # sm89 DCP local-prefill shadow K cache: one quantized row + scale
+            # sm89 DCP local-prefill shadow K cache, one quantized row + scale
             # per prefill token, sized for the worst case (max batched tokens
             # plus one page of alignment padding per request).
             profile_specs.append(
@@ -430,7 +430,7 @@ def sparse_attn_indexer(
         local_prefill = getattr(prefill_metadata, "dcp_local_prefill", False)
         gather_src_cache = kv_cache
         if local_prefill:
-            # sm89 DCP local-prefill (fresh prompts): the real indexer cache
+            # sm89 DCP local-prefill (fresh prompts). The real indexer cache
             # holds only this rank's 1/dcp KV shard, but k carries the full
             # fresh prompts (activations are replicated across the DCP group).
             # Quantize them into a per-forward shadow cache with the same
@@ -520,7 +520,7 @@ def sparse_attn_indexer(
                         cu_seqlen_ke,
                     )
                 elif _use_sm89_dsa():
-                    # Must be checked before the deep_gemm branch: deep_gemm may
+                    # Must be checked before the deep_gemm branch; deep_gemm may
                     # be pip-installed on sm89 even though its kernels cannot
                     # run there. FP4 Q never reaches here (SM100-only).
                     assert q_scale_slice is None
@@ -581,8 +581,8 @@ def sparse_attn_indexer(
         assert decode_metadata is not None
         if _use_sm89_dsa():
             # The sm89 kernel consumes whole pages ([num_pages, page_bytes],
-            # per page: block_size fp8 key rows then block_size fp32 scales)
-            # rather than the per-token quant view deep_gemm uses.
+            # each page holds block_size fp8 key rows then block_size fp32
+            # scales) rather than the per-token quant view deep_gemm uses.
             kv_cache = kv_cache.view(torch.uint8).view(kv_cache.shape[0], -1)
         else:
             kv_cache = kv_cache_as_quant_view(kv_cache, head_dim, use_fp4_cache)
@@ -648,7 +648,7 @@ def sparse_attn_indexer(
                 max_model_len,
             )
         elif _use_sm89_dsa():
-            # Must be checked before the deep_gemm branch: deep_gemm may be
+            # Must be checked before the deep_gemm branch; deep_gemm may be
             # pip-installed on sm89 even though its kernels cannot run there.
             # schedule_metadata is the (P+1, 2) partition table built by
             # sm89_paged_mqa_logits_metadata in the indexer metadata builder.
@@ -840,7 +840,7 @@ class SparseAttnIndexer(CustomOp):
         self.dcp_rank = get_dcp_group().rank_in_group if self.dcp_world_size > 1 else 0
         self.cp_kv_cache_interleave_size = parallel_config.cp_kv_cache_interleave_size
         # Worst-case row count for the sm89 DCP local-prefill shadow K cache
-        # (see sparse_attn_indexer): every prefill token plus up to one
+        # (see sparse_attn_indexer), every prefill token plus up to one
         # 64-token page of alignment padding per request. Used only to
         # reserve workspace during the profiling run; 0 disables it.
         self.dcp_local_prefill_shadow_rows = 0
