@@ -696,6 +696,24 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         # Sparse MLA impls only support forward_mqa (decode-style attention)
         is_sparse_impl = isinstance(self.impl, SparseMLAAttentionImpl)
 
+        # sm89 sparse local-prefill under DCP: when every prefill request is a
+        # fresh prompt, its full KV is computable on-rank from the replicated
+        # activations, so prefill tokens attend locally (no q all-gather, no
+        # LSE combine) and only decode tokens take the DCP path. The metadata
+        # builder sets prefill_local only for Sm89MLASparseImpl batches that
+        # qualify; all other impls/metadata lack the attribute.
+        sparse_dcp_local_prefill = (
+            is_sparse_impl
+            and self.impl.dcp_world_size > 1
+            and getattr(attn_metadata, "prefill_local", None) is not None
+        )
+        if sparse_dcp_local_prefill:
+            # Build the per-forward shadow pool of this batch's fresh prompt
+            # KV before the attention kernels below consume it.
+            self.impl.build_local_prefill_pool(  # type: ignore[attr-defined]
+                k_c_normed, k_pe, attn_metadata, self._k_scale
+            )
+
         if is_sparse_impl:
             num_mqa_tokens = q.size(0)
             num_mha_tokens = 0
@@ -799,37 +817,86 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 )
             else:
                 mqa_q = (mqa_ql_nope, mqa_q_pe)
+            mqa_prefill_q: torch.Tensor | None = None
             if self.impl.dcp_world_size > 1:
                 if isinstance(mqa_q, tuple):
                     # concatenate mqa_ql_nope and mqa_q_pe -> (B, N, L + P)
                     mqa_q = torch.cat(mqa_q, dim=-1)
-                # mqa_q do allgather in head dim.
-                mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
+                if sparse_dcp_local_prefill:
+                    # Peel off the fresh-prompt prefill tokens (batch tail;
+                    # decode tokens come first) before the all-gather: they
+                    # attend locally with this rank's heads only. The gate is
+                    # batch-uniform across DCP ranks, so collective
+                    # participation stays aligned.
+                    num_dcp_decode_tokens = attn_metadata.num_decode_tokens
+                    mqa_prefill_q = mqa_q[num_dcp_decode_tokens:]
+                    mqa_q = mqa_q[:num_dcp_decode_tokens]
+                    if num_dcp_decode_tokens > 0:
+                        mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
+                else:
+                    # mqa_q do allgather in head dim.
+                    mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
 
             # call decode attn
             if not is_sparse_impl:
                 assert attn_metadata.decode is not None
-            attn_out, lse = self.impl.forward_mqa(mqa_q, kv_cache, attn_metadata, self)  # type: ignore[attr-defined]
 
-            # correct dcp attn_out with lse.
-            if self.impl.dcp_world_size > 1:
-                if self.dcp_a2a:
-                    attn_out = dcp_a2a_lse_reduce(
-                        attn_out,
-                        lse,
-                        get_dcp_group(),
-                        is_lse_base_on_e=self.impl.lse_base_on_e,
+            if sparse_dcp_local_prefill:
+                assert mqa_prefill_q is not None
+                num_dcp_decode_tokens = attn_metadata.num_decode_tokens
+                if num_dcp_decode_tokens > 0:
+                    # Decode tokens: unchanged DCP path (all-gathered heads on
+                    # the local KV shard, then cross-rank LSE combine).
+                    attn_out, lse = self.impl.forward_mqa(  # type: ignore[attr-defined]
+                        mqa_q, kv_cache, attn_metadata, self
                     )
-                else:
-                    attn_out = cp_lse_ag_out_rs(
-                        attn_out,
-                        lse,
-                        get_dcp_group(),
-                        is_lse_base_on_e=self.impl.lse_base_on_e,
+                    if self.dcp_a2a:
+                        attn_out = dcp_a2a_lse_reduce(
+                            attn_out,
+                            lse,
+                            get_dcp_group(),
+                            is_lse_base_on_e=self.impl.lse_base_on_e,
+                        )
+                    else:
+                        attn_out = cp_lse_ag_out_rs(
+                            attn_out,
+                            lse,
+                            get_dcp_group(),
+                            is_lse_base_on_e=self.impl.lse_base_on_e,
+                        )
+                    self._v_up_proj(
+                        attn_out, out=mqa_output_slice[:num_dcp_decode_tokens]
                     )
+                if mqa_prefill_q.shape[0] > 0:
+                    prefill_attn_out = self.impl.forward_mqa_local_prefill(  # type: ignore[attr-defined]
+                        mqa_prefill_q, attn_metadata
+                    )
+                    self._v_up_proj(
+                        prefill_attn_out,
+                        out=mqa_output_slice[num_dcp_decode_tokens:],
+                    )
+            else:
+                attn_out, lse = self.impl.forward_mqa(mqa_q, kv_cache, attn_metadata, self)  # type: ignore[attr-defined]
 
-            # v_up projection
-            self._v_up_proj(attn_out, out=mqa_output_slice)
+                # correct dcp attn_out with lse.
+                if self.impl.dcp_world_size > 1:
+                    if self.dcp_a2a:
+                        attn_out = dcp_a2a_lse_reduce(
+                            attn_out,
+                            lse,
+                            get_dcp_group(),
+                            is_lse_base_on_e=self.impl.lse_base_on_e,
+                        )
+                    else:
+                        attn_out = cp_lse_ag_out_rs(
+                            attn_out,
+                            lse,
+                            get_dcp_group(),
+                            is_lse_base_on_e=self.impl.lse_base_on_e,
+                        )
+
+                # v_up projection
+                self._v_up_proj(attn_out, out=mqa_output_slice)
 
         if quant_key is not None:
             quant_idx = num_mqa_tokens if mha_use_quant_output else num_actual_toks

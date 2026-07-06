@@ -17,6 +17,12 @@
 // l==0 rows (all -1 indices) write 0 output / -inf LSE. No atomics; fixed reduction orders
 // -> bitwise run-to-run deterministic. Static shapes; -1 handling makes it CUDA-graph-safe.
 //
+// Optional topk_lens[T] (requires front-compacted index rows: valid slots first, then -1)
+// clamps the key loop to ceil(len/BI) tiles. The skipped tiles are all-(-1) no-ops in the
+// full loop (alpha == 1, sum == 0, P == 0), so the result is identical; DCP passes its
+// per-rank valid counts here to skip the ~(1 - 1/dcp_world_size) non-owned candidates.
+// The loop bound is read from device memory under a fixed grid, so it stays graph-safe.
+//
 // cp.async invariant: exactly STAGES commit groups in the prologue (empty
 // commits pad when n_iters < STAGES) and exactly one commit per loop iteration (empty past
 // the tail), so cp_async_wait<STAGES-1> always guarantees iteration `it`'s group landed.
@@ -29,6 +35,7 @@
 #include <torch/csrc/stable/macros.h>
 
 #include <cstdint>
+#include <optional>
 
 #ifndef USE_ROCM
 
@@ -91,12 +98,16 @@ DEVINL float2 fp8x2_to_float2(uint16_t v) {
 }
 
 // ------------------------------------------------------------- sparse MLA forward
+// HAS_LENS == false compiles the constexpr block away, leaving the original
+// full-topk loop untouched (the extra kernel param is never read).
+template <bool HAS_LENS>
 __global__ void __launch_bounds__(128, 1)
 sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
                       const uint8_t* __restrict__ pool,      // [S, 656]
                       const int32_t* __restrict__ indices,   // [T, topk], -1 padded
                       __nv_bfloat16* __restrict__ out,       // [T, h, 512]
                       float* __restrict__ lse,                // [T, h]
+                      const int32_t* __restrict__ topk_lens,  // [T]; read iff HAS_LENS
                       int h, int topk, float sm_scale) {
   extern __shared__ uint8_t smem[];
   uint8_t* staging = smem;
@@ -138,7 +149,15 @@ sparse_mla_fwd_kernel(const __nv_bfloat16* __restrict__ q,   // [T, h, 576]
     cp_async_commit();
   };
 
-  const int n_iters = (topk + BI - 1) / BI;
+  int n_iters = (topk + BI - 1) / BI;
+  if constexpr (HAS_LENS) {
+    // Front-compacted rows: every key at/past len is -1, so the dropped tiles
+    // are exact no-ops. Clamp defensively; the per-key -1 mask still guards
+    // every key actually processed, so a wrong len can only mis-count how
+    // many all-(-1) tiles get scanned, never corrupt the output.
+    const int len = min(max(topk_lens[t], 0), topk);
+    n_iters = min(n_iters, (len + BI - 1) / BI);
+  }
 #pragma unroll
   for (int s = 0; s < STAGES; ++s) {
     if (s < n_iters) issue_iter(s, s);
@@ -297,7 +316,8 @@ void sm89_sparse_mla_fwd(const torch::stable::Tensor& q,
                          const torch::stable::Tensor& pool,
                          const torch::stable::Tensor& indices,
                          torch::stable::Tensor& out, torch::stable::Tensor& lse,
-                         double sm_scale) {
+                         double sm_scale,
+                         std::optional<torch::stable::Tensor> topk_lens) {
 #ifndef USE_ROCM
   STD_TORCH_CHECK(q.is_cuda() && pool.is_cuda() && indices.is_cuda() &&
                       out.is_cuda() && lse.is_cuda(),
@@ -323,15 +343,33 @@ void sm89_sparse_mla_fwd(const torch::stable::Tensor& q,
   STD_TORCH_CHECK(q.is_contiguous() && pool.is_contiguous() && indices.is_contiguous() &&
                       out.is_contiguous() && lse.is_contiguous(),
                   "all tensors must be contiguous");
+  const int32_t* lens_ptr = nullptr;
+  if (topk_lens.has_value()) {
+    const torch::stable::Tensor& lens = topk_lens.value();
+    STD_TORCH_CHECK(lens.is_cuda() && lens.dim() == 1 && lens.size(0) == T &&
+                        lens.scalar_type() == torch::headeronly::ScalarType::Int &&
+                        lens.is_contiguous(),
+                    "topk_lens must be a contiguous CUDA [T] i32 tensor");
+    lens_ptr = lens.const_data_ptr<int32_t>();
+  }
 
   const cudaStream_t stream = get_current_cuda_stream();
-  cudaFuncSetAttribute(sm89_dsa::sparse_mla_fwd_kernel,
-                       cudaFuncAttributeMaxDynamicSharedMemorySize, sm89_dsa::SMEM_TOTAL);
   dim3 grid(T, (h + sm89_dsa::HT - 1) / sm89_dsa::HT);
-  sm89_dsa::sparse_mla_fwd_kernel<<<grid, 128, sm89_dsa::SMEM_TOTAL, stream>>>(
-      static_cast<const __nv_bfloat16*>(q.const_data_ptr()), pool.const_data_ptr<uint8_t>(),
-      indices.const_data_ptr<int32_t>(), static_cast<__nv_bfloat16*>(out.mutable_data_ptr()),
-      lse.mutable_data_ptr<float>(), h, topk, (float)sm_scale);
+  if (lens_ptr != nullptr) {
+    cudaFuncSetAttribute(sm89_dsa::sparse_mla_fwd_kernel<true>,
+                         cudaFuncAttributeMaxDynamicSharedMemorySize, sm89_dsa::SMEM_TOTAL);
+    sm89_dsa::sparse_mla_fwd_kernel<true><<<grid, 128, sm89_dsa::SMEM_TOTAL, stream>>>(
+        static_cast<const __nv_bfloat16*>(q.const_data_ptr()), pool.const_data_ptr<uint8_t>(),
+        indices.const_data_ptr<int32_t>(), static_cast<__nv_bfloat16*>(out.mutable_data_ptr()),
+        lse.mutable_data_ptr<float>(), lens_ptr, h, topk, (float)sm_scale);
+  } else {
+    cudaFuncSetAttribute(sm89_dsa::sparse_mla_fwd_kernel<false>,
+                         cudaFuncAttributeMaxDynamicSharedMemorySize, sm89_dsa::SMEM_TOTAL);
+    sm89_dsa::sparse_mla_fwd_kernel<false><<<grid, 128, sm89_dsa::SMEM_TOTAL, stream>>>(
+        static_cast<const __nv_bfloat16*>(q.const_data_ptr()), pool.const_data_ptr<uint8_t>(),
+        indices.const_data_ptr<int32_t>(), static_cast<__nv_bfloat16*>(out.mutable_data_ptr()),
+        lse.mutable_data_ptr<float>(), nullptr, h, topk, (float)sm_scale);
+  }
   STD_CUDA_KERNEL_LAUNCH_CHECK();
 #else
   STD_TORCH_CHECK(false, "sm89_sparse_mla_fwd is not supported on ROCm");

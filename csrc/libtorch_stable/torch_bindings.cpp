@@ -513,7 +513,8 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
 
   ops.def(
       "sm89_sparse_mla_fwd(Tensor q, Tensor pool, Tensor indices, "
-      "Tensor! out, Tensor! lse, float sm_scale) -> ()");
+      "Tensor! out, Tensor! lse, float sm_scale, "
+      "Tensor? topk_lens=None) -> ()");
 #endif
 
   // Activation ops

@@ -23,6 +23,7 @@ from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
 from aphrodite.config.cache import CacheDType
 from aphrodite.platforms import current_platform
 from aphrodite.platforms.interface import DeviceCapability
+from aphrodite.utils.math_utils import round_up
 from aphrodite.utils.torch_utils import np_to_pinned_tensor
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
@@ -38,6 +39,7 @@ from aphrodite.v1.attention.backends.mla.sparse_utils import (
     triton_convert_req_index_to_global_index,
     triton_filter_and_convert_dcp_index,
 )
+from aphrodite.v1.attention.backends.utils import split_decodes_and_prefills
 from aphrodite.v1.kv_cache_interface import AttentionSpec
 from aphrodite.v1.worker.workspace import current_workspace_manager
 
@@ -147,6 +149,30 @@ class Sm89MLASparseBackend(AttentionBackend):
 
 
 @dataclass
+class Sm89LocalPrefillMetadata:
+    """DCP local-prefill (fresh prompts only) metadata.
+
+    Present iff every prefill request in the batch starts at context length 0
+    (no previously cached tokens). Every DCP rank then holds the complete
+    prompt activations (they are replicated across the DCP group, which reuses
+    the TP group), so each rank can build the prompt's full KV locally in a
+    per-forward shadow pool and attend with its local heads -- no q all-gather,
+    no LSE combine, and no indexer top-k merge are needed for these tokens.
+    """
+
+    # int32 [num_prefill_tokens]: prefill request index (0-based within the
+    # prefill segment) for each prefill token; feeds the prefill-workspace
+    # branch of the topk index conversion kernel.
+    workspace_request_ids: torch.Tensor
+    # int32 [num_prefills]: row offset of each prefill request's prompt in the
+    # shadow pool (= its query start within the prefill token segment).
+    workspace_starts: torch.Tensor
+    # int64 [num_prefill_tokens]: identity slots (arange) used to write the
+    # prefill tokens' fp8_ds_mla rows into the shadow pool.
+    shadow_slot_mapping: torch.Tensor
+
+
+@dataclass
 class Sm89MLASparseMetadata(AttentionMetadata):
     num_reqs: int
     max_query_len: int
@@ -161,6 +187,10 @@ class Sm89MLASparseMetadata(AttentionMetadata):
     block_size: int = 64
     topk_tokens: int = 2048
     cp_kv_cache_interleave_size: int = 1
+    # Only populated under DCP when the local-prefill path is active; every
+    # other configuration leaves these at their defaults and is unaffected.
+    num_decode_tokens: int = 0
+    prefill_local: Sm89LocalPrefillMetadata | None = None
 
 
 class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadata]):
@@ -187,6 +217,81 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             dtype=torch.int32,
             device=device,
         )
+        parallel_config = aphrodite_config.parallel_config
+        # Local-prefill eligibility (static part). PCP shards prefill tokens
+        # across ranks, breaking the premise that each rank holds the whole
+        # prompt's activations; speculative decode changes the decode/prefill
+        # split rules, so keep the gate simple and fall back.
+        num_speculative_tokens = (
+            aphrodite_config.speculative_config.num_speculative_tokens
+            if aphrodite_config.speculative_config is not None
+            else 0
+        )
+        self.allow_local_prefill = (
+            parallel_config.decode_context_parallel_size > 1
+            and parallel_config.prefill_context_parallel_size == 1
+            and num_speculative_tokens == 0
+        )
+        if self.allow_local_prefill:
+            # Identity slot mapping for the local-prefill shadow pool: prefill
+            # token i (in batch order) lands in shadow row i.
+            self.local_prefill_slot_buffer = torch.arange(
+                aphrodite_config.scheduler_config.max_num_batched_tokens,
+                dtype=torch.int64,
+                device=device,
+            )
+
+    def _build_local_prefill(
+        self,
+        cm: CommonAttentionMetadata,
+        seg_lengths: np.ndarray,
+        starts: np.ndarray,
+    ) -> tuple[int, "Sm89LocalPrefillMetadata | None"]:
+        """Local-prefill metadata for DCP, or (0, None) if inapplicable.
+
+        Active only when every prefill request is a fresh prompt (context
+        length 0), so the whole prompt's KV is computable on-rank from the
+        replicated activations. Continuation chunks (context > 0) fall back to
+        the existing full-DCP path for the entire batch: the gate must be
+        batch-uniform so every DCP rank issues the same collectives.
+        """
+        if not self.allow_local_prefill:
+            return 0, None
+        # Must match the indexer builder's split exactly (same threshold and
+        # require_uniform) so both sides agree on the decode/prefill boundary.
+        num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
+            split_decodes_and_prefills(
+                cm,
+                decode_threshold=self.reorder_batch_threshold or 1,
+                require_uniform=True,
+            )
+        )
+        if num_prefills == 0:
+            return num_decode_tokens, None
+        # Exact for prefill rows (see CommonAttentionMetadata docstring).
+        seq_lens_cpu = cm.seq_lens_cpu_upper_bound
+        assert seq_lens_cpu is not None
+        prefill_query_lens = seg_lengths[num_decodes:]
+        all_fresh = np.array_equal(
+            np.asarray(seq_lens_cpu[num_decodes:], dtype=np.int64),
+            prefill_query_lens.astype(np.int64),
+        )
+        if not all_fresh:
+            return num_decode_tokens, None
+
+        ws_starts = (starts[num_decodes:-1] - num_decode_tokens).astype(np.int32)
+        ws_req_ids = np.repeat(np.arange(num_prefills, dtype=np.int32), prefill_query_lens)
+        workspace_starts = torch.empty(num_prefills, dtype=torch.int32, device=self.device)
+        workspace_starts.copy_(np_to_pinned_tensor(ws_starts), non_blocking=True)
+        workspace_request_ids = torch.empty(
+            num_prefill_tokens, dtype=torch.int32, device=self.device
+        )
+        workspace_request_ids.copy_(np_to_pinned_tensor(ws_req_ids), non_blocking=True)
+        return num_decode_tokens, Sm89LocalPrefillMetadata(
+            workspace_request_ids=workspace_request_ids,
+            workspace_starts=workspace_starts,
+            shadow_slot_mapping=self.local_prefill_slot_buffer[:num_prefill_tokens],
+        )
 
     def build(
         self,
@@ -205,6 +310,8 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             np_to_pinned_tensor(req_id_per_token), non_blocking=True
         )
 
+        num_decode_tokens, prefill_local = self._build_local_prefill(cm, seg_lengths, starts)
+
         return Sm89MLASparseMetadata(
             num_reqs=cm.num_reqs,
             max_query_len=cm.max_query_len,
@@ -219,6 +326,8 @@ class Sm89MLASparseMetadataBuilder(AttentionMetadataBuilder[Sm89MLASparseMetadat
             cp_kv_cache_interleave_size=(
                 self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size
             ),
+            num_decode_tokens=num_decode_tokens,
+            prefill_local=prefill_local,
         )
 
 
@@ -271,9 +380,29 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
 
         aphrodite_config = get_current_aphrodite_config()
         max_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
-        (self.q_concat_buffer,) = current_workspace_manager().get_simultaneous(
-            ((max_tokens, num_heads, head_size), torch.bfloat16),
-        )
+        dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
+        self.prefill_local_pool: torch.Tensor | None = None
+        self.prefill_local_pool_paged: torch.Tensor | None = None
+        if dcp_world_size > 1:
+            # DCP local-prefill shadow pool: one fp8_ds_mla row (656 B) per
+            # prefill token, written each forward with an identity slot
+            # mapping. Rounded up to the 64-token cache block so it can be
+            # viewed with the paged shape concat_and_cache_mla expects; with
+            # identity slots the paged view is exactly the flat row view.
+            pool_rows = round_up(max_tokens, 64)
+            self.q_concat_buffer, self.prefill_local_pool = (
+                current_workspace_manager().get_simultaneous(
+                    ((max_tokens, num_heads, head_size), torch.bfloat16),
+                    ((pool_rows, 656), torch.uint8),
+                )
+            )
+            self.prefill_local_pool_paged = self.prefill_local_pool.view(
+                pool_rows // 64, 64, 656
+            )
+        else:
+            (self.q_concat_buffer,) = current_workspace_manager().get_simultaneous(
+                ((max_tokens, num_heads, head_size), torch.bfloat16),
+            )
 
     def forward_mqa(
         self,
@@ -292,21 +421,35 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
 
         assert self.topk_indices_buffer is not None
         topk_indices = self.topk_indices_buffer[:num_actual_toks]
+        topk_lens: torch.Tensor | None = None
         if self.dcp_world_size > 1:
             # Keep only the slots this DCP rank owns, mapped to local physical
-            # cache slots; non-owned entries become -1. The kernel masks
-            # interior -1s natively, so no compaction or valid-count side
-            # channel is needed.
-            topk_indices = triton_filter_and_convert_dcp_index(
-                attn_metadata.req_id_per_token,
+            # cache slots and compacted to a per-row prefix (tail -1). The
+            # per-token valid counts go to the kernel as topk_lens so it stops
+            # after the owned prefix (~topk/dcp_world_size slots) instead of
+            # scanning all topk candidates. BLOCK_N == topk compacts each row
+            # in a single tile, which keeps the prefix in column order and the
+            # pass run-to-run deterministic (the multi-tile atomic slot
+            # allocator would not); fall back to the default tile width if
+            # topk is not a power of two (tl.arange constraint).
+            num_topk = topk_indices.shape[1]
+            block_n = num_topk if num_topk & (num_topk - 1) == 0 else 128
+            # Slice req_id_per_token to the tokens covered by q: under the DCP
+            # local-prefill split q holds only the leading decode tokens (the
+            # conversion grid is sized from this tensor). A full q makes this
+            # slice a no-op.
+            topk_indices, topk_lens = triton_filter_and_convert_dcp_index(
+                attn_metadata.req_id_per_token[:num_actual_toks],
                 attn_metadata.block_table,
                 topk_indices,
                 dcp_size=self.dcp_world_size,
                 dcp_rank=self.dcp_rank,
                 cp_kv_cache_interleave_size=attn_metadata.cp_kv_cache_interleave_size,
                 BLOCK_SIZE=attn_metadata.block_size,
-                NUM_TOPK_TOKENS=topk_indices.shape[1],
-                compact_valid_to_front=False,
+                NUM_TOPK_TOKENS=num_topk,
+                BLOCK_N=block_n,
+                compact_valid_to_front=True,
+                return_valid_counts=True,
             )
         else:
             # Per-request token indices -> physical cache slots. -1 padding
@@ -329,5 +472,84 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
         num_heads = q.shape[1]
         attn_out = q.new_empty((num_actual_toks, num_heads, self.kv_lora_rank))
         lse = q.new_empty((num_actual_toks, num_heads), dtype=torch.float32)
-        ops.sm89_sparse_mla_fwd(q, kv_pool, topk_indices, attn_out, lse, self.softmax_scale)
+        # topk_lens (like the converted indices) is allocated per call, so
+        # under CUDA-graph capture it lives in the graph pool and the captured
+        # conversion kernels rewrite it on every replay, same as attn_out/lse.
+        ops.sm89_sparse_mla_fwd(q, kv_pool, topk_indices, attn_out, lse, self.softmax_scale, topk_lens)
         return attn_out, lse if self.need_to_return_lse_for_decode else None
+
+    def build_local_prefill_pool(
+        self,
+        kv_c_normed: torch.Tensor,
+        k_pe: torch.Tensor,
+        attn_metadata: Sm89MLASparseMetadata,
+        k_scale: torch.Tensor,
+    ) -> None:
+        """Quantize this batch's fresh-prompt KV into the local shadow pool.
+
+        Uses the same concat_and_cache_mla fp8_ds_mla kernel as the real cache
+        write, so shadow rows are numerically identical to what the DCP path
+        would read back from the sharded cache. Identity slots: prefill token i
+        (batch order) -> shadow row i. Runs on every DCP rank with identical,
+        replicated inputs; no collective involved.
+        """
+        prefill_local = attn_metadata.prefill_local
+        assert prefill_local is not None
+        assert self.prefill_local_pool_paged is not None
+        num_decode_tokens = attn_metadata.num_decode_tokens
+        ops.concat_and_cache_mla(
+            kv_c_normed[num_decode_tokens:],
+            k_pe[num_decode_tokens:].squeeze(1),
+            self.prefill_local_pool_paged,
+            prefill_local.shadow_slot_mapping,
+            kv_cache_dtype="fp8_ds_mla",
+            scale=k_scale,
+        )
+
+    def forward_mqa_local_prefill(
+        self,
+        q: torch.Tensor,
+        attn_metadata: Sm89MLASparseMetadata,
+    ) -> torch.Tensor:
+        """Collective-free sparse attention for fresh-prompt prefill tokens.
+
+        q carries only this rank's local heads (no DCP all-gather). The
+        indexer produced per-request global token positions (its DCP merge is
+        skipped in this mode), which map affinely into the shadow pool via the
+        prefill-workspace branch of the conversion kernel. Since the shadow
+        pool holds the complete prompt, single-pass local attention is exact
+        and no LSE combine is needed.
+        """
+        prefill_local = attn_metadata.prefill_local
+        assert prefill_local is not None
+        assert self.prefill_local_pool is not None
+        assert self.topk_indices_buffer is not None
+        num_decode_tokens = attn_metadata.num_decode_tokens
+        num_prefill_tokens = q.shape[0]
+        token_slice = slice(num_decode_tokens, num_decode_tokens + num_prefill_tokens)
+
+        topk_indices = self.topk_indices_buffer[token_slice]
+        topk_indices = triton_convert_req_index_to_global_index(
+            attn_metadata.req_id_per_token[token_slice],
+            attn_metadata.block_table,
+            topk_indices,
+            BLOCK_SIZE=attn_metadata.block_size,
+            NUM_TOPK_TOKENS=topk_indices.shape[1],
+            HAS_PREFILL_WORKSPACE=True,
+            prefill_workspace_request_ids=prefill_local.workspace_request_ids,
+            prefill_workspace_starts=prefill_local.workspace_starts,
+        )
+
+        num_heads = q.shape[1]
+        attn_out = q.new_empty((num_prefill_tokens, num_heads, self.kv_lora_rank))
+        lse = q.new_empty((num_prefill_tokens, num_heads), dtype=torch.float32)
+        ops.sm89_sparse_mla_fwd(
+            q,
+            self.prefill_local_pool,
+            topk_indices,
+            attn_out,
+            lse,
+            self.softmax_scale,
+            None,
+        )
+        return attn_out

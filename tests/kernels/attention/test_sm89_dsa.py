@@ -554,6 +554,77 @@ def test_sm89_sparse_mla_fwd(num_heads, topk, num_tokens):
     assert (lse[valid] - ref_lse[valid]).abs().max().item() < 3e-2
 
 
+@pytest.mark.parametrize("num_heads", [16, 32])
+def test_sm89_sparse_mla_fwd_topk_lens(num_heads):
+    """topk_lens on front-compacted rows must reproduce the full loop bitwise.
+
+    _make_sparse_indices already packs each row's valid slots to the front, so
+    the row valid counts are exact topk_lens. The early exit only drops all-(-1)
+    key tiles, which are exact no-ops in the full loop, so out/lse must match
+    the topk_lens=None run byte for byte.
+    """
+    torch.manual_seed(20260706 + num_heads)
+    num_tokens, topk, num_slots = 16, 2048, 2560
+    sm_scale = 576**-0.5
+    pool, _ = _make_ds_mla_pool(num_slots)
+    q = torch.randn(num_tokens, num_heads, 576, device="cuda", dtype=torch.bfloat16)
+    indices = _make_sparse_indices(num_tokens, topk, num_slots)
+    # The helper already forces len == 0 (row 0) and len == topk (row 1); add a
+    # row shorter than the cp.async prologue depth (len <= BI < STAGES * BI)
+    # and a non-multiple-of-BI row (partial last tile).
+    for t, n in ((2, 5), (3, 67)):
+        indices[t] = -1
+        indices[t, :n] = torch.randperm(num_slots, device="cuda")[:n].to(torch.int32)
+    topk_lens = (indices >= 0).sum(dim=-1, dtype=torch.int32)
+
+    def run(lens: torch.Tensor | None) -> tuple[torch.Tensor, torch.Tensor]:
+        out = torch.empty(num_tokens, num_heads, DS_NOPE, device="cuda", dtype=torch.bfloat16)
+        lse = torch.empty(num_tokens, num_heads, device="cuda", dtype=torch.float32)
+        ops.sm89_sparse_mla_fwd(q, pool, indices, out, lse, sm_scale, lens)
+        torch.cuda.synchronize()
+        return out, lse
+
+    out_full, lse_full = run(None)
+    out_skip, lse_skip = run(topk_lens)
+    # bitwise, not just numeric: compare the raw bit patterns
+    assert torch.equal(out_skip.view(torch.int16), out_full.view(torch.int16))
+    assert torch.equal(lse_skip.view(torch.int32), lse_full.view(torch.int32))
+
+
+def test_sm89_sparse_mla_topk_lens_cuda_graph():
+    """The lens-gated kernel must be capturable, with lens read at replay time."""
+    torch.manual_seed(2077)
+    num_tokens, num_heads, topk, num_slots = 8, 16, 2048, 2560
+    sm_scale = 576**-0.5
+    pool, _ = _make_ds_mla_pool(num_slots)
+    q = torch.randn(num_tokens, num_heads, 576, device="cuda", dtype=torch.bfloat16)
+    indices = _make_sparse_indices(num_tokens, topk, num_slots)
+    topk_lens = (indices >= 0).sum(dim=-1, dtype=torch.int32)
+    out = torch.zeros(num_tokens, num_heads, DS_NOPE, device="cuda", dtype=torch.bfloat16)
+    lse = torch.zeros(num_tokens, num_heads, device="cuda", dtype=torch.float32)
+
+    graph = _graph_capture(lambda: ops.sm89_sparse_mla_fwd(q, pool, indices, out, lse, sm_scale, topk_lens))
+
+    def replay_vs_full() -> None:
+        out.zero_()
+        lse.zero_()
+        graph.replay()
+        out_e = torch.zeros_like(out)
+        lse_e = torch.zeros_like(lse)
+        ops.sm89_sparse_mla_fwd(q, pool, indices, out_e, lse_e, sm_scale, None)
+        torch.cuda.synchronize()
+        assert torch.equal(out, out_e) and torch.equal(lse, lse_e)
+
+    replay_vs_full()
+
+    # mutate indices + lens in place; the captured pointers must see new data
+    torch.manual_seed(2078)
+    indices.copy_(_make_sparse_indices(num_tokens, topk, num_slots))
+    topk_lens.copy_((indices >= 0).sum(dim=-1, dtype=torch.int32))
+    q.copy_(torch.randn_like(q))
+    replay_vs_full()
+
+
 def test_sm89_sparse_mla_cuda_graph():
     torch.manual_seed(7)
     num_tokens, num_heads, topk, num_slots = 8, 16, 512, 1024

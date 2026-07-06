@@ -3118,14 +3118,20 @@ def sm89_sparse_mla_fwd(
     out: torch.Tensor,
     lse: torch.Tensor,
     sm_scale: float,
+    topk_lens: torch.Tensor | None = None,
 ) -> None:
     """Sparse MLA forward on sm89, gathering directly from an fp8_ds_mla pool by slot.
 
     q: [T, h, 576] bf16; kv_cache_pool: [S, 656] uint8 (fp8_ds_mla rows); indices:
     [T, topk] int32 physical slots, -1 padded; out: [T, h, 512] bf16; lse: [T, h] fp32.
     Rows whose indices are all -1 produce zero output and -inf LSE.
+
+    topk_lens: optional [T] int32 per-token valid counts. Requires index rows to be
+    front-compacted (valid slots first, then -1); the kernel then stops after the last
+    valid slot instead of scanning all topk columns, with output identical to
+    topk_lens=None. DCP passes its per-rank counts here (~topk/dcp_world_size valid).
     """
-    torch.ops._C.sm89_sparse_mla_fwd(q, kv_cache_pool, indices, out, lse, sm_scale)
+    torch.ops._C.sm89_sparse_mla_fwd(q, kv_cache_pool, indices, out, lse, sm_scale, topk_lens)
 
 
 def cp_gather_indexer_k_quant_cache(

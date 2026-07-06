@@ -78,10 +78,17 @@ def _convert_req_index_to_global_index_kernel(
     block_id = local_idx // BLOCK_SIZE
     inblock_off = local_idx % BLOCK_SIZE
 
-    # Guard block_table access
+    # Guard block_table access. Prefill-workspace rows never consult the
+    # block table (they map to workspace_start + tok below), so the block
+    # bound must not invalidate them: under DCP the per-rank block table
+    # covers only 1/dcp_world_size of the sequence, while prefill workspace
+    # token ids span the full prompt.
     valid_block = (block_id < max_num_blocks_per_req) & (block_id >= 0)
     bt_ptr = block_table_ptr + req * bt_stride0 + block_id * bt_stride1
-    is_invalid_tok |= ~valid_block | is_remote
+    invalid_lookup = ~valid_block | is_remote
+    if HAS_PREFILL:
+        invalid_lookup = invalid_lookup & ~is_prefill
+    is_invalid_tok |= invalid_lookup
     base = tl.load(bt_ptr, mask=valid_block & ~is_prefill & ~is_remote, other=0)
     out_val = base * BLOCK_SIZE + inblock_off
 

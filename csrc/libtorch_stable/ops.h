@@ -374,7 +374,8 @@ void sm89_sparse_mla_fwd(const torch::stable::Tensor& q,
                          const torch::stable::Tensor& pool,
                          const torch::stable::Tensor& indices,
                          torch::stable::Tensor& out, torch::stable::Tensor& lse,
-                         double sm_scale);
+                         double sm_scale,
+                         std::optional<torch::stable::Tensor> topk_lens);
 #endif
 
 void selective_scan_fwd(
