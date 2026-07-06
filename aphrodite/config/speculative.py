@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any, Literal, get_args
 from pydantic import Field, SkipValidation, field_validator, model_validator
 from typing_extensions import Self
 
-from aphrodite.config import LoadConfig
 from aphrodite.config.kernel import MoEBackend
+from aphrodite.config.load import LoadConfig
 from aphrodite.config.model import HfOverrides, ModelConfig
 from aphrodite.config.parallel import ParallelConfig
 from aphrodite.config.utils import config
