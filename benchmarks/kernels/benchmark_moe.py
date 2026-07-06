@@ -11,11 +11,14 @@ from typing import Any, TypedDict
 
 import ray
 import torch
-from aphrodite.modeling.layers.fused_moe.config import (
+from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
     _get_config_dtype_str,
 )
-from aphrodite.modeling.layers.fused_moe.fused_moe import *
+from aphrodite.model_executor.layers.fused_moe.fused_moe import *
+from aphrodite.model_executor.layers.fused_moe.router.fused_topk_router import (
+    fused_topk,
+)
 from ray.experimental.tqdm_ray import tqdm
 
 from aphrodite.platforms import current_platform
@@ -121,7 +124,7 @@ def benchmark_config(
         input_gating.copy_(gating_output[i])
 
     def run():
-        from aphrodite.modeling.layers.fused_moe import override_config
+        from aphrodite.model_executor.layers.fused_moe import override_config
 
         if use_fp8_w8a8:
             quant_dtype = torch.float8_e4m3fn
@@ -149,9 +152,7 @@ def benchmark_config(
                 w2,
                 topk_weights,
                 topk_ids,
-                inplace=True,
                 quant_config=quant_config,
-                allow_deep_gemm=use_deep_gemm,
             )
 
     # JIT compilation & warmup
@@ -546,6 +547,7 @@ def main(args: argparse.Namespace):
         "DeepseekV3ForCausalLM",
         "DeepseekV32ForCausalLM",
         "Glm4MoeForCausalLM",
+        "GlmMoeDsaForCausalLM",
     ):
         E = config.n_routed_experts
         topk = config.num_experts_per_tok

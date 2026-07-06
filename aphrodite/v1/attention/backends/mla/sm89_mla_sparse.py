@@ -23,6 +23,7 @@ from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
 from aphrodite.config.cache import CacheDType
 from aphrodite.platforms import current_platform
 from aphrodite.platforms.interface import DeviceCapability
+from aphrodite.utils.math_utils import cdiv
 from aphrodite.utils.torch_utils import np_to_pinned_tensor
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
@@ -42,6 +43,11 @@ from aphrodite.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:
     from aphrodite.model_executor.models.deepseek_v2 import Indexer
+
+# Split-KV sizing target: AD102 has 128 SMs and the forward kernel's 99KB smem
+# footprint limits it to one CTA per SM, so aim for ~128 CTAs before splitting
+# stops paying.
+_SPLITK_TARGET_CTAS = 128
 
 
 @cache
@@ -269,6 +275,28 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
             ((max_tokens, num_heads, head_size), torch.bfloat16),
         )
 
+        # Opt-in A/B gates for the forward kernel (see sm89_sparse_mla_fwd.cu):
+        # with both unset the validated single-pass 16-head-tile op is called,
+        # bit for bit. The 8-head tile only pays when the rank's padded head
+        # tile would be half empty.
+        self._h8_tile = envs.APHRODITE_SM89_DSA_H8_TILE and num_heads <= 8
+        self._splitk_max = min(envs.APHRODITE_SM89_DSA_SPLITK, 8)
+
+    def _pick_num_splits(self, num_tokens: int) -> int:
+        """Split-KV factor for this launch shape.
+
+        A pure function of the (padded) token count and static config, so CUDA
+        graph replays of a capture bucket always re-issue the captured grid.
+        """
+        if self._splitk_max <= 1:
+            return 1
+        head_tile = 8 if self._h8_tile else 16
+        ctas = num_tokens * cdiv(self.num_heads, head_tile)
+        splits = 1
+        while splits * 2 <= self._splitk_max and ctas * splits < _SPLITK_TARGET_CTAS:
+            splits *= 2
+        return splits
+
     def forward_mqa(
         self,
         q: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
@@ -303,5 +331,31 @@ class Sm89MLASparseImpl(SparseMLAAttentionImpl[Sm89MLASparseMetadata]):
 
         attn_out = q.new_empty((num_actual_toks, self.num_heads, self.kv_lora_rank))
         lse = q.new_empty((num_actual_toks, self.num_heads), dtype=torch.float32)
-        ops.sm89_sparse_mla_fwd(q, kv_pool, topk_indices, attn_out, lse, self.softmax_scale)
+        num_splits = self._pick_num_splits(num_actual_toks)
+        if self._h8_tile or num_splits > 1:
+            part_o = part_ml = None
+            if num_splits > 1:
+                # fp32 split partials (unnormalized O + per-head (m, l)); the
+                # combine kernel merges them in fixed split order.
+                part_o = q.new_empty(
+                    (num_splits, num_actual_toks, self.num_heads, self.kv_lora_rank),
+                    dtype=torch.float32,
+                )
+                part_ml = q.new_empty(
+                    (num_splits, num_actual_toks, self.num_heads, 2), dtype=torch.float32
+                )
+            ops.sm89_sparse_mla_fwd_v2(
+                q,
+                kv_pool,
+                topk_indices,
+                attn_out,
+                lse,
+                part_o,
+                part_ml,
+                self.softmax_scale,
+                num_splits,
+                self._h8_tile,
+            )
+        else:
+            ops.sm89_sparse_mla_fwd(q, kv_pool, topk_indices, attn_out, lse, self.softmax_scale)
         return attn_out, None

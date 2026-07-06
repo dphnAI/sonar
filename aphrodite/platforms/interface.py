@@ -272,6 +272,21 @@ class Platform:
         return "aphrodite.compilation.passes.pass_manager.PostGradPassManager"
 
     @classmethod
+    def seed_everything(cls, seed: int | None = None) -> None:
+        """
+        Set the seed of every random-number generator (Python, NumPy, torch).
+        ``torch.manual_seed`` seeds all devices; a None seed is a no-op.
+        """
+        if seed is not None:
+            import random
+
+            import numpy as np
+
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+
+    @classmethod
     def get_compile_backend(cls) -> str:
         """
         Get the custom compile backend for current platform.

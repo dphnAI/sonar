@@ -3128,6 +3128,33 @@ def sm89_sparse_mla_fwd(
     torch.ops._C.sm89_sparse_mla_fwd(q, kv_cache_pool, indices, out, lse, sm_scale)
 
 
+def sm89_sparse_mla_fwd_v2(
+    q: torch.Tensor,
+    kv_cache_pool: torch.Tensor,
+    indices: torch.Tensor,
+    out: torch.Tensor,
+    lse: torch.Tensor,
+    part_o: torch.Tensor | None,
+    part_ml: torch.Tensor | None,
+    sm_scale: float,
+    num_splits: int,
+    h8_tile: bool,
+) -> None:
+    """Gated decode variants of sm89_sparse_mla_fwd (same contract and guards).
+
+    h8_tile selects the transposed 8-head-tile kernel (halves the padded mma work
+    when a rank has <= 8 query heads). num_splits > 1 selects split-KV: the top-k
+    keys are partitioned across num_splits CTAs (grid.z), each writing
+    unnormalized fp32 partials into part_o [S, T, h, 512] and per-head (m, l)
+    into part_ml [S, T, h, 2]; a combine kernel then merges them by LSE in fixed
+    split order (deterministic, no atomics). num_splits == 1 with h8_tile=False
+    is bitwise identical to sm89_sparse_mla_fwd.
+    """
+    torch.ops._C.sm89_sparse_mla_fwd_v2(
+        q, kv_cache_pool, indices, out, lse, part_o, part_ml, sm_scale, num_splits, h8_tile
+    )
+
+
 def cp_gather_indexer_k_quant_cache(
     kv_cache: torch.Tensor,
     dst_k: torch.Tensor,

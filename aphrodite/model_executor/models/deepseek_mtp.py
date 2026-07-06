@@ -316,7 +316,13 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts):
                 continue
             spec_layer = get_spec_layer_idx_from_weight_name(self.config, name)
             if spec_layer is None:
-                continue
+                if name != "model.embed_tokens.weight":
+                    continue
+                # GLM-family DSA checkpoints don't duplicate the embedding
+                # inside the MTP layer, and under PP the proposer can't share
+                # the target model's embed_tokens, so load the top-level
+                # embedding into the draft directly.
+                spec_layer = self.model.mtp_start_layer_idx
             is_fusion_moe_shared_experts_layer = (
                 rocm_aiter_moe_shared_expert_enabled and ("mlp.shared_experts" in name)
             )
