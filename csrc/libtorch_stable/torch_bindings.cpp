@@ -514,15 +514,6 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
   ops.def(
       "sm89_sparse_mla_fwd(Tensor q, Tensor pool, Tensor indices, "
       "Tensor! out, Tensor! lse, float sm_scale) -> ()");
-
-  // Gated decode variants: h8_tile (transposed 8-head tile) and/or
-  // num_splits > 1 (split-KV; part_o [S, T, h, 512] f32 + part_ml [S, T, h, 2]
-  // f32 workspaces, merged by a combine kernel). num_splits == 1 with
-  // h8_tile=False is bitwise identical to sm89_sparse_mla_fwd.
-  ops.def(
-      "sm89_sparse_mla_fwd_v2(Tensor q, Tensor pool, Tensor indices, "
-      "Tensor! out, Tensor! lse, Tensor!? part_o, Tensor!? part_ml, "
-      "float sm_scale, int num_splits, bool h8_tile) -> ()");
 #endif
 
   // Activation ops

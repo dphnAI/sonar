@@ -375,15 +375,6 @@ void sm89_sparse_mla_fwd(const torch::stable::Tensor& q,
                          const torch::stable::Tensor& indices,
                          torch::stable::Tensor& out, torch::stable::Tensor& lse,
                          double sm_scale);
-
-void sm89_sparse_mla_fwd_v2(const torch::stable::Tensor& q,
-                            const torch::stable::Tensor& pool,
-                            const torch::stable::Tensor& indices,
-                            torch::stable::Tensor& out,
-                            torch::stable::Tensor& lse,
-                            const std::optional<torch::stable::Tensor>& part_o,
-                            const std::optional<torch::stable::Tensor>& part_ml,
-                            double sm_scale, int64_t num_splits, bool h8_tile);
 #endif
 
 void selective_scan_fwd(

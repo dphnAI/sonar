@@ -268,8 +268,6 @@ if TYPE_CHECKING:
     APHRODITE_WSL2_ENABLE_PIN_MEMORY: bool = False
     APHRODITE_DISABLE_LOG_LOGO: bool = False
     APHRODITE_DISABLE_SM89_DSA: bool = False
-    APHRODITE_SM89_DSA_H8_TILE: bool = False
-    APHRODITE_SM89_DSA_SPLITK: int = 0
     APHRODITE_LORA_DISABLE_PDL: bool = False
     APHRODITE_ENABLE_CUDA_COMPATIBILITY: bool = False
     APHRODITE_CUDA_COMPATIBILITY_PATH: str | None = None
@@ -1897,16 +1895,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # kernels. When set, the SM89_MLA_SPARSE backend and the sm89 indexer
     # logits paths are skipped even if the kernels are compiled in.
     "APHRODITE_DISABLE_SM89_DSA": lambda: bool(int(os.getenv("APHRODITE_DISABLE_SM89_DSA", "0"))),
-    # Opt-in A/B gate: use the transposed 8-head-tile sm89 sparse-MLA forward
-    # kernel when a rank has <= 8 query heads (e.g. 64 heads at TP8), halving
-    # the padded mma work of the default 16-head tile. Default off = the
-    # validated single-pass kernel, bit for bit.
-    "APHRODITE_SM89_DSA_H8_TILE": lambda: bool(int(os.getenv("APHRODITE_SM89_DSA_H8_TILE", "0"))),
-    # Opt-in A/B gate: maximum split-KV factor for the sm89 sparse-MLA forward
-    # kernel (flash-decoding style; capped at 8; 0/1 disables). Small decode
-    # grids split their top-k keys across up to this many CTAs and merge the
-    # partials by LSE, filling more SMs at low batch sizes.
-    "APHRODITE_SM89_DSA_SPLITK": lambda: int(os.getenv("APHRODITE_SM89_DSA_SPLITK", "0")),
     # Disable PDL for LoRA, as enabling PDL with LoRA on SM100 causes
     # Triton compilation to fail.
     "APHRODITE_LORA_DISABLE_PDL": lambda: bool(int(os.getenv("APHRODITE_LORA_DISABLE_PDL", "0"))),
