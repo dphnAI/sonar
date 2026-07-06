@@ -35,6 +35,12 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletion
 from aphrodite.entrypoints.openai.engine.protocol import FunctionCall
 from aphrodite.entrypoints.openai.responses.protocol import ResponseInputOutputItem
 from aphrodite.logger import init_logger
+from aphrodite.tool_parsers.utils import (
+    build_responses_tool_call_name_map,
+    flat_namespace_tool_name,
+    iter_response_function_tool_dicts,
+    resolve_responses_tool_call_name,
+)
 from aphrodite.utils import random_uuid
 
 logger = init_logger(__name__)
@@ -45,8 +51,10 @@ def build_response_output_items(
     content: str | None,
     tool_calls: list[FunctionCall] | None,
     logprobs: list[Logprob] | None = None,
+    tools: list[Tool] | None = None,
 ) -> list[ResponseOutputItem]:
     outputs: list[ResponseOutputItem] = []
+    tool_call_name_map = build_responses_tool_call_name_map(tools)
 
     if reasoning:
         outputs.append(
@@ -79,13 +87,15 @@ def build_response_output_items(
 
     if tool_calls:
         for idx, tool_call in enumerate(tool_calls):
+            call_name = resolve_responses_tool_call_name(tool_call.name, tool_call_name_map=tool_call_name_map)
             outputs.append(
                 ResponseFunctionToolCall(
                     id=f"fc_{random_uuid()}",
                     call_id=tool_call.id or make_tool_call_id(func_name=tool_call.name, idx=idx),
                     type="function_call",
                     status="completed",
-                    name=tool_call.name,
+                    name=call_name.name,
+                    namespace=call_name.namespace,
                     arguments=tool_call.arguments,
                 )
             )
@@ -212,10 +222,13 @@ def _construct_message_from_response_item(
     prev_assistant_msg = prev_msg if prev_msg and prev_msg.get("role") == "assistant" else None
 
     if isinstance(item, ResponseFunctionToolCall):
+        tool_name = item.name
+        if item.namespace:
+            tool_name = flat_namespace_tool_name(item.namespace, item.name)
         tool_call = ChatCompletionMessageToolCallParam(
             id=item.call_id,
             function=FunctionCallTool(
-                name=item.name,
+                name=tool_name,
                 arguments=item.arguments,
             ),
             type="function",
@@ -309,7 +322,17 @@ def _construct_message_from_response_item(
 
 
 def extract_function_tool_names(tools: list[Tool]) -> frozenset[str]:
-    return frozenset(tool.name for tool in tools if tool.type == "function")
+    names = []
+    for tool in tools:
+        if tool.type == "function":
+            names.append(tool.name)
+        elif tool.type == "namespace":
+            names.extend(
+                flat_namespace_tool_name(tool.name, namespaced_tool.name)
+                for namespaced_tool in tool.tools
+                if namespaced_tool.type == "function"
+            )
+    return frozenset(names)
 
 
 def extract_tool_types(tools: list[Tool]) -> set[str]:
@@ -346,5 +369,7 @@ def construct_tool_dicts(tools: list[Tool], tool_choice: ToolChoice) -> list[dic
     if not tools or (tool_choice == "none"):
         tool_dicts = None
     else:
-        tool_dicts = [convert_tool_responses_to_completions_format(tool.model_dump()) for tool in tools]
+        tool_dicts = [
+            convert_tool_responses_to_completions_format(tool) for tool in iter_response_function_tool_dicts(tools)
+        ]
     return tool_dicts

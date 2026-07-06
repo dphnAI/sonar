@@ -58,6 +58,7 @@ from openai.types.responses.response_output_item import McpCall
 from openai.types.responses.response_reasoning_item import (
     Content as ResponseReasoningTextContent,
 )
+from openai.types.responses.tool import Tool
 from openai_harmony import Message as HarmonyMessage
 
 from aphrodite.entrypoints.mcp.tool_server import ToolServer
@@ -70,6 +71,10 @@ from aphrodite.entrypoints.openai.responses.protocol import (
     ResponseReasoningPartAddedEvent,
     ResponseReasoningPartDoneEvent,
     StreamingResponsesResponse,
+)
+from aphrodite.entrypoints.openai.responses.utils import (
+    build_responses_tool_call_name_map,
+    resolve_responses_tool_call_name,
 )
 from aphrodite.outputs import CompletionOutput
 from aphrodite.parser.harmony import Segment
@@ -813,6 +818,7 @@ class SimpleStreamingState:
     accumulated_text: str = ""
     tool_call_id: str = ""
     tool_call_name: str = ""
+    tool_call_namespace: str | None = None
     tool_call_index: int | None = None
     has_emitted_tool_call_delta: bool = False
     current_state: _StateType = field(default_factory=lambda: _StateType.NONE)
@@ -1014,11 +1020,13 @@ def emit_simple_tool_call_open(
     state: SimpleStreamingState,
     name: str,
     index: int | None,
+    namespace: str | None = None,
 ) -> list[StreamingResponsesResponse]:
     state.current_state = _StateType.TOOL_CALL
     state.current_item_id = random_uuid()
     state.tool_call_id = f"call_{random_uuid()}"
     state.tool_call_name = name
+    state.tool_call_namespace = namespace
     state.tool_call_index = index
     state.accumulated_text = ""
     state.has_emitted_tool_call_delta = False
@@ -1032,6 +1040,7 @@ def emit_simple_tool_call_open(
                 id=state.current_item_id,
                 call_id=state.tool_call_id,
                 name=name,
+                namespace=namespace,
                 arguments="",
                 status="in_progress",
             ),
@@ -1079,6 +1088,7 @@ def emit_simple_tool_call_done(
             item=ResponseFunctionToolCall(
                 type="function_call",
                 name=state.tool_call_name,
+                namespace=state.tool_call_namespace,
                 arguments=state.accumulated_text,
                 status="completed",
                 id=state.current_item_id,
@@ -1087,6 +1097,7 @@ def emit_simple_tool_call_done(
         ),
     )
     state.output_index += 1
+    state.tool_call_namespace = None
     state.current_state = _StateType.NONE
     return events
 
@@ -1161,8 +1172,13 @@ class SimpleStreamingEventProcessor:
         ),
     }
 
-    def __init__(self, state: SimpleStreamingState | None = None) -> None:
+    def __init__(
+        self,
+        state: SimpleStreamingState | None = None,
+        tools: list[Tool] | None = None,
+    ) -> None:
         self.state = state or SimpleStreamingState()
+        self.tool_call_name_map = build_responses_tool_call_name_map(tools)
 
     def resolve_target_state(self, delta_message: DeltaMessage) -> tuple[_StateType, Any]:
         """
@@ -1212,7 +1228,16 @@ class SimpleStreamingEventProcessor:
         handlers = self._STATE_HANDLERS[target_state]
         if target_state == _StateType.TOOL_CALL:
             assert tool_call is not None
-            return handlers.open_fn(self.state, tool_call.function.name, tool_call.index)
+            call_name = resolve_responses_tool_call_name(
+                tool_call.function.name,
+                tool_call_name_map=self.tool_call_name_map,
+            )
+            return handlers.open_fn(
+                self.state,
+                call_name.name,
+                tool_call.index,
+                call_name.namespace,
+            )
         return handlers.open_fn(self.state)
 
     def emit_delta(
