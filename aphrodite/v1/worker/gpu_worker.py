@@ -55,7 +55,7 @@ from aphrodite.multimodal.video import (
     PYNVVIDEOCODEC_CUDA_CONTEXT_BYTES,
     PYNVVIDEOCODEC_DECODER_GPU_MEMORY_BYTES,
     PYNVVIDEOCODEC_MAX_RETAINED_DECODERS,
-    PYNVVIDEOCODEC_VIDEO_BACKEND,
+    VIDEO_LOADER_REGISTRY,
 )
 from aphrodite.platforms import current_platform
 from aphrodite.profiler.wrapper import CudaProfilerWrapper, TorchProfilerWrapper
@@ -549,11 +549,13 @@ class Worker(WorkerBase):
         return self._reserve_mm_ipc_gpu_memory(int(self.available_kv_cache_memory_bytes))
 
     @staticmethod
-    def _uses_pynvvideocodec_video_backend(mm_config) -> bool:
+    def _uses_gpu_video_backend(mm_config) -> bool:
         video_kwargs = mm_config.media_io_kwargs.get("video", {})
         video_loader_backend = video_kwargs.get("video_backend") or envs.APHRODITE_VIDEO_LOADER_BACKEND
         codec_backend = video_kwargs.get("backend")
-        return video_loader_backend == PYNVVIDEOCODEC_VIDEO_BACKEND or codec_backend == PYNVVIDEOCODEC_VIDEO_BACKEND
+        return VIDEO_LOADER_REGISTRY.backend_requires_gpu(video_loader_backend) or (
+            codec_backend is not None and VIDEO_LOADER_REGISTRY.backend_requires_gpu(codec_backend)
+        )
 
     def _reserve_mm_ipc_gpu_memory(self, available_kv_cache_memory_bytes: int) -> int:
         """Carve frontend multimodal GPU memory out of the KV cache.
@@ -581,7 +583,7 @@ class Worker(WorkerBase):
             + PYNVVIDEOCODEC_CUDA_CONTEXT_BYTES
         )
         decoder_reserved_bytes = (
-            num_api_servers * per_server_decoder_bytes if self._uses_pynvvideocodec_video_backend(mm_config) else 0
+            num_api_servers * per_server_decoder_bytes if self._uses_gpu_video_backend(mm_config) else 0
         )
         reserved_bytes = raw_frame_reserved_bytes + decoder_reserved_bytes
         if reserved_bytes <= 0:
