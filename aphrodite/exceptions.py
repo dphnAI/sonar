@@ -66,6 +66,37 @@ class LoRAAdapterNotFoundError(AphroditeNotFoundError):
         return self.message
 
 
+class AphroditeUnprocessableEntityError(ValueError):
+    """Aphrodite-specific error for unprocessable entity requests.
+
+    Args:
+        message: The error message describing the unprocessable entity.
+        parameter: Optional parameter name that failed validation.
+        value: Optional value that was rejected during validation.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        parameter: str | None = None,
+        value: Any = None,
+    ) -> None:
+        super().__init__(message)
+        self.parameter = parameter
+        self.value = value
+
+    def __str__(self):
+        base = super().__str__()
+        extras = []
+        if self.parameter is not None:
+            extras.append(f"parameter={self.parameter}")
+        if self.value is not None:
+            extras.append(f"value={self.value}")
+        return f"{base} ({', '.join(extras)})" if extras else base
+
+
 # Backward compatibility with older upstream-derived imports.
 APHRODITEValidationError = AphroditeValidationError
 APHRODITENotFoundError = AphroditeNotFoundError
+APHRODITEUnprocessableEntityError = AphroditeUnprocessableEntityError
