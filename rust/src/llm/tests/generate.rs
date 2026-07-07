@@ -14,7 +14,7 @@ use aphrodite_engine_core_client::protocol::output::{EngineCoreEvent, EngineCore
 use aphrodite_engine_core_client::protocol::request::EngineCoreRequest;
 use aphrodite_engine_core_client::protocol::sampling::EngineCoreSamplingParams;
 use aphrodite_engine_core_client::test_utils::{IpcNamespace, spawn_mock_engine_task};
-use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig};
+use aphrodite_engine_core_client::{EngineCoreClient, EngineCoreClientConfig, EngineId};
 use aphrodite_llm::{
     Error, FinishReason, GenerateOutputStreamExt as _, GeneratePromptInfo, GenerateRequest, Llm,
 };
@@ -696,7 +696,7 @@ async fn abort_by_external_id_aborts_all_internal_requests() {
 async fn generate_records_request_metrics_in_prometheus_output() {
     let ipc = IpcNamespace::new().unwrap();
     let handshake_address = ipc.handshake_endpoint();
-    let engine_id = b"engine-metrics".to_vec();
+    let engine_id = EngineId::from_engine_index(4);
     let model_name = request_metrics_model_name("metrics-model");
 
     let (shutdown_tx, engine_task) = spawn_mock_engine_task(
@@ -829,7 +829,7 @@ async fn generate_records_request_metrics_in_prometheus_output() {
 async fn dropping_stream_records_abort_terminal_request_metrics() {
     let ipc = IpcNamespace::new().unwrap();
     let handshake_address = ipc.handshake_endpoint();
-    let engine_id = b"engine-metrics-drop".to_vec();
+    let engine_id = EngineId::from_engine_index(5);
     let model_name = request_metrics_model_name("metrics-drop-model");
 
     let (shutdown_tx, engine_task) = spawn_mock_engine_task(
