@@ -16,6 +16,10 @@
 # limitations under the License.
 """Wrapper around `transformers` models"""
 
+from typing import TYPE_CHECKING
+
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
 from aphrodite.model_executor.models.transformers.base import Base
 from aphrodite.model_executor.models.transformers.causal import CausalMixin
 from aphrodite.model_executor.models.transformers.legacy import LegacyMixin
@@ -31,6 +35,36 @@ from aphrodite.model_executor.models.transformers.pooling import (
     SequenceClassificationMixin,
 )
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
+
+if TYPE_CHECKING:
+    import torch
+
+    from aphrodite.model_executor.layers.attention import Attention
+
+
+def aphrodite_attention_forward(
+    # Transformers args
+    module: "torch.nn.Module",
+    query: "torch.Tensor",
+    key: "torch.Tensor",
+    value: "torch.Tensor",
+    attention_mask: "torch.Tensor",
+    # Transformers kwargs
+    scaling: float | None = None,
+    # Aphrodite kwargs
+    attention_instances: dict[int, "Attention"] | None = None,
+    **kwargs,
+):
+    self_attn = attention_instances[module.layer_idx]
+    if scaling is not None:
+        self_attn.impl.scale = float(scaling)
+    hidden = query.shape[-2]
+    query, key, value = (x.transpose(1, 2) for x in (query, key, value))
+    query, key, value = (x.reshape(hidden, -1) for x in (query, key, value))
+    return self_attn.forward(query, key, value), None
+
+
+ALL_ATTENTION_FUNCTIONS["aphrodite"] = aphrodite_attention_forward
 
 
 # Text only models
