@@ -9,7 +9,10 @@ from aphrodite.config import AphroditeConfig
 from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.v1.core.sched.output import NewRequestData
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
-from aphrodite.v1.worker.gpu.attn_utils import build_attn_metadata
+from aphrodite.v1.worker.gpu.attn_utils import (
+    build_attn_metadata,
+    compute_mm_prefix_ranges,
+)
 from aphrodite.v1.worker.gpu.input_batch import InputBatch
 from aphrodite.v1.worker.gpu.mm.encoder_cache import EncoderCache
 from aphrodite.v1.worker.gpu.mm.rope import get_rope_state
@@ -142,6 +145,18 @@ class DefaultModelState(ModelState):
             max_seq_len = self.max_model_len
         else:
             max_seq_len = seq_lens_cpu_upper_bound[:num_reqs].max().item()
+        req_doc_ranges: dict[int, list[tuple[int, int]]] | None = None
+        if self.supports_mm_inputs and self.encoder_cache is not None and self.model_config.is_mm_prefix_lm:
+            req_doc_ranges = compute_mm_prefix_ranges(
+                req_ids=input_batch.req_ids,
+                mm_features=self.encoder_cache.mm_features,
+                sliding_window=self.model_config.get_sliding_window(),
+                clamp_sliding_window_in_kernel=getattr(
+                    self.model,
+                    "mm_prefix_clamp_sliding_window",
+                    False,
+                ),
+            )
         attn_metadata = build_attn_metadata(
             attn_groups=attn_groups,
             num_reqs=num_reqs,
@@ -157,6 +172,7 @@ class DefaultModelState(ModelState):
             seq_lens_cpu_upper_bound=seq_lens_cpu_upper_bound,
             dcp_local_seq_lens=input_batch.dcp_local_seq_lens,
             positions=input_batch.positions,
+            mm_req_doc_ranges=req_doc_ranges,
             for_cudagraph_capture=for_capture,
             rswa_prefix_lens=input_batch.prompt_lens,
         )

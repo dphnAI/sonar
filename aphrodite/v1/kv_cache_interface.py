@@ -322,6 +322,9 @@ class TQFullAttentionSpec(FullAttentionSpec):
 
     tq_slot_size: int = 0
 
+    def kernel_cache_dtype_str(self, cache_dtype: str) -> str:
+        return cache_dtype
+
     @property
     def real_page_size_bytes(self) -> int:
         if self.tq_slot_size > 0:

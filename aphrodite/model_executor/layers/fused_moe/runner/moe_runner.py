@@ -691,7 +691,9 @@ class MoERunner(MoERunnerInterface):
 
     @property
     def do_naive_dispatch_combine(self) -> bool:
-        return self.moe_config.dp_size > 1 and not self._quant_method.supports_internal_mk
+        return (
+            self.moe_config.dp_size > 1 or self.moe_config.is_sequence_parallel
+        ) and not self._quant_method.supports_internal_mk
 
     def _maybe_dispatch(
         self,

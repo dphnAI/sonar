@@ -3,7 +3,11 @@
 
 import torch
 
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVQuantMode
+from aphrodite.v1.kv_cache_interface import (
+    FullAttentionSpec,
+    KVQuantMode,
+    TQFullAttentionSpec,
+)
 from aphrodite.v1.worker.gpu.attn_utils import _reshape_kv_cache
 from aphrodite.v1.worker.utils import AttentionGroup
 
@@ -226,3 +230,56 @@ def test_reshape_padded_quantized_kv_cache_preserves_scale_stride():
     assert kv_cache.stride(0) == spec.page_size_bytes
     assert kv_cache.stride(1) == 16 * 1 * 8
     assert kv_cache[1, 1].storage_offset() == spec.page_size_bytes + 16 * 1 * 8
+
+
+class FakeTurboQuantBackend:
+    @staticmethod
+    def get_kv_cache_shape(
+        num_blocks: int,
+        block_size: int,
+        num_kv_heads: int,
+        head_size: int,
+        cache_dtype_str: str = "auto",
+    ) -> tuple[int, ...]:
+        if cache_dtype_str.startswith("turboquant_"):
+            return (num_blocks, block_size, num_kv_heads, 6)
+        return (num_blocks, 2, block_size, num_kv_heads, head_size)
+
+    @staticmethod
+    def get_kv_cache_stride_order(
+        include_num_layers_dimension: bool = False,
+    ) -> tuple[int, ...]:
+        assert not include_num_layers_dimension
+        return (0, 1, 2, 3)
+
+
+def test_reshape_turboquant_kv_cache_preserves_backend_dtype():
+    num_blocks = 2
+    spec = TQFullAttentionSpec(
+        block_size=16,
+        num_kv_heads=1,
+        head_size=8,
+        dtype=torch.uint8,
+        tq_slot_size=6,
+    )
+    assert spec.kernel_cache_dtype_str("turboquant_k8v4") == "turboquant_k8v4"
+
+    raw_tensors = {"layer": torch.zeros(spec.page_size_bytes * num_blocks, dtype=torch.int8)}
+    attn_groups = [
+        AttentionGroup(
+            backend=FakeTurboQuantBackend,
+            layer_names=["layer"],
+            kv_cache_spec=spec,
+            kv_cache_group_id=0,
+        )
+    ]
+
+    kv_cache = _reshape_kv_cache(
+        attn_groups,
+        raw_tensors,
+        "turboquant_k8v4",
+        [spec.block_size],
+        {},
+    )["layer"]
+
+    assert kv_cache.shape == (num_blocks, 16, 1, 6)

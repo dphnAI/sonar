@@ -25,7 +25,6 @@ FROM ubuntu:22.04 AS base-common
 WORKDIR /workspace/
 
 ARG PYTHON_VERSION=3.12
-ARG PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cpu"
 
 # Install minimal dependencies and uv
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -48,15 +47,13 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 ENV UV_HTTP_TIMEOUT=500
 
 # Install Python dependencies 
-ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
-ENV UV_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
 ENV UV_INDEX_STRATEGY="unsafe-best-match"
 ENV UV_LINK_MODE="copy"
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,src=requirements/common.txt,target=requirements/common.txt \
     --mount=type=bind,src=requirements/cpu.txt,target=requirements/cpu.txt \
     uv pip install --upgrade pip && \
-    uv pip install -r requirements/cpu.txt
+    uv pip install -r requirements/cpu.txt --torch-backend cpu
 
 ARG TARGETARCH
 ENV TARGETARCH=${TARGETARCH}
@@ -94,7 +91,7 @@ WORKDIR /workspace/aphrodite
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,src=requirements/build/cpu.txt,target=requirements/build/cpu.txt \
-    uv pip install -r requirements/build/cpu.txt
+    uv pip install -r requirements/build/cpu.txt --torch-backend cpu
 
 COPY . .
 RUN --mount=type=bind,source=.git,target=.git \

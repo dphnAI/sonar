@@ -1767,12 +1767,19 @@ class AphroditeConfig:
         if architecture is None:
             return
 
+        from aphrodite.model_executor.models import ModelRegistry
         from aphrodite.model_executor.models.config import (
             MODELS_CONFIG_MAP,
             HybridAttentionMambaModelConfig,
         )
 
         cls = MODELS_CONFIG_MAP.get(architecture, None)
+        if cls is None:
+            # `architecture` may be an HF base-model name (e.g. "Mamba2Model"
+            # when `architectures` is omitted); normalize to the resolved arch
+            # so per-arch config hooks are not skipped.
+            architecture = ModelRegistry._normalize_arch(architecture, self.model_config)
+            cls = MODELS_CONFIG_MAP.get(architecture, None)
         if cls is not None:
             cls.verify_and_update_config(self)
 

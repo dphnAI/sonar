@@ -1002,6 +1002,7 @@ class OpenAIServingResponses(GenerateBaseServing):
                 content=content,
                 tool_calls=tool_calls,
                 logprobs=logprobs,
+                tools=request.tools,
             )
 
         # Fallback when no parser is configured
@@ -1246,7 +1247,7 @@ class OpenAIServingResponses(GenerateBaseServing):
         created_time: int,
         _increment_sequence_number_and_return: Callable[[StreamingResponsesResponse], StreamingResponsesResponse],
     ) -> AsyncGenerator[StreamingResponsesResponse, None]:
-        processor = SimpleStreamingEventProcessor()
+        processor = SimpleStreamingEventProcessor(tools=request.tools)
 
         def _get_logprobs(
             output: CompletionOutput,

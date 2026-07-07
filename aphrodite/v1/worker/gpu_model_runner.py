@@ -131,6 +131,9 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
 )
 from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadataBuilder
+from aphrodite.v1.attention.backends.linear_attn import (
+    BailingLinearAttentionMetadataBuilder,
+)
 from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionMetadataBuilder
 from aphrodite.v1.attention.backends.utils import (
     NULL_BLOCK_ID,
@@ -2262,8 +2265,15 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
             )
 
             extra_attn_metadata_args = {}
-            if use_spec_decode and isinstance(builder, (Mamba2AttentionMetadataBuilder, GDNAttentionMetadataBuilder)):
-                assert ubid is None, "UBatching not supported with GDN yet"
+            if use_spec_decode and isinstance(
+                builder,
+                (
+                    Mamba2AttentionMetadataBuilder,
+                    GDNAttentionMetadataBuilder,
+                    BailingLinearAttentionMetadataBuilder,
+                ),
+            ):
+                assert ubid is None, "UBatching not supported with GDN or linear attn yet"
                 extra_attn_metadata_args = dict(
                     num_accepted_tokens=self.num_accepted_tokens.gpu[:num_reqs_padded],
                     num_decode_draft_tokens_cpu=self.num_decode_draft_tokens.cpu[:num_reqs_padded],

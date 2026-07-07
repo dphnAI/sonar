@@ -57,7 +57,7 @@ MODELS = [
 )
 @pytest.mark.parametrize("model", MODELS)
 def test_auto_round_model(aphrodite_runner, model):
-    with aphrodite_runner(model, enforce_eager=True) as llm:
+    with aphrodite_runner(model) as llm:
         output = llm.generate_greedy(["The capital of France is"], max_tokens=8)
 
     assert output
@@ -324,7 +324,7 @@ def test_wna16_xpu_prefers_ark_when_available(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.get_ark_state",
+        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (True, None, object(), DummyQuantLinear),
     )
 
@@ -343,7 +343,7 @@ def test_wna16_xpu_falls_back_when_ark_unavailable(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.get_ark_state",
+        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (False, "missing", None, None),
     )
 
@@ -365,7 +365,7 @@ def test_wna16_cpu_gptq_prefers_ark_when_available(monkeypatch) -> None:
     monkeypatch.setattr(current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: True)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.get_ark_state",
+        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (True, None, object(), DummyQuantLinear),
     )
 
@@ -386,7 +386,7 @@ def test_wna16_cpu_gptq_raises_when_ark_and_marlin_unavailable(
     monkeypatch.setattr(current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: True)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear.get_ark_state",
+        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_ark_ops.get_ark_state",
         lambda: (False, "missing", None, None),
     )
     monkeypatch.setattr(
