@@ -4,7 +4,7 @@
 import json
 import subprocess
 import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -756,21 +756,6 @@ def test_tool_calling():
 # ---------------------------------------------------------------------------
 
 
-def _make_aiohttp_mocks(response_data: bytes = b"fake-data", status: int = 200):
-    """Create mock objects that simulate aiohttp.ClientSession context managers."""
-    mock_resp = MagicMock()
-    mock_resp.status = status
-    mock_resp.read = AsyncMock(return_value=response_data)
-    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-    mock_resp.__aexit__ = AsyncMock(return_value=False)
-
-    mock_session = MagicMock()
-    mock_session.get = MagicMock(return_value=mock_resp)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
-    return mock_session
-
-
 @pytest.mark.asyncio
 async def test_download_bytes_data_url_bypasses_domain_check():
     """data: URLs must work regardless of the domain allowlist."""
@@ -813,14 +798,17 @@ async def test_download_bytes_allows_permitted_domain():
     """HTTP URLs whose hostname IS in the allowlist must be fetched."""
     url = "https://example.com/audio.wav"
     expected = b"audio-bytes"
-    mock_session = _make_aiohttp_mocks(expected)
 
     with patch(
-        "aphrodite.entrypoints.openai.run_batch.aiohttp.ClientSession",
-        return_value=mock_session,
-    ):
+        "aphrodite.entrypoints.openai.run_batch.global_http_connection.async_get_bytes",
+        new=AsyncMock(return_value=expected),
+    ) as mock_get_bytes:
         result = await download_bytes_from_url(url, allowed_media_domains=["example.com"])
     assert result == expected
+    mock_get_bytes.assert_awaited_once_with(
+        url,
+        allow_redirects=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -828,14 +816,17 @@ async def test_download_bytes_no_allowlist_permits_any_domain():
     """Without an allowlist all HTTP URLs must be attempted (backward compat)."""
     url = "https://any-domain.example.org/file.wav"
     expected = b"some-data"
-    mock_session = _make_aiohttp_mocks(expected)
 
     with patch(
-        "aphrodite.entrypoints.openai.run_batch.aiohttp.ClientSession",
-        return_value=mock_session,
-    ):
+        "aphrodite.entrypoints.openai.run_batch.global_http_connection.async_get_bytes",
+        new=AsyncMock(return_value=expected),
+    ) as mock_get_bytes:
         result = await download_bytes_from_url(url, allowed_media_domains=None)
     assert result == expected
+    mock_get_bytes.assert_awaited_once_with(
+        url,
+        allow_redirects=True,
+    )
 
 
 @pytest.mark.asyncio
