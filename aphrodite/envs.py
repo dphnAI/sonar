@@ -119,6 +119,7 @@ if TYPE_CHECKING:
     APHRODITE_USE_OINK_OPS: bool = False
     APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
     APHRODITE_ROCM_USE_AITER: bool = False
+    APHRODITE_ROCM_USE_AITER_CUSTOM_AR: bool = True
     APHRODITE_ROCM_USE_AITER_PAGED_ATTN: bool = False
     APHRODITE_ROCM_USE_AITER_LINEAR: bool = True
     APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM: bool = False
@@ -1021,6 +1022,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD", "True").lower() in ("true", "1")
     ),
     "APHRODITE_ROCM_USE_AITER": lambda: (os.getenv("APHRODITE_ROCM_USE_AITER", "False").lower() in ("true", "1")),
+    # Use AITER's CustomAllreduce as the custom-allreduce backend inside
+    # Aphrodite's CudaCommunicator on ROCm.
+    "APHRODITE_ROCM_USE_AITER_CUSTOM_AR": lambda: (
+        os.getenv("APHRODITE_ROCM_USE_AITER_CUSTOM_AR", "True").lower() in ("true", "1")
+    ),
     # Whether to use aiter paged attention.
     # By default is disabled.
     "APHRODITE_ROCM_USE_AITER_PAGED_ATTN": lambda: (
