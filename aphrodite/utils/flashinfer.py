@@ -296,12 +296,12 @@ def has_flashinfer_b12x_gemm() -> bool:
 
 @functools.cache
 def has_flashinfer_b12x_moe() -> bool:
-    """Return ``True`` if FlashInfer CuteDSL SM12x fused MoE is available."""
+    """Return ``True`` if FlashInfer B12x fused MoE is available."""
     if not has_flashinfer_moe():
         return False
 
     required_functions = [
-        ("flashinfer.fused_moe", "b12x_fused_moe"),
+        ("flashinfer.fused_moe", "B12xMoEWrapper"),
         ("flashinfer.cute_dsl.utils", "convert_sf_to_mma_layout"),
     ]
 
