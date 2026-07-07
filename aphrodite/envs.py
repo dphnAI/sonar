@@ -637,9 +637,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "APHRODITE_USE_MODELSCOPE": lambda: (os.environ.get("APHRODITE_USE_MODELSCOPE", "False").lower() == "true"),
     # If true, replace the Rust BPE backend that powers HF fast tokenizers
     # with the `fastokens` (https://github.com/crusoecloud/fastokens) shim.
-    # Applies to any tokenizer mode that loads an HF fast tokenizer
-    # (`hf`, `deepseek_v32`, `deepseek_v4`, …). The `fastokens`
-    # Python package must be installed.
+    # Available in Aphrodite v0.23.0 and later. If your installed Aphrodite
+    # version does not recognize this environment variable, upgrade Aphrodite
+    # before enabling the override. Applies to any tokenizer mode that loads an
+    # HF fast tokenizer (`hf`, `deepseek_v32`, `deepseek_v4`, …). The
+    # `fastokens` Python package must be installed.
     "APHRODITE_USE_FASTOKENS": lambda: bool(int(os.getenv("APHRODITE_USE_FASTOKENS", "0"))),
     # Interval in seconds to log a warning message when the ring buffer is full
     "APHRODITE_RINGBUFFER_WARNING_INTERVAL": lambda: int(os.environ.get("APHRODITE_RINGBUFFER_WARNING_INTERVAL", "60")),

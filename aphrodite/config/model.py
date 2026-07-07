@@ -127,8 +127,11 @@ class ModelConfig:
 
     To swap the Rust BPE backend that powers HF fast tokenizers for the
     [fastokens](https://github.com/crusoecloud/fastokens) implementation, set
-    `APHRODITE_USE_FASTOKENS=1` instead — that override applies to any mode that
-    loads an HF fast tokenizer (`hf`, `deepseek_v32`, `deepseek_v4`, …)."""
+    `APHRODITE_USE_FASTOKENS=1` instead. `APHRODITE_USE_FASTOKENS` is available
+    in Aphrodite v0.23.0 and later; if your installed Aphrodite version does not
+    recognize the environment variable, upgrade Aphrodite before enabling the
+    override. The override applies to any mode that loads an HF fast tokenizer
+    (`hf`, `deepseek_v32`, `deepseek_v4`, …)."""
     trust_remote_code: bool = False
     """Trust remote code (e.g., from HuggingFace) when downloading the model
     and tokenizer."""
