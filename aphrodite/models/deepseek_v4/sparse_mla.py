@@ -5,7 +5,6 @@
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-import numpy as np
 import torch
 
 from aphrodite.config import AphroditeConfig
@@ -13,7 +12,6 @@ from aphrodite.config.cache import CacheDType
 from aphrodite.platforms.interface import DeviceCapability
 from aphrodite.triton_utils import tl, triton
 from aphrodite.utils.math_utils import cdiv
-from aphrodite.utils.torch_utils import np_to_pinned_tensor
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
@@ -190,16 +188,7 @@ class DeepseekV4FlashMLAMetadataBuilder(AttentionMetadataBuilder[DeepseekV4Flash
         fast_build: bool = False,
     ) -> DeepseekV4FlashMLAMetadata:
         cm = common_attn_metadata
-        num_tokens = cm.num_actual_tokens
-        starts = np.asarray(cm.query_start_loc_cpu, dtype=np.int32)
-        seg_lengths = np.diff(starts)
-        req_id_per_token = np.repeat(np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths)
-        # Zero-fill for cudagraphs
-        self.req_id_per_token_buffer.fill_(0)
-        self.req_id_per_token_buffer[: req_id_per_token.shape[0]].copy_(
-            np_to_pinned_tensor(req_id_per_token), non_blocking=True
-        )
-        req_id_per_token = self.req_id_per_token_buffer[:num_tokens]
+        req_id_per_token = cm.token_to_req_indices(self.req_id_per_token_buffer)
 
         slot_mapping = cm.slot_mapping
         if self.compress_ratio > 1:
