@@ -25,11 +25,19 @@ def create_error_response(
         exc = message
         logger.debug("create_error_response called with %s: %s", type(exc).__name__, exc)
 
-        from aphrodite.exceptions import APHRODITENotFoundError, APHRODITEValidationError
+        from aphrodite.exceptions import (
+            APHRODITENotFoundError,
+            APHRODITEUnprocessableEntityError,
+            APHRODITEValidationError,
+        )
 
         if isinstance(exc, APHRODITEValidationError):
             err_type = "BadRequestError"
             status_code = HTTPStatus.BAD_REQUEST
+            param = exc.parameter
+        elif isinstance(exc, APHRODITEUnprocessableEntityError):
+            err_type = "UnprocessableEntityError"
+            status_code = HTTPStatus.UNPROCESSABLE_ENTITY
             param = exc.parameter
         elif isinstance(exc, APHRODITENotFoundError):
             err_type = "NotFoundError"

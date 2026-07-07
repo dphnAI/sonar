@@ -13,14 +13,17 @@ from pathlib import Path
 from typing import Any, TypeVar
 from urllib.request import url2pathname
 
+import aiohttp
 import numpy as np
 import numpy.typing as npt
+import requests
 import torch
 from PIL import Image, UnidentifiedImageError
 from urllib3.util import Url, parse_url
 
 import aphrodite.envs as envs
 from aphrodite.connections import HTTPConnection, global_http_connection
+from aphrodite.exceptions import APHRODITEUnprocessableEntityError
 from aphrodite.logger import init_logger
 from aphrodite.multimodal.video import get_video_loader_backend_for_processor
 from aphrodite.utils.registry import ExtensionManager
@@ -44,6 +47,51 @@ MODALITY_IO_MAP: dict[str, type[MediaIO]] = {
     "image": ImageMediaIO,
     "video": VideoMediaIO,
 }
+
+
+def _wrap_media_fetch_error(
+    url: str,
+    exc: Exception,
+) -> APHRODITEUnprocessableEntityError | Exception:
+    """Convert permanent media fetch failures into 422 request errors."""
+    if isinstance(exc, aiohttp.ClientResponseError):
+        if exc.status in (408, 429):
+            return exc
+        if exc.status < 500:
+            return APHRODITEUnprocessableEntityError(
+                f"Failed to fetch media from URL: HTTP {exc.status} error",
+                parameter="image_url",
+                value=url,
+            )
+        return exc
+
+    if isinstance(exc, requests.exceptions.HTTPError):
+        if exc.response is not None:
+            status_code = exc.response.status_code
+            if status_code in (408, 429):
+                return exc
+            if status_code < 500:
+                return APHRODITEUnprocessableEntityError(
+                    f"Failed to fetch media from URL: HTTP {status_code} error",
+                    parameter="image_url",
+                    value=url,
+                )
+        return exc
+
+    if isinstance(exc, requests.exceptions.InvalidURL):
+        return APHRODITEUnprocessableEntityError(
+            "Failed to fetch media from URL: Invalid URL format",
+            parameter="image_url",
+            value=url,
+        )
+
+    if isinstance(exc, ValueError):
+        return APHRODITEUnprocessableEntityError(
+            "Failed to fetch media from URL: Invalid URL",
+            parameter="image_url",
+            value=url,
+        )
+    return exc
 
 
 def merge_media_io_kwargs(
@@ -288,11 +336,17 @@ class MediaConnector:
                 return media_io.load_bytes(cached)
 
             connection = self.connection
-            data = connection.get_bytes(
-                url_spec.url,
-                timeout=fetch_timeout,
-                allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
-            )
+            try:
+                data = connection.get_bytes(
+                    url_spec.url,
+                    timeout=fetch_timeout,
+                    allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
+                )
+            except Exception as e:
+                wrapped = _wrap_media_fetch_error(url, e)
+                if isinstance(wrapped, APHRODITEUnprocessableEntityError):
+                    raise wrapped from e
+                raise
 
             self._put_cached_bytes(url, data)
             return media_io.load_bytes(data)
@@ -313,7 +367,7 @@ class MediaConnector:
         loop = asyncio.get_running_loop()
 
         if url[:5].lower() == "data:":
-            future = loop.run_in_executor(global_thread_pool, self._load_data_url, url, media_io)
+            future: asyncio.Future[_M] = loop.run_in_executor(global_thread_pool, self._load_data_url, url, media_io)
             return await future
 
         url_spec = parse_url(url)
@@ -327,11 +381,17 @@ class MediaConnector:
                 return await future
 
             connection = self.connection
-            data = await connection.async_get_bytes(
-                url_spec.url,
-                timeout=fetch_timeout,
-                allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
-            )
+            try:
+                data = await connection.async_get_bytes(
+                    url_spec.url,
+                    timeout=fetch_timeout,
+                    allow_redirects=envs.APHRODITE_MEDIA_URL_ALLOW_REDIRECTS,
+                )
+            except Exception as e:
+                wrapped = _wrap_media_fetch_error(url, e)
+                if isinstance(wrapped, APHRODITEUnprocessableEntityError):
+                    raise wrapped from e
+                raise
 
             await loop.run_in_executor(global_thread_pool, self._put_cached_bytes, url, data)
             future = loop.run_in_executor(global_thread_pool, media_io.load_bytes, data)

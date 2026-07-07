@@ -51,7 +51,10 @@ from aphrodite.entrypoints.serve.utils.server_utils import (
     log_response,
     validation_exception_handler,
 )
-from aphrodite.exceptions import APHRODITEValidationError
+from aphrodite.exceptions import (
+    APHRODITEUnprocessableEntityError,
+    APHRODITEValidationError,
+)
 from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParserManager
 from aphrodite.renderers.online_derenderer import OnlineDerenderer
@@ -243,6 +246,7 @@ def build_app(
     app.exception_handler(EngineDeadError)(engine_error_handler)
     app.exception_handler(GenerationError)(generation_error_handler)
     app.exception_handler(APHRODITEValidationError)(exception_handler)
+    app.exception_handler(APHRODITEUnprocessableEntityError)(exception_handler)
     app.exception_handler(Exception)(exception_handler)
 
     # Ensure --api-key option from CLI takes precedence over APHRODITE_API_KEY
