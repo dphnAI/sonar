@@ -2,12 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import functools
 from collections.abc import Callable
-from contextlib import contextmanager
-from typing import Protocol
 
 import torch
 from torch._ops import OpOverload
-from torch.distributed import ProcessGroup
 
 import aphrodite.envs as envs
 from aphrodite.platforms import current_platform
@@ -50,41 +47,6 @@ def is_aiter_found() -> bool:
 # been checked in forward passes that are torch compiled.
 # we keep this global outside to not cause torch compile breaks.
 IS_AITER_FOUND = is_aiter_found()
-
-
-class AiterCustomAllreduceProto(Protocol):
-    max_size: int
-    world_size: int
-    fully_connected: bool
-
-    @contextmanager
-    def capture(self): ...
-    def close(self) -> None: ...
-    def fused_ar_rms(
-        self,
-        inp: torch.Tensor,
-        res_inp: torch.Tensor,
-        *,
-        w: torch.Tensor,
-        eps: float,
-        registered: bool = False,
-        use_1stage: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]: ...
-    def fused_ar_rms_per_group_quant(
-        self,
-        inp: torch.Tensor,
-        res_inp: torch.Tensor,
-        *,
-        w: torch.Tensor,
-        eps: float,
-        group_size: int = 128,
-        registered: bool = False,
-        use_1stage: bool = False,
-        emit_bf16: bool = False,
-    ) -> (
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-    ): ...
-    def should_custom_ar(self, inp: torch.Tensor) -> bool: ...
 
 
 def is_aiter_found_and_supported() -> bool:
@@ -806,6 +768,7 @@ def _rocm_aiter_fused_allreduce_rmsnorm_impl(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
     assert aiter_ar is not None, "aiter allreduce must be initialized"
+    ca = aiter_ar.aiter_ca
 
     total_bytes = input_.numel() * input_.element_size()
     hidden_dim = input_.shape[-1]
@@ -816,8 +779,8 @@ def _rocm_aiter_fused_allreduce_rmsnorm_impl(
     else:
         hidden_ok = False
     token_ok = token_num <= 80
-    world_size = aiter_ar.world_size
-    full_nvlink = aiter_ar.fully_connected
+    world_size = ca.world_size
+    full_nvlink = ca.fully_connected
 
     if world_size == 2:
         size_ok = True
@@ -830,12 +793,11 @@ def _rocm_aiter_fused_allreduce_rmsnorm_impl(
 
     use_1stage = hidden_ok and token_ok and size_ok
 
-    result = aiter_ar.fused_ar_rms(
+    result = ca.custom_fused_ar_rms(
         input_,
         residual,
-        w=weight,
-        eps=epsilon,
-        registered=torch.cuda.is_current_stream_capturing(),
+        weight,
+        epsilon,
         use_1stage=use_1stage,
     )
     assert result is not None
@@ -866,6 +828,7 @@ def _rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_impl(
     """
     aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
     assert aiter_ar is not None, "aiter allreduce must be initialized"
+    ca = aiter_ar.aiter_ca
 
     total_bytes = input_.numel() * input_.element_size()
     hidden_dim = input_.shape[-1]
@@ -876,8 +839,8 @@ def _rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_impl(
     else:
         hidden_ok = False
     token_ok = token_num <= 80
-    world_size = aiter_ar.world_size
-    full_nvlink = aiter_ar.fully_connected
+    world_size = ca.world_size
+    full_nvlink = ca.fully_connected
 
     if world_size == 2:
         size_ok = True
@@ -890,7 +853,7 @@ def _rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_impl(
 
     use_1stage = hidden_ok and token_ok and size_ok
 
-    result = aiter_ar.fused_ar_rms_per_group_quant(
+    result = ca.fused_ar_rms_per_group_quant(
         input_,
         residual,
         w=weight,
@@ -938,6 +901,7 @@ def _rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm_impl(
     """
     aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
     assert aiter_ar is not None, "aiter allreduce must be initialized"
+    ca = aiter_ar.aiter_ca
 
     total_bytes = input_.numel() * input_.element_size()
     hidden_dim = input_.shape[-1]
@@ -948,8 +912,8 @@ def _rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm_impl(
     else:
         hidden_ok = False
     token_ok = token_num <= 80
-    world_size = aiter_ar.world_size
-    full_nvlink = aiter_ar.fully_connected
+    world_size = ca.world_size
+    full_nvlink = ca.fully_connected
 
     if world_size == 2:
         size_ok = True
@@ -962,7 +926,7 @@ def _rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm_impl(
 
     use_1stage = hidden_ok and token_ok and size_ok
 
-    result = aiter_ar.fused_ar_rms_per_group_quant(
+    result = ca.fused_ar_rms_per_group_quant(
         input_,
         residual,
         w=weight,
@@ -1550,6 +1514,7 @@ class rocm_aiter_ops:
 
     # Check if the env variable is set
     _AITER_ENABLED = envs.APHRODITE_ROCM_USE_AITER
+    _CUSTOM_ALL_REDUCE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_CUSTOM_AR
     _LINEAR_ENABLED = envs.APHRODITE_ROCM_USE_AITER_LINEAR
     _FMOE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MOE
     _MLA_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MLA
@@ -1571,9 +1536,6 @@ class rocm_aiter_ops:
     # num_shared_experts / shared_expert_scoring_func args (7-arg form).
     _TOPK_SOFTMAX_FUSED_SIGMOID: bool | None = None
 
-    _ALL_REDUCE_MAX_SIZE: int = 8192 * 1024 * 8 * 2
-    _CUSTOM_ALL_REDUCE: AiterCustomAllreduceProto | None = None
-
     @classmethod
     def refresh_env_variables(cls):
         """
@@ -1584,6 +1546,7 @@ class rocm_aiter_ops:
         you can call this function to reload the env variables.
         """
         cls._AITER_ENABLED = envs.APHRODITE_ROCM_USE_AITER
+        cls._CUSTOM_ALL_REDUCE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_CUSTOM_AR
         cls._LINEAR_ENABLED = envs.APHRODITE_ROCM_USE_AITER_LINEAR
         cls._FMOE_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MOE
         cls._MLA_ENABLED = envs.APHRODITE_ROCM_USE_AITER_MLA
@@ -1743,6 +1706,11 @@ class rocm_aiter_ops:
 
     @classmethod
     @if_aiter_supported
+    def is_custom_all_reduce_enabled(cls) -> bool:
+        return cls._AITER_ENABLED and cls._CUSTOM_ALL_REDUCE_ENABLED
+
+    @classmethod
+    @if_aiter_supported
     def is_shuffle_kv_cache_enabled(cls) -> bool:
         return cls._SHUFFLE_KV_CACHE_ENABLED
 
@@ -1795,31 +1763,16 @@ class rocm_aiter_ops:
         return cls.is_linear_enabled() and on_gfx950()
 
     @classmethod
-    def initialize_aiter_allreduce(cls, group: ProcessGroup, device: torch.device) -> None:
-        try:
-            from aiter.dist.device_communicators.custom_all_reduce import (
-                CustomAllreduce as AiterCustomAllreduce,
-            )
+    def get_aiter_allreduce(cls):
+        """Return the TP device communicator's AITER custom all-reduce."""
+        from aphrodite.distributed.device_communicators.aiter_custom_all_reduce import (
+            AiterCustomAllreduce,
+        )
+        from aphrodite.distributed.parallel_state import get_tp_group
 
-            cls._CUSTOM_ALL_REDUCE = AiterCustomAllreduce(group, device)
-        except Exception:
-            cls._CUSTOM_ALL_REDUCE = None
-
-    @classmethod
-    def get_aiter_allreduce(cls) -> AiterCustomAllreduceProto | None:
-        return cls._CUSTOM_ALL_REDUCE
-
-    @classmethod
-    def destroy_aiter_allreduce(cls) -> None:
-        if cls._CUSTOM_ALL_REDUCE is not None:
-            cls._CUSTOM_ALL_REDUCE.close()
-            cls._CUSTOM_ALL_REDUCE = None
-
-    @classmethod
-    def get_aiter_allreduce_max_size(cls) -> int | None:
-        # effective max input size (based on upstream aiter version: v0.1.10.post3)
-        # https://github.com/ROCm/aiter/blob/6a0e7b26ccf33164785531212cc2ec2cde0b9243/aiter/dist/device_communicators/custom_all_reduce.py#L272-L273
-        return int(cls._ALL_REDUCE_MAX_SIZE / 2)
+        device_comm = get_tp_group().device_communicator
+        aiter_ar_comm = getattr(device_comm, "aiter_ar_comm", None)
+        return aiter_ar_comm if isinstance(aiter_ar_comm, AiterCustomAllreduce) else None
 
     @classmethod
     @if_aiter_supported
@@ -2133,19 +2086,6 @@ class rocm_aiter_ops:
     @staticmethod
     def get_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm_op() -> OpOverload:  # noqa: E501
         return torch.ops.aphrodite.rocm_aiter_fused_allreduce_rmsnorm_quant_per_group_with_bf16_norm.default  # noqa: E501
-
-    # TODO(frida-andersson): drop once Aphrodite pins AITER >= 0.1.14 (ROCm/aiter#2823).
-    @classmethod
-    def has_fused_allreduce_rmsnorm_quant_per_group(cls) -> bool:
-        """True if the running AITER build exposes the per-group AR+RMS+quant
-        kernel (added in ROCm/aiter PR #2823).
-
-        The pattern registration in ``RocmAiterAllReduceFusionPass`` keys off
-        this so Aphrodite degrades to the AR+RMS-only fusion when run against an
-        older aiter that lacks the per-group launcher.
-        """
-        aiter_ar = cls.get_aiter_allreduce()
-        return aiter_ar is not None and hasattr(aiter_ar, "fused_ar_rms_per_group_quant")
 
     @staticmethod
     def get_fused_mla_dual_rms_norm_op() -> OpOverload:

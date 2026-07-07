@@ -6,6 +6,7 @@ import torch
 from torch.distributed import ProcessGroup
 
 import aphrodite.envs as envs
+from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.distributed.device_communicators.all_reduce_utils import (
     NCCL_SYMM_MEM_ALL_REDUCE_CONFIG,
     should_nccl_symm_mem_ag_rs,
@@ -19,6 +20,7 @@ from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 
 from ..utils import StatelessProcessGroup
+from .aiter_custom_all_reduce import AiterCustomAllreduce
 from .base_device_communicator import DeviceCommunicatorBase
 
 logger = init_logger(__name__)
@@ -48,16 +50,19 @@ class CudaCommunicator(DeviceCommunicatorBase):
             use_custom_allreduce = False
             use_torch_symm_mem = False
             use_flashinfer_allreduce = False
+            use_aiter_allreduce = False
         else:
             from aphrodite.distributed.parallel_state import _ENABLE_CUSTOM_ALL_REDUCE
 
             use_custom_allreduce = _ENABLE_CUSTOM_ALL_REDUCE
             use_torch_symm_mem = envs.APHRODITE_ALLREDUCE_USE_SYMM_MEM
             use_flashinfer_allreduce = envs.APHRODITE_ALLREDUCE_USE_FLASHINFER
+            use_aiter_allreduce = use_custom_allreduce and bool(rocm_aiter_ops.is_custom_all_reduce_enabled())
 
         self.use_custom_allreduce = use_custom_allreduce
         self.use_torch_symm_mem = use_torch_symm_mem
         self.use_flashinfer_allreduce = use_flashinfer_allreduce
+        self.use_aiter_allreduce = use_aiter_allreduce
 
         # lazy import to avoid documentation build error
         from aphrodite.distributed.device_communicators.custom_all_reduce import (
@@ -85,6 +90,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.qr_comm: QuickAllReduce | None = None
         self.symm_mem_comm: SymmMemCommunicator | None = None
         self.fi_ar_comm: FlashInferAllReduce | None = None
+        self.aiter_ar_comm: AiterCustomAllreduce | None = None
 
         if use_torch_symm_mem and current_platform.is_cuda():
             self.symm_mem_comm = SymmMemCommunicator(
@@ -98,7 +104,13 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 device=self.device,
             )
 
-        if use_custom_allreduce and self.world_size > 1:
+        if self.use_aiter_allreduce and self.world_size > 1:
+            self.aiter_ar_comm = AiterCustomAllreduce(
+                group=self.cpu_group,
+                device=self.device,
+            )
+
+        if use_custom_allreduce and self.aiter_ar_comm is None and self.world_size > 1:
             # Initialize a custom fast all-reduce implementation.
             self.ca_comm = CustomAllreduce(
                 group=self.cpu_group,
@@ -106,13 +118,14 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 symm_mem_enabled=(self.symm_mem_comm is not None and not self.symm_mem_comm.disabled),
             )
 
-            if current_platform.is_rocm():
-                # Initialize a custom quick all-reduce implementation for AMD.
-                # Quick reduce is designed as a complement to custom allreduce.
-                # Based on quickreduce (https://github.com/mk1-project/quickreduce).
-                # If it's a rocm, 'use_custom_allreduce==True' means it must
-                # currently be an MI300 series.
-                self.qr_comm = QuickAllReduce(group=self.cpu_group, device=self.device)
+        if use_custom_allreduce and self.world_size > 1 and current_platform.is_rocm():
+            # Initialize a custom quick all-reduce implementation for AMD.
+            # Quick reduce is designed as a complement to custom allreduce
+            # (Aphrodite's or AITER's), so it is initialized for either backend.
+            # Based on quickreduce (https://github.com/mk1-project/quickreduce).
+            # On ROCm, 'use_custom_allreduce==True' means it must currently be
+            # an MI300 series.
+            self.qr_comm = QuickAllReduce(group=self.cpu_group, device=self.device)
 
         if self.world_size > 1:
             self._log_all_reduce_backend_selection()
@@ -186,6 +199,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
             "NCCL_SYMM_MEM",
             "QUICK_REDUCE",
             "FLASHINFER",
+            "AITER_CUSTOM",
             "CUSTOM",
             "SYMM_MEM",
             "PYNCCL",
@@ -215,6 +229,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
             enabled_ar_backends.append("QUICK_REDUCE")
         if self.fi_ar_comm is not None and not self.fi_ar_comm.disabled:
             enabled_ar_backends.append("FLASHINFER")
+        if self.aiter_ar_comm is not None and not self.aiter_ar_comm.disabled:
+            enabled_ar_backends.append("AITER_CUSTOM")
         if self.ca_comm is not None and not self.ca_comm.disabled:
             enabled_ar_backends.append("CUSTOM")
         if self.symm_mem_comm is not None and not self.symm_mem_comm.disabled:
@@ -237,8 +253,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
             out = torch.ops.aphrodite.all_reduce_symmetric_with_copy(input_)
             if out is not None:
                 return out
-        # always try quick reduce first, then flashinfer, then custom allreduce,
-        # and then pynccl. (quick reduce just for ROCM MI3*)
+        # always try quick reduce first, then flashinfer, then the AITER or
+        # Aphrodite custom allreduce, and then pynccl.
         qr_comm = self.qr_comm
         if qr_comm is not None and not qr_comm.disabled and qr_comm.should_quick_allreduce(input_):
             out = qr_comm.quick_all_reduce(input_)
@@ -247,6 +263,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
         fi_ar_comm = self.fi_ar_comm
         if fi_ar_comm is not None and not fi_ar_comm.disabled and fi_ar_comm.should_use_fi_ar(input_):
             out = fi_ar_comm.all_reduce(input_)
+            assert out is not None
+            return out
+        aiter_ar_comm = self.aiter_ar_comm
+        if aiter_ar_comm is not None and not aiter_ar_comm.disabled and aiter_ar_comm.should_custom_ar(input_):
+            out = aiter_ar_comm.custom_all_reduce(input_)
             assert out is not None
             return out
         ca_comm = self.ca_comm
@@ -463,6 +484,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
             self.pynccl_comm = None
         if self.ca_comm is not None:
             self.ca_comm = None
+        if self.aiter_ar_comm is not None:
+            self.aiter_ar_comm.close()
+            self.aiter_ar_comm = None
         if self.fi_ar_comm is not None:
             self.fi_ar_comm.destroy()
             self.fi_ar_comm = None
