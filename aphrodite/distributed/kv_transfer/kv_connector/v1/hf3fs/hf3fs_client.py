@@ -208,7 +208,7 @@ class Hf3fsClient:
         return results
 
     @wsynchronized()
-    def batch_write(self, offsets: list[int], tensors: list[torch.Tensor], event: torch.Event) -> list[int]:
+    def batch_write(self, offsets: list[int], tensors: list[torch.Tensor], event: torch.cuda.Event) -> list[int]:
         """Write data from tensors to the file at specified offsets.
 
         Args:
