@@ -128,7 +128,7 @@ def _fwd_kernel_stage1(
                 Req_to_tokens + stride_req_to_tokens_b * cur_batch_req_idx + offs_n // PAGE_SIZE,
                 mask=offs_n < split_kv_end,
                 other=0,
-            )
+            ).to(tl.int64)  # page_number * page stride overflows int32
             kv_in_page = offs_n % PAGE_SIZE
             offs_buf_k = (
                 (kv_page_number * stride_buf_kpbs + kv_in_page * stride_buf_kbs)[:, None]
@@ -352,7 +352,7 @@ def _fwd_grouped_kernel_stage1(
                 mask=offs_n < split_kv_end,
                 other=0,
                 cache_modifier=".ca",
-            )
+            ).to(tl.int64)  # page_number * page stride overflows int32
             kv_off_k = kv_page_number * stride_buf_kpbs + (offs_n % PAGE_SIZE) * stride_buf_kbs
 
             # explicitly facilitate overlapping load/compute
