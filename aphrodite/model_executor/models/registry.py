@@ -492,6 +492,10 @@ _MULTIMODAL_MODELS = {
     "Molmo2ForConditionalGeneration": ("molmo2", "Molmo2ForConditionalGeneration"),
     "Moondream3ForCausalLM": ("moondream3", "Moondream3ForCausalLM"),
     "MossAudioModel": ("moss_audio", "MossAudioModel"),
+    "MossTranscribeDiarizeForConditionalGeneration": (
+        "moss_transcribe_diarize",
+        "MossTranscribeDiarizeForConditionalGeneration",
+    ),
     "HfMoondream": ("moondream3", "Moondream3ForCausalLM"),
     "NemotronH_Nano_VL_V2": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
     "NemotronH_Nano_Omni_Reasoning_V3": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
