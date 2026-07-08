@@ -254,6 +254,13 @@ class MiniMaxM3IndexerMetadataBuilder(AttentionMetadataBuilder[MiniMaxM3IndexerM
             dtype=torch.int32,
             device=device,
         )
+        # Stable per-token causal page-count buffer for decode cudagraph replays
+        # (consumed by the MSA top-k path's sparse_topk_select num_valid_pages).
+        self.num_valid_pages_buffer = torch.empty(
+            aphrodite_config.scheduler_config.max_num_batched_tokens,
+            dtype=torch.int32,
+            device=device,
+        )
 
 
 class MiniMaxM3IndexerTritonMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
