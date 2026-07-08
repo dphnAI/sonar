@@ -130,10 +130,12 @@ class SiluAndMul(CustomOp):
             enforce_enable=enforce_enable,
             compile_native=compile_native,
         )
-        if current_platform.is_cuda_alike() or current_platform.is_xpu():
+        if (
+            current_platform.is_cuda_alike()
+            or current_platform.is_cpu()
+            or current_platform.is_xpu()
+        ):
             self.op = torch.ops._C.silu_and_mul
-        elif current_platform.is_cpu():
-            self._forward_method = self.forward_native
 
     @staticmethod
     def forward_native(x: torch.Tensor) -> torch.Tensor:
@@ -147,6 +149,9 @@ class SiluAndMul(CustomOp):
         out = torch.empty(output_shape, dtype=x.dtype, device=x.device)
         self.op(out, x)
         return out
+
+    def forward_cpu(self, x: torch.Tensor) -> torch.Tensor:
+        return self.forward_cuda(x)
 
     def forward_xpu(self, x: torch.Tensor) -> torch.Tensor:
         return self.forward_cuda(x)
