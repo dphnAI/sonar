@@ -142,7 +142,7 @@ def _reference_index_topk(
         num_blocks = (seq_len + BLOCK_SIZE - 1) // BLOCK_SIZE
         pages = block_table[req_id, :num_blocks]
         k = index_kv_cache[pages].reshape(num_blocks * BLOCK_SIZE, -1)
-        score = torch.einsum("qhd,kd->hqk", q.float(), k.float()) * sm_scale
+        score = sm_scale * torch.einsum("qhd,kd->hqk", q.float(), k.float())
 
         q_pos = prefix_len + torch.arange(q_len, device=idx_q.device)
         k_pos = torch.arange(k.shape[0], device=idx_q.device)
@@ -444,11 +444,11 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
     msa_impl.index_cache.kv_cache = index_cache
     triton_impl.index_cache.kv_cache = index_cache
 
-    # Exercise the shared persistent top-k buffer for BOTH impls: each must write
-    # decode ([:, :nd]) and prefill ([:, nd:]) into its buffer and return views.
+    # Exercise the shared persistent top-k buffer for BOTH impls: MSA writes a
+    # token-major buffer while Triton keeps the legacy head-major views.
     # Separate buffers so the two forwards don't clobber each other.
     nd = sum(q for q in batch.query_lens if q <= 1)
-    msa_impl.topk_indices_buffer = torch.full((num_idx_heads, num_tokens, topk), -2, dtype=torch.int32, device=device)
+    msa_impl.topk_indices_buffer = torch.full((num_tokens, num_idx_heads, topk), -2, dtype=torch.int32, device=device)
     triton_impl.topk_indices_buffer = torch.full(
         (num_idx_heads, num_tokens, topk), -2, dtype=torch.int32, device=device
     )
@@ -461,18 +461,15 @@ def test_msa_indexer_impl_matches_triton(topk, monkeypatch):
         msa_decode, msa_prefill = msa_impl(index_q)
         tri_decode, tri_prefill = triton_impl(index_q)
 
-    assert msa_decode is not None and tri_decode is not None
-    assert msa_prefill is not None and tri_prefill is not None
-    _assert_topk_indices_equal_unordered(msa_decode, tri_decode)
-    _assert_topk_indices_equal_unordered(msa_prefill, tri_prefill)
-    # decode/prefill outputs are views into each impl's persistent buffer.
-    for impl, dec, pre in (
-        (msa_impl, msa_decode, msa_prefill),
-        (triton_impl, tri_decode, tri_prefill),
-    ):
-        buf = impl.topk_indices_buffer
-        assert dec.data_ptr() == buf[:, :nd, :].data_ptr()
-        assert pre.data_ptr() == buf[:, nd:, :].data_ptr()
+    assert msa_decode is None and msa_prefill is None
+    assert tri_decode is not None and tri_prefill is not None
+    msa_buf = msa_impl.topk_indices_buffer
+    _assert_topk_indices_equal_unordered(msa_buf[:nd].transpose(0, 1), tri_decode)
+    _assert_topk_indices_equal_unordered(msa_buf[nd:num_tokens].transpose(0, 1), tri_prefill)
+    # Triton decode/prefill outputs are views into its persistent buffer.
+    triton_buf = triton_impl.topk_indices_buffer
+    assert tri_decode.data_ptr() == triton_buf[:, :nd, :].data_ptr()
+    assert tri_prefill.data_ptr() == triton_buf[:, nd:, :].data_ptr()
 
 
 @pytest.mark.parametrize(
@@ -577,11 +574,12 @@ def test_decode_index_topk_fp8(num_idx_heads: int):
         init_blocks=init_blocks,
         local_blocks=local_blocks,
         num_kv_heads=num_idx_heads,
-        sm_scale=head_dim**-0.5,
         decode_query_len=decode_query_len,
+        max_decode_query_len=decode_query_len,
     )
     # Reference from the DEQUANTIZED fp8 values (the kernel computes the fp8 QK
-    # in fp32, so it must match an fp32 matmul of the same e4m3 values).
+    # in fp32 with no scaling, so it must match an unscaled fp32 matmul of the
+    # same e4m3 values).
     expected = _reference_index_topk(
         idx_q.float(),
         index_kv_cache.float(),
@@ -592,7 +590,6 @@ def test_decode_index_topk_fp8(num_idx_heads: int):
         topk,
         init_blocks,
         local_blocks,
-        head_dim**-0.5,
     )
     _assert_topk_indices_equal_unordered(actual, expected)
 
