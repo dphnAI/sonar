@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from aphrodite.distributed.parallel_state import get_pp_group
+from aphrodite.platforms import current_platform
 from aphrodite.v1.worker.gpu.buffer_utils import async_copy_to_gpu
 from aphrodite.v1.worker.gpu.input_batch import InputBatch
 
@@ -169,6 +170,10 @@ class PPHandler:
             return
 
         assert sampled_token_ids.dtype == torch.int64
+
+        if current_platform.is_xpu():
+            self.main_stream.synchronize()
+
         with torch.cuda.stream(self.broadcast_stream):
             self.broadcast_stream.wait_stream(self.main_stream)
             torch.distributed.broadcast(
