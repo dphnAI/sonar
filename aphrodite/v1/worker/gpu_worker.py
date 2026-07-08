@@ -769,17 +769,17 @@ class Worker(WorkerBase):
                 f"for peak activation, {format_gib(self.non_torch_memory)} GiB "
                 f"for non-torch memory, and {format_gib(cuda_graph_memory_bytes)} "
                 f"GiB for CUDAGraph memory. Replace gpu_memory_utilization "
-                f"config with `--kv-cache-memory="
+                f"config with `--kv-cache-memory-bytes="
                 f"{kv_cache_memory_bytes_to_requested_limit}` "
                 f"({format_gib(kv_cache_memory_bytes_to_requested_limit)} GiB) to fit "
-                f"into requested memory, or `--kv-cache-memory="
+                f"into requested memory, or `--kv-cache-memory-bytes="
                 f"{kv_cache_memory_bytes_to_gpu_limit}` "
                 f"({format_gib(kv_cache_memory_bytes_to_gpu_limit)} GiB) to fully "
                 f"utilize gpu memory. Current kv cache memory in use is "
                 f"{format_gib(self.available_kv_cache_memory_bytes)} GiB."
             )
 
-            logger.debug(msg)
+            logger.info(msg)
 
         if self.use_v2_model_runner:
             # V2: Run full execute_model + sample_tokens to JIT compile triton kernels.
