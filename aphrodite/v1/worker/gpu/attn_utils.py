@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from math import prod
 from typing import Any, cast
@@ -398,18 +398,14 @@ def _align_mixed_attention_kv_cache_views(
         if kv_tensor.block_stride > 0:
             continue
         shared_block_dims = {
-            block_dims_by_layer[layer_name]
-            for layer_name in kv_tensor.shared_by
-            if layer_name in block_dims_by_layer
+            block_dims_by_layer[layer_name] for layer_name in kv_tensor.shared_by if layer_name in block_dims_by_layer
         }
         if 0 not in shared_block_dims or 1 not in shared_block_dims:
             continue
 
         for layer_name in kv_tensor.shared_by:
             if block_dims_by_layer.get(layer_name) == 0:
-                _restride_blocks_first_kv_cache_to_kv_first_storage(
-                    kv_caches[layer_name]
-                )
+                _restride_blocks_first_kv_cache_to_kv_first_storage(kv_caches[layer_name])
 
 
 def _restride_blocks_first_kv_cache_to_kv_first_storage(
@@ -422,8 +418,7 @@ def _restride_blocks_first_kv_cache_to_kv_first_storage(
     expected_tail_stride = torch.empty(kv_cache.shape[2:]).stride()
     if kv_cache.stride()[2:] != expected_tail_stride:
         logger.warning_once(
-            "Skipping mixed KV-cache layout alignment for a non-NHD "
-            "blocks-first attention view with stride %s.",
+            "Skipping mixed KV-cache layout alignment for a non-NHD blocks-first attention view with stride %s.",
             kv_cache.stride(),
         )
         return
@@ -534,7 +529,7 @@ def build_attn_metadata(
     mm_req_doc_ranges: dict[int, list[tuple[int, int]]] | None = None,
     model_specific_attn_metadata: ModelSpecificAttnMetadata | None = None,
     for_cudagraph_capture: bool = False,
-    causal: bool = True,
+    causal: bool | Mapping[int, bool] = True,
     rswa_prefix_lens: torch.Tensor | None = None,
 ) -> dict[str, Any]:
     seq_lens = seq_lens[:num_reqs]
@@ -548,6 +543,8 @@ def build_attn_metadata(
     for i in range(num_kv_cache_groups):
         block_table = block_tables[i]
         slot_mapping = slot_mappings[i]
+        # Per-group causal for hybrid drafters (mixed SWA/full attention).
+        group_causal = causal if isinstance(causal, bool) else causal.get(i, True)
 
         common_attn_metadata_extra_kwargs = (
             model_specific_attn_metadata.get_extra_common_attn_kwargs(i, num_reqs)
@@ -565,7 +562,7 @@ def build_attn_metadata(
             max_query_len=max_query_len,
             block_table_tensor=block_table,
             slot_mapping=slot_mapping,
-            causal=causal,
+            causal=group_causal,
             dcp_local_seq_lens=dcp_local_seq_lens,
             positions=positions,
             mm_req_doc_ranges=mm_req_doc_ranges,
