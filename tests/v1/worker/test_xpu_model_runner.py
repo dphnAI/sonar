@@ -44,3 +44,32 @@ def test_torch_cuda_wrapper_allows_dynamo_handler_registration() -> None:
     # if they are the same object (pre-fix alias), raises Handler already registered.
     TorchInGraphFunctionVariable._get_handlers.cache_clear()
     TorchInGraphFunctionVariable._get_handlers()
+
+
+@pytest.mark.forked
+def test_torch_cuda_wrapper_drops_event_blocking_kwarg(monkeypatch) -> None:
+    event_calls: list[dict[str, object]] = []
+
+    class FakeXPUEvent:
+        def __init__(self, *args, **kwargs) -> None:
+            event_calls.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(torch.xpu, "Event", FakeXPUEvent)
+
+    with _torch_cuda_wrapper():
+        event = torch.cuda.Event(
+            enable_timing=True,
+            blocking=True,
+            interprocess=False,
+        )
+
+    assert isinstance(event, FakeXPUEvent)
+    assert event_calls == [
+        {
+            "args": (),
+            "kwargs": {
+                "enable_timing": True,
+                "interprocess": False,
+            },
+        }
+    ]
