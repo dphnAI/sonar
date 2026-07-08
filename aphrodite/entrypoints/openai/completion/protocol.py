@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, Field, model_validator
 
+import aphrodite.envs as envs
 from aphrodite.config import ModelConfig
 from aphrodite.config.utils import replace
 from aphrodite.entrypoints.openai.engine.protocol import (
@@ -35,6 +36,7 @@ from aphrodite.sampling_params import (
     ThinkingTokenBudget,
 )
 from aphrodite.utils import random_uuid
+from aphrodite.utils.collection_utils import is_list_of
 
 logger = init_logger(__name__)
 
@@ -543,6 +545,38 @@ class CompletionRequest(OpenAIBaseModel):
             raise APHRODITEValidationError(
                 "Either prompt or prompt_embeds must be provided and non-empty.",
                 parameter="prompt",
+            )
+
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_prompt_list_length(cls, data):
+        max_prompts = envs.APHRODITE_MAX_COMPLETION_PROMPTS
+
+        prompt = data.get("prompt")
+        if (
+            isinstance(prompt, list)
+            and len(prompt) > 0
+            and not is_list_of(prompt, int)
+            and len(prompt) > max_prompts
+        ):
+            raise APHRODITEValidationError(
+                f"prompt list length {len(prompt)} exceeds the maximum "
+                f"allowed count of {max_prompts}. To increase this "
+                "limit, set the APHRODITE_MAX_COMPLETION_PROMPTS "
+                "environment variable.",
+                parameter="prompt",
+            )
+
+        prompt_embeds = data.get("prompt_embeds")
+        if isinstance(prompt_embeds, list) and len(prompt_embeds) > max_prompts:
+            raise APHRODITEValidationError(
+                f"prompt_embeds list length {len(prompt_embeds)} exceeds "
+                f"the maximum allowed count of {max_prompts}. To increase "
+                "this limit, set the APHRODITE_MAX_COMPLETION_PROMPTS "
+                "environment variable.",
+                parameter="prompt_embeds",
             )
 
         return data
