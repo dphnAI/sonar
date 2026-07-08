@@ -111,6 +111,7 @@ class CompletionRequest(OpenAIBaseModel):
     )
     allowed_token_ids: list[int] | None = None
     prompt_logprobs: int | None = None
+    bad_words: list[str] = Field(default_factory=list)
     # Aphrodite extra sampler params
     top_a: float | None = 0.0
     tfs: float | None = 1.0
@@ -398,6 +399,7 @@ class CompletionRequest(OpenAIBaseModel):
             structured_outputs=self.structured_outputs,
             logit_bias=self.logit_bias,
             allowed_token_ids=self.allowed_token_ids,
+            bad_words=self.bad_words,
             # Aphrodite extra sampler params
             no_repeat_ngram_size=self.no_repeat_ngram_size,
             dynatemp_min=self.dynatemp_min,
