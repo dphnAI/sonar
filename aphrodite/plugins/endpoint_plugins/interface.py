@@ -52,9 +52,7 @@ class EndpointPlugin(Protocol):
         """
         ...
 
-    async def init_state(
-        self, engine_client: "EngineClient | None", state: State, args: Namespace
-    ) -> None:
+    async def init_state(self, engine_client: "EngineClient | None", state: State, args: Namespace) -> None:
         """Initialize per-app state consumed by this plugin's routes.
 
         Called once during `init_app_state()` after core state has been

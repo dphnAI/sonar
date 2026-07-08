@@ -124,7 +124,10 @@ def test_plugin_skipped_when_required_tasks_set_but_supported_tasks_none(
 
 
 def test_factory_raising_is_logged_and_skipped(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("APHRODITE_PLUGINS", "raising_endpoint_plugin,dummy_admin_endpoint_plugin")
+    monkeypatch.setenv(
+        "APHRODITE_PLUGINS",
+        "raising_endpoint_plugin,dummy_admin_endpoint_plugin",
+    )
     monkeypatch.setattr(
         "aphrodite.plugins.load_plugins_by_group",
         _fake_loader(
