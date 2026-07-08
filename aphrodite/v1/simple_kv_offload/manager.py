@@ -116,7 +116,7 @@ class SimpleCPUOffloadScheduler:
         self.cpu_coordinator: KVCacheCoordinator = get_kv_cache_coordinator(
             kv_cache_config=self.cpu_kv_cache_config,
             max_model_len=aphrodite_config.model_config.max_model_len,
-            max_num_batched_tokens=(aphrodite_config.scheduler_config.max_num_batched_tokens),
+            max_in_flight_tokens=aphrodite_config.max_in_flight_tokens,
             use_eagle=False,
             enable_caching=True,
             enable_kv_cache_events=self.enable_kv_cache_events,
