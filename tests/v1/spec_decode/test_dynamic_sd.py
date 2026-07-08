@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Regression tests for the Dynamic SD batch-size schedule helpers."""
 
+import logging
+
 import pytest
 
 from aphrodite.v1.core.sched.scheduler import Scheduler
@@ -180,6 +182,31 @@ def test_scheduler_falls_back_to_static_k_when_dsd_not_configured():
     output = _add_requests_and_schedule(scheduler, 4)
 
     assert scheduler.dynamic_sd_lookup is None
+    assert output.num_spec_tokens_to_schedule == 3
+
+
+def test_dynamic_sd_is_disabled_with_data_parallel(caplog_aphrodite):
+    with caplog_aphrodite.at_level(logging.WARNING, logger="aphrodite"):
+        scheduler = create_scheduler(
+            max_num_seqs=256,
+            max_num_batched_tokens=2560,
+            num_speculative_tokens=3,
+            num_speculative_tokens_per_batch_size=[
+                (1, 16, 3),
+                (64, 128, 2),
+                (256, 4096, 0),
+            ],
+            data_parallel_size=2,
+        )
+
+    speculative_config = scheduler.aphrodite_config.speculative_config
+    assert speculative_config is not None
+    assert speculative_config.num_speculative_tokens_per_batch_size is None
+    assert scheduler.dynamic_sd_lookup is None
+    assert "Dynamic speculative decoding is not supported with data parallelism" in caplog_aphrodite.text
+
+    output = _add_requests_and_schedule(scheduler, 256)
+    assert len(output.num_scheduled_tokens) == 256
     assert output.num_spec_tokens_to_schedule == 3
 
 
