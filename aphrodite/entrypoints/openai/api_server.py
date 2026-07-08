@@ -77,6 +77,39 @@ logger = init_logger("aphrodite.entrypoints.openai.api_server")
 _FALLBACK_SUPPORTED_TASKS: tuple[SupportedTask, ...] = ("generate",)
 
 
+def _attach_endpoint_plugins(
+    app: FastAPI, supported_tasks: tuple["SupportedTask", ...]
+) -> None:
+    """Phase A of endpoint plugin wiring: discover, gate and attach routes.
+
+    Attached last after all core routers. This lets endpoint plugin routes
+    shadow core routes with the same path. No-ops when no plugins are
+    discovered or allowlisted.
+    """
+    from aphrodite.plugins import load_endpoint_plugins
+
+    endpoint_plugins = load_endpoint_plugins(supported_tasks)
+    for plugin in endpoint_plugins:
+        plugin.attach_router(app)
+    app.state.endpoint_plugins = endpoint_plugins
+
+
+async def _init_endpoint_plugins_state(
+    engine_client: EngineClient | None, state: State, args: Namespace
+) -> None:
+    """Phase B of endpoint plugin wiring: initialize per app plugin state.
+
+    `state.endpoint_plugins` is set by `_attach_endpoint_plugins` in
+    `build_app`. Some callers build their own bare `State` without going
+    through `build_app`; absence is treated the same as no attached plugins.
+
+    `engine_client` is `None` for the CPU-only render server, which has no
+    engine. Plugins must handle a `None` engine client themselves.
+    """
+    for plugin in getattr(state, "endpoint_plugins", []):
+        await plugin.init_state(engine_client, state, args)
+
+
 @asynccontextmanager
 async def build_async_engine_client(
     args: Namespace,
@@ -230,6 +263,11 @@ def build_app(
         from aphrodite.entrypoints.pooling.factories import register_pooling_api_routers
 
         register_pooling_api_routers(app, supported_tasks, model_config)
+
+    # Endpoint plugins are attached last so their routes are registered after all core
+    # routers. A plugin eligible for the `render` task still gets routes registered
+    # and receives `engine_client=None` at Phase B.
+    _attach_endpoint_plugins(app, supported_tasks)
 
     app.root_path = args.root_path
     app.add_middleware(
@@ -404,6 +442,8 @@ async def init_app_state(
 
         init_pooling_state(engine_client, state, args, request_logger, supported_tasks)
 
+    await _init_endpoint_plugins_state(engine_client, state, args)
+
     state.enable_server_load_tracking = args.enable_server_load_tracking
     state.server_load_metrics = 0
 
@@ -491,6 +531,9 @@ async def init_render_app_state(
     state.args = args
     state.enable_server_load_tracking = False
     state.server_load_metrics = 0
+
+    # No `EngineClient` exists for the render server, so plugins get `None`.
+    await _init_endpoint_plugins_state(None, state, args)
 
 
 def create_server_socket(
