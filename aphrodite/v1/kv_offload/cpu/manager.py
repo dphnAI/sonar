@@ -66,6 +66,7 @@ class CPUOffloadingManager(OffloadingManager):
         self.store_threshold: int = store_threshold
         self.max_tracker_size: int = max_tracker_size
         self.stores_skipped_in_current_batch: int = 0
+        self.allocation_sizes_in_current_batch: list[int] = []
 
         # Number of block references. It is ordered so can evict the LRU entry in O(1).
         self.counts: OrderedDict[OffloadKey, int] | None = OrderedDict() if store_threshold >= 2 else None
@@ -178,6 +179,7 @@ class CPUOffloadingManager(OffloadingManager):
                 evicted_keys=[],
             )
 
+        self.allocation_sizes_in_current_batch.append(len(keys_to_store))
         num_blocks_to_evict = len(keys_to_store) - self._get_num_free_blocks()
 
         to_evict: list[OffloadKey] = []
@@ -286,6 +288,10 @@ class CPUOffloadingManager(OffloadingManager):
         num_used = self._num_allocated_blocks - len(self._free_list) - self._num_evictable_cache_blocks
         usage = num_used / self._num_blocks if self._num_blocks > 0 else 0.0
         stats.set_gauge(CPUOffloadingMetrics.CPU_CACHE_USAGE_PERC, usage)
+
+        for allocation_size in self.allocation_sizes_in_current_batch:
+            stats.observe_histogram(CPUOffloadingMetrics.CPU_ALLOCATION_SIZE, allocation_size)
+        self.allocation_sizes_in_current_batch.clear()
 
         if self.store_threshold >= 2:
             stats.increase_counter(
