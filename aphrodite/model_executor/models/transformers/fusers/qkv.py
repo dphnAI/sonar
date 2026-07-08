@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 """QKV projection fuser: `q(x), k(x), v(x)` -> a fused qkv linear + split."""
 
@@ -48,9 +49,7 @@ class QKVFuser(StackedFuser):
         return [(self.q_name, "q"), (self.k_name, "k"), (self.v_name, "v")]
 
     @classmethod
-    def _get_qkv_nodes(
-        cls, graph: fx.Graph, module: nn.Module
-    ) -> tuple[fx.Node, fx.Node, fx.Node] | None:
+    def _get_qkv_nodes(cls, graph: fx.Graph, module: nn.Module) -> tuple[fx.Node, fx.Node, fx.Node] | None:
         """Search `graph` for the QKV pattern `q(x), k(x), v(x)`."""
         by_input: dict[fx.Node, list[fx.Node]] = {}
         for node in graph.nodes:
@@ -88,9 +87,7 @@ class QKVFuser(StackedFuser):
         candidates = [
             name
             for name, child in module.named_children()
-            if isinstance(child, nn.Linear)
-            and name not in names.values()
-            and child.in_features == attn_width
+            if isinstance(child, nn.Linear) and name not in names.values() and child.in_features == attn_width
         ]
         names["o_name"] = candidates[0] if len(candidates) == 1 else None
         return cls(source_cls=type(module).__name__, **names)
@@ -98,21 +95,18 @@ class QKVFuser(StackedFuser):
     def update_forward(self, module: nn.Module) -> None:
         """Replace `q(x), k(x), v(x)` with `qkv(x).split(sizes, -1)` in source."""
         funcdef, fn = recover_forward(type(module))
-        calls = [
-            single_self_call(funcdef, name)
-            for name in (self.q_name, self.k_name, self.v_name)
-        ]
+        calls = [single_self_call(funcdef, name) for name in (self.q_name, self.k_name, self.v_name)]
         arg_dumps = {ast.dump(call.args[0]) for call in calls}
         if len(arg_dumps) != 1:
             raise ValueError("projection inputs are written differently")
         # The trace may be partial, so prove projection exclusivity in source:
         # no other linear child may consume the same input (else the matched
         # three may not be q, k and v)
-        other_linears = {
-            name
-            for name, child in module.named_children()
-            if isinstance(child, nn.Linear)
-        } - {self.q_name, self.k_name, self.v_name}
+        other_linears = {name for name, child in module.named_children() if isinstance(child, nn.Linear)} - {
+            self.q_name,
+            self.k_name,
+            self.v_name,
+        }
         for node in ast.walk(funcdef):
             if (
                 isinstance(node, ast.Call)
@@ -127,21 +121,16 @@ class QKVFuser(StackedFuser):
         if len({id(block) for block, _ in blocks}) != 1:
             raise ValueError("projection calls are in different blocks")
 
-        # q(x), k(x), v(x) -> q, k, v = qkv(x).split(self.qkv.split_sizes, -1)
+        # q(x), k(x), v(x) -> q, k, v = qkv(x).split(qkv.output_sizes / qkv.tp_size, -1)
         names = {node.id for node in ast.walk(funcdef) if isinstance(node, ast.Name)}
         temps = [f"{name}_fused" for name in (self.q_name, self.k_name, self.v_name)]
         if names & set(temps):
             raise ValueError("fused temporaries would shadow existing names")
         merged = f"self.{self.merged_name}"
-        template = (
-            f"{', '.join(temps)} = {merged}(__arg__).split({merged}.split_sizes, -1)"
-        )
+        sections = f"[s // {merged}.tp_size for s in {merged}.output_sizes]"
+        template = f"{', '.join(temps)} = {merged}(__arg__).split({sections}, -1)"
         assign = ast.parse(template).body[0]
-        arg = next(
-            node
-            for node in ast.walk(assign)
-            if isinstance(node, ast.Name) and node.id == "__arg__"
-        )
+        arg = next(node for node in ast.walk(assign) if isinstance(node, ast.Name) and node.id == "__arg__")
         replace_expr(assign, arg, calls[0].args[0])
         block, index = blocks[0]
         ast.copy_location(assign, block[index])
@@ -198,13 +187,6 @@ class QKVFuser(StackedFuser):
             self.merged_name,
             merged,
         )
-        # The rewritten forward splits the merged projection into this rank's
-        # shard sizes (see `update_forward`)
-        merged.split_sizes = [
-            merged.num_heads * merged.head_size,
-            merged.num_kv_heads * merged.head_size,
-            merged.num_kv_heads * merged.v_head_size,
-        ]
         setattr(module, self.merged_name, merged)
         # Drop the consumed submodules so their (meta) params are not expected.
         for name in (self.q_name, self.k_name, self.v_name):
@@ -213,8 +195,6 @@ class QKVFuser(StackedFuser):
         if self.o_name is not None:
             o_proj_prefix = maybe_prefix(prefix, self.o_name)
             o_proj = module.get_submodule(self.o_name)
-            new_o = replace_linear_class(
-                o_proj, "rowwise", quant_config, prefix=o_proj_prefix
-            )
+            new_o = replace_linear_class(o_proj, "rowwise", quant_config, prefix=o_proj_prefix)
             setattr(module, self.o_name, new_o)
             log_replacement(o_proj_prefix, o_proj, new_o)
