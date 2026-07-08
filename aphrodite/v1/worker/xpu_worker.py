@@ -24,6 +24,8 @@ logger = init_logger(__name__)
 class XPUWorker(Worker):
     """A XPU worker class."""
 
+    profiler: TorchProfilerWrapper | None
+
     def __init__(
         self,
         aphrodite_config: AphroditeConfig,
@@ -70,7 +72,7 @@ class XPUWorker(Worker):
             torch.accelerator.empty_cache()
             self.init_gpu_memory = torch.xpu.get_device_properties(self.local_rank).total_memory
         else:
-            raise RuntimeError(f"Not support device type: {self.device_config.device}")
+            raise RuntimeError(f"Unsupported device type: {self.device_config.device}")
 
         ENV_CCL_ATL_TRANSPORT = os.getenv("CCL_ATL_TRANSPORT", "ofi")
         ENV_LOCAL_WORLD_SIZE = os.getenv("LOCAL_WORLD_SIZE", str(self.parallel_config.world_size))
