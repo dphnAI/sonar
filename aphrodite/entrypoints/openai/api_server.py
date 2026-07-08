@@ -77,9 +77,7 @@ logger = init_logger("aphrodite.entrypoints.openai.api_server")
 _FALLBACK_SUPPORTED_TASKS: tuple[SupportedTask, ...] = ("generate",)
 
 
-def _attach_endpoint_plugins(
-    app: FastAPI, supported_tasks: tuple["SupportedTask", ...]
-) -> None:
+def _attach_endpoint_plugins(app: FastAPI, supported_tasks: tuple["SupportedTask", ...]) -> None:
     """Phase A of endpoint plugin wiring: discover, gate and attach routes.
 
     Attached last after all core routers. This lets endpoint plugin routes
@@ -94,9 +92,7 @@ def _attach_endpoint_plugins(
     app.state.endpoint_plugins = endpoint_plugins
 
 
-async def _init_endpoint_plugins_state(
-    engine_client: EngineClient | None, state: State, args: Namespace
-) -> None:
+async def _init_endpoint_plugins_state(engine_client: EngineClient | None, state: State, args: Namespace) -> None:
     """Phase B of endpoint plugin wiring: initialize per app plugin state.
 
     `state.endpoint_plugins` is set by `_attach_endpoint_plugins` in
