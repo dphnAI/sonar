@@ -196,7 +196,9 @@ impl Normalizable for CompletionRequest {
 }
 
 /// Mirrors the Python Aphrodite `CompletionResponse` class.
-#[serde_with::skip_serializing_none]
+///
+/// Do not skip serializing `None` fields here: non-streaming response types
+/// should serialize `None` as explicit `null`.
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct CompletionResponse {
     pub id: String,
@@ -210,7 +212,6 @@ pub(super) struct CompletionResponse {
 }
 
 /// Mirrors the Python Aphrodite `CompletionResponseChoice` class.
-#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct CompletionChoice {
     pub index: u32,
