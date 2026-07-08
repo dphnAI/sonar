@@ -647,6 +647,7 @@ package_data = {
         "py.typed",
         "libs/*.so*",
         "model_executor/layers/fused_moe/configs/*.json",
+        "model_executor/layers/mamba/ops/configs/selective_state_update/*.json",
         "model_executor/layers/quantization/utils/configs/*.json",
         "entrypoints/serve/instrumentator/static/*.js",
         "entrypoints/serve/instrumentator/static/*.css",
