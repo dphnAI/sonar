@@ -440,7 +440,12 @@ class Platform:
         cls,
         device_id: int = 0,
     ) -> DeviceCapability | None:
-        """Stateless version of [torch.cuda.get_device_capability][]."""
+        """Stateless version of [torch.cuda.get_device_capability][].
+
+        Args:
+            device_id: Device index in the visible device namespace, matching
+                the argument accepted by torch.cuda.
+        """
         return None
 
     @classmethod
