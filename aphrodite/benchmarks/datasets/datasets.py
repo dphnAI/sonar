@@ -3874,9 +3874,10 @@ class ASRDataset(HuggingFaceDataset):
 
     EARNINGS22_CLEANED_DATASET = "ArtificialAnalysis/Earnings22-Cleaned-AA"
     EARNINGS22_TINY_FILTERED_DATASET = "D4nt3/esb-datasets-earnings22-validation-tiny-filtered"
+    LIBRISPEECH_DATASET = "openslr/librispeech_asr"
 
     SUPPORTED_DATASET_PATHS = {
-        "openslr/librispeech_asr",
+        LIBRISPEECH_DATASET,
         "facebook/voxpopuli",
         "LIUM/tedlium",
         "edinburghcstr/ami",
@@ -3904,7 +3905,10 @@ class ASRDataset(HuggingFaceDataset):
                 self.data = self.data.shuffle(seed=self.random_seed)
             self._materialize_local_audio_column()
             return
-        if self.hf_name == self.EARNINGS22_TINY_FILTERED_DATASET:
+        if self.hf_name in (
+            self.EARNINGS22_TINY_FILTERED_DATASET,
+            self.LIBRISPEECH_DATASET,
+        ):
             super().load_data()
             self._disable_audio_decode()
             return
@@ -3975,14 +3979,14 @@ class ASRDataset(HuggingFaceDataset):
             elif isinstance(audio, str):
                 duration_s = sf.info(audio).duration
                 mm_content = {"audio_path": audio}
-            elif isinstance(audio, dict) and audio.get("path"):
-                duration_s = sf.info(audio["path"]).duration
-                mm_content = {"audio_path": audio["path"]}
             elif isinstance(audio, dict) and audio.get("bytes") is not None:
                 with BytesIO(audio["bytes"]) as audio_buffer:
                     y, sr = sf.read(audio_buffer, dtype="float32")
                 duration_s = get_audio_duration(y=y, sr=sr)
                 mm_content = {"audio": (y, sr)}
+            elif isinstance(audio, dict) and audio.get("path"):
+                duration_s = sf.info(audio["path"]).duration
+                mm_content = {"audio_path": audio["path"]}
             else:
                 raise ValueError(
                     "ASR samples must provide decoded audio arrays, embedded audio bytes, or a local audio path."
