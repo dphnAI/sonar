@@ -232,6 +232,7 @@ if TYPE_CHECKING:
     APHRODITE_ALLREDUCE_USE_SYMM_MEM: bool = True
     APHRODITE_ALLREDUCE_USE_FLASHINFER: bool = False
     APHRODITE_TUNED_CONFIG_FOLDER: str | None = None
+    APHRODITE_ENABLE_STARTUP_PLAN: bool = False
     APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS: set[str] = set()
     APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT: bool = False
     APHRODITE_GPT_OSS_HARMONY_SYSTEM_INSTRUCTIONS: bool = False
@@ -1516,6 +1517,16 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # Each component first checks this folder, then the configs shipped with
     # Aphrodite (if any). If no JSON matches, it uses a hard-coded heuristic.
     "APHRODITE_TUNED_CONFIG_FOLDER": lambda: os.getenv("APHRODITE_TUNED_CONFIG_FOLDER", None),
+    # Opt-in persistence of the startup plan. When enabled, each worker
+    # saves the memory-profiling result (the suggested --kv-cache-memory value
+    # and the free-memory baseline) under APHRODITE_CACHE_ROOT/startup_plan/,
+    # keyed by a hardware+config fingerprint, and later boots auto-apply it
+    # -- skipping memory profiling -- when the fingerprint matches and
+    # current free memory >= the recorded baseline.
+    # See aphrodite/v1/worker/startup_plan.py.
+    "APHRODITE_ENABLE_STARTUP_PLAN": lambda: bool(
+        int(os.getenv("APHRODITE_ENABLE_STARTUP_PLAN", "0"))
+    ),
     # Valid values are container,code_interpreter,web_search_preview
     # ex APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS=container,code_interpreter
     # If the server_label of your mcp tool is not in this list it will
@@ -1820,6 +1831,8 @@ def compile_factors() -> dict[str, object]:
         "APHRODITE_DEBUG_DUMP_PATH",
         "APHRODITE_PORT",
         "APHRODITE_CACHE_ROOT",
+        # Runtime memory-plan persistence; does not affect compiled graphs.
+        "APHRODITE_ENABLE_STARTUP_PLAN",
         "LD_LIBRARY_PATH",
         "APHRODITE_SERVER_DEV_MODE",
         "APHRODITE_DP_MASTER_IP",
