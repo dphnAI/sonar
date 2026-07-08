@@ -20,7 +20,7 @@ ENV PYTORCH_ROCM_ARCH=${ARG_PYTORCH_ROCM_ARCH:-${PYTORCH_ROCM_ARCH}}
 # the base image.
 RUN apt-get update -q -y && apt-get install -q -y --no-install-recommends \
     sqlite3 libsqlite3-dev libfmt-dev libmsgpack-dev libsuitesparse-dev \
-    apt-transport-https ca-certificates wget curl git libnuma-dev \
+    apt-transport-https ca-certificates wget curl git libnuma-dev unzip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m pip install --upgrade pip
@@ -138,6 +138,7 @@ COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/docker/Dockerfile /docke
 COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/docker/Dockerfile.cpu /docker/Dockerfile.cpu
 COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/docker/Dockerfile.rocm /docker/
 COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/docker/docker-bake.hcl /docker/docker-bake.hcl
+COPY --from=build_aphrodite ${COMMON_WORKDIR}/aphrodite/rust /rust
 
 
 # -----------------------
@@ -324,6 +325,7 @@ COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/docker/Doc
 COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/docker/Dockerfile.cpu /docker/Dockerfile.cpu
 COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/docker/Dockerfile.rocm /docker/
 COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/docker/docker-bake.hcl /docker/docker-bake.hcl
+COPY --from=build_aphrodite_wheel_release ${COMMON_WORKDIR}/aphrodite/rust /rust
 
 
 # -----------------------
