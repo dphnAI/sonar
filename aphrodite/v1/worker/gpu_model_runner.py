@@ -172,6 +172,7 @@ from aphrodite.v1.outputs import (
     SamplerOutput,
     make_empty_encoder_model_runner_output,
 )
+from aphrodite.v1.pool.late_interaction_runner import LateInteractionRunner
 from aphrodite.v1.pool.metadata import PoolingMetadata, PoolingStates
 from aphrodite.v1.sample.logits_processor import LogitsProcessors, build_logitsprocs
 from aphrodite.v1.sample.logits_processor.interface import LogitsProcessor
@@ -206,7 +207,6 @@ from aphrodite.v1.worker.cp_utils import (
 from aphrodite.v1.worker.dp_utils import coordinate_batch_across_dp
 from aphrodite.v1.worker.ec_connector_model_runner_mixin import ECConnectorModelRunnerMixin
 from aphrodite.v1.worker.gpu.attn_utils import _reshape_attention_kv_cache
-from aphrodite.v1.worker.gpu.pool.late_interaction_runner import LateInteractionRunner
 from aphrodite.v1.worker.gpu_input_batch import CachedRequestState, InputBatch
 from aphrodite.v1.worker.gpu_ubatch_wrapper import UBatchWrapper
 from aphrodite.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
