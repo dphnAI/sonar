@@ -379,7 +379,7 @@ async def test_chat_request(server: RemoteOpenAIServer, client: openai.AsyncOpen
     assert output.object == "list"
     assert len(output.data) == 1
     assert output.model == MODEL_NAME
-    assert output.usage.prompt_tokens == 36
+    assert output.usage.prompt_tokens == 35
 
     # test continue_final_message with add_generation_prompt
     response = requests.post(

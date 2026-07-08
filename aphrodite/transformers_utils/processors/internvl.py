@@ -12,7 +12,7 @@ import numpy.typing as npt
 import torch
 import torchvision.transforms as T
 from PIL import Image
-from transformers import BatchFeature, TensorType
+from transformers import BaseVideoProcessor, BatchFeature, ImageProcessingMixin, TensorType
 from transformers.processing_utils import ProcessorMixin
 
 from aphrodite.multimodal.image import convert_image_mode
@@ -213,7 +213,7 @@ def video_to_pixel_values_internvl(
     return pixel_values
 
 
-class InternVLImageProcessor:
+class InternVLImageProcessor(ImageProcessingMixin):
     def __init__(
         self,
         image_size: int,
@@ -310,7 +310,7 @@ class InternVLImageProcessor:
         return BatchFeature(image_inputs, tensor_type=return_tensors)
 
 
-class InternVLVideoProcessor:
+class InternVLVideoProcessor(BaseVideoProcessor):
     def __init__(
         self,
         image_size: int,
