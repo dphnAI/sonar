@@ -1,0 +1,154 @@
+# Base UBI image
+ARG BASE_UBI_IMAGE_TAG=9.6-1754584681
+
+###############################################################
+#                       BUILDER  STAGE                        #
+###############################################################
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${BASE_UBI_IMAGE_TAG} AS builder-base
+
+ARG APHRODITE_VERSION_OVERRIDE=""
+ARG PYTHON_VERSION=3.12
+ARG APHRODITE_TARGET_DEVICE=cpu
+
+USER root
+WORKDIR /root
+
+ENV HOME=/root \
+    WHEEL_DIR=/wheelsdir \
+    VIRTUAL_ENV=/opt/aphrodite \
+    GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1 \
+    CARGO_HOME=/root/.cargo \
+    RUSTUP_HOME=/root/.rustup \
+    UV_CACHE_DIR=$HOME/.cache/uv \
+    PATH=/root/.cargo/bin:/root/.rustup/bin:${VIRTUAL_ENV}/bin:$PATH
+
+RUN echo "DEBUG: APHRODITE_VERSION_OVERRIDE=${APHRODITE_VERSION_OVERRIDE}"
+RUN --mount=type=cache,target=/var/cache/dnf \
+    microdnf install -y \
+    bash \
+    python${PYTHON_VERSION}-devel python${PYTHON_VERSION}-pip \
+    && python${PYTHON_VERSION} -m venv ${VIRTUAL_ENV} \
+    && python${PYTHON_VERSION} -m pip install -U pip uv --no-cache
+
+# Important: Copy only bare minimum required for the script to run
+COPY requirements/ requirements/
+COPY pyproject.toml ./
+
+# The script is expected to install whatever python dependencies are missing
+# as well as whatever system libraries need to be installed from source
+COPY build_aphrodite_*.sh ./
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    bash ./build_aphrodite_$(uname -m).sh
+
+# copy Aphrodite source code to build cache
+COPY . .
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    . /opt/rh/gcc-toolset-14/enable && \
+    pip install -U uv
+
+# build & install Aphrodite so that all transitive dependencies are build/downloaded into the uv cache
+RUN --mount=type=cache,target=/root/.cache/uv \
+    . /opt/rh/gcc-toolset-14/enable && \
+    export PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH && \
+    export CC=/opt/rh/gcc-toolset-14/root/usr/bin/gcc && \
+    export CXX=/opt/rh/gcc-toolset-14/root/usr/bin/g++ && \
+    export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/lib64/pkgconfig:$PKG_CONFIG_PATH && \
+    export CMAKE_PREFIX_PATH=/usr/local:/usr:$CMAKE_PREFIX_PATH && \
+    export Protobuf_PROTOC_EXECUTABLE=/usr/bin/protoc && \
+    export CFLAGS="-mcpu=power10 -mtune=power10" && \
+    export CXXFLAGS="-mcpu=power10 -mtune=power10" && \
+    export DNNL_ARCH_OPT_FLAGS="-mcpu=power10 -mtune=power10" && \
+    export C_INCLUDE_PATH=/usr/local/include:$C_INCLUDE_PATH && \
+    export CPLUS_INCLUDE_PATH=/usr/local/include:$CPLUS_INCLUDE_PATH && \
+    uv pip install 'setuptools>=78.1.1' && \
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/OpenBLAS/lib/:/usr/local/lib64:/usr/local/lib && \
+    export LIBGOMP=/opt/rh/gcc-toolset-14/root/usr/lib/gcc/ppc64le-redhat-linux/14/libgomp.so && \
+    export CMAKE_LIBRARY_PATH=$(dirname $LIBGOMP):${CMAKE_LIBRARY_PATH} && \
+    export LIBRARY_PATH=$(dirname $LIBGOMP):${LIBRARY_PATH} && \
+    export LD_LIBRARY_PATH=$(dirname $LIBGOMP):${LD_LIBRARY_PATH} && \
+    echo "LIBGOMP=${LIBGOMP}" && \
+    find /root/.cache/uv -name "*.whl" && \
+    if [ -n "${APHRODITE_VERSION_OVERRIDE}" ]; then \
+        export SETUPTOOLS_SCM_PRETEND_VERSION="${APHRODITE_VERSION_OVERRIDE}"; \
+        export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_APHRODITE_ENGINE="${APHRODITE_VERSION_OVERRIDE}"; \
+    fi && \
+    uv build --wheel --out-dir ${WHEEL_DIR} --no-build-isolation && \
+    uv pip install "$(echo ${WHEEL_DIR}/aphrodite_engine*.whl)[tensorizer]" --refresh
+
+###############################################################
+#                 FINAL APHRODITE IMAGE STAGE                #
+###############################################################
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${BASE_UBI_IMAGE_TAG} AS aphrodite-openai
+
+ARG PYTHON_VERSION=3.12
+ENV APHRODITE_NO_USAGE_STATS=1
+
+# Set Environment Variables for venv & openblas
+ENV VIRTUAL_ENV=/opt/aphrodite
+ENV PCP_DIR=/opt/rh/gcc-toolset-14/root
+ENV PATH=${VIRTUAL_ENV}/bin:${PCP_DIR}/usr/bin:/usr/local/bin:$PATH
+ENV PKG_CONFIG_PATH=${PCP_DIR}/usr/lib64/pkgconfig:/usr/local/lib/pkgconfig/
+ENV C_INCLUDE_PATH="/usr/local/include:$C_INCLUDE_PATH"
+ENV LD_LIBRARY_PATH=${PCP_DIR}/usr/lib64:${PCP_DIR}/usr/lib:${VIRTUAL_ENV}/lib64/python${PYTHON_VERSION}/site-packages/torch/lib:/usr/local/lib:$LD_LIBRARY_PATH:/usr/local/lib64:/usr/lib64:/usr/lib
+ENV UV_LINK_MODE=copy
+ARG APHRODITE_VERSION_OVERRIDE=""
+ARG UV_EXTRA_INDEX_URL="https://wheels.developerfirst.ibm.com/ppc64le/linux/+simple/"
+ENV UV_EXTRA_INDEX_URL=${UV_EXTRA_INDEX_URL}
+ENV UV_INDEX_STRATEGY=first-match
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
+    microdnf install --nodocs -y \
+    libomp libicu tar autoconf automake libtool findutils openssl numactl numactl-devel \
+    pkgconfig xsimd gcc-toolset-14 libsndfile \
+    libtiff libjpeg openjpeg2 zlib zeromq \
+    freetype lcms2 libwebp tcl tk utf8proc \
+    harfbuzz fribidi libraqm libimagequant libxcb util-linux gperftools-libs \
+    python${PYTHON_VERSION}-devel python${PYTHON_VERSION}-pip \
+    && . /opt/rh/gcc-toolset-14/enable \
+    && microdnf update -y \
+    && microdnf clean all
+
+RUN microdnf install --nodocs -y util-linux && \
+    microdnf clean all
+
+COPY --from=builder-base /usr/lib64/libprotobuf.so.25 /usr/lib64/
+COPY --from=builder-base /usr/lib64/libprotobuf.so.25.0.0 /usr/lib64/
+
+# Use builder venv in final stage instead of wheel reinstallation
+COPY --from=builder-base /opt/aphrodite /opt/aphrodite
+
+ENV LD_PRELOAD=/usr/lib64/libtcmalloc.so.4
+
+WORKDIR /home/aphrodite
+
+# setup non-root user for OpenShift
+RUN umask 002 && \
+    useradd --uid 2000 --gid 0 aphrodite && \
+    mkdir -p /home/aphrodite && \
+    chmod g+rwx /home/aphrodite
+
+ENV HOME=/home/aphrodite
+
+# Add labels to document build configuration
+LABEL org.opencontainers.image.title="Aphrodite CPU"
+LABEL org.opencontainers.image.description="Aphrodite inference engine for CPU platforms"
+LABEL org.opencontainers.image.vendor="Aphrodite"
+LABEL org.opencontainers.image.source="https://github.com/aphrodite-engine/aphrodite-engine"
+
+# Build configuration labels
+ARG TARGETARCH
+ARG APHRODITE_CPU_PPC64LE
+ARG PYTHON_VERSION
+
+LABEL ai.aphrodite.build.target-arch="${TARGETARCH}"
+LABEL ai.aphrodite.build.cpu-ppc64le="${APHRODITE_CPU_PPC64LE:-false}"
+LABEL ai.aphrodite.build.python-version="${PYTHON_VERSION:-3.12}"
+
+USER 2000
+
+ENTRYPOINT ["aphrodite", "run"]
