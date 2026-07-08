@@ -160,7 +160,7 @@ class WeightsMapper:
 
 
 def model_should_use_tied_lm_head(
-    config: PretrainedConfig,
+    config: "PretrainedConfig",
     quant_config: "QuantizationConfig | None",
 ) -> bool:
     """Return whether the model should tie lm_head to input embeddings.
