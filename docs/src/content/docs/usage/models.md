@@ -94,6 +94,7 @@ On ROCm platforms, Mistral and Mixtral are capped to 4096 max context length due
 | `MiniCPMV`                               |        Image         |                    `openbmb/MiniCPM-V-2_6` |
 | `MllamaForConditionalGeneration`         |        Image         | `meta-llama/Llama-3.2-11B-Vision-Instruct` |
 | `MolmoForCausalLM`                       |        Image         |                  `allenai/Molmo-7B-D-0924` |
+| `MossTranscribeDiarizeForConditionalGeneration` | Audio | `OpenMOSS-Team/MOSS-Transcribe-Diarize` |
 | `PaliGemmaForConditionalGeneration`      |        Image         |               `google/paligemma-3b-pt-224` |
 | `Phi3VForCausalLM`                       |        Image         |        `microsoft/Phi-3.5-vision-instruct` |
 | `PixtralForConditionalGeneration`        |        Image         |               `mistralai/Pixtral-12B-2409` |
