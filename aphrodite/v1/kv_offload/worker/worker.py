@@ -3,8 +3,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from aphrodite.distributed.kv_events import MEDIUM_CPU, MEDIUM_GPU
 from aphrodite.logger import init_logger
-from aphrodite.v1.kv_offload.base import LoadStoreSpec
+from aphrodite.v1.kv_offload.base import GPULoadStoreSpec, LoadStoreSpec
+from aphrodite.v1.kv_offload.cpu.common import CPULoadStoreSpec
 
 # a single transfer spec (src_blocks_spec, dst_blocks_spec)
 TransferSpec = tuple[LoadStoreSpec, LoadStoreSpec]
@@ -12,6 +14,18 @@ TransferSpec = tuple[LoadStoreSpec, LoadStoreSpec]
 TransferType = tuple[str, str]
 
 logger = init_logger(__name__)
+
+
+def _get_medium(spec_or_cls: LoadStoreSpec | type[LoadStoreSpec]) -> str:
+    cls = spec_or_cls if isinstance(spec_or_cls, type) else type(spec_or_cls)
+    if issubclass(cls, GPULoadStoreSpec):
+        return MEDIUM_GPU
+    if issubclass(cls, CPULoadStoreSpec):
+        return MEDIUM_CPU
+    medium = getattr(cls, "medium", None)
+    if callable(medium):
+        return medium()
+    raise TypeError(f"Cannot determine KV offload medium for {cls.__name__}")
 
 
 @dataclass
@@ -110,7 +124,7 @@ class OffloadingWorker:
             dst_cls: the destination type of transfers handled by this handler.
             handler: the handler that will handle transfers.
         """
-        transfer_type = (src_cls.medium(), dst_cls.medium())
+        transfer_type = (_get_medium(src_cls), _get_medium(dst_cls))
         assert transfer_type not in self.transfer_type_to_handler
         self.handlers.add(handler)
         self.transfer_type_to_handler[transfer_type] = handler
@@ -128,7 +142,7 @@ class OffloadingWorker:
             True if transfer was submitted successfully.
         """
         src, dst = spec
-        transfer_type = (src.medium(), dst.medium())
+        transfer_type = (_get_medium(src), _get_medium(dst))
         handler = self.transfer_type_to_handler.get(transfer_type)
         assert handler is not None
         try:
