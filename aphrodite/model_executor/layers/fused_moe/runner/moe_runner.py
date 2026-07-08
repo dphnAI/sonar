@@ -414,12 +414,7 @@ class MoERunner(MoERunnerInterface):
         * If we have SP (TP=N, DP=M, EP), there is a separate AG step handled
           in the model.
         """
-        if (
-            shared_output is not None
-            and not self.moe_config.is_sequence_parallel
-            and not self.moe_config.skip_final_all_reduce
-            and self._fused_output_is_reduced
-        ):
+        if shared_output is not None and not self.moe_config.is_sequence_parallel and self._fused_output_is_reduced:
             shared_output = tensor_model_parallel_all_reduce(shared_output)
         return shared_output
 
@@ -435,6 +430,11 @@ class MoERunner(MoERunnerInterface):
         here. Skipped when sequence-parallel is active (SP handles its
         own reduction) or when the early path already reduced both outputs.
         """
+        # skip_final_all_reduce must not coexist with a pre-reduced fused
+        # output. This should be enforced by MoE config initialization.
+        if self.moe_config.skip_final_all_reduce:
+            assert not self._fused_output_is_reduced, "skip_final_all_reduce requires an un-reduced fused output"
+
         # We don't need to reduce the final output if:
         # - We are not running with TP or DP
         # - The MK already reduced the fused output itself.
