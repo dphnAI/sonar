@@ -7,14 +7,14 @@ from typing import TypeAlias
 
 import numpy as np
 import torch
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from transformers import PythonBackend, TokenizersBackend
 
 from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.v1.engine import EngineCoreOutput, FinishReason
 from aphrodite.v1.metrics.stats import PrefillStats
 from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors
 
-GeneralTokenizerType: TypeAlias = PreTrainedTokenizer | PreTrainedTokenizerFast
+GeneralTokenizerType: TypeAlias = PythonBackend | TokenizersBackend
 
 # Number of sample logprobs to request when testing sample logprobs
 NUM_SAMPLE_LOGPROBS_UNDER_TEST = 5
@@ -191,7 +191,7 @@ def _create_random_top_token_test_matrix(
 
 def decode_token(
     tok_id: int,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PythonBackend,
 ) -> str:
     """Reproduce the process of detokenizing a token for testing purposes.
 
@@ -208,7 +208,7 @@ def decode_token(
 def generate_dummy_sample_logprobs(
     sampled_tokens_list: list,
     num_logprobs: int,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PythonBackend,
 ) -> list[tuple[list[int], list[float], int]]:
     """Generate dummy sample logprobs
 
@@ -255,7 +255,7 @@ def generate_dummy_sample_logprobs(
 def generate_dummy_prompt_logprobs_tensors(
     prompt_tokens_list: list,
     num_logprobs: int,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PythonBackend,
 ) -> LogprobsTensors:
     """Generate dummy prompt logprobs tensors
 

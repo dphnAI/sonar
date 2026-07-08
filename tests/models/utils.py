@@ -478,6 +478,7 @@ def dummy_hf_overrides(
             "Llama4ForConditionalGeneration",
             "Llama4ForCausalLM",
             "EagleLlama4ForCausalLM",
+            "Gemma4MTPModel",
         ):
             num_experts_per_tok = 1
         update_dict.update(

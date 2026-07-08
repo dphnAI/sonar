@@ -259,7 +259,7 @@ class MiniCPMOProcessor(ProcessorMixin):
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's
-        [`~PreTrainedTokenizer.batch_decode`]. Please refer to the
+        [`~PythonBackend.batch_decode`]. Please refer to the
         docstring of this method for more information.
         """
         output_ids = args[0]
@@ -278,7 +278,7 @@ class MiniCPMOProcessor(ProcessorMixin):
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's
-        [`~PreTrainedTokenizer.decode`]. Please refer to the docstring
+        [`~PythonBackend.decode`]. Please refer to the docstring
         of this method for more information.
         """
         result = args[0]
