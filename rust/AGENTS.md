@@ -28,6 +28,10 @@ This project aims to implement an alternative frontend to the Aphrodite Engine i
 
 ## Testing
 
+- Before adding tests, identify the module's purpose, its input/output contract, the failure being guarded against, and the cheapest level that catches it (unit before integration before end-to-end).
+- Reuse existing test modules, fixtures, and helpers before creating new ones.
+- Test observable behavior through public APIs, and make the intent clear in the test name or a short comment/doc comment when needed.
+- Keep tests minimal: one behavior per test and the smallest setup that exercises it.
 - Prefer snapshot testing with the `expect-test` crate over writing multiple `assert_eq!` statements on individual fields. Use `expect_test::expect![[...]].assert_debug_eq(...)` to snapshot the `Debug` output of the entire struct.
     - Write `expect![[""]]` as a placeholder first, then run `UPDATE_EXPECT=1 cargo test` to auto-fill the snapshot content.
     - For values containing non-deterministic data (e.g., UUIDs), set them to a fixed value like `"<placeholder>"` before snapshotting.
