@@ -95,6 +95,10 @@ if TYPE_CHECKING:
     MAX_JOBS: str | None = None
     NVCC_THREADS: str | None = None
     APHRODITE_DOCKER_BUILD_CONTEXT: bool = False
+    APHRODITE_BUILD_COMMIT: str = "unknown"
+    APHRODITE_BUILD_PIPELINE: str = "local"
+    APHRODITE_BUILD_URL: str = ""
+    APHRODITE_IMAGE_TAG: str = ""
     APHRODITE_KEEP_ALIVE_ON_ENGINE_DEATH: bool = False
     CMAKE_BUILD_TYPE: Literal["Debug", "Release", "RelWithDebInfo"] | None = None
     VERBOSE: bool = False
@@ -595,6 +599,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "APHRODITE_DOCKER_BUILD_CONTEXT": lambda: (
         os.environ.get("APHRODITE_DOCKER_BUILD_CONTEXT", "").strip().lower() in ("1", "true")
     ),
+    # Build provenance metadata embedded in official aphrodite-openai images.
+    # Set via Docker ENV at image build time; informational only.
+    "APHRODITE_BUILD_COMMIT": lambda: os.environ.get("APHRODITE_BUILD_COMMIT", "unknown"),
+    "APHRODITE_BUILD_PIPELINE": lambda: os.environ.get("APHRODITE_BUILD_PIPELINE", "local"),
+    "APHRODITE_BUILD_URL": lambda: os.environ.get("APHRODITE_BUILD_URL", ""),
+    "APHRODITE_IMAGE_TAG": lambda: os.environ.get("APHRODITE_IMAGE_TAG", ""),
     # CMake build type
     # If not set, defaults to "Debug" or "RelWithDebInfo"
     # Available options: "Debug", "Release", "RelWithDebInfo"
