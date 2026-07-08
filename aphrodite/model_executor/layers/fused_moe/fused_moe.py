@@ -31,6 +31,7 @@ from aphrodite.model_executor.layers.fused_moe.utils import (
 )
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import tl, triton
+from aphrodite.utils.platform_utils import get_device_name_as_file_name
 from aphrodite.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
@@ -975,7 +976,7 @@ def zero_experts_compute_triton(
 
 # Adapted from: https://github.com/sgl-project/sglang/pull/2628
 def get_config_file_name(E: int, N: int, dtype: str | None, block_shape: list[int] | None = None) -> str:
-    device_name = current_platform.get_device_name().replace(" ", "_")
+    device_name = get_device_name_as_file_name()
     # Set device_name to H200 if a device from the H200 family is detected
     if "H200" in device_name.split("_"):
         device_name = "NVIDIA_H200"
