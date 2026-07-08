@@ -18,6 +18,7 @@ from aphrodite.config import (
     SchedulerConfig,
     set_current_aphrodite_config,
 )
+from aphrodite.config.reasoning import ReasoningConfig
 from aphrodite.distributed.parallel_state import (
     init_distributed_environment,
     initialize_model_parallel,
@@ -243,6 +244,28 @@ def test_select_common_block_size_uses_largest_shared_int():
 
     selected_size = select_common_block_size(256, [backend_a, backend_b])
     assert selected_size == 64
+
+
+def test_reasoning_config_without_custom_logitsprocs_does_not_need_output_token_ids(
+    dist_init,
+):
+    aphrodite_config = get_aphrodite_config()
+    assert aphrodite_config.model_config.logits_processors is None
+    reasoning_config = ReasoningConfig(reasoning_start_str="<think>", reasoning_end_str="</think>")
+    reasoning_config._reasoning_start_token_ids = [1]
+    reasoning_config._reasoning_end_token_ids = [2]
+    aphrodite_config.reasoning_config = reasoning_config
+
+    with set_current_aphrodite_config(aphrodite_config):
+        model_config = aphrodite_config.model_config
+        num_heads = model_config.get_num_kv_heads(aphrodite_config.parallel_config)
+        head_size = model_config.get_head_size()
+        static_forward_context = aphrodite_config.compilation_config.static_forward_context
+        static_forward_context["layer.0"] = Attention(num_heads, head_size, 0.1)
+        runner = GPUModelRunner(aphrodite_config, torch.device("cpu"))
+
+    assert runner.input_batch.thinking_budget_state_holder is not None
+    assert runner.input_batch.logitsprocs_need_output_token_ids is False
 
 
 @pytest.mark.skip_global_cleanup
