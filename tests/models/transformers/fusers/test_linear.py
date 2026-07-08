@@ -116,9 +116,7 @@ class FakeAttention(nn.Module):
         self.v_proj = nn.Linear(hidden, kv_heads * head_dim, bias=bias)
         self.o_proj = nn.Linear(heads * head_dim, hidden, bias=bias)
 
-    def forward(
-        self, hidden_states, attention_mask=None, past_key_values=None, **kwargs
-    ):
+    def forward(self, hidden_states, attention_mask=None, past_key_values=None, **kwargs):
         from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
         input_shape = hidden_states.shape[:-1]
@@ -128,12 +126,8 @@ class FakeAttention(nn.Module):
         v = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         if past_key_values is not None:
             k, v = past_key_values.update(k, v, self.layer_idx)
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, None
-        )
-        attn_output, attn_weights = attention_interface(
-            self, q, k, v, attention_mask, scaling=self.scaling, **kwargs
-        )
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, None)
+        attn_output, attn_weights = attention_interface(self, q, k, v, attention_mask, scaling=self.scaling, **kwargs)
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.o_proj(attn_output), attn_weights
 
@@ -141,9 +135,7 @@ class FakeAttention(nn.Module):
 class ReversedFakeAttention(FakeAttention):
     """Projections computed in (v, k, q) order — q must still be identified."""
 
-    def forward(
-        self, hidden_states, attention_mask=None, past_key_values=None, **kwargs
-    ):
+    def forward(self, hidden_states, attention_mask=None, past_key_values=None, **kwargs):
         from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
         input_shape = hidden_states.shape[:-1]
@@ -151,12 +143,8 @@ class ReversedFakeAttention(FakeAttention):
         v = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         k = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         q = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, None
-        )
-        attn_output, _ = attention_interface(
-            self, q, k, v, attention_mask, scaling=self.scaling, **kwargs
-        )
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(self.config._attn_implementation, None)
+        attn_output, _ = attention_interface(self, q, k, v, attention_mask, scaling=self.scaling, **kwargs)
         return self.o_proj(attn_output.reshape(*input_shape, -1)), None
 
 
@@ -176,9 +164,7 @@ class QKNormAttention(FakeAttention):
         self.q_norm = nn.RMSNorm(self.q_proj.out_features)
         self.k_norm = nn.RMSNorm(self.k_proj.out_features)
 
-    def forward(
-        self, hidden_states, attention_mask=None, past_key_values=None, **kwargs
-    ):
+    def forward(self, hidden_states, attention_mask=None, past_key_values=None, **kwargs):
         q = self.q_norm(self.q_proj(hidden_states))
         k = self.k_norm(self.k_proj(hidden_states))
         v = self.v_proj(hidden_states)
@@ -193,9 +179,7 @@ class PerHeadQKNormAttention(FakeAttention):
         self.q_norm = nn.RMSNorm(self.head_dim)
         self.k_norm = nn.RMSNorm(self.head_dim)
 
-    def forward(
-        self, hidden_states, attention_mask=None, past_key_values=None, **kwargs
-    ):
+    def forward(self, hidden_states, attention_mask=None, past_key_values=None, **kwargs):
         shape = (*hidden_states.shape[:-1], -1, self.head_dim)
         q = self.q_norm(self.q_proj(hidden_states).view(shape))
         k = self.k_norm(self.k_proj(hidden_states).view(shape))
@@ -245,10 +229,7 @@ def _apply_glu_fuser_with_stubs(module: nn.Module, fuser: GLUFuser):
 
 def _apply_qkv_fuser_with_stubs(module: nn.Module, fuser: QKVFuser):
     """Apply a fuser using a plain merged `nn.Linear` (no TP sharding)."""
-    q, k, v = (
-        module.get_submodule(name)
-        for name in (fuser.q_name, fuser.k_name, fuser.v_name)
-    )
+    q, k, v = (module.get_submodule(name) for name in (fuser.q_name, fuser.k_name, fuser.v_name))
     merged = nn.Linear(
         q.in_features,
         q.out_features + k.out_features + v.out_features,
@@ -258,7 +239,8 @@ def _apply_qkv_fuser_with_stubs(module: nn.Module, fuser: QKVFuser):
         merged.weight.copy_(torch.cat([q.weight, k.weight, v.weight], dim=0))
         if q.bias is not None:
             merged.bias.copy_(torch.cat([q.bias, k.bias, v.bias], dim=0))
-    merged.split_sizes = [q.out_features, k.out_features, v.out_features]
+    merged.output_sizes = [q.out_features, k.out_features, v.out_features]
+    merged.tp_size = 1
     setattr(module, fuser.merged_name, merged)
     for name in (fuser.q_name, fuser.k_name, fuser.v_name):
         delattr(module, name)
@@ -332,7 +314,8 @@ def test_detects_and_rewrites_qkv(attn_cls, kv_heads):
     # original semantics (branches, kwargs, attribute reads)
     code = fuser.fused_forward.__code__
     names = code.co_names
-    assert "qkv_proj" in names and "split_sizes" in names and "o_proj" in names
+    assert "qkv_proj" in names and "output_sizes" in names and "o_proj" in names
+    assert "tp_size" in names
     assert not {"q_proj", "k_proj", "v_proj"} & set(names)
     if attn_cls is FakeAttention:
         assert "update" in names  # the cache branch survives
@@ -407,9 +390,7 @@ def test_weight_mappings_are_scoped_to_fused_prefixes():
     mapper = WeightsMapper()
     for prefix in ("model.layers.0.mlp", "model.layers.1.mlp"):
         mapper.orig_to_new_stacked.update(glu_fuser.orig_to_new_stacked(prefix))
-    mapper.orig_to_new_stacked.update(
-        qkv_fuser.orig_to_new_stacked("model.layers.0.self_attn")
-    )
+    mapper.orig_to_new_stacked.update(qkv_fuser.orig_to_new_stacked("model.layers.0.self_attn"))
 
     names = [
         "model.layers.0.mlp.gate_proj.weight",
