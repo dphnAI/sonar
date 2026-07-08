@@ -12,6 +12,7 @@ from aphrodite.entrypoints.chat_utils import (
     ConversationMessage,
 )
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
+    ChatCompletionNamedToolChoiceParam,
     ChatCompletionRequest,
 )
 from aphrodite.entrypoints.openai.completion.protocol import (
@@ -125,8 +126,12 @@ class OnlineRenderer:
                 )
             elif request.tool_choice != "auto":
                 # "required" or named tool requires tool parser
+                if isinstance(request.tool_choice, ChatCompletionNamedToolChoiceParam):
+                    tool_choice_desc = f'function "{request.tool_choice.function.name}"'
+                else:
+                    tool_choice_desc = f'"{request.tool_choice}"'
                 return self.create_error_response(
-                    f'tool_choice="{request.tool_choice}" requires --tool-call-parser to be set'
+                    f"tool_choice={tool_choice_desc} requires --tool-call-parser to be set"
                 )
 
         if request.tools is None or (request.tool_choice == "none" and self.exclude_tools_when_tool_choice_none):
