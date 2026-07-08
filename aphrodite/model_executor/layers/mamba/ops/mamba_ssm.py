@@ -19,6 +19,7 @@ from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.mamba.ops.triton_helpers import fast_exp
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import HAS_TRITON, tl, triton
+from aphrodite.utils.platform_utils import get_device_name_as_file_name
 from aphrodite.v1.attention.backends.utils import NULL_BLOCK_ID
 
 if current_platform.is_xpu():
@@ -46,7 +47,7 @@ def get_ssm_config_file_name(headdim: int, dstate: int, cache_dtype: str, device
 
 
 def get_ssm_device_name() -> str:
-    return current_platform.get_device_name().replace(" ", "_")
+    return get_device_name_as_file_name()
 
 
 def _canonical_cache_dtype(cache_dtype: str) -> str:

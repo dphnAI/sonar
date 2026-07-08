@@ -15,7 +15,7 @@ from aiter.ops.flydsl.kernels.moe_gemm_2stage import (
 )
 
 from aphrodite.logger import init_logger
-from aphrodite.platforms import current_platform
+from aphrodite.utils.platform_utils import get_device_name_as_file_name
 from aphrodite.utils.torch_utils import direct_register_custom_op
 
 logger = init_logger(__name__)
@@ -102,7 +102,7 @@ def build_routing_buffers(
 
 @functools.lru_cache
 def try_get_optimal_config(num_experts, inter_dim):
-    device_name = current_platform.get_device_name().replace(" ", "_")
+    device_name = get_device_name_as_file_name()
     json_file_name = f"E={num_experts},N={inter_dim},device_name={device_name},dtype=int4_w4a16,backend=flydsl.json"
     config_file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "configs", json_file_name)
     if os.path.exists(config_file_path):

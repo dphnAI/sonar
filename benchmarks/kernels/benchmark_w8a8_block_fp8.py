@@ -19,6 +19,7 @@ from aphrodite.model_executor.layers.quantization.utils.fp8_utils import (
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import triton
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
+from aphrodite.utils.platform_utils import get_device_name_as_file_name
 
 mp.set_start_method("spawn", force=True)
 
@@ -265,7 +266,7 @@ def save_configs(
     input_type="fp8",
 ) -> None:
     os.makedirs(save_path, exist_ok=True)
-    device_name = current_platform.get_device_name().replace(" ", "_")
+    device_name = get_device_name_as_file_name()
     json_file_name = (
         f"N={N},K={K},device_name={device_name},dtype={input_type}_w8a8,block_shape=[{block_n},{block_k}].json"
     )
