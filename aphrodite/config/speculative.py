@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import copy
+import functools
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from pydantic import Field, SkipValidation, field_validator, model_validator
@@ -530,6 +532,37 @@ class SpeculativeConfig:
 
         return hf_config
 
+    @staticmethod
+    def _apply_composed_hf_override(
+        target_hf_overrides: Callable[[PretrainedConfig], PretrainedConfig],
+        hf_config: PretrainedConfig,
+    ) -> PretrainedConfig:
+        hf_config = SpeculativeConfig.hf_config_override(hf_config)
+        return target_hf_overrides(hf_config)
+
+    @staticmethod
+    def compose_draft_hf_overrides(
+        target_hf_overrides: HfOverrides | None,
+    ) -> Callable[[PretrainedConfig], PretrainedConfig]:
+        """Build the ``hf_overrides`` for the draft ``ModelConfig``.
+
+        Callable overrides on the target are config-to-config transforms
+        (for example, test harnesses shrinking ``num_hidden_layers``) and
+        must also reach the draft config. Dict overrides are target-specific
+        key patches and are not applied to the draft.
+
+        The composed override must stay picklable because the draft
+        ``ModelConfig`` is sent to spawned engine-core processes. Bind the
+        target via ``functools.partial`` over a module-referenceable static
+        method instead of using a local closure.
+        """
+        if not callable(target_hf_overrides):
+            return SpeculativeConfig.hf_config_override
+
+        return functools.partial(
+            SpeculativeConfig._apply_composed_hf_override, target_hf_overrides
+        )
+
     def __post_init__(self):
         # Note: "method" is a new parameter that helps to extend the
         # configuration of non-model-based proposers, and the "model" parameter
@@ -684,7 +717,9 @@ class SpeculativeConfig:
                 if self.method == "medusa":
                     draft_hf_overrides = {"model_type": "medusa"}
                 else:
-                    draft_hf_overrides = SpeculativeConfig.hf_config_override
+                    draft_hf_overrides = SpeculativeConfig.compose_draft_hf_overrides(
+                        self.target_model_config.hf_overrides
+                    )
                 self.draft_model_config = ModelConfig(
                     model=self.model,
                     runner="draft",
