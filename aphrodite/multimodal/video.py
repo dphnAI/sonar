@@ -15,7 +15,7 @@ import torch
 
 from aphrodite import envs
 from aphrodite.logger import init_logger
-from aphrodite.utils.import_utils import PlaceholderModule
+from aphrodite.utils.import_utils import PlaceholderModule, check_torchcodec_available
 from aphrodite.utils.mem_constants import MiB_bytes
 from aphrodite.utils.registry import ExtensionManager
 
@@ -33,7 +33,7 @@ except ImportError:
 
 try:
     from torchcodec.decoders import VideoDecoder
-except ImportError:
+except (ImportError, RuntimeError):
     VideoDecoder = PlaceholderModule("torchcodec").placeholder_attr(  # type: ignore[assignment]
         "decoders.VideoDecoder"
     )
@@ -911,6 +911,7 @@ class VideoBackend(
                 frames, valid = cls.decode_frames(container, frame_idx, source.original_fps, source.duration)
         elif backend == "torchcodec":
             assert not frame_recovery, "frame_recovery is only available for `opencv` backend"
+            check_torchcodec_available()
             decoder = cls.make_torchcodec_decoder(
                 data,
                 num_ffmpeg_threads=num_ffmpeg_threads,
