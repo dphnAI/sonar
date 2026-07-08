@@ -101,6 +101,7 @@ if TYPE_CHECKING:
     APHRODITE_ALLOW_LONG_MAX_MODEL_LEN: bool = False
     APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE: int = 5  # seconds
     APHRODITE_MAX_N_SEQUENCES: int = 16384
+    APHRODITE_MAX_COMPLETION_PROMPTS: int = 1024
     APHRODITE_PLUGINS: list[str] | None = None
     APHRODITE_LORA_RESOLVER_CACHE_DIR: str | None = None
     APHRODITE_LORA_RESOLVER_HF_REPO_LIST: str | None = None
@@ -952,6 +953,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # sequences per request). Limits resource consumption to prevent
     # denial-of-service via excessively large fan-out. Default: 16384.
     "APHRODITE_MAX_N_SEQUENCES": lambda: int(os.environ.get("APHRODITE_MAX_N_SEQUENCES", "16384")),
+    # Maximum number of prompts allowed in a single /v1/completions request
+    # when the prompt field is a list. Prevents unbounded fan-out of engine
+    # requests from a single API call. Default: 1024.
+    "APHRODITE_MAX_COMPLETION_PROMPTS": lambda: int(os.environ.get("APHRODITE_MAX_COMPLETION_PROMPTS", "1024")),
     # a list of plugin names to load, separated by commas.
     # if this is not set, it means all plugins will be loaded
     # if this is set to an empty string, no plugins will be loaded
