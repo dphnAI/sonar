@@ -122,6 +122,38 @@ export APHRODITE_IMAGE_FETCH_TIMEOUT=<timeout>
 
 :::
 
+### Video Decoding Backend
+
+Aphrodite decodes video bytes into frames using a selectable decoding backend.
+Three FFmpeg-backed software backends are supported:
+
+- `opencv` (default): OpenCV-based decoder.
+- `pyav`: PyAV decoder.
+- `torchcodec`: TorchCodec (PyTorch-native) decoder.
+
+`torchcodec` lets you choose which FFmpeg version is used, while `opencv` and
+`pyav` rely on whichever FFmpeg build they were linked against.
+
+Select the codec backend by passing `backend` via `--media-io-kwargs`:
+
+```bash
+aphrodite run Qwen/Qwen3-VL-30B-A3B-Instruct \
+  --media-io-kwargs '{"video": {"backend": "torchcodec"}}'
+```
+
+TorchCodec-specific parameters:
+
+- `num_ffmpeg_threads`: Number of FFmpeg decoding threads. `0` (default) uses
+  the FFmpeg default.
+- `seek_mode`: Seek mode for the decoder. `"exact"` (default) guarantees
+  frame-accurate sampling. `"approximate"` skips the initial scan and relies on
+  the file's metadata.
+
+```bash
+aphrodite run Qwen/Qwen3-VL-30B-A3B-Instruct \
+  --media-io-kwargs '{"video": {"backend": "torchcodec", "seek_mode": "approximate", "num_ffmpeg_threads": 4}}'
+```
+
 :::tip
 There is no need to format the prompt in the API request since it'll be handled by the server.
 :::
