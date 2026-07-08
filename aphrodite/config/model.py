@@ -72,7 +72,7 @@ else:
 
 logger = init_logger(__name__)
 
-RunnerOption = Literal["auto", RunnerType]
+RunnerOption = Literal["auto", "generate", "pooling", "draft"]
 ConvertType = Literal["none", "embed", "classify"]
 ConvertOption = Literal["auto", ConvertType]
 TokenizerMode = Literal["auto", "hf", "slow", "mistral", "deepseek_v32", "deepseek_v4"]
@@ -334,26 +334,30 @@ class ModelConfig:
     multimodal_config: MultiModalConfig | None = None
     """Configuration for multimodal model. If `None`, this will be inferred
     from the architecture of `self.model`."""
-    language_model_only: InitVar[bool] = False
-    limit_mm_per_prompt: InitVar[dict[str, int | dict[str, int]] | None] = None
-    enable_mm_embeds: InitVar[bool | None] = None
-    media_io_kwargs: InitVar[dict[str, dict[str, Any]] | None] = None
-    mm_processor_kwargs: InitVar[dict[str, Any] | None] = None
-    mm_processor_cache_gb: InitVar[float | None] = None
-    mm_processor_cache_type: InitVar[MMCacheType | None] = None
-    mm_shm_cache_max_object_size_mb: InitVar[int | None] = None
-    mm_encoder_only: InitVar[bool | None] = None
-    mm_encoder_tp_mode: InitVar[MMEncoderTPMode | None] = None
-    mm_encoder_attn_backend: InitVar[AttentionBackendEnum | str | None] = None
-    mm_encoder_attn_dtype: InitVar[str | None] = None
-    mm_encoder_fp8_scale_path: InitVar[str | None] = None
-    mm_encoder_fp8_scale_save_path: InitVar[str | None] = None
-    mm_encoder_fp8_scale_save_margin: InitVar[float | None] = None
-    interleave_mm_strings: InitVar[bool | None] = None
-    skip_mm_profiling: InitVar[bool | None] = None
-    video_pruning_rate: InitVar[float | None] = None
-    mm_tensor_ipc: InitVar[MMTensorIPC] = None
-    mm_ipc_gpu_memory_gb: InitVar[float | None] = None
+    language_model_only: InitVar[bool] = cast(InitVar[bool], False)
+    limit_mm_per_prompt: InitVar[dict[str, int | dict[str, int]] | None] = cast(
+        InitVar[dict[str, int | dict[str, int]] | None], None
+    )
+    enable_mm_embeds: InitVar[bool | None] = cast(InitVar[bool | None], None)
+    media_io_kwargs: InitVar[dict[str, dict[str, Any]] | None] = cast(InitVar[dict[str, dict[str, Any]] | None], None)
+    mm_processor_kwargs: InitVar[dict[str, Any] | None] = cast(InitVar[dict[str, Any] | None], None)
+    mm_processor_cache_gb: InitVar[float | None] = cast(InitVar[float | None], None)
+    mm_processor_cache_type: InitVar[MMCacheType | None] = cast(InitVar[MMCacheType | None], None)
+    mm_shm_cache_max_object_size_mb: InitVar[int | None] = cast(InitVar[int | None], None)
+    mm_encoder_only: InitVar[bool | None] = cast(InitVar[bool | None], None)
+    mm_encoder_tp_mode: InitVar[MMEncoderTPMode | None] = cast(InitVar[MMEncoderTPMode | None], None)
+    mm_encoder_attn_backend: InitVar[AttentionBackendEnum | str | None] = cast(
+        InitVar[AttentionBackendEnum | str | None], None
+    )
+    mm_encoder_attn_dtype: InitVar[str | None] = cast(InitVar[str | None], None)
+    mm_encoder_fp8_scale_path: InitVar[str | None] = cast(InitVar[str | None], None)
+    mm_encoder_fp8_scale_save_path: InitVar[str | None] = cast(InitVar[str | None], None)
+    mm_encoder_fp8_scale_save_margin: InitVar[float | None] = cast(InitVar[float | None], None)
+    interleave_mm_strings: InitVar[bool | None] = cast(InitVar[bool | None], None)
+    skip_mm_profiling: InitVar[bool | None] = cast(InitVar[bool | None], None)
+    video_pruning_rate: InitVar[float | None] = cast(InitVar[float | None], None)
+    mm_tensor_ipc: InitVar[MMTensorIPC | None] = cast(InitVar[MMTensorIPC | None], None)
+    mm_ipc_gpu_memory_gb: InitVar[float | None] = cast(InitVar[float | None], None)
 
     def compute_hash(self) -> str:
         """
@@ -479,7 +483,7 @@ class ModelConfig:
         interleave_mm_strings: bool | None,
         skip_mm_profiling: bool | None,
         video_pruning_rate: float | None,
-        mm_tensor_ipc: MMTensorIPC,
+        mm_tensor_ipc: MMTensorIPC | None,
         mm_ipc_gpu_memory_gb: float | None,
     ) -> None:
         # Keep set served_model_name before maybe_model_redirect(self.model)
@@ -960,6 +964,7 @@ class ModelConfig:
                 "modelopt",
                 "modelopt_fp4",
                 "modelopt_mxfp8",
+                "mxfp8",
                 "modelopt_mixed",
                 # Ensure heavy backends are probed last to avoid unnecessary
                 # imports during override detection (e.g., MXFP4 imports Triton)
