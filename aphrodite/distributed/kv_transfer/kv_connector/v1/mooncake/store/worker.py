@@ -59,6 +59,7 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.mooncake.store.protocol i
     RESP_OK,
 )
 from aphrodite.logger import init_logger
+from aphrodite.utils.math_utils import cdiv
 from aphrodite.utils.network_utils import get_ip, make_zmq_socket
 from aphrodite.v1.core.kv_cache_utils import (
     BlockHash,
@@ -1391,12 +1392,12 @@ class MooncakeStoreWorker:
             lookup_mask = lookup_masks[g_idx]
             key_prefixes = self._lookup_key_prefixes[g_idx]
             group_hashes = self.coord.block_hashes_for_spec(block_hashes, self._kv_cache_groups[g_idx].kv_cache_spec)
-            for chunk_id, h in enumerate(group_hashes):
-                start_idx = chunk_id * spec_block_size
-                if start_idx >= token_len:
-                    break
-                if lookup_mask is not None and (chunk_id >= len(lookup_mask) or not lookup_mask[chunk_id]):
+            max_chunks = min(len(group_hashes), cdiv(token_len, spec_block_size))
+            mask_limit = max_chunks if lookup_mask is None else min(max_chunks, len(lookup_mask))
+            for chunk_id in range(mask_limit):
+                if lookup_mask is not None and not lookup_mask[chunk_id]:
                     continue
+                h = group_hashes[chunk_id]
                 hash_hex = h.hex()
                 for key_prefix in key_prefixes:
                     candidate_keys.append(PoolKey.build_key_string(key_prefix, hash_hex))
