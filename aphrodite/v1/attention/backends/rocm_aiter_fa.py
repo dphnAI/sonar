@@ -544,7 +544,11 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
             chunk_seq_lens = (chunk_ends - chunk_starts).clamp(min=0)  # [num_chunks, num_extends]
             cu_seq_lens_cpu = torch.zeros([num_chunks, num_extends + 1], dtype=torch.int32, pin_memory=True)
             torch.cumsum(chunk_seq_lens, dim=1, out=cu_seq_lens_cpu[:, 1:], dtype=torch.int32)
-            max_cum_tokens = cu_seq_lens_cpu[:, -1].max().item()
+            # Avoid .max() on an empty tensor when there is no context
+            # (num_chunks == 0, e.g. Whisper encoder's first pass).
+            max_cum_tokens = (
+                cu_seq_lens_cpu[:, -1].max().item() if num_chunks > 0 else 0
+            )
 
             range_idx = torch.arange(max_cum_tokens, dtype=torch.int32)[None, None, :]
             idx_to_batch_tensor = range_idx == cu_seq_lens_cpu[:, 1:][:, :, None]
