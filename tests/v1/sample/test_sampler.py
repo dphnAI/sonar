@@ -190,7 +190,7 @@ def test_sampler_presence_penalty(device: str, batch_size: int, presence_penalty
     sampling_metadata.presence_penalties = _create_penalty_tensor(batch_size, presence_penalty, torch.device(device))
     sampling_metadata.no_penalties = False
     sampler = Sampler()
-    logits = sampler.apply_penalties(fake_logits, sampling_metadata, sampling_metadata.output_token_ids)
+    logits = sampler.sampling_ops.apply_penalties(fake_logits, sampling_metadata, sampling_metadata.output_token_ids)
     logits = logits.cpu()
     for batch_idx in range(batch_size):
         # Since all tokens initially have the same logits, the non-penalized
@@ -238,7 +238,7 @@ def test_sampler_frequency_penalty(device: str, batch_size: int, frequency_penal
     sampling_metadata.output_token_ids = output_token_ids
     sampling_metadata.no_penalties = False
     sampler = Sampler()
-    logits = sampler.apply_penalties(fake_logits, sampling_metadata, sampling_metadata.output_token_ids)
+    logits = sampler.sampling_ops.apply_penalties(fake_logits, sampling_metadata, sampling_metadata.output_token_ids)
     logits = logits.cpu()
     for batch_idx in range(batch_size):
         non_penalized_token_id = logits[batch_idx].argmax().item()
@@ -284,7 +284,7 @@ def test_sampler_repetition_penalty(device: str, batch_size: int, repetition_pen
     )
     sampling_metadata.no_penalties = False
     sampler = Sampler()
-    logits = sampler.apply_penalties(fake_logits, sampling_metadata, sampling_metadata.output_token_ids)
+    logits = sampler.sampling_ops.apply_penalties(fake_logits, sampling_metadata, sampling_metadata.output_token_ids)
     logits = logits.cpu()
     for batch_idx in range(batch_size):
         non_penalized_token_id = logits[batch_idx].argmax().item()
@@ -329,7 +329,7 @@ def test_sampler_allowed_token_ids(device: str, batch_size: int, num_allowed_tok
     )
     sampling_metadata.allowed_token_ids_mask = mask
     sampler = Sampler()
-    logits = sampler.apply_logits_processors(fake_logits, sampling_metadata, predict_bonus_token=False)
+    logits = sampler.sampling_ops.apply_logits_processors(fake_logits, sampling_metadata, predict_bonus_token=False)
     logits = logits.cpu()
     for batch_idx in range(batch_size):
         logits_for_req = logits[batch_idx]
@@ -363,7 +363,7 @@ def test_sampler_bad_words(device: str, batch_size: int, bad_words_lengths: tupl
     sampling_metadata.bad_words_token_ids = _create_bad_words_token_ids(batch_size, VOCAB_SIZE, bad_words_lengths)
     bad_words_last_tokens = _update_output_token_ids_for_bad_words(sampling_metadata, VOCAB_SIZE)
     sampler = Sampler()
-    logits = sampler.apply_logits_processors(fake_logits, sampling_metadata, predict_bonus_token=False)
+    logits = sampler.sampling_ops.apply_logits_processors(fake_logits, sampling_metadata, predict_bonus_token=False)
     logits = logits.cpu()
     for batch_idx in range(batch_size):
         logits_for_req = logits[batch_idx]
