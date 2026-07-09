@@ -42,7 +42,8 @@ Aphrodite supports a large variety of generative Transformer models in [Hugging 
 | `NemotronForCausalLM`             |              `nvidia/Minitron-8B-Base` |
 | `NVLM_D`                          |                    `nvidia/NVLM-D-72B` |
 | `OPTForCausalLM`                  |                     `facebook/opt-66b` |
-| `OLMoForCausalLM`                 |                   `allenai/OLMo-7B-hf` |
+| `OlmoForCausalLM`                 |                   `allenai/OLMo-7B-hf` |
+| `Olmo2ForCausalLM`                |               `allenai/OLMo-2-0425-1B` |
 | `OlmoeForCausalLM`                |             `allenai/OLMoE-1B-7B-0125` |
 | `OrionForCausalLM`                |           `OrionStarAI/Orion-14B-Chat` |
 | `PhiForCausalLM`                  |                      `microsoft/phi-2` |
