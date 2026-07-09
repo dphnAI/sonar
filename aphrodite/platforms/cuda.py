@@ -348,6 +348,16 @@ class CudaPlatformBase(Platform):
 
     @classmethod
     def check_and_update_config(cls, aphrodite_config: AphroditeConfig) -> None:
+        # Thor / SM 11.0: PyTorch's default cuBLAS workspace (~8 MiB) is too
+        # small here and yields CUBLAS_STATUS_NOT_SUPPORTED for some GEMM/GEMV
+        # shapes. Force the 32 MiB workspace torch already uses for majors
+        # 9/10/12 -- mirrors pytorch/pytorch#189312, which adds major==11 to
+        # that set. Drop this once a torch build with that fix is pinned.
+        # setdefault preserves any explicit user override.
+        device_capability = cls.get_device_capability()
+        if device_capability is not None and device_capability.major == 11:
+            os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
         parallel_config = aphrodite_config.parallel_config
         model_config = aphrodite_config.model_config
 
