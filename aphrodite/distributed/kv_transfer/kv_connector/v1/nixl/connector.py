@@ -196,6 +196,13 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
         assert self.connector_scheduler is not None
         self.connector_scheduler.set_xfer_handshake_metadata(metadata)
 
+    def set_xfer_handshake_metadata_pp_aware(
+        self, metadata: dict[tuple[int, int], KVConnectorHandshakeMetadata]
+    ) -> None:
+        """Set handshake metadata keyed by (pp_rank, tp_rank)."""
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.set_xfer_handshake_metadata_pp_aware(metadata)
+
     ############################################################
     # Worker Side Methods
     ############################################################
