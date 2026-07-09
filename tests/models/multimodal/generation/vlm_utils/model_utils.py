@@ -52,15 +52,6 @@ def blip2_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> 
     return hf_output_ids, hf_output_str, out_logprobs
 
 
-def fuyu_aphrodite_to_hf_output(aphrodite_output: RunnerOutput, model: str) -> RunnerOutput:
-    """Sanitize aphrodite output [fuyu models] to be comparable with hf output."""
-    output_ids, output_str, out_logprobs = aphrodite_output
-
-    hf_output_str = output_str.lstrip() + "|ENDOFTEXT|"
-
-    return output_ids, hf_output_str, out_logprobs
-
-
 def qwen_aphrodite_to_hf_output(
     aphrodite_output: RunnerOutput, model: str
 ) -> tuple[list[int], str, SampleLogprobs | None]:
