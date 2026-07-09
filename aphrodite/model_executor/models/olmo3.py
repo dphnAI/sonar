@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 # Adapted from
-# https://github.com/huggingface/transformers/blob/v4.40.1/src/transformers/models/olmo/modeling_olmo.py
+# https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo3/modeling_olmo3.py
 # Copyright 2024 The vLLM team.
 # Copyright 2024 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
@@ -22,106 +22,150 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Inference-only OLMo model compatible with HuggingFace weights."""
+"""Inference-only OLMo3 model compatible with HuggingFace weights."""
 
 from collections.abc import Iterable
+from functools import partial
 from itertools import islice
 
 import torch
 from torch import nn
-from transformers import OlmoConfig
+from transformers import Olmo3Config
 
 from aphrodite.compilation.decorators import support_torch_compile
-from aphrodite.config import AphroditeConfig, CacheConfig
+from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from aphrodite.distributed.communication_op import tensor_model_parallel_all_gather
+from aphrodite.distributed.parallel_state import get_tensor_model_parallel_rank
+from aphrodite.distributed.utils import split_tensor_along_last_dim
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
+from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
-from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.rotary_embedding import get_rope
 from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
-from aphrodite.sequence import IntermediateTensors
-
-from .interfaces import SupportsLoRA, SupportsPP
-from .utils import (
+from aphrodite.model_executor.models.interfaces import SupportsLoRA, SupportsPP
+from aphrodite.model_executor.models.utils import (
     AutoWeightsLoader,
     WeightsMapper,
+    extract_layer_index,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_prefix,
 )
+from aphrodite.sequence import IntermediateTensors
 
 
-class OlmoAttention(nn.Module):
+class Olmo3Attention(nn.Module):
     """
     This is the attention block where the output is computed as
     `Attention(LN(x))` in `MLP(LN(x + Attention(LN(x))))`
     (plus another skip connection).
     """
 
-    def __init__(
-        self,
-        config: OlmoConfig,
-        cache_config: CacheConfig | None = None,
-        quant_config: QuantizationConfig | None = None,
-        prefix: str = "",
-    ):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        tensor_model_parallel_world_size = get_tensor_model_parallel_world_size()
-        self.total_num_heads = config.num_attention_heads
+        self.config = aphrodite_config.model_config.hf_config
+        assert isinstance(self.config, Olmo3Config)
 
-        assert self.hidden_size % self.total_num_heads == 0
-        assert self.total_num_heads % tensor_model_parallel_world_size == 0
+        hidden_size = self.config.hidden_size
+        self.tp_size = get_tensor_model_parallel_world_size()
+        self.total_num_heads = self.config.num_attention_heads
 
-        self.num_heads = self.total_num_heads // tensor_model_parallel_world_size
-        self.head_dim = self.hidden_size // self.total_num_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.clip_qkv = config.clip_qkv
+        assert hidden_size % self.total_num_heads == 0
+        assert self.total_num_heads % self.tp_size == 0
+
+        self.num_heads = self.total_num_heads // self.tp_size
+        self.total_num_kv_heads = self.config.num_key_value_heads or self.total_num_heads
+        if self.total_num_kv_heads >= self.tp_size:
+            assert self.total_num_kv_heads % self.tp_size == 0
+        else:
+            assert self.tp_size % self.total_num_kv_heads == 0
+
+        self.num_kv_heads = max(1, self.total_num_kv_heads // self.tp_size)
+        self.head_dim = hidden_size // self.total_num_heads
+        self.q_size = self.num_heads * self.head_dim
+        self.kv_size = self.num_kv_heads * self.head_dim
+        self.max_position_embeddings = self.config.max_position_embeddings
 
         # Attention input projection. Projects x -> (q, k, v)
         self.qkv_proj = QKVParallelLinear(
-            self.hidden_size,
+            hidden_size,
             self.head_dim,
             self.total_num_heads,
-            bias=config.attention_bias,
-            quant_config=quant_config,
+            self.total_num_kv_heads,
+            bias=False,
+            quant_config=aphrodite_config.quant_config,
             prefix=f"{prefix}.qkv_proj",
         )
 
-        # Rotary embeddings.
-        self.rotary_emb = get_rope(
-            self.head_dim,
-            max_position=self.max_position_embeddings,
-            rope_parameters=config.rope_parameters,
+        self.tp_rank = get_tensor_model_parallel_rank()
+        self.k_norm = RMSNorm(
+            self.total_num_kv_heads * self.head_dim,
+            eps=self.config.rms_norm_eps,
         )
+        self.q_norm = RMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps)
+
         self.scaling = self.head_dim**-0.5
+
+        layer_idx = extract_layer_index(prefix)
+        sliding_window = None
+        if (layer_types := getattr(self.config, "layer_types", None)) is not None and layer_types[
+            layer_idx
+        ] == "sliding_attention":
+            sliding_window = self.config.sliding_window
+
         self.attn = Attention(
             self.num_heads,
             self.head_dim,
-            scale=self.scaling,
-            cache_config=cache_config,
-            quant_config=quant_config,
+            self.scaling,
+            num_kv_heads=self.num_kv_heads,
+            cache_config=aphrodite_config.cache_config,
+            quant_config=aphrodite_config.quant_config,
+            per_layer_sliding_window=sliding_window,
             prefix=f"{prefix}.attn",
+        )
+
+        # Rotary embeddings. Rope scaling is only applied on full attention layers.
+        if sliding_window is None:
+            rope_parameters = self.config.rope_parameters
+        else:
+            rope_theta = self.config.rope_parameters["rope_theta"]
+            rope_parameters = {"rope_type": "default", "rope_theta": rope_theta}
+        self.rotary_emb = get_rope(
+            self.head_dim,
+            max_position=self.max_position_embeddings,
+            rope_parameters=rope_parameters,
         )
 
         # Attention output projection.
         self.o_proj = RowParallelLinear(
-            self.hidden_size,
-            self.hidden_size,
-            bias=config.attention_bias,
-            quant_config=quant_config,
+            self.total_num_heads * self.head_dim,
+            hidden_size,
+            bias=False,
+            quant_config=aphrodite_config.quant_config,
             prefix=f"{prefix}.o_proj",
         )
+
+    def _apply_qk_norm(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.tp_size > 1:
+            q = tensor_model_parallel_all_gather(q.contiguous())
+            k = tensor_model_parallel_all_gather(k.contiguous())
+        q = self.q_norm(q)
+        k = self.k_norm(k)
+        if self.tp_size > 1:
+            splitter = partial(split_tensor_along_last_dim, num_partitions=self.tp_size)
+            q = splitter(q)[self.tp_rank]
+            k = splitter(k)[self.tp_rank]
+        return q, k
 
     def forward(
         self,
@@ -129,39 +173,34 @@ class OlmoAttention(nn.Module):
         hidden_states: torch.Tensor,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
-        if self.clip_qkv is not None:
-            qkv.clamp_(min=-self.clip_qkv, max=self.clip_qkv)
-        q, k, v = qkv.chunk(chunks=3, dim=-1)
+        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        q, k = self._apply_qk_norm(q, k)
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v)
         output, _ = self.o_proj(attn_output)
         return output
 
 
-class OlmoMLP(nn.Module):
+class Olmo3MLP(nn.Module):
     """
     This is the MLP block where the output is computed as
-    `MLP(LN(x))` in `MLP(LN(x + Attention(LN(x))))`
+    `MLP(x)` in `LN(MLP(x + LN(Attention(x))))`
     (plus another skip connection).
     """
 
-    def __init__(
-        self,
-        config: OlmoConfig,
-        quant_config: QuantizationConfig | None = None,
-        prefix: str = "",
-    ):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
+        config = aphrodite_config.model_config.hf_config
+        assert isinstance(config, Olmo3Config)
+        hidden_size = config.hidden_size
+        intermediate_size = config.intermediate_size
 
         # Feed-forward input projection.
         self.gate_up_proj = MergedColumnParallelLinear(
-            self.hidden_size,
-            [self.intermediate_size] * 2,
+            hidden_size,
+            [intermediate_size] * 2,
             bias=False,
-            quant_config=quant_config,
+            quant_config=aphrodite_config.quant_config,
             prefix=f"{prefix}.gate_up_proj",
         )
 
@@ -170,10 +209,10 @@ class OlmoMLP(nn.Module):
 
         # Feed-forward output projection.
         self.down_proj = RowParallelLinear(
-            self.intermediate_size,
-            self.hidden_size,
+            intermediate_size,
+            hidden_size,
             bias=False,
-            quant_config=quant_config,
+            quant_config=aphrodite_config.quant_config,
             prefix=f"{prefix}.down_proj",
         )
 
@@ -187,70 +226,70 @@ class OlmoMLP(nn.Module):
         return x
 
 
-class OlmoDecoderLayer(nn.Module):
+class Olmo3DecoderLayer(nn.Module):
     """
     This is a typical transformer block where the output is
     computed as `MLP(LN(x + Attention(LN(x))))`
     (plus another skip connection).
     """
 
-    def __init__(
-        self,
-        config: OlmoConfig,
-        cache_config: CacheConfig | None = None,
-        quant_config: QuantizationConfig | None = None,
-        prefix: str = "",
-    ):
+    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
+        config = aphrodite_config.model_config.hf_config
+        assert isinstance(config, Olmo3Config)
         # Attention block.
-        self.self_attn = OlmoAttention(config, cache_config, quant_config, prefix=f"{prefix}.self_attn")
+        self.self_attn = Olmo3Attention(aphrodite_config=aphrodite_config, prefix=f"{prefix}.self_attn")
 
         # MLP block.
-        self.mlp = OlmoMLP(config, quant_config, prefix=f"{prefix}.mlp")
+        self.mlp = Olmo3MLP(aphrodite_config=aphrodite_config, prefix=f"{prefix}.mlp")
 
         # LayerNorm
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, bias=False)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, bias=False)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.post_feedforward_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
+    ) -> torch.Tensor:
         # Attention block.
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
         hidden_states = self.self_attn(positions, hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = hidden_states + residual
 
         # MLP block.
         residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_feedforward_layernorm(hidden_states)
         hidden_states = residual + hidden_states
         return hidden_states
 
 
 @support_torch_compile
-class OlmoModel(nn.Module):
+class Olmo3Model(nn.Module):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
+        self.config = aphrodite_config.model_config.hf_config
+        assert isinstance(self.config, Olmo3Config)
 
-        config = aphrodite_config.model_config.hf_config
-        cache_config = aphrodite_config.cache_config
-        quant_config = aphrodite_config.quant_config
-
-        self.config = config
-
-        self.embed_tokens = VocabParallelEmbedding(config.vocab_size, config.hidden_size)
+        self.embed_tokens = VocabParallelEmbedding(
+            self.config.vocab_size,
+            self.config.hidden_size,
+            prefix=f"{prefix}.embed_tokens",
+        )
         self.start_layer, self.end_layer, self.layers = make_layers(
-            config.num_hidden_layers,
-            lambda prefix: OlmoDecoderLayer(config, cache_config, quant_config, prefix=prefix),
+            self.config.num_hidden_layers,
+            lambda prefix: Olmo3DecoderLayer(aphrodite_config=aphrodite_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
-        self.norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False, bias=False)
+        self.norm = RMSNorm(
+            self.config.hidden_size,
+            eps=self.config.rms_norm_eps,
+        )
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
-            ["hidden_states"], config.hidden_size
+            ["hidden_states"], self.config.hidden_size
         )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -270,11 +309,15 @@ class OlmoModel(nn.Module):
         if get_pp_group().is_first_rank:
             if inputs_embeds is not None:
                 hidden_states = inputs_embeds
+            # Get embeddings of input.
+            # shape: (batch_size, seq_len, d_model)
             else:
-                hidden_states = self.embed_input_ids(input_ids)
+                hidden_states = self.embed_tokens(input_ids)
+
         else:
             assert intermediate_tensors is not None
             hidden_states = intermediate_tensors["hidden_states"]
+            assert isinstance(hidden_states, torch.Tensor)
 
         # Apply blocks one-by-one.
         for layer in islice(self.layers, self.start_layer, self.end_layer):
@@ -283,13 +326,14 @@ class OlmoModel(nn.Module):
 
         if not get_pp_group().is_last_rank:
             return IntermediateTensors({"hidden_states": hidden_states})
+
         # Apply final layer norm.
         # shape: (batch_size, seq_len or 1, d_model)
         hidden_states = self.norm(hidden_states)
         return hidden_states
 
 
-class OlmoForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
+class Olmo3ForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
     """
     Extremely barebones HF model wrapper.
     """
@@ -312,16 +356,16 @@ class OlmoForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
         config = aphrodite_config.model_config.hf_config
-        quant_config = aphrodite_config.quant_config
+        assert isinstance(config, Olmo3Config)
         self.config = config
-        self.model = OlmoModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
+        self.model = Olmo3Model(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
         else:
             self.lm_head = ParallelLMHead(
                 config.vocab_size,
                 config.hidden_size,
-                quant_config=quant_config,
+                quant_config=aphrodite_config.quant_config,
                 prefix=maybe_prefix(prefix, "lm_head"),
             )
         self.logits_processor = LogitsProcessor(config.vocab_size)
@@ -352,7 +396,7 @@ class OlmoForCausalLM(nn.Module, SupportsPP, SupportsLoRA):
         logits = self.logits_processor(self.lm_head, hidden_states)
         return logits
 
-    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
+    def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
         loader = AutoWeightsLoader(
             self,
             skip_prefixes=(["lm_head.weight"] if self.config.tie_word_embeddings else None),
