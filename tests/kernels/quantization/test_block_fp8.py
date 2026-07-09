@@ -100,9 +100,7 @@ def test_per_token_group_quant_fp8(num_tokens, d, dtype, group_size, column_majo
         # mismatch. Observed worst case across all parameter combos: 0.049%,
         # max ULP = 1.
         ulp = fp8_ulp_distance(out, ref_out)
-        assert (ulp <= 1).all(), (
-            f"FP8 mismatch > 1 ULP: {int((ulp > 1).sum())} elements"
-        )
+        assert (ulp <= 1).all(), f"FP8 mismatch > 1 ULP: {int((ulp > 1).sum())} elements"
         assert float((ulp > 0).float().mean()) < 5e-4, (
             f"Too many 1-ULP mismatches: {int((ulp > 0).sum())}/{ulp.numel()}"
         )

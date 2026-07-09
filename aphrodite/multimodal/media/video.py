@@ -40,8 +40,7 @@ class VideoMediaIO(MediaIO[tuple[npt.NDArray, dict[str, Any]]]):
                     static_val = (default_kwargs or {}).get(key)
                     if static_val != requested:
                         logger.warning_once(
-                            "Stripping request-level %s=%r: GPU video "
-                            "backend not configured at startup.",
+                            "Stripping request-level %s=%r: GPU video backend not configured at startup.",
                             key,
                             requested,
                         )

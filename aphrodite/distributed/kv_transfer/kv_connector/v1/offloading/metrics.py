@@ -83,10 +83,7 @@ def get_connector_metric_definitions() -> dict[str, OffloadingMetricMetadata]:
             buckets=TRANSFER_SIZE_BUCKETS,
         ),
         _ConnectorMetricName.LOOKUP_SYNC_DELAY: OffloadingHistogramMetadata(
-            documentation=(
-                "Histogram of the time spent in a single offload lookup call, "
-                "in seconds."
-            ),
+            documentation=("Histogram of the time spent in a single offload lookup call, in seconds."),
             buckets=(
                 0.00001,
                 0.00005,
@@ -122,9 +119,7 @@ def get_connector_metric_definitions() -> dict[str, OffloadingMetricMetadata]:
             ),
         ),
         _ConnectorMetricName.ALLOCATION_FAILURE: OffloadingCounterMetadata(
-            documentation=(
-                "Number of KV offload store allocation attempts that failed."
-            ),
+            documentation=("Number of KV offload store allocation attempts that failed."),
         ),
     }
 

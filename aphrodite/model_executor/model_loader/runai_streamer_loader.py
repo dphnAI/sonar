@@ -46,26 +46,14 @@ class RunaiModelStreamerLoader(BaseModelLoader):
             env_updates: dict[str, str] = {}
             if "concurrency" in extra_config:
                 concurrency = extra_config["concurrency"]
-                if (
-                    isinstance(concurrency, bool)
-                    or not isinstance(concurrency, int)
-                    or concurrency <= 0
-                ):
-                    raise ValueError(
-                        f"concurrency must be a positive integer, got {concurrency!r}"
-                    )
+                if isinstance(concurrency, bool) or not isinstance(concurrency, int) or concurrency <= 0:
+                    raise ValueError(f"concurrency must be a positive integer, got {concurrency!r}")
                 env_updates["RUNAI_STREAMER_CONCURRENCY"] = str(concurrency)
 
             if "memory_limit" in extra_config:
                 memory_limit = extra_config["memory_limit"]
-                if (
-                    isinstance(memory_limit, bool)
-                    or not isinstance(memory_limit, int)
-                    or memory_limit < -1
-                ):
-                    raise ValueError(
-                        f"memory_limit must be an integer >= -1, got {memory_limit!r}"
-                    )
+                if isinstance(memory_limit, bool) or not isinstance(memory_limit, int) or memory_limit < -1:
+                    raise ValueError(f"memory_limit must be an integer >= -1, got {memory_limit!r}")
                 env_updates["RUNAI_STREAMER_MEMORY_LIMIT"] = str(memory_limit)
             os.environ.update(env_updates)
 

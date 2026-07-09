@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 """Base classes for the Transformers backend fusers."""
 
@@ -85,10 +86,7 @@ class StackedFuser(BaseFuser):
 
     def info(self, name: str) -> str:
         sources = " + ".join(shard for shard, _ in self.shards)
-        return (
-            f"Fused: {sources} ({name}: {self.source_cls}) -> "
-            f"{self.merged_name} ({self.merged_cls})"
-        )
+        return f"Fused: {sources} ({name}: {self.source_cls}) -> {self.merged_name} ({self.merged_cls})"
 
     @property
     @abstractmethod
@@ -104,9 +102,7 @@ class StackedFuser(BaseFuser):
         so only this exact layer is remapped, never a same-named projection
         elsewhere (e.g. an unfused MoE expert's `gate_proj`)."""
         merged = maybe_prefix(prefix, self.merged_name)
-        return {
-            maybe_prefix(prefix, name): (merged, shard) for name, shard in self.shards
-        }
+        return {maybe_prefix(prefix, name): (merged, shard) for name, shard in self.shards}
 
     @property
     def packed_modules_mapping(self) -> dict[str, list[str]]:

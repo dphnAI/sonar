@@ -435,9 +435,7 @@ def _setup_tilelang_jit_hook() -> None:
 
     jit_kernel_cls = getattr(tilelang_kernel, "JITKernel", None)
     if jit_kernel_cls is None:
-        logger.debug(
-            "TileLang JITKernel is unavailable; skipping TileLang JIT monitor."
-        )
+        logger.debug("TileLang JITKernel is unavailable; skipping TileLang JIT monitor.")
         return
 
     try:
@@ -471,14 +469,10 @@ def _setup_tilelang_jit_hook() -> None:
             try:
                 detail = None
                 if _verbose:
-                    detail = _format_verbose_tilelang_compile_details(
-                        self, args, kwargs, cache_key
-                    )
+                    detail = _format_verbose_tilelang_compile_details(self, args, kwargs, cache_key)
                 func = getattr(self, "func", None)
                 orig_func = getattr(func, "orig_func", None)
-                _log_tilelang_jit_compile(
-                    _tilelang_kernel_name(orig_func or func), detail
-                )
+                _log_tilelang_jit_compile(_tilelang_kernel_name(orig_func or func), detail)
                 return original_call(self, *args, **kwargs)
             finally:
                 _tilelang_jitimpl_compile_depth -= 1

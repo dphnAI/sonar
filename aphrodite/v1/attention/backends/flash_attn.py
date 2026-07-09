@@ -845,18 +845,14 @@ class FlashAttentionImpl(AttentionImpl):
                     # store (-1, -1) -> sw stays None / 0.
                     sw_val = (
                         1 + sliding_window_size[0]
-                        if sliding_window_size is not None
-                        and sliding_window_size[0] >= 0
+                        if sliding_window_size is not None and sliding_window_size[0] >= 0
                         else None
                     )
                     # Gemma4: also clamp the bidirectional block to the
                     # sliding window when the layer opts in
                     # (mm_prefix_clamp_sliding_window flag from PR #47217).
                     mm_clamp_sw = 0
-                    if (
-                        getattr(layer, "mm_prefix_clamp_sliding_window", False)
-                        and sw_val is not None
-                    ):
+                    if getattr(layer, "mm_prefix_clamp_sliding_window", False) and sw_val is not None:
                         mm_clamp_sw = sw_val
                     mm_mask_mod = _make_mm_prefix_mask_mod(
                         max_ranges,

@@ -449,9 +449,7 @@ class ZmqEventPublisher(EventPublisher):
         for seq, buf in self._buffer:
             if seq >= start_seq:
                 # Subscriber receives (topic, seq_bytes, payload)
-                self._replay.send_multipart(
-                    (client_id, b"", self._topic_bytes, seq.to_bytes(8, "big"), buf)
-                )
+                self._replay.send_multipart((client_id, b"", self._topic_bytes, seq.to_bytes(8, "big"), buf))
         # Send end of sequence marker
         self._replay.send_multipart((client_id, b"", b"", self.END_SEQ, b""))
 

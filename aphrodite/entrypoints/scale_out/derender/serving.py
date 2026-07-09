@@ -97,11 +97,7 @@ class ServingDerender(BaseServing):
                             f"max_model_len ({max_model_len})."
                         )
                     for entry in choice.logprobs.content:
-                        if (
-                            max_logprobs >= 0
-                            and entry.top_logprobs
-                            and len(entry.top_logprobs) > max_logprobs
-                        ):
+                        if max_logprobs >= 0 and entry.top_logprobs and len(entry.top_logprobs) > max_logprobs:
                             return self.create_error_response(
                                 f"top_logprobs count "
                                 f"({len(entry.top_logprobs)}) in "

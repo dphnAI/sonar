@@ -120,9 +120,7 @@ class ShortConv(MambaBase, CustomOp):
             return
 
         conv_state = (
-            self.kv_cache[0]
-            if is_conv_state_dim_first()
-            else self.kv_cache[0].transpose(-1, -2)
+            self.kv_cache[0] if is_conv_state_dim_first() else self.kv_cache[0].transpose(-1, -2)
         )  # (num_blocks, dim, state_len)
 
         num_prefills = attn_metadata.num_prefills

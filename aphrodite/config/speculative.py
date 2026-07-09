@@ -561,9 +561,7 @@ class SpeculativeConfig:
         if not callable(target_hf_overrides):
             return SpeculativeConfig.hf_config_override
 
-        return functools.partial(
-            SpeculativeConfig._apply_composed_hf_override, target_hf_overrides
-        )
+        return functools.partial(SpeculativeConfig._apply_composed_hf_override, target_hf_overrides)
 
     def __post_init__(self):
         # Note: "method" is a new parameter that helps to extend the

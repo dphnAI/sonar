@@ -569,9 +569,7 @@ class ModelOptFp8PcPtLinearMethod(LinearMethodBase):
         )
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        weight, weight_scale, _ = process_fp8_weight_channel_strategy(
-            layer.weight, layer.weight_scale.data
-        )
+        weight, weight_scale, _ = process_fp8_weight_channel_strategy(layer.weight, layer.weight_scale.data)
         layer.weight = Parameter(weight.t(), requires_grad=False)
         layer.weight_scale = Parameter(weight_scale, requires_grad=False)
         self.fp8_linear.process_weights_after_loading(layer)

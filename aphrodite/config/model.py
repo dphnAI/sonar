@@ -818,8 +818,7 @@ class ModelConfig:
         if not pending:
             return
         logger.warning_once(
-            "Applying model_class_overrides %s. This is intended for "
-            "development/debugging.",
+            "Applying model_class_overrides %s. This is intended for development/debugging.",
             str(self.model_class_overrides),
         )
         for arch, target in pending:

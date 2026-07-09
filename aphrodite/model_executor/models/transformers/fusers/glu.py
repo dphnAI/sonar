@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 """GLU projection fuser: `act(gate(x)) * up(x)` -> a fused gate/up linear."""
 
@@ -75,9 +76,7 @@ class GLUFuser(StackedFuser):
         )
 
     @classmethod
-    def _get_glu_nodes(
-        cls, graph: fx.Graph, module: nn.Module
-    ) -> tuple[fx.Node, fx.Node, fx.Node, fx.Node] | None:
+    def _get_glu_nodes(cls, graph: fx.Graph, module: nn.Module) -> tuple[fx.Node, fx.Node, fx.Node, fx.Node] | None:
         """Search graph for the GLU pattern `act(gate(x)) * up(x)`."""
         for mul in graph.nodes:
             if (
@@ -128,9 +127,7 @@ class GLUFuser(StackedFuser):
         gate = module.get_submodule(gate_node.target)
         up = module.get_submodule(up_node.target)
         # Shapes must be compatible for a single merged GEMM.
-        if gate.in_features == up.in_features and (gate.bias is None) == (
-            up.bias is None
-        ):
+        if gate.in_features == up.in_features and (gate.bias is None) == (up.bias is None):
             predicate = lambda n: is_linear(n, module) and peel(n.args[0]) is mul_node
             down_node = find_node(graph, predicate)
             return cls(
@@ -211,8 +208,6 @@ class GLUFuser(StackedFuser):
         if self.down_name is not None:
             down_prefix = maybe_prefix(prefix, self.down_name)
             down = module.get_submodule(self.down_name)
-            new_down = replace_linear_class(
-                down, "rowwise", quant_config, prefix=down_prefix
-            )
+            new_down = replace_linear_class(down, "rowwise", quant_config, prefix=down_prefix)
             setattr(module, self.down_name, new_down)
             log_replacement(down_prefix, down, new_down)

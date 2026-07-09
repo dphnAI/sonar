@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 """RMSNorm fuser: detect the norm structurally and swap in Aphrodite's fused RMSNorm."""
 
@@ -150,9 +151,7 @@ class RMSNormFuser(BaseFuser):
         if rsqrt is None:
             return None
         # The `x * rsqrt(...)` normalize multiply.
-        normalize = find_node(
-            graph, lambda n: is_op(n, "mul") and rsqrt in map(peel, n.args)
-        )
+        normalize = find_node(graph, lambda n: is_op(n, "mul") and rsqrt in map(peel, n.args))
         if normalize is None:
             return None
         # An optional later `weight * normalized` (or `(1 + weight) * normalized`).
@@ -197,9 +196,7 @@ class RMSNormFuser(BaseFuser):
     ) -> nn.Module:
         """Fuse the matched RMSNorm pattern into a Aphrodite fused RMSNorm CustomOp."""
         weight = getattr(module, "weight", None)
-        hidden_size = (
-            weight.size(0) if weight is not None else model_config.get_hidden_size()
-        )
+        hidden_size = weight.size(0) if weight is not None else model_config.get_hidden_size()
         graph = trace(module)
         eps = self._eps_from_graph(graph) if graph is not None else None
         if eps is None:

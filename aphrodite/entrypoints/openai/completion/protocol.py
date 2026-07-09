@@ -557,12 +557,7 @@ class CompletionRequest(OpenAIBaseModel):
         max_prompts = envs.APHRODITE_MAX_COMPLETION_PROMPTS
 
         prompt = data.get("prompt")
-        if (
-            isinstance(prompt, list)
-            and len(prompt) > 0
-            and not is_list_of(prompt, int)
-            and len(prompt) > max_prompts
-        ):
+        if isinstance(prompt, list) and len(prompt) > 0 and not is_list_of(prompt, int) and len(prompt) > max_prompts:
             raise APHRODITEValidationError(
                 f"prompt list length {len(prompt)} exceeds the maximum "
                 f"allowed count of {max_prompts}. To increase this "

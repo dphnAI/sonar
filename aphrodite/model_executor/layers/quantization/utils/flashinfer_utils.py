@@ -12,8 +12,9 @@ if TYPE_CHECKING:
     # circular import: the fused_moe package imports this module during its own
     # initialization, so importing MoEActivation at module scope deadlocks when
     # flashinfer_utils is imported first.
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
     from flashinfer.fused_moe.core import ActivationType
+
+    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 
 logger = init_logger(__name__)
 
@@ -23,8 +24,9 @@ def activation_to_flashinfer_int(activation: "MoEActivation") -> int:
 
 
 def activation_to_flashinfer_type(activation: "MoEActivation") -> "ActivationType":
-    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
     from flashinfer.fused_moe.core import ActivationType
+
+    from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 
     # silu and gelu are mapped to their gated versions SwiGLU and GeGLU respectively
     ACTIVATION_TO_FI_ACTIVATION = {
