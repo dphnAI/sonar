@@ -335,7 +335,7 @@ class ROCMAiterMLASparseMetadata(AttentionMetadata):
 
 @dataclass
 class ROCMAiterMLASparseMetadataBuilder(AttentionMetadataBuilder[ROCMAiterMLASparseMetadata]):
-    _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
+    _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
 
     def __init__(
         self,
@@ -350,6 +350,9 @@ class ROCMAiterMLASparseMetadataBuilder(AttentionMetadataBuilder[ROCMAiterMLASpa
         parallel_config = aphrodite_config.parallel_config
         self.device = device
         max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+
+        self.aphrodite_config = aphrodite_config
+        self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
 
         self.num_heads = self.model_config.get_num_attention_heads(parallel_config)
         self.mla_dims = get_mla_dims(self.model_config)
