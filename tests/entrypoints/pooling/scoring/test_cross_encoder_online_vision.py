@@ -87,7 +87,7 @@ def assert_score(actual: float, expected: float, backend: str, label: str):
 
 query = "A cat standing in the snow."
 document = "This product was excellent and exceeded my expectations."
-image_url = "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/cat_snow.jpg"
+image_url = "https://vllm-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/cat_snow.jpg"
 documents = [
     {
         "type": "text",

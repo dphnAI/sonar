@@ -20,14 +20,14 @@ assert vlm2vec_jinja_path.exists()
 
 # Test different image extensions (JPG/PNG) and formats (gray/RGB/RGBA)
 TEST_IMAGE_ASSETS = [
-    "2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",  # "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-    "Grayscale_8bits_palette_sample_image.png",  # "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/Grayscale_8bits_palette_sample_image.png",
-    "1280px-Venn_diagram_rgb.svg.png",  # "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/1280px-Venn_diagram_rgb.svg.png",
-    "RGBA_comp.png",  # "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/RGBA_comp.png",
+    "2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",  # "https://vllm-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+    "Grayscale_8bits_palette_sample_image.png",  # "https://vllm-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/Grayscale_8bits_palette_sample_image.png",
+    "1280px-Venn_diagram_rgb.svg.png",  # "https://vllm-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/1280px-Venn_diagram_rgb.svg.png",
+    "RGBA_comp.png",  # "https://vllm-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/RGBA_comp.png",
 ]
 
 input_text = "The best thing about Aphrodite is that it supports many different models"
-image_url = "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/cat_snow.jpg"
+image_url = "https://vllm-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/cat_snow.jpg"
 image_base64 = {"url": encode_image_url(fetch_image(image_url))}
 
 
@@ -129,7 +129,7 @@ def test_chat_image_base64_request(server: RemoteOpenAIServer, model_name: str):
 
 @pytest.mark.parametrize("model_name", [MODEL_NAME])
 def test_chat_image_with_media_io_kwargs(server: RemoteOpenAIServer, model_name: str):
-    rgba_image_url = "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/RGBA_comp.png"
+    rgba_image_url = "https://vllm-public-assets.s3.us-west-2.amazonaws.com/vision_model_images/RGBA_comp.png"
     messages = [
         {
             "role": "user",
