@@ -372,3 +372,29 @@ def test_sampler_bad_words(device: str, batch_size: int, bad_words_lengths: tupl
                 assert logits_for_req[token_id] == -float("inf")
             else:
                 assert logits_for_req[token_id] != -float("inf")
+
+
+def test_subset_sampling_metadata_handles_empty_output_token_ids():
+    """Regression for an IndexError in _subset_sampling_metadata.
+
+    Mixed temperature_last across the batch makes the sampler split the batch
+    and call _subset_sampling_metadata with full-batch indices. When no request
+    needs per-request output tokens (penalties / DRY / no_repeat_ngram /
+    bad_words / output-token logitsprocs / thinking-budget all off),
+    output_token_ids is the empty list, and indexing it raised
+    "IndexError: list index out of range". The subset must keep it empty and
+    still index it correctly when it is populated.
+    """
+    device = torch.device("cpu")
+    sampler = Sampler()
+    sampling_metadata = _create_default_sampling_metadata(NUM_OUTPUT_TOKENS, 4, VOCAB_SIZE, device)
+    sampling_metadata.temperature_last = [True, False, True, False]
+
+    sampling_metadata.output_token_ids = []
+    subset = sampler._subset_sampling_metadata(sampling_metadata, [1, 3])
+    assert subset.output_token_ids == []
+    assert subset.temperature_last == [False, False]
+
+    sampling_metadata.output_token_ids = [[10], [20], [30], [40]]
+    subset = sampler._subset_sampling_metadata(sampling_metadata, [1, 3])
+    assert subset.output_token_ids == [[20], [40]]

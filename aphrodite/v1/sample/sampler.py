@@ -386,7 +386,11 @@ class Sampler(nn.Module):
             frequency_penalties=maybe_index_tensor(sampling_metadata.frequency_penalties),
             presence_penalties=maybe_index_tensor(sampling_metadata.presence_penalties),
             repetition_penalties=maybe_index_tensor(sampling_metadata.repetition_penalties),
-            output_token_ids=[sampling_metadata.output_token_ids[i] for i in indices],
+            output_token_ids=(
+                [sampling_metadata.output_token_ids[i] for i in indices]
+                if sampling_metadata.output_token_ids
+                else []
+            ),
             allowed_token_ids_mask=maybe_index_tensor(sampling_metadata.allowed_token_ids_mask),
             bad_words_token_ids=reindex_dict_nested_list(sampling_metadata.bad_words_token_ids),
             logit_bias=reindex_dict_float_map(sampling_metadata.logit_bias),
