@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 """MoE fuser: route an HF MoE block through `FusedMoE` with Aphrodite's own routing."""
 
@@ -71,12 +72,7 @@ def _returns_tuple(cls: type[nn.Module]) -> bool:
 def _is_scalar_gate(module: nn.Module) -> bool:
     """A linear projecting to a single logit (the shared-expert sigmoid gate)."""
     weight = getattr(module, "weight", None)
-    return (
-        isinstance(module, nn.Linear)
-        and weight is not None
-        and weight.ndim == 2
-        and weight.shape[0] == 1
-    )
+    return isinstance(module, nn.Linear) and weight is not None and weight.ndim == 2 and weight.shape[0] == 1
 
 
 def _reaches(node: fx.Node, key: str) -> set[fx.Node]:
@@ -144,11 +140,7 @@ class MoEBlockFuser:
         if topk is None:
             return None
         # Exactly one scoring op upstream of the top-k, fed (transitively) by a linear.
-        scorers = [
-            n
-            for n in _reaches(topk, "all_input_nodes")
-            if is_op(n, "softmax") or is_op(n, "sigmoid")
-        ]
+        scorers = [n for n in _reaches(topk, "all_input_nodes") if is_op(n, "softmax") or is_op(n, "sigmoid")]
         if len(scorers) != 1:
             return None
         scorer = scorers[0]
@@ -157,9 +149,7 @@ class MoEBlockFuser:
         return "softmax" if is_op(scorer, "softmax") else "sigmoid"
 
     @staticmethod
-    def _match_shared_experts(
-        graph: fx.Graph, experts: str
-    ) -> tuple[str | None, str | None]:
+    def _match_shared_experts(graph: fx.Graph, experts: str) -> tuple[str | None, str | None]:
         """Detects the shared expert and its optional gate by dataflow."""
         experts_predicate = lambda n: n.op == "call_module" and n.target == experts
         if (experts_node := find_node(graph, experts_predicate)) is None:
@@ -180,9 +170,7 @@ class MoEBlockFuser:
                 (
                     src
                     for n in cone
-                    if is_op(n, "sigmoid")
-                    and isinstance(src := peel(n.args[0]), fx.Node)
-                    and src in modules
+                    if is_op(n, "sigmoid") and isinstance(src := peel(n.args[0]), fx.Node) and src in modules
                 ),
                 None,
             )
@@ -207,21 +195,13 @@ class MoEBlockFuser:
             return None
         # Shared expert: a child the block adds to the experts' output.
         shared_name = shared_gate_name = None
-        others = [
-            n
-            for n, _ in moe_block.named_children()
-            if n not in {experts_name, gate_name}
-        ]
+        others = [n for n, _ in moe_block.named_children() if n not in {experts_name, gate_name}]
         if others:
             graph = trace(moe_block)
             if graph is None:
                 return None
-            shared_name, shared_gate_name = cls._match_shared_experts(
-                graph, experts_name
-            )
-            if shared_gate_name is not None and not _is_scalar_gate(
-                getattr(moe_block, shared_gate_name)
-            ):
+            shared_name, shared_gate_name = cls._match_shared_experts(graph, experts_name)
+            if shared_gate_name is not None and not _is_scalar_gate(getattr(moe_block, shared_gate_name)):
                 return None
         # Fail closed: `rewrite_forward` runs only the experts and the detected
         # shared expert, so any other stateful child would be dropped.
@@ -243,9 +223,7 @@ class MoEBlockFuser:
         setattr(moe_block, self.gate_name, gate)
         return gate
 
-    def shared_experts(
-        self, moe_block: nn.Module, prefix: str
-    ) -> SharedExpertMLP | None:
+    def shared_experts(self, moe_block: nn.Module, prefix: str) -> SharedExpertMLP | None:
         """Build the HF shared expert (and its optional gate)
         as a `SharedExpertMLP` for Aphrodite's fused MoE."""
         if self.shared_name is None:

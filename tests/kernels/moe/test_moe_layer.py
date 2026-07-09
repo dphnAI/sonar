@@ -418,10 +418,7 @@ def visible_devices_have_peer_access(world_size: int) -> bool:
 
     try:
         return all(
-            gpu_p2p_access_check(src, dst)
-            for src in range(world_size)
-            for dst in range(world_size)
-            if src != dst
+            gpu_p2p_access_check(src, dst) for src in range(world_size) for dst in range(world_size) if src != dst
         )
     except RuntimeError:
         return False

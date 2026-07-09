@@ -146,13 +146,8 @@ def _select_flashinfer_allreduce_use_oneshot(
     if device_capability is None:
         max_one_shot_size = None
     else:
-        max_one_shot_size = _FI_ALLREDUCE_ONE_SHOT_MAX_SIZES_MB.get(
-            device_capability, {}
-        ).get(world_size)
-    return (
-        max_one_shot_size is None
-        or current_tensor_size <= max_one_shot_size * MiB
-    )
+        max_one_shot_size = _FI_ALLREDUCE_ONE_SHOT_MAX_SIZES_MB.get(device_capability, {}).get(world_size)
+    return max_one_shot_size is None or current_tensor_size <= max_one_shot_size * MiB
 
 
 if flashinfer_comm is not None:
@@ -264,8 +259,7 @@ if flashinfer_comm is not None:
             # the end for the one-shot path; the two-shot path is synchronized
             # and keeps the early completion. Related one-shot instability in
             # the same kernel: flashinfer-ai/flashinfer#1223.
-            trigger_completion_at_end=(use_oneshot is True)
-            or num_tokens > PDL_ADVANCE_LAUNCH_TOKENS,
+            trigger_completion_at_end=(use_oneshot is True) or num_tokens > PDL_ADVANCE_LAUNCH_TOKENS,
         )
 
     def call_trtllm_fused_allreduce_norm_fake(

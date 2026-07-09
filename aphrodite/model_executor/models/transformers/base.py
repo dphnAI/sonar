@@ -178,9 +178,7 @@ class Base(
             embed_scale = getattr(input_embeddings, "embed_scale", None)
             if embed_scale is not None:
                 # Some models scale embeddings inside the input embedding layer
-                new_input_embeddings = ScaledVocabParallelEmbedding(
-                    **embedding_kwargs, embed_scale=float(embed_scale)
-                )
+                new_input_embeddings = ScaledVocabParallelEmbedding(**embedding_kwargs, embed_scale=float(embed_scale))
             else:
                 new_input_embeddings = VocabParallelEmbedding(**embedding_kwargs)
             self.model.set_input_embeddings(new_input_embeddings)

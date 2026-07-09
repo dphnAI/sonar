@@ -703,10 +703,7 @@ class HunYuanVLMultiModalProcessor(BaseMultiModalProcessor[HunYuanVLProcessingIn
         # HunYuanVLProcessor requires image placeholders wrapped with start/end tokens.
         if mm_data.get("images") is not None and prompt:
             img_tok = hf_processor.image_token
-            wrapped = (
-                f"{hf_processor.image_start_token}{img_tok}"
-                f"{hf_processor.image_end_token}"
-            )
+            wrapped = f"{hf_processor.image_start_token}{img_tok}{hf_processor.image_end_token}"
             if img_tok in prompt and wrapped not in prompt:
                 prompt = prompt.replace(img_tok, wrapped)
         return self.info.ctx.call_hf_processor(

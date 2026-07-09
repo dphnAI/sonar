@@ -675,25 +675,14 @@ class JinaRankingIOProcessor(LateInteractionIOProcessor, JinaRankingIOProcessorM
     ) -> Sequence[EngineInput]:
         queries = self.ensure_str(scoring_data.data_1)
         docs = self.ensure_str(scoring_data.data_2)
-        chat_template_kwargs = (
-            prompt_extras.get("chat_template_kwargs") if prompt_extras else None
-        )
-        instruction = (
-            chat_template_kwargs.get("instruction") if chat_template_kwargs else None
-        )
+        chat_template_kwargs = prompt_extras.get("chat_template_kwargs") if prompt_extras else None
+        instruction = chat_template_kwargs.get("instruction") if chat_template_kwargs else None
 
         if len(queries) == 1:
-            prompts = [
-                self.format_docs_prompts_func(
-                    query=queries[0], docs=docs, instruction=instruction
-                )
-            ]
+            prompts = [self.format_docs_prompts_func(query=queries[0], docs=docs, instruction=instruction)]
         else:
             prompts = [
-                self.format_docs_prompts_func(
-                    query=q, docs=[d], instruction=instruction
-                )
-                for q, d in zip(queries, docs)
+                self.format_docs_prompts_func(query=q, docs=[d], instruction=instruction) for q, d in zip(queries, docs)
             ]
 
         return self._preprocess_cmpl_offline(prompts=prompts, tok_params=tok_params, prompt_extras=prompt_extras)

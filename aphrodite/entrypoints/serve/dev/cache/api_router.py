@@ -38,9 +38,7 @@ async def reset_prefix_cache(
     """
     logger.info("Resetting prefix cache...")
 
-    success = await engine_client(raw_request).reset_prefix_cache(
-        reset_running_requests, reset_external
-    )
+    success = await engine_client(raw_request).reset_prefix_cache(reset_running_requests, reset_external)
     return JSONResponse(content={"success": bool(success)})
 
 

@@ -33,9 +33,7 @@ def dynamo_reset():
     yield
 
 
-def _cpu_bgmv_shrink(
-    inputs, lora_weight, output, seq_len_tensor, lora_indices, scaling=1.0
-):
+def _cpu_bgmv_shrink(inputs, lora_weight, output, seq_len_tensor, lora_indices, scaling=1.0):
     """Memory-efficient shrink reference: per-LoRA matmul loop on CPU."""
     exploded = torch.repeat_interleave(lora_indices, seq_len_tensor)
     for lid in exploded.unique():

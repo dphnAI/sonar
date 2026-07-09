@@ -126,9 +126,7 @@ def test_non_rms_norms_are_not_matched(cls):
     assert not isinstance(get_fuser(module), RMSNormFuser)
 
 
-@pytest.mark.parametrize(
-    "cls", [GatedRMSNorm, GatedFusedRMSNorm, UntraceableGatedRMSNorm]
-)
+@pytest.mark.parametrize("cls", [GatedRMSNorm, GatedFusedRMSNorm, UntraceableGatedRMSNorm])
 def test_gated_rms_norm_is_not_fused(cls):
     with torch.device("meta"):
         assert not isinstance(get_fuser(cls()), RMSNormFuser)
@@ -142,9 +140,7 @@ def test_gated_rms_norm_is_not_fused(cls):
         (WeightlessRMSNorm, "RMSNorm", False),
     ],
 )
-def test_rms_norm_builds_aphrodite_class(
-    cls, expected, zero_centered, default_aphrodite_config
-):
+def test_rms_norm_builds_aphrodite_class(cls, expected, zero_centered, default_aphrodite_config):
     from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm as AphroditeGemmaRMSNorm
     from aphrodite.model_executor.layers.layernorm import RMSNorm as AphroditeRMSNorm
 
@@ -163,9 +159,7 @@ def test_rms_norm_builds_aphrodite_class(
     assert isinstance(built, types_by_name[expected])
     assert isinstance(built, TPAwareNormMixin)  # fused norms self-correct under TP
     assert built.variance_epsilon == module.variance_epsilon
-    assert isinstance(built.weight, nn.Parameter) == (
-        getattr(module, "weight", None) is not None
-    )
+    assert isinstance(built.weight, nn.Parameter) == (getattr(module, "weight", None) is not None)
 
 
 def test_fused_rms_norm_op_default_eps(default_aphrodite_config):

@@ -271,9 +271,7 @@ class RequestOffloadState:
         for group_state, new_blocks in zip(self.group_states, new_block_id_groups):
             group_state.block_ids.extend(new_blocks)
 
-    def storable_blocks(
-        self, group_config: "GroupOffloadConfig", num_offloadable_tokens: int
-    ) -> int:
+    def storable_blocks(self, group_config: "GroupOffloadConfig", num_offloadable_tokens: int) -> int:
         """Number of leading offloaded blocks eligible for store.
 
         For eagle/MTP groups the volatile trailing block of the offloadable
@@ -842,9 +840,7 @@ class OffloadingConnectorScheduler:
             # or unreachable by the load path's alignment constraints.
             new_offload_keys: list[OffloadKey] = []
             for group_config, group_state in zip(self.config.kv_group_configs, req_status.group_states):
-                num_blocks = req_status.storable_blocks(
-                    group_config, num_offloadable_tokens
-                )
+                num_blocks = req_status.storable_blocks(group_config, num_offloadable_tokens)
 
                 start_block_idx = group_state.next_stored_block_idx
                 if num_blocks <= start_block_idx:
@@ -905,9 +901,7 @@ class OffloadingConnectorScheduler:
             non_sliding_window_block_ids: list[int] = []
             for group_config, group_state in zip(self.config.kv_group_configs, req_status.group_states):
                 is_sliding_window = group_config.sliding_window_size_in_blocks is not None
-                num_blocks = req_status.storable_blocks(
-                    group_config, num_offloadable_tokens
-                )
+                num_blocks = req_status.storable_blocks(group_config, num_offloadable_tokens)
                 start_block_idx = group_state.next_stored_block_idx
                 block_ids = group_state.block_ids
                 num_group_blocks = 0
@@ -936,9 +930,7 @@ class OffloadingConnectorScheduler:
 
                 group_sizes.append(num_group_blocks)
                 block_indices.append(start_gpu_block_idx or 0)
-                group_state.next_stored_block_idx = max(
-                    group_state.next_stored_block_idx, num_blocks
-                )
+                group_state.next_stored_block_idx = max(group_state.next_stored_block_idx, num_blocks)
 
             src_spec = GPULoadStoreSpec(src_block_ids, group_sizes=group_sizes, block_indices=block_indices)
             dst_spec = store_output.store_spec

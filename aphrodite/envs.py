@@ -1534,9 +1534,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # -- skipping memory profiling -- when the fingerprint matches and
     # current free memory >= the recorded baseline.
     # See aphrodite/v1/worker/startup_plan.py.
-    "APHRODITE_ENABLE_STARTUP_PLAN": lambda: bool(
-        int(os.getenv("APHRODITE_ENABLE_STARTUP_PLAN", "0"))
-    ),
+    "APHRODITE_ENABLE_STARTUP_PLAN": lambda: bool(int(os.getenv("APHRODITE_ENABLE_STARTUP_PLAN", "0"))),
     # Valid values are container,code_interpreter,web_search_preview
     # ex APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS=container,code_interpreter
     # If the server_label of your mcp tool is not in this list it will
