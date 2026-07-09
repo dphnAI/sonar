@@ -544,9 +544,7 @@ def build_attn_metadata(
         block_table = block_tables[i]
         slot_mapping = slot_mappings[i]
         # Per-group causal for hybrid drafters (mixed SWA/full attention).
-        group_causal = (
-            causal if isinstance(causal, (bool, torch.Tensor)) else causal.get(i, True)
-        )
+        group_causal = causal if isinstance(causal, (bool, torch.Tensor)) else causal.get(i, True)
 
         common_attn_metadata_extra_kwargs = (
             model_specific_attn_metadata.get_extra_common_attn_kwargs(i, num_reqs)
