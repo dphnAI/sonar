@@ -104,12 +104,8 @@ class SpeechToTextBaseServing(GenerateBaseServing):
         self.default_sampling_params = self.model_config.get_diff_sampling_param()
         self.task_type: Final = task_type
 
-        self.asr_config = self.model_cls.get_speech_to_text_config(
-            self.model_config, task_type
-        )
-        self.streaming_post_processor_cls = (
-            self.model_cls.get_streaming_post_processor_cls()
-        )
+        self.asr_config = self.model_cls.get_speech_to_text_config(self.model_config, task_type)
+        self.streaming_post_processor_cls = self.model_cls.get_streaming_post_processor_cls()
 
         self.enable_force_include_usage = enable_force_include_usage
 
@@ -653,16 +649,10 @@ class SpeechToTextBaseServing(GenerateBaseServing):
                     assert len(res.outputs) == 1
                     output = res.outputs[0]
 
-                    output_text = post_processor.process_delta(
-                        output.text, output.finish_reason is not None
-                    )
+                    output_text = post_processor.process_delta(output.text, output.finish_reason is not None)
 
                     # dont add separator to the first chunk
-                    if (
-                        result_generator is not list_result_generator[0]
-                        and beginning_of_chunk
-                        and output_text
-                    ):
+                    if result_generator is not list_result_generator[0] and beginning_of_chunk and output_text:
                         output_text = separator + output_text
                         beginning_of_chunk = False
 
