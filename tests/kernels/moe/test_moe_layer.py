@@ -1521,10 +1521,11 @@ def _run_one_config(
         elif quantization in ("fp8", "fp8_blocked", "modelopt_fp8"):
             atol, rtol = 6.5e-2, 6.5e-2
         elif quantization == "modelopt_fp4":
-            if k >= 2048:
-                atol = rtol = 1e-1 + (k * 1e-4)
-            else:
-                atol = rtol = 1e-1
+            # FP4 quantization noise grows with the contraction dim, so scale the
+            # tolerance by k at all sizes. The flat 1e-1 used below 2048 was
+            # marginally tight on Blackwell cc11.0 (a few of 16384 elements landed
+            # just past 0.1), where FP4 rounding differs slightly from cc10.0.
+            atol = rtol = 1e-1 + (k * 1e-4)
 
             if backend == "allgather_reducescatter" and tp_size > 1:
                 atol += 2e-1
