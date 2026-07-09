@@ -45,7 +45,6 @@ Aphrodite supports a large variety of generative Transformer models in [Hugging 
 | `OLMoForCausalLM`                 |                   `allenai/OLMo-7B-hf` |
 | `OlmoeForCausalLM`                |             `allenai/OLMoE-1B-7B-0125` |
 | `OrionForCausalLM`                |           `OrionStarAI/Orion-14B-Chat` |
-| `PersimmonForCausalLM`            |              `adept/persimmon-8b-chat` |
 | `PhiForCausalLM`                  |                      `microsoft/phi-2` |
 | `Phi3ForCausalLM`                 | `microsoft/Phi-3-medium-128k-instruct` |
 | `Phi3SmallForCausalLM`            |  `microsoft/Phi-3-small-128k-instruct` |
@@ -84,7 +83,6 @@ On ROCm platforms, Mistral and Mixtral are capped to 4096 max context length due
 | `Blip2ForConditionalGeneration`          |        Image         |                `Salesforce/blip2-opt-6.7b` |
 | `ChameleonForConditionalGeneration`      |        Image         |                    `facebook/chameleon-7b` |
 | `ChatGLMModel`                           |        Image         |                        `THUDM/chatglm3-6b` |
-| `FuyuForCausalLM`                        |        Image         |                            `adept/fuyu-8b` |
 | `InternVLChatModel`                      |        Image         |                   `OpenGVLab/InternVL2-8B` |
 | `LlavaForConditionalGeneration`          |        Image         |                `llava-hf/llava-v1.5-7b-hf` |
 | `LlavaNextForConditionalGeneration`      |        Image         |        `llava-hf/llava-v1.6-mistral-7b-hf` |
