@@ -580,9 +580,7 @@ class KVCacheManager:
         clipped_block_ids: list[list[int]] = []
         for group, ids in zip(self.kv_cache_config.kv_cache_groups, block_ids):
             spec = group.kv_cache_spec
-            if not isinstance(spec, AttentionSpec) or isinstance(
-                spec, (CrossAttentionSpec, EncoderOnlyAttentionSpec)
-            ):
+            if not isinstance(spec, AttentionSpec) or isinstance(spec, (CrossAttentionSpec, EncoderOnlyAttentionSpec)):
                 clipped_block_ids.append(ids)
                 continue
 
