@@ -5025,7 +5025,10 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
 
             if weights_path is not None:
                 self.model_config.model = weights_path
-            weights_iterator = model_loader.get_all_weights(self.model_config, model)
+            # get_all_weights returns (iterator, total_bytes); reload only needs
+            # the iterator (unpacking it also avoids feeding the size int into
+            # load_weights, which then fails to unpack the weights generator).
+            weights_iterator, _ = model_loader.get_all_weights(self.model_config, model)
             weights_iterator = cast(Iterable[tuple[str, torch.Tensor]], weights_iterator)
 
         # begin loading weights
