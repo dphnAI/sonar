@@ -103,16 +103,6 @@ def run_llava_onevision(question, modality):
     return llm, prompt, stop_token_ids
 
 
-# Fuyu
-def run_fuyu(question, modality):
-    assert modality == "image"
-
-    prompt = f"{question}\n"
-    llm = LLM(model="adept/fuyu-8b")
-    stop_token_ids = None
-    return llm, prompt, stop_token_ids
-
-
 # Phi-3-Vision
 def run_phi3v(question, modality):
     assert modality == "image"
@@ -343,7 +333,6 @@ model_example_map = {
     "llava-next": run_llava_next,
     "llava-next-video": run_llava_next_video,
     "llava-onevision": run_llava_onevision,
-    "fuyu": run_fuyu,
     "phi3_v": run_phi3v,
     "paligemma": run_paligemma,
     "chameleon": run_chameleon,
