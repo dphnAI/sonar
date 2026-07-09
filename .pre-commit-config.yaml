@@ -16,15 +16,17 @@ repos:
   rev: v1.43.5
   hooks:
   - id: typos
-    exclude: 'kernels/xqa/cubin/.*'
+    exclude: '(kernels|csrc)/xqa/cubin/.*'
     args: [--force-exclude]
+    require_serial: true
 - repo: https://github.com/pre-commit/mirrors-clang-format
   rev: v21.1.2
   hooks:
   - id: clang-format
-    exclude: 'kernels/(moe/topk_softmax_kernels.cu|quantization/gguf/(ggml-common.h|dequantize.cuh|vecdotq.cuh|mmq.cuh|mmvq.cuh)|flash_mla|hadamard|backup|vmm|xqa)|aphrodite/third_party/.*'
+    exclude: '(kernels|csrc)/(moe/topk_softmax_kernels.cu|quantization/gguf/(ggml-common.h|dequantize.cuh|vecdotq.cuh|mmq.cuh|mmvq.cuh)|quantization/exl3/exllamav3_ext/quant/exl3_kernel_map_samples.cuh|flash_mla|hadamard|backup|vmm|xqa)|aphrodite/third_party/.*'
     types_or: [c++, cuda]
     args: [--style=file, --verbose]
+    require_serial: true
 - repo: https://github.com/DavidAnson/markdownlint-cli2
   rev: v0.21.0
   hooks:
