@@ -178,6 +178,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             "remote_host": params["remote_host"],
             "remote_port": params["remote_port"],
             "remote_tp_size": params["tp_size"],
+            "remote_pp_size": params.get("pp_size", 1),
         }
         self._push_registration_deadlines[request.request_id] = time.perf_counter() + self._push_registration_timeout
         # In push mode D doesn't know P's blocks; P determines them
@@ -227,6 +228,8 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             # serving layer via abort_immediately. To keep P from
             # stranding the prefill blocks, we still register an empty
             # recv so the worker emits a notif that lets P free them.
+            # Seed remote_block_ids so add_new_req_to_recv won't KeyError.
+            params["remote_block_ids"] = ()
             self._reqs_need_recv[request.request_id] = (request, [])
             params["do_remote_prefill"] = False
             return False, None
@@ -271,6 +274,7 @@ class NixlPushConnectorScheduler(NixlBaseConnectorScheduler):
             remote_host=self.side_channel_host,
             remote_port=self.side_channel_port,
             tp_size=self.aphrodite_config.parallel_config.tensor_parallel_size,
+            pp_size=self.aphrodite_config.parallel_config.pipeline_parallel_size,
             remote_num_tokens=remote_num_tokens,
         )
 
