@@ -14,7 +14,7 @@ MAXIMUM_VIDEOS = 1
 
 HF_OVERRIDES = {"architectures": ["Qwen2_5_VLForSequenceClassification"]}
 input_text = "This product was excellent and exceeded my expectations"
-image_url = "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/cat_snow.jpg"
+image_url = "https://vllm-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/cat_snow.jpg"
 image_base64 = {"url": encode_image_url(fetch_image(image_url))}
 video_url = "https://www.bogotobogo.com/python/OpenCV_Python/images/mean_shift_tracking/slow_traffic_small.mp4"
 

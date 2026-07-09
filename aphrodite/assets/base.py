@@ -7,7 +7,7 @@ from pathlib import Path
 import aphrodite.envs as envs
 from aphrodite.connections import global_http_connection
 
-APHRODITE_S3_BUCKET_URL = "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com"
+APHRODITE_S3_BUCKET_URL = "https://vllm-public-assets.s3.us-west-2.amazonaws.com"
 
 
 def get_cache_dir() -> Path:
@@ -21,7 +21,7 @@ def get_cache_dir() -> Path:
 @lru_cache
 def get_aphrodite_public_assets(filename: str, s3_prefix: str | None = None) -> Path:
     """
-    Download an asset file from `s3://aphrodite-public-assets`
+    Download an asset file from `s3://vllm-public-assets`
     and return the path to the downloaded file.
     """
     asset_directory = get_cache_dir() / "aphrodite_public_assets"

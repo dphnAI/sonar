@@ -75,7 +75,7 @@ def test_gemma_multimodal(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": "https://aphrodite-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/red_chair.jpg"
+                        "url": "https://vllm-public-assets.s3.us-west-2.amazonaws.com/multimodal_asset/red_chair.jpg"
                     },
                 },
                 {"type": "text", "text": "A fine 19th century piece of furniture."},
