@@ -1206,7 +1206,7 @@ tokenizers==0.22.2
     #   -r requirements/test/../common.txt
     #   -r requirements/test/cuda.in
     #   transformers
-torch==2.11.0+cu130
+torch==2.13.0+cu130
     # via
     #   -c requirements/cuda.txt
     #   -r requirements/test/cuda.in
@@ -1237,7 +1237,7 @@ torchcodec==0.14.0+cu130
     # via
     #   -c requirements/cuda.txt
     #   -r requirements/test/cuda.in
-torchvision==0.26.0+cu130
+torchvision==0.28.0+cu130
     # via
     #   -c requirements/cuda.txt
     #   -r requirements/test/cuda.in
@@ -1274,7 +1274,7 @@ transformers==5.10.4
     #   xgrammar
 transformers-stream-generator==0.0.5
     # via -r requirements/test/cuda.in
-triton==3.6.0
+triton==3.7.1
     # via
     #   torch
     #   xgrammar
