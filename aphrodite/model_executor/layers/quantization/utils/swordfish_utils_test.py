@@ -23,7 +23,7 @@ SWORDFISH_BLOCK_N = 64
 SWORDFISH_BLOCK_K = 64
 SWORDFISH_BLOCK_INT32 = 512
 SWORDFISH_SUPPORTED_QUANT_TYPES = [scalar_types.uint4b8, scalar_types.uint8b128]
-SWORDFISH_SUPPORTED_GROUP_SIZES = [-1, 64, 128]
+SWORDFISH_SUPPORTED_GROUP_SIZES = [-1, 32, 64, 128]
 
 
 def swordfish_shape_ok(size_k: int, size_n: int) -> bool:

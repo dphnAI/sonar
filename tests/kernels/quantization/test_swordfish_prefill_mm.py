@@ -74,12 +74,11 @@ def test_swordfish_prefill_mm_rejects_bad_args():
     k, n = 512, 256
     w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE)
     _, packed, scales = swordfish_quantize(w, QT, GROUP)
-    a16 = torch.randn((16, k), dtype=torch.float16, device=DEVICE)
-    with pytest.raises(Exception, match="bf16"):
-        ops.swordfish_prefill_mm(a16, packed, scales.to(torch.float16), GROUP, k, n)
     a = torch.randn((16, k), dtype=torch.bfloat16, device=DEVICE)
-    with pytest.raises(Exception, match="group_size"):
-        ops.swordfish_prefill_mm(a, packed, scales, 64, k, n)
+    with pytest.raises(Exception, match="dtype"):
+        ops.swordfish_prefill_mm(a.to(torch.float16), packed, scales, GROUP, k, n)
+    with pytest.raises(Exception, match="group"):
+        ops.swordfish_prefill_mm(a, packed, scales, 48, k, n)
 
 
 @pytest.mark.parametrize("mnk", [(256, 512, 256), (128, 2048, 1024), (512, 11008, 2048)])
@@ -104,3 +103,20 @@ def test_swordfish_prefill_mm_8bit_correct(mnk):
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_prefill_mm(a, packed, scales, GROUP, k, n, num_bits=8)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+
+
+@pytest.mark.parametrize("mnk", [(256, 512, 256), (128, 2048, 1024)])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("group", [32, 64, 128])
+def test_swordfish_prefill_mm_dtypes_groups(mnk, dtype, group):
+    m, k, n = mnk
+    torch.manual_seed(m + k + n + group)
+    w = torch.randn((k, n), dtype=dtype, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales = swordfish_quantize(w, QT, group)
+    a = torch.randn((m, k), dtype=dtype, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_prefill_mm(a, packed, scales, group, k, n)
+    torch.testing.assert_close(
+        out.to(torch.float32), ref, rtol=1e-1,
+        atol=5e-2 if dtype == torch.float16 else 8e-2,
+    )

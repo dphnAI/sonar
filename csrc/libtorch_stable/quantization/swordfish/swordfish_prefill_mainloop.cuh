@@ -93,6 +93,47 @@ __device__ __forceinline__ void dequant_u4b8_bf16x2(uint32_t q,
                     reinterpret_cast<__nv_bfloat162 const&>(kSub));
 }
 
+// u4b8 -> f16x2 pair dequant (marlin dequant<half2, kU4B8>). Same fragment
+// semantics as the bf16 helper; the high nibble plane rides an embedded
+// x16 exponent folded out by the fma.
+__device__ __forceinline__ void dequant_u4b8_f16x2(uint32_t q,
+                                                   __half2 frag[2]) {
+  static constexpr uint32_t kLo = 0x000f000f;
+  static constexpr uint32_t kHi = 0x00f000f0;
+  static constexpr uint32_t kEx = 0x64006400;
+  static constexpr uint32_t kSub = 0x64086408;
+  static constexpr uint32_t kMul = 0x2c002c00;
+  static constexpr uint32_t kAdd = 0xd480d480;
+  static constexpr uint32_t kImmLut = (0xf0 & 0xcc) | 0xaa;
+  uint32_t lo, hi;
+  asm volatile("lop3.b32 %0, %1, %2, %3, %4;\n"
+               : "=r"(lo)
+               : "r"(q), "n"(kLo), "n"(kEx), "n"(kImmLut));
+  asm volatile("lop3.b32 %0, %1, %2, %3, %4;\n"
+               : "=r"(hi)
+               : "r"(q), "n"(kHi), "n"(kEx), "n"(kImmLut));
+  frag[0] = __hsub2(reinterpret_cast<__half2 const&>(lo),
+                    reinterpret_cast<__half2 const&>(kSub));
+  frag[1] = __hfma2(reinterpret_cast<__half2 const&>(hi),
+                    reinterpret_cast<__half2 const&>(kMul),
+                    reinterpret_cast<__half2 const&>(kAdd));
+}
+
+// u8b128 -> f16x2 pair dequant (marlin dequant<half2, kU8B128>).
+__device__ __forceinline__ void dequant_u8b128_f16x2(uint32_t q,
+                                                     __half2 frag[2]) {
+  static constexpr uint32_t kMask01 = 0x5250;
+  static constexpr uint32_t kMask23 = 0x5351;
+  static constexpr uint32_t kBase = 0x64646464;
+  static constexpr uint32_t kSub = 0x64806480;
+  const uint32_t lo = __byte_perm(q, kBase, kMask01);
+  const uint32_t hi = __byte_perm(q, kBase, kMask23);
+  frag[0] = __hsub2(reinterpret_cast<__half2 const&>(lo),
+                    reinterpret_cast<__half2 const&>(kSub));
+  frag[1] = __hsub2(reinterpret_cast<__half2 const&>(hi),
+                    reinterpret_cast<__half2 const&>(kSub));
+}
+
 // u8b128 -> bf16x2 pair dequant (marlin dequant<nv_bfloat162, kU8B128>, the
 // FasterTransformer fp32-bias idiom). Under the 8-bit pack interleave
 // {0,2,1,3} one word yields the same fragment pair as the 4-bit dequant of
@@ -195,8 +236,8 @@ public:
   // scale-typed, so it rides the scale TMA machinery verbatim and the
   // transform's scaling multiply becomes an fma.
   static constexpr bool HasZp = !cute::is_void_v<ElementZero>;
-  static_assert(!HasZp || cute::is_same_v<ElementZero, cutlass::bfloat16_t>,
-                "swordfish prefill zero points must be bf16 (8 - zp) * scale");
+  static_assert(!HasZp || cute::is_same_v<ElementZero, ElementScale>,
+                "swordfish prefill zero points are scale-typed (8 - zp) * s");
 
   using StrideA = cute::remove_cvref_t<decltype(get<0>(StridePairA_{}))>;
   using LayoutScale = cute::remove_cvref_t<decltype(get<1>(StridePairA_{}))>;
@@ -209,10 +250,13 @@ public:
 
   using ElementAMma = typename TiledMma::ValTypeA;
   using ElementBMma = typename TiledMma::ValTypeB;
-  static_assert(cute::is_same_v<ElementAMma, cutlass::bfloat16_t>,
-                "swordfish prefill v1 dequantizes to bf16");
-  static_assert(cute::is_same_v<NonVoidElementScale, cutlass::bfloat16_t>,
-                "swordfish prefill v1 requires bf16 group scales");
+  static constexpr bool kActF16 = cute::is_same_v<ElementAMma, cutlass::half_t>;
+  static_assert(kActF16 || cute::is_same_v<ElementAMma, cutlass::bfloat16_t>,
+                "swordfish prefill dequantizes to fp16 or bf16");
+  static_assert(cute::is_same_v<NonVoidElementScale, ElementAMma>,
+                "swordfish prefill group scales match the activation dtype");
+  // Register pair type matching ElementAMma for the transform.
+  using Elem2 = cute::conditional_t<kActF16, __half2, __nv_bfloat162>;
 
   using ElementAccumulator = typename TiledMma::ValTypeC;
 
@@ -257,8 +301,13 @@ public:
   static constexpr int ScaleGranularityMN = size<0,0>(LayoutScale{});
   static constexpr int ScaleGranularityK = size<1,0>(LayoutScale{});
   static_assert(ScaleGranularityMN == 1, "swordfish scales are per-column");
-  static_assert(ScaleGranularityK == 64 || ScaleGranularityK == 128,
-                "swordfish prefill v1 supports group_size 64 or 128");
+  static_assert(ScaleGranularityK == 32 || ScaleGranularityK == 64 ||
+                    ScaleGranularityK == 128,
+                "swordfish prefill supports group sizes 32, 64 and 128");
+  // At granularity 32 a k64 sub-block spans two scale groups, so the
+  // transform keeps one register set per 32-row group of its share.
+  static constexpr int kScaleGroupsPerWarp =
+      ScaleGranularityK == 32 ? 2 : 1;
   using ScaleConfig = cutlass::detail::Sm100MixedInputBlockwiseScaleConfig<
       ScaleGranularityMN,
       ScaleGranularityK>;
@@ -852,8 +901,8 @@ public:
     const int c    = lane >> 2;   // column octet within each n16 group
     const int t    = lane & 3;    // k-quad
 
-    // All of this warp's k rows fall in [kbi*64, kbi*64+64), i.e. one scale
-    // k-group for group_size in {64, 128}.
+    // This warp's k rows fall in [kbi*64, kbi*64+64), one scale k-group for
+    // group sizes 64 and 128 and two consecutive groups at 32.
     const int scale_kg = (kbi * kBlockK) / ScaleGranularityK;
 
     // Per-thread compute-buffer addressing (see compute_elem_offset). The
@@ -906,28 +955,36 @@ public:
         }
       }
 
-      NonVoidElementScale const* srow = smem_s_base
-          + load2transform_consumer_index * kScalesPerStage
-          + scale_kg * CtaTileN_Weights + nbi * kBlockN;
-      __nv_bfloat162 sreg[4][2];  // [j][column octet 0/1] broadcast pairs
-      __nv_bfloat162 zreg[4][2];
+      auto bcast2 = [](NonVoidElementScale v) {
+        if constexpr (kActF16) {
+          return __half2half2(reinterpret_cast<__half const&>(v));
+        } else {
+          return __bfloat162bfloat162(
+              reinterpret_cast<__nv_bfloat16 const&>(v));
+        }
+      };
+      // [group of the warp's share][j][column octet 0/1] broadcast pairs
+      Elem2 sreg[kScaleGroupsPerWarp][4][2];
+      Elem2 zreg[kScaleGroupsPerWarp][4][2];
       CUTLASS_PRAGMA_UNROLL
-      for (int j = 0; j < 4; j++) {
-        sreg[j][0] = __bfloat162bfloat162(
-            reinterpret_cast<__nv_bfloat16 const&>(srow[16 * j + c]));
-        sreg[j][1] = __bfloat162bfloat162(
-            reinterpret_cast<__nv_bfloat16 const&>(srow[16 * j + 8 + c]));
-      }
-      if constexpr (HasZp) {
-        NonVoidElementScale const* zrow = smem_z_base
+      for (int kg = 0; kg < kScaleGroupsPerWarp; kg++) {
+        NonVoidElementScale const* srow = smem_s_base
             + load2transform_consumer_index * kScalesPerStage
-            + scale_kg * CtaTileN_Weights + nbi * kBlockN;
+            + (scale_kg + kg) * CtaTileN_Weights + nbi * kBlockN;
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < 4; j++) {
-          zreg[j][0] = __bfloat162bfloat162(
-              reinterpret_cast<__nv_bfloat16 const&>(zrow[16 * j + c]));
-          zreg[j][1] = __bfloat162bfloat162(
-              reinterpret_cast<__nv_bfloat16 const&>(zrow[16 * j + 8 + c]));
+          sreg[kg][j][0] = bcast2(srow[16 * j + c]);
+          sreg[kg][j][1] = bcast2(srow[16 * j + 8 + c]);
+        }
+        if constexpr (HasZp) {
+          NonVoidElementScale const* zrow = smem_z_base
+              + load2transform_consumer_index * kScalesPerStage
+              + (scale_kg + kg) * CtaTileN_Weights + nbi * kBlockN;
+          CUTLASS_PRAGMA_UNROLL
+          for (int j = 0; j < 4; j++) {
+            zreg[kg][j][0] = bcast2(zrow[16 * j + c]);
+            zreg[kg][j][1] = bcast2(zrow[16 * j + 8 + c]);
+          }
         }
       }
 
@@ -941,28 +998,37 @@ public:
       CUTLASS_PRAGMA_UNROLL
       for (int si = 0; si < kSubTilesPerWarp; si++) {
         const int s = sh + si;
+        // Sub-tile s covers k rows [16s, 16s+16); group index within the
+        // warp's register set (always 0 at granularity 64 and 128).
+        const int kg = kScaleGroupsPerWarp == 1 ? 0 : (s / 2) % 2;
         CUTLASS_PRAGMA_UNROLL
         for (int j = 0; j < 4; j++) {
           ElementAMma* const row0 = stage_base + (nbi * 8 + 2 * j) * 512;
           ElementAMma* const row1 = row0 + 512;
-          __nv_bfloat162 f0[2], f1[2];
-          if constexpr (WBits == 8) {
+          Elem2 f0[2], f1[2];
+          if constexpr (WBits == 8 && kActF16) {
+            swordfish_detail::dequant_u8b128_f16x2(w[si][2 * j], f0);
+            swordfish_detail::dequant_u8b128_f16x2(w[si][2 * j + 1], f1);
+          } else if constexpr (WBits == 8) {
             swordfish_detail::dequant_u8b128_bf16x2(w[si][2 * j], f0);
             swordfish_detail::dequant_u8b128_bf16x2(w[si][2 * j + 1], f1);
+          } else if constexpr (kActF16) {
+            swordfish_detail::dequant_u4b8_f16x2(w[si][j], f0);
+            swordfish_detail::dequant_u4b8_f16x2(w[si][j] >> 8, f1);
           } else {
             swordfish_detail::dequant_u4b8_bf16x2(w[si][j], f0);
             swordfish_detail::dequant_u4b8_bf16x2(w[si][j] >> 8, f1);
           }
           if constexpr (HasZp) {
-            f0[0] = __hfma2(f0[0], sreg[j][0], zreg[j][0]);
-            f0[1] = __hfma2(f0[1], sreg[j][0], zreg[j][0]);
-            f1[0] = __hfma2(f1[0], sreg[j][1], zreg[j][1]);
-            f1[1] = __hfma2(f1[1], sreg[j][1], zreg[j][1]);
+            f0[0] = __hfma2(f0[0], sreg[kg][j][0], zreg[kg][j][0]);
+            f0[1] = __hfma2(f0[1], sreg[kg][j][0], zreg[kg][j][0]);
+            f1[0] = __hfma2(f1[0], sreg[kg][j][1], zreg[kg][j][1]);
+            f1[1] = __hfma2(f1[1], sreg[kg][j][1], zreg[kg][j][1]);
           } else {
-            f0[0] = __hmul2(f0[0], sreg[j][0]);
-            f0[1] = __hmul2(f0[1], sreg[j][0]);
-            f1[0] = __hmul2(f1[0], sreg[j][1]);
-            f1[1] = __hmul2(f1[1], sreg[j][1]);
+            f0[0] = __hmul2(f0[0], sreg[kg][j][0]);
+            f0[1] = __hmul2(f0[1], sreg[kg][j][0]);
+            f1[0] = __hmul2(f1[0], sreg[kg][j][1]);
+            f1[1] = __hmul2(f1[1], sreg[kg][j][1]);
           }
           *reinterpret_cast<uint32_t*>(row0 + klow[s][0]) = reinterpret_cast<uint32_t const&>(f0[0]);
           *reinterpret_cast<uint32_t*>(row0 + klow[s][1]) = reinterpret_cast<uint32_t const&>(f0[1]);

@@ -38,7 +38,7 @@ MNK = [
     (32, 4096, 512),
     (33, 256, 256),
 ]
-GROUPS = [-1, 128]
+GROUPS = [-1, 32, 64, 128]
 DTYPES = [torch.float16, torch.bfloat16]
 
 

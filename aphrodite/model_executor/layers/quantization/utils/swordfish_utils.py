@@ -24,7 +24,9 @@ def query_swordfish_supported_quant_types(zero_points: bool) -> list[ScalarType]
 def query_swordfish_supported_group_sizes(act_type: torch.dtype) -> list[int]:
     if act_type not in (torch.float16, torch.bfloat16):
         return []
-    return [-1, 64, 128]
+    # Group 32 and channelwise run on the decode kernels at every M; the
+    # tcgen05 prefill covers groups 64 and 128.
+    return [-1, 32, 64, 128]
 
 
 def check_swordfish_supports_shape(

@@ -2,6 +2,8 @@
 //. The kernel lives in swordfish_decode.cuh.
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <optional>
 
 #include <torch/csrc/stable/accelerator.h>
@@ -30,11 +32,16 @@ namespace {
 // the compiled graph. Here the true runtime M decides on every call and on
 // every captured CUDA graph.
 inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st,
-                        int64_t group_size, int64_t k, int64_t n) {
-  if (a_st != torch::headeronly::ScalarType::BFloat16 || group_size != 128 ||
-      k % 128 != 0 || n % 128 != 0) {
+                        bool w8, int64_t group_size, int64_t k, int64_t n) {
+  if (a_st != torch::headeronly::ScalarType::BFloat16 &&
+      a_st != torch::headeronly::ScalarType::Half) {
     return false;
   }
+  if (w8 ? group_size != 128
+         : (group_size != 32 && group_size != 64 && group_size != 128)) {
+    return false;
+  }
+  if (k % 128 != 0 || n % 128 != 0) return false;
   // The prefill grid launches about n/128 CTAs per M tile. When that fills
   // the machine the tcgen05 path wins from M 48 up; when it underfills
   // (many SMs, narrow N), the Stream-K decode window carries [17, 96).
@@ -45,6 +52,18 @@ inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st,
   }
   const bool prefill_fills = n / 128 >= sms;
   return m >= 96 || (m >= 48 && prefill_fills);
+}
+
+// APHRODITE_SWORDFISH_DETERMINISTIC forces the run-stable decode paths:
+// the smem-reduction epilogue replaces every atomic-window kernel, at the
+// decode window's cost. The tcgen05 prefill is deterministic either way.
+// The fused-MoE kernels keep their atomic merge regardless.
+inline bool force_deterministic() {
+  static const bool v = [] {
+    const char* e = std::getenv("APHRODITE_SWORDFISH_DETERMINISTIC");
+    return e != nullptr && e[0] != '\0' && std::strcmp(e, "0") != 0;
+  }();
+  return v;
 }
 
 inline int cached_sm_count() {
@@ -194,7 +213,15 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
                    const void* z, void* c, int m, int k, int n, int group_size,
                    cudaStream_t stream) {
   using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
-  if (m <= 16) {
+  if (force_deterministic()) {
+    dim3 grid((m + 15) / 16, n / kBlockN);
+    swordfish_decode_kernel<type_id, false, 1, HAS_ZP, W8>
+        <<<grid, kDecodeThreads, 0, stream>>>(
+            reinterpret_cast<const scalar_t*>(a), b,
+            reinterpret_cast<const scalar_t*>(s),
+            reinterpret_cast<const scalar_t*>(z),
+            reinterpret_cast<scalar_t*>(c), m, k, n, group_size);
+  } else if (m <= 16) {
     // Tuned single-tile path with in-kernel C zeroing and heuristic split-K.
     launch_decode_atomic<type_id, HAS_ZP, W8>(1, a, b, s, z, c, m, k, n,
                                               group_size, stream);
@@ -296,7 +323,7 @@ torch::stable::Tensor swordfish_mm(
 
   const int64_t size_m = a.size(0);
 
-  if (use_prefill(size_m, a_st, group_size, size_k, size_n)) {
+  if (use_prefill(size_m, a_st, w8, group_size, size_k, size_n)) {
     return swordfish_prefill_mm(a, b_packed, group_scales, group_zps,
                                 num_bits, group_size, size_k, size_n);
   }
