@@ -76,7 +76,7 @@ def test_swordfish_mm_opcheck():
     w = torch.randn((k, n), dtype=torch.float16, device=DEVICE) / (k**0.5)
     _, packed, scales = swordfish_quantize(w, QT, 128)
     a = torch.randn((m, k), dtype=torch.float16, device=DEVICE)
-    opcheck(torch.ops._C.swordfish_mm, (a, packed, scales, None, 4, 128, k, n))
+    opcheck(torch.ops._C.swordfish_mm, (a, packed, scales, None, None, 4, 128, k, n))
 
 
 @pytest.mark.parametrize("dtype", DTYPES)
@@ -178,6 +178,52 @@ def test_swordfish_mm_act_order(mnk, bits):
     w_ref, packed, scales, sort_indices = swordfish_quantize_act_order(w, qt, 128)
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
-    a_sorted = ops.permute_cols(a, sort_indices)
-    out = ops.swordfish_mm(a_sorted, packed, scales, 128, k, n, num_bits=bits)
+    out = ops.swordfish_mm(a, packed, scales, 128, k, n, num_bits=bits,
+                           perm=sort_indices)
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+
+
+@pytest.mark.parametrize("bits", [4, 8])
+@pytest.mark.parametrize("dtype", DTYPES)
+def test_swordfish_mm_dense_tier(bits, dtype, monkeypatch):
+    # Force the dequant + cuBLAS tier regardless of device size.
+    monkeypatch.setenv("APHRODITE_SWORDFISH_DENSE_M", "64")
+    m, k, n = 128, 1024, 512
+    qt = scalar_types.uint4b8 if bits == 4 else scalar_types.uint8b128
+    torch.manual_seed(bits + m)
+    w = torch.randn((k, n), dtype=dtype, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales = swordfish_quantize(w, qt, 128)
+    a = torch.randn((m, k), dtype=dtype, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_mm(a, packed, scales, 128, k, n, num_bits=bits)
+    torch.testing.assert_close(
+        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
+    )
+
+
+def test_swordfish_mm_dense_tier_awq(monkeypatch):
+    monkeypatch.setenv("APHRODITE_SWORDFISH_DENSE_M", "64")
+    m, k, n = 128, 1024, 512
+    torch.manual_seed(2)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales, zps_neg = swordfish_quantize_awq(w, 128)
+    a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_mm(a, packed, scales, 128, k, n, group_zps=zps_neg)
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+
+
+def test_swordfish_mm_dense_tier_act_order(monkeypatch):
+    # The dense tier scatters weight rows through the sort instead of
+    # permuting the activations.
+    monkeypatch.setenv("APHRODITE_SWORDFISH_DENSE_M", "64")
+    m, k, n = 128, 1024, 512
+    torch.manual_seed(7)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales, sort_indices = swordfish_quantize_act_order(
+        w, scalar_types.uint4b8, 128
+    )
+    a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_mm(a, packed, scales, 128, k, n, perm=sort_indices)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

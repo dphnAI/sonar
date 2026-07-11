@@ -13,10 +13,18 @@
 #include <torch/headeronly/core/ScalarType.h>
 #include <torch/headeronly/util/Exception.h>
 
+#include "libtorch_stable/ops.h"
 #include "libtorch_stable/torch_utils.h"
 #include "swordfish_decode.cuh"
 
 namespace swordfish {
+
+// Defined in swordfish_dense_tier.cu (same extension).
+void swordfish_dense_tier_mm(const void* a, const int32_t* b, const void* s,
+                             const void* z, const int32_t* perm, void* c,
+                             void* w_dense, bool is_half, bool w8,
+                             bool has_zp, int m, int k, int n, int group_size,
+                             cudaStream_t stream);
 
 // Defined in swordfish_prefill.cu (same extension).
 torch::stable::Tensor swordfish_prefill_mm(
@@ -52,6 +60,22 @@ inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st,
   }
   const bool prefill_fills = n / 128 >= sms;
   return m >= 96 || (m >= 48 && prefill_fills);
+}
+
+// Above this M the problem is compute-bound and dequant-once + dense
+// cuBLAS outruns the fused mixed-input mainloops, so the tier takes over on
+// parts with a datacenter-class dense rate. Thor's dense rate is below its
+// tcgen05 mixed-input throughput, so it never crosses.
+inline int dense_tier_min_m(int sms, bool w8) {
+  static const int v = [] {
+    const char* e = std::getenv("APHRODITE_SWORDFISH_DENSE_M");
+    return e != nullptr && e[0] != '\0' ? std::atoi(e) : 0;
+  }();
+  if (v != 0) return v;
+  if (sms < 100) return INT_MAX;
+  // Measured B200 crossovers; 8-bit crosses earlier because the mixed-input
+  // pipeline moves twice the weight bytes through the transform.
+  return w8 ? 1024 : 4096;
 }
 
 // APHRODITE_SWORDFISH_DETERMINISTIC forces the run-stable decode paths:
@@ -268,7 +292,8 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
 torch::stable::Tensor swordfish_mm(
     torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
     torch::stable::Tensor& group_scales,
-    std::optional<torch::stable::Tensor> const& group_zps, int64_t num_bits,
+    std::optional<torch::stable::Tensor> const& group_zps,
+    std::optional<torch::stable::Tensor> const& perm, int64_t num_bits,
     int64_t group_size, int64_t size_k, int64_t size_n) {
   STD_TORCH_CHECK(num_bits == 4 || num_bits == 8,
                   "swordfish supports 4-bit and 8-bit weights");
@@ -323,8 +348,43 @@ torch::stable::Tensor swordfish_mm(
 
   const int64_t size_m = a.size(0);
 
+  const bool has_perm = perm.has_value() && perm->numel() > 0;
+  if (has_perm) {
+    STD_TORCH_CHECK(perm->scalar_type() == torch::headeronly::ScalarType::Int &&
+                        perm->numel() == size_k,
+                    "perm must be int32 [", size_k, "]");
+  }
+
+  if (size_m >= dense_tier_min_m(cached_sm_count(), w8) &&
+      !force_deterministic()) {
+    const int32_t device_index = a.get_device_index();
+    torch::stable::accelerator::DeviceGuard device_guard(device_index);
+    const cudaStream_t stream = get_current_cuda_stream(device_index);
+    torch::stable::Tensor c = torch::stable::empty({size_m, size_n}, a_st,
+                                                   std::nullopt, a.device());
+    torch::stable::Tensor w_dense = torch::stable::empty(
+        {size_k, size_n}, a_st, std::nullopt, a.device());
+    // Act_order folds into the weight scatter here, so the activations are
+    // consumed unpermuted.
+    swordfish_dense_tier_mm(
+        a.const_data_ptr(),
+        reinterpret_cast<const int32_t*>(b_packed.const_data_ptr()),
+        group_scales.const_data_ptr(),
+        has_zp ? group_zps->const_data_ptr() : nullptr,
+        has_perm ? reinterpret_cast<const int32_t*>(perm->const_data_ptr())
+                 : nullptr,
+        c.mutable_data_ptr(), w_dense.mutable_data_ptr(),
+        a_st == torch::headeronly::ScalarType::Half, w8, has_zp, int(size_m),
+        int(size_k), int(size_n), int(group_size), stream);
+    return c;
+  }
+
+  // The fused paths consume group-sorted K, so the activation columns take
+  // the sort here (previously the python layer's ops.permute_cols call).
+  torch::stable::Tensor a_used = has_perm ? permute_cols(a, *perm) : a;
+
   if (use_prefill(size_m, a_st, w8, group_size, size_k, size_n)) {
-    return swordfish_prefill_mm(a, b_packed, group_scales, group_zps,
+    return swordfish_prefill_mm(a_used, b_packed, group_scales, group_zps,
                                 num_bits, group_size, size_k, size_n);
   }
 
@@ -337,7 +397,7 @@ torch::stable::Tensor swordfish_mm(
   if (size_m == 0) return c;
 
   const auto* b_ptr = reinterpret_cast<const int32_t*>(b_packed.const_data_ptr());
-  const void* a_ptr = a.const_data_ptr();
+  const void* a_ptr = a_used.const_data_ptr();
   const void* s_ptr = group_scales.const_data_ptr();
   const void* z_ptr = has_zp ? group_zps->const_data_ptr() : nullptr;
   void* c_ptr = c.mutable_data_ptr();

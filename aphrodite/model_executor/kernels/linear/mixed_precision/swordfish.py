@@ -143,9 +143,6 @@ class SwordfishLinearKernel(MPLinearKernel):
         x_2d = x.reshape(-1, x.shape[-1])
         out_shape = x.shape[:-1] + (c.partition_weight_shape[1],)
 
-        if c.has_g_idx:
-            x_2d = ops.permute_cols(x_2d, layer.g_idx_sort_indices)
-
         # The decode/prefill crossover lives inside the C++ op. A Python
         # branch would be baked in at torch.compile trace time.
         output = ops.swordfish_mm(
@@ -157,6 +154,7 @@ class SwordfishLinearKernel(MPLinearKernel):
             c.partition_weight_shape[1],
             group_zps=w_zp,
             num_bits=c.weight_type.size_bits,
+            perm=layer.g_idx_sort_indices if c.has_g_idx else None,
         )
 
         if bias is not None:

@@ -120,8 +120,8 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
   // holds prescaled (8 - zp) * scale per group when present (AWQ/HQQ).
   ops.def(
       "swordfish_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
-      "Tensor? group_zps, int num_bits, int group_size, SymInt size_k, "
-      "SymInt size_n) -> Tensor");
+      "Tensor? group_zps, Tensor? perm, int num_bits, int group_size, "
+      "SymInt size_k, SymInt size_n) -> Tensor");
   // conditionally compiled so impl registrations are in source file
 
   // swordfish fused-MoE decode GEMM: one persistent Stream-K launch over

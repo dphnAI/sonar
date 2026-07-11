@@ -1590,12 +1590,16 @@ def swordfish_mm(
     size_n: int,
     group_zps: torch.Tensor | None = None,
     num_bits: int = 4,
+    perm: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """w4a16/w8a16 GEMM: a [M, K] fp16/bf16 times a Swordfish ABI v1 packed
     weight with per-group scales [groups, N]. group_zps holds prescaled
-    (8 - zp) * scale rows for zero-point checkpoints (AWQ/HQQ, 4-bit only)."""
+    (8 - zp) * scale rows for zero-point checkpoints (AWQ/HQQ, 4-bit only).
+    perm is the act_order column sort; the op permutes the activations for
+    the fused paths and folds the sort into the dense tier's weight scatter."""
     return torch.ops._C.swordfish_mm(
-        a, b_packed, group_scales, group_zps, num_bits, group_size, size_k, size_n
+        a, b_packed, group_scales, group_zps, perm, num_bits, group_size,
+        size_k, size_n
     )
 
 
@@ -1607,6 +1611,7 @@ if hasattr(torch.ops._C, "swordfish_mm"):
         b_packed: torch.Tensor,
         group_scales: torch.Tensor,
         group_zps: torch.Tensor | None,
+        perm: torch.Tensor | None,
         num_bits: int,
         group_size: int,
         size_k: int,
