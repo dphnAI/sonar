@@ -97,11 +97,13 @@ __device__ __forceinline__ void red_add2(scalar_t2* p, scalar_t2 v) {
 // into a zeroed C, freeing 16 KB smem per CTA and both __syncthreads, and
 // making cross-CTA split-K free. Summation order is nondeterministic. The
 // launcher uses it for the decode window (M <= 47).
-template <aphrodite::ScalarTypeId type_id, bool ATOMIC_EPI, int M_TILES = 1>
+template <aphrodite::ScalarTypeId type_id, bool ATOMIC_EPI, int M_TILES = 1,
+          bool HAS_ZP = false>
 __global__ void swordfish_decode_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
     const int32_t* __restrict__ B,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
+    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
     typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
     int M, int K, int N, int group_size) {
   static_assert(M_TILES >= 1 && M_TILES <= 3, "supported m-tile fusion: 1-3");
@@ -196,12 +198,15 @@ __global__ void swordfish_decode_kernel(
   // shfl broadcasts the pairs. Fetch and expand are split so the next
   // group's row prefetches a full group early, hiding its latency under
   // compute (on-demand loads were the dominant stall on K-heavy shapes).
+  // HAS_ZP runs the same machinery over Z, whose rows hold prescaled
+  // (8 - zp) * scale, turning the dequant scaling into an fma.
   scalar_t2 s_reg[4][2];  // [j][b] broadcast pairs for this lane's column
-  auto fetch_scale_row = [&](int g) -> scalar_t2 {
-    return reinterpret_cast<const scalar_t2*>(S + int64_t(g) * N +
+  scalar_t2 z_reg[4][2];
+  auto fetch_row = [&](const scalar_t* base, int g) -> scalar_t2 {
+    return reinterpret_cast<const scalar_t2*>(base + int64_t(g) * N +
                                               col_base)[lane];
   };
-  auto expand_scales = [&](scalar_t2 mine) {
+  auto expand_row = [&](scalar_t2 mine, scalar_t2 (&dst)[4][2]) {
     const uint32_t sel = group_id & 1;  // half index within the shfl'd pair
 #pragma unroll
     for (int j = 0; j < 4; j++) {
@@ -212,7 +217,7 @@ __global__ void swordfish_decode_kernel(
             0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
         const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
         const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
-        s_reg[j][b] = Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
+        dst[j][b] = Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
       }
     }
   };
@@ -231,10 +236,17 @@ __global__ void swordfish_decode_kernel(
       marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
           b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
 
-      frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
-      frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
-      frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
-      frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
+      if constexpr (HAS_ZP) {
+        frag_b0[0] = __hfma2(frag_b0[0], s_reg[j][0], z_reg[j][0]);
+        frag_b0[1] = __hfma2(frag_b0[1], s_reg[j][0], z_reg[j][0]);
+        frag_b1[0] = __hfma2(frag_b1[0], s_reg[j][1], z_reg[j][1]);
+        frag_b1[1] = __hfma2(frag_b1[1], s_reg[j][1], z_reg[j][1]);
+      } else {
+        frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
+        frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
+        frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
+        frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
+      }
 
 #pragma unroll
       for (int t = 0; t < M_TILES; t++) {
@@ -297,13 +309,18 @@ __global__ void swordfish_decode_kernel(
   const int g_last =
       group_size > 0 && p_beg < p_end ? (32 * (p_end - 1)) / group_size : 0;
   scalar_t2 s_next = zero2;  // prefetched next-group row (lane's slice)
+  scalar_t2 z_next = zero2;
   if (p_beg < p_end) {
     if (group_size > 0) {
       g = p_beg / ppg;
       left = ppg - p_beg % ppg;
     }
-    expand_scales(fetch_scale_row(g));
-    if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+    expand_row(fetch_row(S, g), s_reg);
+    if constexpr (HAS_ZP) expand_row(fetch_row(Z, g), z_reg);
+    if (g + 1 <= g_last) {
+      s_next = fetch_row(S, g + 1);
+      if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
+    }
   }
 
   // Incremental int32 issue cursors. A modulo-indexed ring compiles to
@@ -360,8 +377,12 @@ __global__ void swordfish_decode_kernel(
     marlin::cp_async_wait<kStagesT - 2>();  // oldest stage (slot) complete
     if (left == 0) {
       ++g;
-      expand_scales(s_next);  // value already in flight since last boundary
-      if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+      expand_row(s_next, s_reg);  // value already in flight since boundary
+      if constexpr (HAS_ZP) expand_row(z_next, z_reg);
+      if (g + 1 <= g_last) {
+        s_next = fetch_row(S, g + 1);
+        if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
+      }
       left = ppg;
     }
     process_pair(p, astage[warp][ATOMIC_EPI ? slot : 0], bstage[warp][slot]);
@@ -436,11 +457,12 @@ __global__ void swordfish_decode_kernel(
 // so a tile's K slices may come from any number of warps with no locks and
 // no fixup pass. This removes split-K heuristics and wave quantization for
 // the window entirely.
-template <aphrodite::ScalarTypeId type_id, int M_TILES>
+template <aphrodite::ScalarTypeId type_id, int M_TILES, bool HAS_ZP = false>
 __global__ void swordfish_decode_streamk_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
     const int32_t* __restrict__ B,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
+    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
     typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
     int M, int K, int N, int group_size, int m_groups) {
   constexpr int kStagesT = M_TILES == 1 ? kStages : (M_TILES == 2 ? 4 : 3);
@@ -478,6 +500,7 @@ __global__ void swordfish_decode_streamk_kernel(
 
   FragC acc[M_TILES][4][2];
   scalar_t2 s_reg[4][2];
+  scalar_t2 z_reg[4][2];
 
   while (w < w_end) {
     const int64_t cg = w / num_pairs;
@@ -509,11 +532,11 @@ __global__ void swordfish_decode_streamk_kernel(
 #pragma unroll
           for (int i = 0; i < 4; i++) acc[t][j][b][i] = 0.0f;
 
-    auto fetch_scale_row = [&](int g) -> scalar_t2 {
-      return reinterpret_cast<const scalar_t2*>(S + int64_t(g) * N +
+    auto fetch_row = [&](const scalar_t* base, int g) -> scalar_t2 {
+      return reinterpret_cast<const scalar_t2*>(base + int64_t(g) * N +
                                                 col_base)[lane];
     };
-    auto expand_scales = [&](scalar_t2 mine) {
+    auto expand_row = [&](scalar_t2 mine, scalar_t2 (&dst)[4][2]) {
       const uint32_t sel = group_id & 1;
 #pragma unroll
       for (int j = 0; j < 4; j++) {
@@ -523,7 +546,7 @@ __global__ void swordfish_decode_streamk_kernel(
               0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
           const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
           const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
-          s_reg[j][b] =
+          dst[j][b] =
               Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
         }
       }
@@ -542,10 +565,17 @@ __global__ void swordfish_decode_streamk_kernel(
             b_quant_0, reinterpret_cast<scalar_t2*>(&frag_b0));
         marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
             b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
-        frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
-        frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
-        frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
-        frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
+        if constexpr (HAS_ZP) {
+          frag_b0[0] = __hfma2(frag_b0[0], s_reg[j][0], z_reg[j][0]);
+          frag_b0[1] = __hfma2(frag_b0[1], s_reg[j][0], z_reg[j][0]);
+          frag_b1[0] = __hfma2(frag_b1[0], s_reg[j][1], z_reg[j][1]);
+          frag_b1[1] = __hfma2(frag_b1[1], s_reg[j][1], z_reg[j][1]);
+        } else {
+          frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
+          frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
+          frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
+          frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
+        }
 #pragma unroll
         for (int t = 0; t < M_TILES; t++) {
           marlin::mma<type_id, false>(fa[t], frag_b0, acc[t][j][0]);
@@ -605,13 +635,18 @@ __global__ void swordfish_decode_streamk_kernel(
     const int g_last =
         group_size > 0 && p_beg < p_end ? (32 * (p_end - 1)) / group_size : 0;
     scalar_t2 s_next = zero2;
+    scalar_t2 z_next = zero2;
     if (p_beg < p_end) {
       if (group_size > 0) {
         g = p_beg / ppg;
         left = ppg - p_beg % ppg;
       }
-      expand_scales(fetch_scale_row(g));
-      if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+      expand_row(fetch_row(S, g), s_reg);
+      if constexpr (HAS_ZP) expand_row(fetch_row(Z, g), z_reg);
+      if (g + 1 <= g_last) {
+        s_next = fetch_row(S, g + 1);
+        if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
+      }
     }
 
 #pragma unroll
@@ -625,8 +660,12 @@ __global__ void swordfish_decode_streamk_kernel(
       marlin::cp_async_wait<kStagesT - 2>();
       if (left == 0) {
         ++g;
-        expand_scales(s_next);
-        if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+        expand_row(s_next, s_reg);
+        if constexpr (HAS_ZP) expand_row(z_next, z_reg);
+        if (g + 1 <= g_last) {
+          s_next = fetch_row(S, g + 1);
+          if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
+        }
         left = ppg;
       }
       process_pair(slot, bstage[warp][slot]);
@@ -666,11 +705,12 @@ __global__ void swordfish_decode_streamk_kernel(
 // reuse, since the issue at step c writes the slot processed at step c-1.
 // Work distribution is per-CTA Stream-K over (m-group, column, chunk) with
 // the m-group index fastest, flushed through red.global at boundaries.
-template <aphrodite::ScalarTypeId type_id, int W>
+template <aphrodite::ScalarTypeId type_id, int W, bool HAS_ZP = false>
 __global__ void swordfish_decode_mshare_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
     const int32_t* __restrict__ B,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
+    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
     typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
     int M, int K, int N, int group_size, int m_groups) {
   static_assert(W == 4 || W == 6, "supported m-share widths");
@@ -717,6 +757,7 @@ __global__ void swordfish_decode_mshare_kernel(
 
   FragC acc[4][2];
   scalar_t2 s_reg[4][2];
+  scalar_t2 z_reg[4][2];
 
   // B copy assignment. The chunk is kCP 1 KB pairs = kCP*64 16-byte units,
   // spread over the CTA's threads; each thread copies kBU units.
@@ -753,11 +794,11 @@ __global__ void swordfish_decode_mshare_kernel(
 #pragma unroll
         for (int i = 0; i < 4; i++) acc[j][b][i] = 0.0f;
 
-    auto fetch_scale_row = [&](int g) -> scalar_t2 {
-      return reinterpret_cast<const scalar_t2*>(S + int64_t(g) * N +
+    auto fetch_row = [&](const scalar_t* base, int g) -> scalar_t2 {
+      return reinterpret_cast<const scalar_t2*>(base + int64_t(g) * N +
                                                 col_base)[lane];
     };
-    auto expand_scales = [&](scalar_t2 mine) {
+    auto expand_row = [&](scalar_t2 mine, scalar_t2 (&dst)[4][2]) {
       const uint32_t sel = group_id & 1;
 #pragma unroll
       for (int j = 0; j < 4; j++) {
@@ -767,7 +808,7 @@ __global__ void swordfish_decode_mshare_kernel(
               0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
           const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
           const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
-          s_reg[j][b] =
+          dst[j][b] =
               Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
         }
       }
@@ -782,10 +823,17 @@ __global__ void swordfish_decode_mshare_kernel(
             b_quant_0, reinterpret_cast<scalar_t2*>(&frag_b0));
         marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
             b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
-        frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
-        frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
-        frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
-        frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
+        if constexpr (HAS_ZP) {
+          frag_b0[0] = __hfma2(frag_b0[0], s_reg[j][0], z_reg[j][0]);
+          frag_b0[1] = __hfma2(frag_b0[1], s_reg[j][0], z_reg[j][0]);
+          frag_b1[0] = __hfma2(frag_b1[0], s_reg[j][1], z_reg[j][1]);
+          frag_b1[1] = __hfma2(frag_b1[1], s_reg[j][1], z_reg[j][1]);
+        } else {
+          frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
+          frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
+          frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
+          frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
+        }
         marlin::mma<type_id, false>(fa, frag_b0, acc[j][0]);
         marlin::mma<type_id, false>(fa, frag_b1, acc[j][1]);
       }
@@ -840,14 +888,19 @@ __global__ void swordfish_decode_mshare_kernel(
     const int p_last = kCP * c_end - 1;
     const int g_last = group_size > 0 ? (32 * p_last) / group_size : 0;
     scalar_t2 s_next = zero2;
+    scalar_t2 z_next = zero2;
     if (c_beg < c_end) {
       const int p0 = kCP * c_beg;
       if (group_size > 0) {
         g = p0 / ppg;
         left = ppg - p0 % ppg;
       }
-      expand_scales(fetch_scale_row(g));
-      if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+      expand_row(fetch_row(S, g), s_reg);
+      if constexpr (HAS_ZP) expand_row(fetch_row(Z, g), z_reg);
+      if (g + 1 <= g_last) {
+        s_next = fetch_row(S, g + 1);
+        if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
+      }
     }
 
 #pragma unroll
@@ -864,8 +917,12 @@ __global__ void swordfish_decode_mshare_kernel(
       for (int pi = 0; pi < kCP; pi++) {
         if (left == 0) {
           ++g;
-          expand_scales(s_next);
-          if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+          expand_row(s_next, s_reg);
+          if constexpr (HAS_ZP) expand_row(z_next, z_reg);
+          if (g + 1 <= g_last) {
+            s_next = fetch_row(S, g + 1);
+            if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
+          }
           left = ppg;
         }
         process_pair(slot, pi);

@@ -12,6 +12,7 @@ import torch
 from aphrodite import _custom_ops as ops
 from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
     swordfish_quantize,
+    swordfish_quantize_awq,
 )
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import scalar_types
@@ -74,7 +75,7 @@ def test_swordfish_mm_opcheck():
     w = torch.randn((k, n), dtype=torch.float16, device=DEVICE) / (k**0.5)
     _, packed, scales = swordfish_quantize(w, QT, 128)
     a = torch.randn((m, k), dtype=torch.float16, device=DEVICE)
-    opcheck(torch.ops._C.swordfish_mm, (a, packed, scales, 128, k, n))
+    opcheck(torch.ops._C.swordfish_mm, (a, packed, scales, None, 128, k, n))
 
 
 @pytest.mark.parametrize("dtype", DTYPES)
@@ -91,3 +92,39 @@ def test_swordfish_mm_determinism(dtype):
     o0 = ops.swordfish_mm(a, packed, scales, 128, k, n)
     for _ in range(5):
         assert torch.equal(o0, ops.swordfish_mm(a, packed, scales, 128, k, n))
+
+
+@pytest.mark.parametrize("mnk", MNK)
+@pytest.mark.parametrize("group", [64, 128])
+@pytest.mark.parametrize("dtype", DTYPES)
+def test_swordfish_mm_awq_correct(mnk, group, dtype):
+    m, k, n = mnk
+    if k % group != 0:
+        pytest.skip("k not divisible by group")
+
+    torch.manual_seed(k * 7 + n + m)
+    w = torch.randn((k, n), dtype=dtype, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales, zps_neg = swordfish_quantize_awq(w, group)
+
+    a = torch.randn((m, k), dtype=dtype, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+
+    out = ops.swordfish_mm(a, packed, scales, group, k, n, group_zps=zps_neg)
+
+    assert out.shape == (m, n)
+    assert out.dtype == dtype
+    torch.testing.assert_close(
+        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
+    )
+
+
+def test_swordfish_mm_awq_large_m():
+    # M > 96 with bf16 routes through the prefill zero-point row.
+    m, k, n = 256, 1024, 256
+    torch.manual_seed(3)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales, zps_neg = swordfish_quantize_awq(w, 128)
+    a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_mm(a, packed, scales, 128, k, n, group_zps=zps_neg)
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

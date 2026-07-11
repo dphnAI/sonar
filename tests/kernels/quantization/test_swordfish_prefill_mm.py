@@ -14,6 +14,7 @@ import torch
 from aphrodite import _custom_ops as ops
 from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
     swordfish_quantize,
+    swordfish_quantize_awq,
 )
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import scalar_types
@@ -65,7 +66,7 @@ def test_swordfish_prefill_mm_opcheck():
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     opcheck(
         torch.ops._C.swordfish_prefill_mm,
-        (a, packed, scales, GROUP, k, n),
+        (a, packed, scales, None, GROUP, k, n),
     )
 
 
@@ -79,3 +80,15 @@ def test_swordfish_prefill_mm_rejects_bad_args():
     a = torch.randn((16, k), dtype=torch.bfloat16, device=DEVICE)
     with pytest.raises(Exception, match="group_size"):
         ops.swordfish_prefill_mm(a, packed, scales, 64, k, n)
+
+
+@pytest.mark.parametrize("mnk", [(256, 512, 256), (128, 2048, 1024), (512, 11008, 2048)])
+def test_swordfish_prefill_mm_awq_correct(mnk):
+    m, k, n = mnk
+    torch.manual_seed(m + k + n)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales, zps_neg = swordfish_quantize_awq(w, GROUP)
+    a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_prefill_mm(a, packed, scales, GROUP, k, n, group_zps=zps_neg)
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

@@ -167,8 +167,13 @@ public:
   // The packed operand is staged as raw bytes.
   static_assert(cute::is_same_v<ElementA, uint8_t>,
                 "swordfish prefill: pass uint8_t as the (packed) A element");
-  static_assert(cute::is_void_v<ElementZero>,
-                "swordfish ABI v1 has no zero points (ConvertAndScale only)");
+  // Zero-point checkpoints (AWQ/HQQ) pass a third element in the A tuple.
+  // The zero tensor holds prescaled (8 - zp) * scale rows, scale-shaped and
+  // scale-typed, so it rides the scale TMA machinery verbatim and the
+  // transform's scaling multiply becomes an fma.
+  static constexpr bool HasZp = !cute::is_void_v<ElementZero>;
+  static_assert(!HasZp || cute::is_same_v<ElementZero, cutlass::bfloat16_t>,
+                "swordfish prefill zero points must be bf16 (8 - zp) * scale");
 
   using StrideA = cute::remove_cvref_t<decltype(get<0>(StridePairA_{}))>;
   using LayoutScale = cute::remove_cvref_t<decltype(get<1>(StridePairA_{}))>;
@@ -378,6 +383,7 @@ public:
         alignas(1024) cute::ArrayEngine<uint8_t, cute::cosize_v<SmemLayoutA>> smem_A;
         alignas(1024) cute::ArrayEngine<ElementB, cute::cosize_v<SmemLayoutB>> smem_B;
         cute::ArrayEngine<NonVoidElementScale, cute::cosize_v<SmemLayoutScale>> smem_scale;
+        cute::ArrayEngine<NonVoidElementScale, HasZp ? cute::cosize_v<SmemLayoutScale> : 1> smem_zero;
       };
       struct TensorStorageTransformed {
         alignas(1024) cute::ArrayEngine<ElementAMma, cute::cosize_v<SmemLayoutACompute>> smem_ACompute;
@@ -395,7 +401,8 @@ public:
   // caution).
   static constexpr uint32_t kScaleTxBytes =
       cutlass::bits_to_bytes(kScalesPerStage * cute::sizeof_bits_v<NonVoidElementScale>);
-  static constexpr uint32_t TmaTransactionBytes_A = kStageBytes + kScaleTxBytes;
+  static constexpr uint32_t TmaTransactionBytes_A =
+      kStageBytes + kScaleTxBytes * (HasZp ? 2 : 1);
   // AtomThrShape-scaled as in stock. The cta_group::2 TMA loads both CTAs'
   // B halves with one instruction and its arrival, covering both halves'
   // bytes, lands on the MMA leader's barrier. In 1-SM this reduces to one
@@ -414,7 +421,7 @@ public:
     StrideB dB{};
     ElementScale const* ptr_S{nullptr};
     LayoutScale layout_S{};
-    ElementZero const* ptr_Z{nullptr};  // must stay null (v1: no zeros)
+    ElementZero const* ptr_Z{nullptr};  // scale-shaped (8 - zp) * scale rows
   };
 
   // Device side kernel params
@@ -451,6 +458,7 @@ public:
     TMA_A tma_load_a;
     TMA_B tma_load_b;
     TMA_Scale tma_load_scale;
+    TMA_Scale tma_load_zero;  // constructed over ptr_Z (layout shared with S)
     uint32_t tma_transaction_bytes{TmaTransactionBytes};
     int32_t blocks_k{0};  // KB = K / 64
     int32_t blocks_n{0};  // NB = N_weights / 64
@@ -507,10 +515,22 @@ public:
         TiledMma{},
         cluster_layout_vmnk);
 
+    Tensor tensor_zero = make_tensor(
+        detail::get_logical_ptr(reinterpret_cast<NonVoidElementScale const*>(args.ptr_Z)),
+        args.layout_S);
+    typename Params::TMA_Scale tma_load_zero = make_tma_atom_A_sm100(
+        GmemTiledCopyScale{},
+        tensor_zero,
+        SmemLayoutScale{}(_,_,_,cute::Int<0>{}),
+        TileShape{},
+        TiledMma{},
+        cluster_layout_vmnk);
+
     return {
         tma_load_a,
         tma_load_b,
         tma_load_scale,
+        tma_load_zero,
         TmaTransactionBytes,
         blocks_k,
         blocks_n };
@@ -530,7 +550,7 @@ public:
     implementable &= (K % CtaTileK == 0);
     implementable &= (L == 1);
     implementable &= (args.ptr_S != nullptr);
-    implementable &= (args.ptr_Z == nullptr);
+    implementable &= ((args.ptr_Z != nullptr) == HasZp);
 
     constexpr int tma_alignment_bits_B = cutlass::detail::get_input_alignment_bits<ElementB>();
     constexpr int min_tma_aligned_elements_B = tma_alignment_bits_B / cutlass::sizeof_bits<ElementB>::value;
@@ -548,6 +568,9 @@ public:
     cute::prefetch_tma_descriptor(params.tma_load_a.get_tma_descriptor());
     cute::prefetch_tma_descriptor(params.tma_load_b.get_tma_descriptor());
     cute::prefetch_tma_descriptor(params.tma_load_scale.get_tma_descriptor());
+    if constexpr (HasZp) {
+      cute::prefetch_tma_descriptor(params.tma_load_zero.get_tma_descriptor());
+    }
   }
 
   /// Construct A Single Stage's Accumulator Shape
@@ -620,6 +643,14 @@ public:
       auto tSsS = get<1>(extra_input_partitions);
       copy(params.tma_load_scale.with(*load2xform_tma_barrier, mcast_mask_a),
            tSgS(_,*k_tile_iter), tSsS(_,tile_A_write_stage));
+
+      if constexpr (HasZp) {
+        auto tZgZ_mkl = get<2>(extra_input_partitions);
+        auto tZgZ = tZgZ_mkl(_, get<0>(cta_coord_mnkl) / size(typename TiledMma::AtomThrID{}), _, get<3>(cta_coord_mnkl));
+        auto tZsZ = get<3>(extra_input_partitions);
+        copy(params.tma_load_zero.with(*load2xform_tma_barrier, mcast_mask_a),
+             tZgZ(_,*k_tile_iter), tZsZ(_,tile_A_write_stage));
+      }
 
       ++k_tile_iter;
     }
@@ -729,11 +760,22 @@ public:
                                     get<2>(cta_coord_vmnk), make_layout(size<2>(cta_layout_vmnk)),
                                     group_modes<0,3>(sS), group_modes<0,3>(tCgS_mkl));
 
+    // Zero rows share the scale layout; the partitions are layout-only and
+    // never copied from when HasZp is false.
+    Tensor mZ_mkl = params.tma_load_zero.get_tma_tensor(shape(LayoutScale{}));
+    Tensor gZ_mkl = local_tile(mZ_mkl, TileShape{}, make_coord(_,_,_), Step<_1, cute::Underscore,_1>{});
+    Tensor sZ = make_tensor(make_smem_ptr(shared_storage.input.smem_zero.begin()), SmemLayoutScale{});
+    Tensor tCgZ_mkl = cta_mma.partition_A(gZ_mkl);
+
+    auto [tZgZ_mkl, tZsZ] = tma_partition(params.tma_load_zero,
+                                    get<2>(cta_coord_vmnk), make_layout(size<2>(cta_layout_vmnk)),
+                                    group_modes<0,3>(sZ), group_modes<0,3>(tCgZ_mkl));
+
     return cute::make_tuple(
         gA_mkl, gB_nkl,                        // for scheduler (shapes only)
         tAgA_nk, tBgB_nkl, tAsA, tBsB,         // for input tensor values
         mcast_mask_a, mcast_mask_b,            // multicast masks
-        cute::make_tuple(tSgS_mkl, tSsS));
+        cute::make_tuple(tSgS_mkl, tSsS, tZgZ_mkl, tZsZ));
   }
 
   /// CHANGE (2): the Transform stage (stock lines 975-1059). Consumes the
@@ -749,7 +791,8 @@ public:
   ///                   k rows 16s + 2t + {0,1,8,9} (t = T%4) of the sub-tile.
   template<
     class KTileIterator, class Accumulator,
-    class GTensorA, class SrcTensorA, class DstTensorA, class ScaleTensor
+    class GTensorA, class SrcTensorA, class DstTensorA, class ScaleTensor,
+    class ZeroTensor
   >
   CUTLASS_DEVICE auto
   transform(
@@ -758,14 +801,15 @@ public:
       Transform2MmaPipeline transform2mma_pipeline,
       Transform2MmaPipelineState transform2mma_pipeline_producer_state,
       Accumulator accumulators,
-      cute::tuple<GTensorA, SrcTensorA, DstTensorA, ScaleTensor> input_operands,
+      cute::tuple<GTensorA, SrcTensorA, DstTensorA, ScaleTensor, ZeroTensor> input_operands,
       KTileIterator k_tile_iter, int k_tile_count) {
 
     cutlass::arch::NamedBarrier transform_bar(NumTransformationThreads, cutlass::arch::ReservedNamedBarriers::TransformBarrier);
 
-    auto [unused_gA, sA, sACompute, sS] = input_operands;
+    auto [unused_gA, sA, sACompute, sS, sZ] = input_operands;
     uint8_t const* smem_a_base = reinterpret_cast<uint8_t const*>(raw_pointer_cast(sA.data()));
     NonVoidElementScale const* smem_s_base = raw_pointer_cast(sS.data());
+    NonVoidElementScale const* smem_z_base = raw_pointer_cast(sZ.data());
     ElementAMma* smem_c_base = raw_pointer_cast(sACompute.data());
 
     const int tid  = threadIdx.x % NumTransformationThreads;
@@ -836,12 +880,25 @@ public:
           + load2transform_consumer_index * kScalesPerStage
           + scale_kg * CtaTileN_Weights + nbi * kBlockN;
       __nv_bfloat162 sreg[4][2];  // [j][column octet 0/1] broadcast pairs
+      __nv_bfloat162 zreg[4][2];
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < 4; j++) {
         sreg[j][0] = __bfloat162bfloat162(
             reinterpret_cast<__nv_bfloat16 const&>(srow[16 * j + c]));
         sreg[j][1] = __bfloat162bfloat162(
             reinterpret_cast<__nv_bfloat16 const&>(srow[16 * j + 8 + c]));
+      }
+      if constexpr (HasZp) {
+        NonVoidElementScale const* zrow = smem_z_base
+            + load2transform_consumer_index * kScalesPerStage
+            + scale_kg * CtaTileN_Weights + nbi * kBlockN;
+        CUTLASS_PRAGMA_UNROLL
+        for (int j = 0; j < 4; j++) {
+          zreg[j][0] = __bfloat162bfloat162(
+              reinterpret_cast<__nv_bfloat16 const&>(zrow[16 * j + c]));
+          zreg[j][1] = __bfloat162bfloat162(
+              reinterpret_cast<__nv_bfloat16 const&>(zrow[16 * j + 8 + c]));
+        }
       }
 
       // Loads from SMEM are done. Signal the mainloop load as early as possible
@@ -861,10 +918,17 @@ public:
           __nv_bfloat162 f0[2], f1[2];
           swordfish_detail::dequant_u4b8_bf16x2(w[si][j], f0);
           swordfish_detail::dequant_u4b8_bf16x2(w[si][j] >> 8, f1);
-          f0[0] = __hmul2(f0[0], sreg[j][0]);
-          f0[1] = __hmul2(f0[1], sreg[j][0]);
-          f1[0] = __hmul2(f1[0], sreg[j][1]);
-          f1[1] = __hmul2(f1[1], sreg[j][1]);
+          if constexpr (HasZp) {
+            f0[0] = __hfma2(f0[0], sreg[j][0], zreg[j][0]);
+            f0[1] = __hfma2(f0[1], sreg[j][0], zreg[j][0]);
+            f1[0] = __hfma2(f1[0], sreg[j][1], zreg[j][1]);
+            f1[1] = __hfma2(f1[1], sreg[j][1], zreg[j][1]);
+          } else {
+            f0[0] = __hmul2(f0[0], sreg[j][0]);
+            f0[1] = __hmul2(f0[1], sreg[j][0]);
+            f1[0] = __hmul2(f1[0], sreg[j][1]);
+            f1[1] = __hmul2(f1[1], sreg[j][1]);
+          }
           *reinterpret_cast<uint32_t*>(row0 + klow[s][0]) = reinterpret_cast<uint32_t const&>(f0[0]);
           *reinterpret_cast<uint32_t*>(row0 + klow[s][1]) = reinterpret_cast<uint32_t const&>(f0[1]);
           *reinterpret_cast<uint32_t*>(row1 + klow[s][0]) = reinterpret_cast<uint32_t const&>(f1[0]);
@@ -902,8 +966,9 @@ public:
     Tensor sACompute = as_position_independent_swizzle_tensor(
         make_tensor(make_smem_ptr(shared_storage.compute.smem_ACompute.begin()), SmemLayoutAComputeMK{}));
     Tensor sS = make_tensor(make_smem_ptr(shared_storage.input.smem_scale.begin()), SmemLayoutScale{});
+    Tensor sZ = make_tensor(make_smem_ptr(shared_storage.input.smem_zero.begin()), SmemLayoutScale{});
 
-    return cute::make_tuple(gA_mkl, sA, sACompute, sS);
+    return cute::make_tuple(gA_mkl, sA, sACompute, sS, sZ);
   }
 
   /// Perform a collective-scoped matrix multiply-accumulate: stock (lines

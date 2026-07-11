@@ -2,8 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Swordfish (Blackwell sm100/sm110 w4a16) support queries.
 
-ABI v1 (frozen): GPTQ u4b8 weights x fp16/bf16 activations, group scales
-{-1, 64, 128}, no zero points, no act_order.
+ABI v1 (frozen): int4 weights x fp16/bf16 activations, group scales
+{-1, 64, 128}, no act_order. Zero-point checkpoints (AWQ) fold
+(8 - zp) * scale into a second scale-shaped tensor at load time.
 """
 
 import torch
@@ -16,7 +17,7 @@ SWORDFISH_BLOCK_K = 64
 
 def query_swordfish_supported_quant_types(zero_points: bool) -> list[ScalarType]:
     if zero_points:
-        return []  # v1: no zero-point schemes
+        return [scalar_types.uint4]
     return [scalar_types.uint4b8]
 
 

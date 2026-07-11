@@ -74,3 +74,30 @@ def swordfish_quantize(
     )
     packed = swordfish_pack_weights_ref(q_w, size_k, size_n)
     return w_ref, packed, s
+
+
+def swordfish_quantize_awq(
+    w: torch.Tensor,
+    group_size: int,
+):
+    """Quantize fp weight [K, N] AWQ-style (uint4 + group zero points) and
+    pack to the Swordfish ABI. Returns (w_ref, packed, scales, zps_neg)
+    where zps_neg holds the prescaled (8 - zp) * scale rows the kernel
+    consumes."""
+    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        quantize_weights,
+    )
+
+    size_k, size_n = w.shape
+    # The kernel applies the zero point after scaling, (w - 8) * s plus
+    # (8 - zp) * s, so the matching reference keeps tolerances tight.
+    w_ref, q_w, s, zp = quantize_weights(
+        w,
+        scalar_types.uint4,
+        group_size,
+        zero_points=True,
+        ref_zero_points_after_scales=True,
+    )
+    packed = swordfish_pack_weights_ref(q_w, size_k, size_n)
+    zps_neg = ((8.0 - zp.to(s.dtype)) * s).contiguous()
+    return w_ref, packed, s, zps_neg

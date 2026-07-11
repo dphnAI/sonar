@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """SwordfishLinearKernel: w4a16 GEMM for the Blackwell sm100 family
-(datacenter sm100 + Thor sm110). GPTQ u4b8 only in v1."""
+(datacenter sm100 + Thor sm110). GPTQ u4b8 and AWQ uint4+zp."""
 
 import torch
 
 from aphrodite import _custom_ops as ops
+from aphrodite.model_executor.layers.quantization.utils.quant_utils import unpack_cols
 from aphrodite.model_executor.layers.quantization.utils.swordfish_utils import (
     check_swordfish_supports_shape,
     query_swordfish_supported_group_sizes,
@@ -42,9 +43,6 @@ class SwordfishLinearKernel(MPLinearKernel):
 
         if c.has_g_idx:
             return False, "Act reordering (g_idx) not supported by Swordfish v1"
-
-        if c.zero_points:
-            return False, "Zero points not supported by Swordfish v1"
 
         supported_types = query_swordfish_supported_quant_types(c.zero_points)
         if c.weight_type not in supported_types:
@@ -86,6 +84,26 @@ class SwordfishLinearKernel(MPLinearKernel):
         self._transform_param(layer, self.w_q_name, transform_w_q)
         self._transform_param(layer, self.w_s_name, transform_w_s)
 
+        if c.zero_points:
+            # The kernel dequantizes to (w - 8) * s and adds a per-group
+            # (8 - zp) * s, so the zp tensor becomes scale-shaped [groups, N]
+            # in the activation dtype. qzeros arrives in the standard packed
+            # layout [N / 8, groups].
+            scales = getattr(layer, self.w_s_name)
+            num_groups = scales.shape[0]
+
+            def transform_w_zp(x):
+                zp = unpack_cols(
+                    x.data.t().contiguous(),
+                    c.weight_type.size_bits,
+                    num_groups,
+                    size_n,
+                )
+                x.data = (8.0 - zp.to(scales.dtype)) * scales.data
+                return x
+
+            self._transform_param(layer, self.w_zp_name, transform_w_zp)
+
     def apply_weights(
         self,
         layer: torch.nn.Module,
@@ -93,7 +111,11 @@ class SwordfishLinearKernel(MPLinearKernel):
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
         c = self.config
-        w_q, w_s, _, _ = self._get_weight_params(layer)
+        w_q, w_s, w_zp, _ = self._get_weight_params(layer)
+        # Symmetric GPTQ checkpoints still materialize a qzeros param; only
+        # zero-point configs transformed it into the (8 - zp) * s tensor.
+        if not c.zero_points:
+            w_zp = None
 
         x_2d = x.reshape(-1, x.shape[-1])
         out_shape = x.shape[:-1] + (c.partition_weight_shape[1],)
@@ -107,6 +129,7 @@ class SwordfishLinearKernel(MPLinearKernel):
             c.group_size,
             c.partition_weight_shape[0],
             c.partition_weight_shape[1],
+            group_zps=w_zp,
         )
 
         if bias is not None:

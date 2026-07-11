@@ -5,6 +5,7 @@
 // of 128, with a 2-SM (cta_group::2) MMA.
 
 #include <algorithm>
+#include <optional>
 #include <torch/csrc/stable/accelerator.h>
 #include <torch/csrc/stable/library.h>
 #include <torch/csrc/stable/ops.h>
@@ -55,7 +56,6 @@ using StrideA = cutlass::gemm::TagToStrideA_t<cutlass::layout::RowMajor>;  // pa
 using StrideB = cutlass::gemm::TagToStrideB_t<
     typename cutlass::layout::LayoutTranspose<cutlass::layout::RowMajor>::type>;  // activations
 using StridePairA = decltype(cute::make_tuple(StrideA{}, LayoutScale{}));
-using ElementPairA = cute::tuple<uint8_t, MmaType>;
 
 static constexpr cute::UMMA::Major UmmaMajorA = cute::UMMA::Major::K;
 static constexpr cute::UMMA::Major UmmaMajorB = cute::UMMA::Major::K;
@@ -65,9 +65,12 @@ static constexpr cute::UMMA::Major UmmaMajorB = cute::UMMA::Major::K;
 // columns each. N=256 wins compute-bound shapes (per-instruction issue
 // overhead caps a 256x128 UMMA at about two thirds of the 256x256 rate);
 // N=128 wins K-heavy shapes, where the wide tile starves the K pipeline.
-template <int kTileN>
+template <int kTileN, bool kHasZp = false>
 struct PrefillCfg {
   using MmaTileShape = Shape<_256, Int<kTileN>, _128>;
+  // A third element in the A tuple enables the collective's zero-point row.
+  using ElementPairA = cute::conditional_t<kHasZp,
+      cute::tuple<uint8_t, MmaType, MmaType>, cute::tuple<uint8_t, MmaType>>;
 
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
       ArchTag, OperatorClass,
@@ -120,7 +123,8 @@ struct PrefillCfg {
   // TMEM is 512 columns and an accumulator stage needs kTileN of them.
   static constexpr int kAccumStages = 512 / kTileN;
   // B stage is the CTA's half of the N-split activation tile, kTileN/2 rows.
-  static constexpr int kInputStageBytes = 8192 + kTileN * 128 + 256 + 64;
+  static constexpr int kInputStageBytes =
+      8192 + kTileN * 128 + 256 + 64 + (kHasZp ? 256 : 0);
   static constexpr int kComputeStageBytes = 32768 + 32;
   static constexpr int kT2MStages = 2;
   static constexpr int kAvail = kSmemCapacity - kKernelCarveout - kEpilogueBytes
@@ -153,8 +157,9 @@ struct PrefillCfg {
 
 template <class Cfg>
 void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
-         torch::stable::Tensor& group_scales, torch::stable::Tensor& c,
-         int M, int N, int K, cudaStream_t stream) {
+         torch::stable::Tensor& group_scales, const void* zp_ptr,
+         torch::stable::Tensor& c, int M, int N, int K,
+         cudaStream_t stream) {
   using Gemm = typename Cfg::Gemm;
   using GemmKernel = typename Cfg::GemmKernel;
 
@@ -190,7 +195,7 @@ void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
         {reinterpret_cast<uint8_t const*>(b_packed.const_data_ptr()),
          StrideA{}, a_base + int64_t(m0) * K, stride_act,
          reinterpret_cast<MmaType const*>(group_scales.const_data_ptr()),
-         layout_S, nullptr},
+         layout_S, reinterpret_cast<MmaType const*>(zp_ptr)},
         {{1.0f, 0.0f}, c_ptr, stride_c, c_ptr, stride_d}};
 
     Gemm gemm;
@@ -219,11 +224,11 @@ void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
 
 #endif  // CUTLASS_ARCH_MMA_SM100_SUPPORTED
 
-torch::stable::Tensor swordfish_prefill_mm(torch::stable::Tensor& a,
-                                           torch::stable::Tensor& b_packed,
-                                           torch::stable::Tensor& group_scales,
-                                           int64_t group_size, int64_t size_k,
-                                           int64_t size_n) {
+torch::stable::Tensor swordfish_prefill_mm(
+    torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
+    torch::stable::Tensor& group_scales,
+    std::optional<torch::stable::Tensor> const& group_zps, int64_t group_size,
+    int64_t size_k, int64_t size_n) {
 #if defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
   STD_TORCH_CHECK(shape_ok(size_k, size_n) && size_k % 128 == 0 &&
                       size_n % 128 == 0,
@@ -255,6 +260,14 @@ torch::stable::Tensor swordfish_prefill_mm(torch::stable::Tensor& a,
                       group_scales.size(0) == num_groups &&
                       group_scales.size(1) == size_n,
                   "group_scales must be [", num_groups, ", ", size_n, "]");
+  const bool has_zp = group_zps.has_value();
+  if (has_zp) {
+    STD_TORCH_CHECK(
+        group_zps->scalar_type() == torch::headeronly::ScalarType::BFloat16 &&
+            group_zps->dim() == 2 && group_zps->size(0) == num_groups &&
+            group_zps->size(1) == size_n,
+        "group_zps must be bf16 [", num_groups, ", ", size_n, "]");
+  }
 
   const int64_t size_m = a.size(0);
 
@@ -271,12 +284,23 @@ torch::stable::Tensor swordfish_prefill_mm(torch::stable::Tensor& a,
   // Tile-N dispatch. The 256-wide tile wins compute-bound shapes; K-heavy
   // shapes starve its K pipeline and prefer 256x128 (measured on both
   // Thor and B200 at K=14336).
+  const void* zp_ptr = has_zp ? group_zps->const_data_ptr() : nullptr;
   if (K >= 2 * N && K >= 8192) {
-    prefill::run<prefill::PrefillCfg<128>>(a, b_packed, group_scales, c, M, N,
-                                           K, stream);
+    if (has_zp) {
+      prefill::run<prefill::PrefillCfg<128, true>>(a, b_packed, group_scales,
+                                                   zp_ptr, c, M, N, K, stream);
+    } else {
+      prefill::run<prefill::PrefillCfg<128>>(a, b_packed, group_scales,
+                                             nullptr, c, M, N, K, stream);
+    }
   } else {
-    prefill::run<prefill::PrefillCfg<256>>(a, b_packed, group_scales, c, M, N,
-                                           K, stream);
+    if (has_zp) {
+      prefill::run<prefill::PrefillCfg<256, true>>(a, b_packed, group_scales,
+                                                   zp_ptr, c, M, N, K, stream);
+    } else {
+      prefill::run<prefill::PrefillCfg<256>>(a, b_packed, group_scales,
+                                             nullptr, c, M, N, K, stream);
+    }
   }
   return c;
 #else
