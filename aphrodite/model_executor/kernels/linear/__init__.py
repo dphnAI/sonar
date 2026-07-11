@@ -281,6 +281,9 @@ _LINEAR_BACKEND_KERNEL_MAP: dict[str, set[type]] = {
     "swordfish": {
         SwordfishLinearKernel,
     },
+    "allspark": {
+        AllSparkLinearKernel,
+    },
     "fbgemm": {
         FbgemmNvFp4LinearKernel,
     },
