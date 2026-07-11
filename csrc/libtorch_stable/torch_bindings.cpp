@@ -124,6 +124,16 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "SymInt size_n) -> Tensor");
   // conditionally compiled so impl registrations are in source file
 
+  // swordfish fused-MoE decode GEMM: one persistent Stream-K launch over
+  // per-expert ABI v1 weights, token-sorted by moe_align_block_size(16).
+  ops.def(
+      "swordfish_moe_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
+      "Tensor sorted_token_ids, Tensor expert_ids, "
+      "Tensor num_tokens_post_padded, Tensor? topk_weights, "
+      "int moe_block_size, int top_k, bool mul_topk_weights, int num_bits, "
+      "int group_size, SymInt size_k, SymInt size_n) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
   // swordfish w4a16 prefill GEMM (sm100 tcgen05 mixed-input mainloop fork)
   // over the same ABI v1 packed weight.
   ops.def(

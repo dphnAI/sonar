@@ -1615,6 +1615,58 @@ if hasattr(torch.ops._C, "swordfish_mm"):
         return torch.empty((a.shape[0], size_n), dtype=a.dtype, device=a.device)
 
 
+def swordfish_moe_mm(
+    a: torch.Tensor,
+    b_packed: torch.Tensor,
+    group_scales: torch.Tensor,
+    sorted_token_ids: torch.Tensor,
+    expert_ids: torch.Tensor,
+    num_tokens_post_padded: torch.Tensor,
+    topk_weights: torch.Tensor | None,
+    moe_block_size: int,
+    top_k: int,
+    mul_topk_weights: bool,
+    num_bits: int,
+    group_size: int,
+    size_k: int,
+    size_n: int,
+) -> torch.Tensor:
+    """Fused-MoE GEMM over per-expert Swordfish ABI v1 weights
+    (int32 [E, NB, KB, words]) with token blocks prepared by
+    moe_align_block_size(moe_block_size in {16, 64}). The 64-token blocks
+    run the CTA-wide weight-staging kernel for batched shapes. Returns
+    [M * top_k, size_n]."""
+    return torch.ops._C.swordfish_moe_mm(
+        a, b_packed, group_scales, sorted_token_ids, expert_ids,
+        num_tokens_post_padded, topk_weights, moe_block_size, top_k,
+        mul_topk_weights, num_bits, group_size, size_k, size_n,
+    )
+
+
+if hasattr(torch.ops._C, "swordfish_moe_mm"):
+
+    @register_fake("_C::swordfish_moe_mm")
+    def swordfish_moe_mm_fake(
+        a: torch.Tensor,
+        b_packed: torch.Tensor,
+        group_scales: torch.Tensor,
+        sorted_token_ids: torch.Tensor,
+        expert_ids: torch.Tensor,
+        num_tokens_post_padded: torch.Tensor,
+        topk_weights: torch.Tensor | None,
+        moe_block_size: int,
+        top_k: int,
+        mul_topk_weights: bool,
+        num_bits: int,
+        group_size: int,
+        size_k: int,
+        size_n: int,
+    ) -> torch.Tensor:
+        return torch.empty(
+            (a.shape[0] * top_k, size_n), dtype=a.dtype, device=a.device
+        )
+
+
 def swordfish_prefill_mm(
     a: torch.Tensor,
     b_packed: torch.Tensor,

@@ -552,6 +552,7 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       set(SWORDFISH_SRCS
         "csrc/libtorch_stable/quantization/swordfish/swordfish_prepack.cu"
         "csrc/libtorch_stable/quantization/swordfish/swordfish_mm.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_moe.cu"
         "csrc/libtorch_stable/quantization/swordfish/swordfish_prefill.cu")
       set_gencode_flags_for_srcs(
         SRCS "${SWORDFISH_SRCS}"
