@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+"""Swordfish decode GEMM correctness: swordfish_mm vs a dequantized reference.
+
+The oracle is A @ w_ref where w_ref is the fp reconstruction of the quantized
+weight (from swordfish_quantize). Tolerances mirror test_machete_mm.
+"""
+
+import pytest
+import torch
+
+from aphrodite import _custom_ops as ops
+from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
+    swordfish_quantize,
+)
+from aphrodite.platforms import current_platform
+from aphrodite.scalar_type import scalar_types
+from tests.kernels.utils import opcheck
+
+if not current_platform.is_cuda():
+    pytest.skip(reason="swordfish requires CUDA", allow_module_level=True)
+if not current_platform.has_device_capability(100):
+    pytest.skip(reason="swordfish requires sm100 family", allow_module_level=True)
+
+DEVICE = "cuda"
+QT = scalar_types.uint4b8
+
+# (M, K, N) decode sweep including regime boundaries, plus K/N variety
+MNK = [
+    (1, 256, 128),
+    (2, 256, 128),
+    (4, 512, 256),
+    (8, 4096, 4096),
+    (16, 4096, 4096),
+    (17, 512, 128),
+    (32, 4096, 512),
+    (33, 256, 256),
+]
+GROUPS = [-1, 128]
+DTYPES = [torch.float16, torch.bfloat16]
+
+
+@pytest.mark.parametrize("mnk", MNK)
+@pytest.mark.parametrize("group", GROUPS)
+@pytest.mark.parametrize("dtype", DTYPES)
+def test_swordfish_mm_correct(mnk, group, dtype):
+    m, k, n = mnk
+    if group != -1 and k % group != 0:
+        pytest.skip("k not divisible by group")
+
+    torch.manual_seed(k * 13 + n + m)
+    w = torch.randn((k, n), dtype=dtype, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales = swordfish_quantize(w, QT, group)
+
+    a = torch.randn((m, k), dtype=dtype, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+
+    out = ops.swordfish_mm(a, packed, scales, group, k, n)
+
+    assert out.shape == (m, n)
+    assert out.dtype == dtype
+    # machete-style tolerance
+    torch.testing.assert_close(
+        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
+    )
+
+
+def test_swordfish_mm_opcheck():
+    # M > 47 with fp16 exercises the deterministic decode epilogue. The
+    # atomic window's summation order varies run to run, which opcheck's
+    # trace comparison flags, and fp16 never routes to the prefill kernel.
+    m, k, n = 64, 512, 128
+    torch.manual_seed(1)
+    w = torch.randn((k, n), dtype=torch.float16, device=DEVICE) / (k**0.5)
+    _, packed, scales = swordfish_quantize(w, QT, 128)
+    a = torch.randn((m, k), dtype=torch.float16, device=DEVICE)
+    opcheck(torch.ops._C.swordfish_mm, (a, packed, scales, 128, k, n))
+
+
+@pytest.mark.parametrize("dtype", DTYPES)
+def test_swordfish_mm_determinism(dtype):
+    # M > 47 exercises the deterministic paths, fp16 through the
+    # smem-reduction decode epilogue and bf16 through the tcgen05 prefill.
+    # M <= 47 uses the atomic epilogue, which is not run-stable by design.
+    m, k, n = 64, 1024, 256
+    torch.manual_seed(9)
+    w = torch.randn((k, n), dtype=dtype, device=DEVICE) / (k**0.5)
+    _, packed, scales = swordfish_quantize(w, QT, 128)
+    a = torch.randn((m, k), dtype=dtype, device=DEVICE)
+    o0 = ops.swordfish_mm(a, packed, scales, 128, k, n)
+    for _ in range(5):
+        assert torch.equal(o0, ops.swordfish_mm(a, packed, scales, 128, k, n))

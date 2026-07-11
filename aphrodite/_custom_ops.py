@@ -1550,6 +1550,89 @@ if hasattr(torch.ops._C, "machete_prepack_B"):
         return torch.empty_like(b_q_weight, memory_format=torch.contiguous_format)
 
 
+# Swordfish (Blackwell sm100/sm110 w4a16)
+def swordfish_prepack_B(
+    b_q_weight: torch.Tensor,
+    size_k: int,
+    size_n: int,
+) -> torch.Tensor:
+    """Pack a GPTQ int4 weight (int32 [K/8, N]) into Swordfish ABI v1
+    (int32 [NB, KB, 512] block-linear)."""
+    return torch.ops._C.swordfish_prepack_B(b_q_weight, size_k, size_n)
+
+
+if hasattr(torch.ops._C, "swordfish_prepack_B"):
+
+    @register_fake("_C::swordfish_prepack_B")
+    def swordfish_prepack_B_fake(
+        b_q_weight: torch.Tensor,
+        size_k: int,
+        size_n: int,
+    ) -> torch.Tensor:
+        return torch.empty(
+            (size_n // 64, size_k // 64, 512),
+            dtype=torch.int32,
+            device=b_q_weight.device,
+        )
+
+
+def swordfish_mm(
+    a: torch.Tensor,
+    b_packed: torch.Tensor,
+    group_scales: torch.Tensor,
+    group_size: int,
+    size_k: int,
+    size_n: int,
+) -> torch.Tensor:
+    """w4a16 GEMM: a [M, K] fp16/bf16 times a Swordfish ABI v1 packed weight
+    (int32 [NB, KB, 512]) with per-group scales [groups, N]."""
+    return torch.ops._C.swordfish_mm(a, b_packed, group_scales, group_size, size_k, size_n)
+
+
+if hasattr(torch.ops._C, "swordfish_mm"):
+
+    @register_fake("_C::swordfish_mm")
+    def swordfish_mm_fake(
+        a: torch.Tensor,
+        b_packed: torch.Tensor,
+        group_scales: torch.Tensor,
+        group_size: int,
+        size_k: int,
+        size_n: int,
+    ) -> torch.Tensor:
+        return torch.empty((a.shape[0], size_n), dtype=a.dtype, device=a.device)
+
+
+def swordfish_prefill_mm(
+    a: torch.Tensor,
+    b_packed: torch.Tensor,
+    group_scales: torch.Tensor,
+    group_size: int,
+    size_k: int,
+    size_n: int,
+) -> torch.Tensor:
+    """w4a16 prefill GEMM (sm100 tcgen05 mixed-input mainloop fork): a [M, K]
+    bf16 times a Swordfish ABI v1 packed weight (int32 [NB, KB, 512]) with
+    bf16 per-group scales [groups, N]. v1: group_size 128, K/N % 128 == 0."""
+    return torch.ops._C.swordfish_prefill_mm(
+        a, b_packed, group_scales, group_size, size_k, size_n
+    )
+
+
+if hasattr(torch.ops._C, "swordfish_prefill_mm"):
+
+    @register_fake("_C::swordfish_prefill_mm")
+    def swordfish_prefill_mm_fake(
+        a: torch.Tensor,
+        b_packed: torch.Tensor,
+        group_scales: torch.Tensor,
+        group_size: int,
+        size_k: int,
+        size_n: int,
+    ) -> torch.Tensor:
+        return torch.empty((a.shape[0], size_n), dtype=a.dtype, device=a.device)
+
+
 # CUTLASS W4A8
 def cutlass_w4a8_mm(
     a: torch.Tensor,

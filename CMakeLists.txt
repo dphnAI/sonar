@@ -538,6 +538,31 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       SRCS "${APHRODITE_STABLE_EXT_SRC}"
       CUDA_ARCHS "${CUDA_ARCHS}")
 
+    #
+    # Swordfish kernels: w4a16 GEMM for the Blackwell sm100 family
+    # (datacenter sm100 + Thor sm110). Family (f) variants need CUDA >= 13.0;
+    # older toolchains fall back to arch-exact sm100.
+    #
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
+      cuda_archs_loose_intersection(SWORDFISH_ARCHS "10.0f;11.0f" "${CUDA_ARCHS}")
+    else()
+      cuda_archs_loose_intersection(SWORDFISH_ARCHS "10.0a" "${CUDA_ARCHS}")
+    endif()
+    if(SWORDFISH_ARCHS)
+      set(SWORDFISH_SRCS
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_prepack.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_mm.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_prefill.cu")
+      set_gencode_flags_for_srcs(
+        SRCS "${SWORDFISH_SRCS}"
+        CUDA_ARCHS "${SWORDFISH_ARCHS}")
+      list(APPEND APHRODITE_STABLE_EXT_SRC "${SWORDFISH_SRCS}")
+      message(STATUS "Building Swordfish kernels for archs: ${SWORDFISH_ARCHS}")
+    else()
+      message(STATUS "Not building Swordfish kernels as no compatible archs "
+                     "found in CUDA target architectures")
+    endif()
+
     if(COOPERATIVE_TOPK_ARCHS)
       list(APPEND APHRODITE_STABLE_EXT_SRC
         "csrc/libtorch_stable/cooperative_topk.cu")

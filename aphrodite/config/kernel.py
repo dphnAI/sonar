@@ -147,6 +147,7 @@ LinearBackend = Literal[
     "torch",
     "aiter",
     "machete",
+    "swordfish",
     "fbgemm",
     "conch",
     "exllama",

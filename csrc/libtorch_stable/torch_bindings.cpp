@@ -108,6 +108,26 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "marlin_int4_fp8_preprocess(Tensor qweight, "
       "Tensor? qzeros_or_none, bool inplace) -> Tensor");
   // conditionally compiled so impl registrations are in source file
+
+  // swordfish (sm100/sm110 w4a16): pack a GPTQ int4 weight into the
+  // Swordfish ABI v1 block-linear layout.
+  ops.def(
+      "swordfish_prepack_B(Tensor b_q_weight, SymInt size_k, "
+      "SymInt size_n) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
+  // swordfish w4a16 decode GEMM over the ABI v1 packed weight.
+  ops.def(
+      "swordfish_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
+      "int group_size, SymInt size_k, SymInt size_n) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
+  // swordfish w4a16 prefill GEMM (sm100 tcgen05 mixed-input mainloop fork)
+  // over the same ABI v1 packed weight.
+  ops.def(
+      "swordfish_prefill_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
+      "int group_size, SymInt size_k, SymInt size_n) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
 #endif
 
 #ifndef USE_ROCM
