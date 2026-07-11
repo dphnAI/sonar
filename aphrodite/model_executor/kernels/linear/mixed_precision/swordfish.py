@@ -72,7 +72,9 @@ class SwordfishLinearKernel(MPLinearKernel):
         def transform_w_q(x):
             assert isinstance(x, BaseAphroditeParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
-            x.data = ops.swordfish_prepack_B(x.data.contiguous(), size_k, size_n)
+            x.data = ops.swordfish_prepack_B(
+                x.data.contiguous(), size_k, size_n, c.weight_type.size_bits
+            )
             return x
 
         def transform_w_s(x):
@@ -130,6 +132,7 @@ class SwordfishLinearKernel(MPLinearKernel):
             c.partition_weight_shape[0],
             c.partition_weight_shape[1],
             group_zps=w_zp,
+            num_bits=c.weight_type.size_bits,
         )
 
         if bias is not None:

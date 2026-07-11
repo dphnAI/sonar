@@ -20,8 +20,13 @@ inline constexpr int kTilesPerBlock = kBlockK / kMarlinTileK;         // 4
 inline constexpr int kBlockBytes = kTilesPerBlock * kSubTileBytes;    // 2048
 inline constexpr int kBlockInt32 = kBlockBytes / 4;                   // 512
 
+// 8-bit blocks double every byte figure; the tile permutation is the same.
+inline constexpr int kSubTileBytes8 = 2 * kSubTileBytes;
+inline constexpr int kBlockBytes8 = 2 * kBlockBytes;
+inline constexpr int kBlockInt32_8 = 2 * kBlockInt32;
+
 // ---- schemes (metadata enums; v1 supports exactly one of each) --------------
-enum class WeightScheme : uint8_t { kU4B8 = 1 };  // int4 symmetric, +8 bias
+enum class WeightScheme : uint8_t { kU4B8 = 1, kU8B128 = 2 };
 enum class ScaleScheme : uint8_t { kGroupContiguous = 1 };  // [groups][N] fp16/bf16
 enum class ZpScheme : uint8_t { kNone = 0 };
 

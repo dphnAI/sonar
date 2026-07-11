@@ -65,7 +65,7 @@ static constexpr cute::UMMA::Major UmmaMajorB = cute::UMMA::Major::K;
 // columns each. N=256 wins compute-bound shapes (per-instruction issue
 // overhead caps a 256x128 UMMA at about two thirds of the 256x256 rate);
 // N=128 wins K-heavy shapes, where the wide tile starves the K pipeline.
-template <int kTileN, bool kHasZp = false>
+template <int kTileN, bool kHasZp = false, int kWBits = 4>
 struct PrefillCfg {
   using MmaTileShape = Shape<_256, Int<kTileN>, _128>;
   // A third element in the A tuple enables the collective's zero-point row.
@@ -123,8 +123,9 @@ struct PrefillCfg {
   // TMEM is 512 columns and an accumulator stage needs kTileN of them.
   static constexpr int kAccumStages = 512 / kTileN;
   // B stage is the CTA's half of the N-split activation tile, kTileN/2 rows.
-  static constexpr int kInputStageBytes =
-      8192 + kTileN * 128 + 256 + 64 + (kHasZp ? 256 : 0);
+  static constexpr int kInputStageBytes = (kWBits == 8 ? 16384 : 8192) +
+                                          kTileN * 128 + 256 + 64 +
+                                          (kHasZp ? 256 : 0);
   static constexpr int kComputeStageBytes = 32768 + 32;
   static constexpr int kT2MStages = 2;
   static constexpr int kAvail = kSmemCapacity - kKernelCarveout - kEpilogueBytes
@@ -143,7 +144,8 @@ struct PrefillCfg {
       // across the CTA pair and the leader's MMA reads the peer's half, so
       // the copy must deliver both halves with one arrival on the leader's
       // barrier. A per-CTA TMA arrives at local barriers and races.
-      cute::SM100_TMA_2SM_LOAD, SmemLayoutAtomPairB, CopyAtomPairB, cute::identity>;
+      cute::SM100_TMA_2SM_LOAD, SmemLayoutAtomPairB, CopyAtomPairB,
+      cute::identity, kWBits>;
 
   // Forked kernel layer whose warp layout derives from the collective's
   // NumTransformationThreads.
@@ -227,8 +229,8 @@ void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
 torch::stable::Tensor swordfish_prefill_mm(
     torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
     torch::stable::Tensor& group_scales,
-    std::optional<torch::stable::Tensor> const& group_zps, int64_t group_size,
-    int64_t size_k, int64_t size_n) {
+    std::optional<torch::stable::Tensor> const& group_zps, int64_t num_bits,
+    int64_t group_size, int64_t size_k, int64_t size_n) {
 #if defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
   STD_TORCH_CHECK(shape_ok(size_k, size_n) && size_k % 128 == 0 &&
                       size_n % 128 == 0,
@@ -247,13 +249,17 @@ torch::stable::Tensor swordfish_prefill_mm(
                   "swordfish prefill v1 supports group_size ",
                   prefill::kScaleGranularityK, " only; got ", group_size);
 
+  STD_TORCH_CHECK(num_bits == 4 || num_bits == 8,
+                  "swordfish supports 4-bit and 8-bit weights");
+  const bool w8 = num_bits == 8;
   const int64_t nb = num_blocks_n(size_n);
   const int64_t kb = num_blocks_k(size_k);
+  const int64_t words = w8 ? kBlockInt32_8 : kBlockInt32;
   STD_TORCH_CHECK(
       b_packed.scalar_type() == torch::headeronly::ScalarType::Int &&
           b_packed.dim() == 3 && b_packed.size(0) == nb &&
-          b_packed.size(1) == kb && b_packed.size(2) == kBlockInt32,
-      "b_packed must be int32 [", nb, ", ", kb, ", ", kBlockInt32, "]");
+          b_packed.size(1) == kb && b_packed.size(2) == words,
+      "b_packed must be int32 [", nb, ", ", kb, ", ", words, "]");
 
   const int64_t num_groups = size_k / group_size;
   STD_TORCH_CHECK(group_scales.dim() == 2 &&
@@ -284,8 +290,15 @@ torch::stable::Tensor swordfish_prefill_mm(
   // Tile-N dispatch. The 256-wide tile wins compute-bound shapes; K-heavy
   // shapes starve its K pipeline and prefer 256x128 (measured on both
   // Thor and B200 at K=14336).
+  STD_TORCH_CHECK(!(has_zp && w8), "zero points are a 4-bit feature");
   const void* zp_ptr = has_zp ? group_zps->const_data_ptr() : nullptr;
-  if (K >= 2 * N && K >= 8192) {
+  if (w8) {
+    // The 256-wide tile's input stages do not fit SMEM at 8 bits, and the
+    // doubled weight stream pressures the K pipeline the way K-heavy shapes
+    // do, which prefers 256x128 regardless.
+    prefill::run<prefill::PrefillCfg<128, false, 8>>(
+        a, b_packed, group_scales, nullptr, c, M, N, K, stream);
+  } else if (K >= 2 * N && K >= 8192) {
     if (has_zp) {
       prefill::run<prefill::PrefillCfg<128, true>>(a, b_packed, group_scales,
                                                    zp_ptr, c, M, N, K, stream);

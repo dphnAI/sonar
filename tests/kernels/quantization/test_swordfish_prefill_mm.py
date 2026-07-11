@@ -66,7 +66,7 @@ def test_swordfish_prefill_mm_opcheck():
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     opcheck(
         torch.ops._C.swordfish_prefill_mm,
-        (a, packed, scales, None, GROUP, k, n),
+        (a, packed, scales, None, 4, GROUP, k, n),
     )
 
 
@@ -91,4 +91,16 @@ def test_swordfish_prefill_mm_awq_correct(mnk):
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_prefill_mm(a, packed, scales, GROUP, k, n, group_zps=zps_neg)
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+
+
+@pytest.mark.parametrize("mnk", [(256, 512, 256), (128, 2048, 1024), (512, 11008, 2048)])
+def test_swordfish_prefill_mm_8bit_correct(mnk):
+    m, k, n = mnk
+    torch.manual_seed(m + k + n + 1)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales = swordfish_quantize(w, scalar_types.uint8b128, GROUP)
+    a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_prefill_mm(a, packed, scales, GROUP, k, n, num_bits=8)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

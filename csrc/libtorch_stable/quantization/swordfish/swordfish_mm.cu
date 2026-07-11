@@ -20,8 +20,8 @@ namespace swordfish {
 torch::stable::Tensor swordfish_prefill_mm(
     torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
     torch::stable::Tensor& group_scales,
-    std::optional<torch::stable::Tensor> const& group_zps, int64_t group_size,
-    int64_t size_k, int64_t size_n);
+    std::optional<torch::stable::Tensor> const& group_zps, int64_t num_bits,
+    int64_t group_size, int64_t size_k, int64_t size_n);
 
 namespace {
 
@@ -56,16 +56,19 @@ inline int cached_sm_count() {
   return sms;
 }
 
-template <aphrodite::ScalarTypeId type_id, int T, bool HAS_ZP>
+template <aphrodite::ScalarTypeId type_id, int T, bool HAS_ZP,
+          bool W8 = false>
 void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
                              const void* z, void* c, int m, int k, int n,
                              int group_size, cudaStream_t stream) {
   using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
   constexpr int kStagesT = T == 1 ? kStages : (T == 2 ? 4 : 3);
+  constexpr int kUnitK = W8 ? 16 : 32;
   static int ctas_per_sm = 0;
   if (ctas_per_sm == 0) {
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &ctas_per_sm, swordfish_decode_streamk_kernel<type_id, T, HAS_ZP>,
+        &ctas_per_sm,
+        swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8>,
         kDecodeThreads, 0);
     if (ctas_per_sm <= 0) ctas_per_sm = 2;
   }
@@ -74,7 +77,7 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
   const int m_tiles = (m + 15) / 16;
   const int m_groups = (m_tiles + T - 1) / T;
   const int nb = n / kBlockN;
-  const int num_pairs = k / 32;
+  const int num_pairs = k / kUnitK;
   const int64_t total = int64_t(m_groups) * nb * num_pairs;
   // Cap the grid so every warp gets at least a pipeline's worth of pairs.
   const int64_t max_warps = total / (2 * kStagesT) > 0 ? total / (2 * kStagesT) : 1;
@@ -84,7 +87,7 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
   }
   if (ctas < 1) ctas = 1;
   cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
-  swordfish_decode_streamk_kernel<type_id, T, HAS_ZP>
+  swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8>
       <<<ctas, kDecodeThreads, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(a), b,
           reinterpret_cast<const scalar_t*>(s),
@@ -92,7 +95,8 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
           reinterpret_cast<scalar_t*>(c), m, k, n, group_size, m_groups);
 }
 
-template <aphrodite::ScalarTypeId type_id, int W, bool HAS_ZP>
+template <aphrodite::ScalarTypeId type_id, int W, bool HAS_ZP,
+          bool W8 = false>
 void launch_decode_mshare_t(const void* a, const int32_t* b, const void* s,
                             const void* z, void* c, int m, int k, int n,
                             int group_size, cudaStream_t stream) {
@@ -100,15 +104,15 @@ void launch_decode_mshare_t(const void* a, const int32_t* b, const void* s,
   static int ctas_per_sm = 0;
   if (ctas_per_sm == 0) {
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &ctas_per_sm, swordfish_decode_mshare_kernel<type_id, W, HAS_ZP>,
-        W * 32, 0);
+        &ctas_per_sm,
+        swordfish_decode_mshare_kernel<type_id, W, HAS_ZP, W8>, W * 32, 0);
     if (ctas_per_sm <= 0) ctas_per_sm = 1;
   }
   int sms = cached_sm_count();
   const int m_tiles = (m + 15) / 16;
   const int m_groups = (m_tiles + W - 1) / W;
   const int nb = n / kBlockN;
-  const int num_chunks = k / 64;
+  const int num_chunks = k / (W8 ? 32 : 64);
   const int64_t total = int64_t(m_groups) * nb * num_chunks;
   int ctas = ctas_per_sm * sms;
   // Fill is load-bearing; a grid capped toward long unbroken segments
@@ -117,7 +121,7 @@ void launch_decode_mshare_t(const void* a, const int32_t* b, const void* s,
   if (ctas > max_ctas) ctas = int(max_ctas);
   if (ctas < 1) ctas = 1;
   cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
-  swordfish_decode_mshare_kernel<type_id, W, HAS_ZP>
+  swordfish_decode_mshare_kernel<type_id, W, HAS_ZP, W8>
       <<<ctas, W * 32, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(a), b,
           reinterpret_cast<const scalar_t*>(s),
@@ -125,7 +129,8 @@ void launch_decode_mshare_t(const void* a, const int32_t* b, const void* s,
           reinterpret_cast<scalar_t*>(c), m, k, n, group_size, m_groups);
 }
 
-template <aphrodite::ScalarTypeId type_id, int T, bool HAS_ZP>
+template <aphrodite::ScalarTypeId type_id, int T, bool HAS_ZP,
+          bool W8 = false>
 void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
                             const void* z, void* c, int m, int k, int n,
                             int group_size, cudaStream_t stream) {
@@ -134,7 +139,8 @@ void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
   static int ctas_per_sm = 0;  // per (type, T) instantiation
   if (ctas_per_sm == 0) {
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &ctas_per_sm, swordfish_decode_kernel<type_id, true, T, HAS_ZP>,
+        &ctas_per_sm,
+        swordfish_decode_kernel<type_id, true, T, HAS_ZP, W8>,
         kDecodeThreads, 0);
     if (ctas_per_sm <= 0) ctas_per_sm = 4;
   }
@@ -142,7 +148,7 @@ void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
   cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
   const int m_ctas = (m + 16 * T - 1) / (16 * T);
   const int nb = n / kBlockN;
-  const int num_pairs = k / 32;
+  const int num_pairs = k / (W8 ? 16 : 32);
   const int target = ctas_per_sm * sms;
   // Floor division. Splitting K pays only when columns fall well short of
   // the machine, since slicing shortens the per-warp pipeline and raises
@@ -159,7 +165,7 @@ void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
   if (split > 1) {
     cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
   }
-  swordfish_decode_kernel<type_id, true, T, HAS_ZP>
+  swordfish_decode_kernel<type_id, true, T, HAS_ZP, W8>
       <<<sgrid, kDecodeThreads, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(a), b,
           reinterpret_cast<const scalar_t*>(s),
@@ -167,31 +173,31 @@ void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
           reinterpret_cast<scalar_t*>(c), m, k, n, group_size);
 }
 
-template <aphrodite::ScalarTypeId type_id, bool HAS_ZP>
+template <aphrodite::ScalarTypeId type_id, bool HAS_ZP, bool W8 = false>
 void launch_decode_atomic(int T, const void* a, const int32_t* b,
                           const void* s, const void* z, void* c, int m, int k,
                           int n, int group_size, cudaStream_t stream) {
   if (T == 1) {
-    launch_decode_atomic_t<type_id, 1, HAS_ZP>(a, b, s, z, c, m, k, n,
-                                               group_size, stream);
+    launch_decode_atomic_t<type_id, 1, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                   group_size, stream);
   } else if (T == 2) {
-    launch_decode_atomic_t<type_id, 2, HAS_ZP>(a, b, s, z, c, m, k, n,
-                                               group_size, stream);
+    launch_decode_atomic_t<type_id, 2, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                   group_size, stream);
   } else {
-    launch_decode_atomic_t<type_id, 3, HAS_ZP>(a, b, s, z, c, m, k, n,
-                                               group_size, stream);
+    launch_decode_atomic_t<type_id, 3, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                   group_size, stream);
   }
 }
 
-template <aphrodite::ScalarTypeId type_id, bool HAS_ZP>
+template <aphrodite::ScalarTypeId type_id, bool HAS_ZP, bool W8 = false>
 void launch_decode(const void* a, const int32_t* b, const void* s,
                    const void* z, void* c, int m, int k, int n, int group_size,
                    cudaStream_t stream) {
   using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
   if (m <= 16) {
     // Tuned single-tile path with in-kernel C zeroing and heuristic split-K.
-    launch_decode_atomic<type_id, HAS_ZP>(1, a, b, s, z, c, m, k, n,
-                                          group_size, stream);
+    launch_decode_atomic<type_id, HAS_ZP, W8>(1, a, b, s, z, c, m, k, n,
+                                              group_size, stream);
   } else if (m <= 96) {
     // Window dispatch. When columns alone fill the machine the fused atomic
     // grid (in-kernel zeroing, no memset) is already balanced; otherwise
@@ -200,27 +206,28 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
     // split-K heuristics and wave quantization.
     const bool wide_n = n / kBlockN >= 4 * cached_sm_count();
     if (wide_n && m <= 47) {
-      launch_decode_atomic<type_id, HAS_ZP>(m <= 32 ? 2 : 3, a, b, s, z, c, m,
-                                            k, n, group_size, stream);
+      launch_decode_atomic<type_id, HAS_ZP, W8>(m <= 32 ? 2 : 3, a, b, s, z,
+                                                c, m, k, n, group_size,
+                                                stream);
     } else if (m <= 32) {
-      launch_decode_streamk_t<type_id, 2, HAS_ZP>(a, b, s, z, c, m, k, n,
-                                                  group_size, stream);
+      launch_decode_streamk_t<type_id, 2, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                      group_size, stream);
     } else if (m <= 47) {
-      launch_decode_streamk_t<type_id, 3, HAS_ZP>(a, b, s, z, c, m, k, n,
-                                                  group_size, stream);
+      launch_decode_streamk_t<type_id, 3, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                      group_size, stream);
     } else if (m <= 64) {
       // M-shared CTA for the band the prefill crossover leaves to decode on
       // many-SM parts. W warps, one m16 tile each for the whole K range, so
       // the weight stream covers all rows once.
-      launch_decode_mshare_t<type_id, 4, HAS_ZP>(a, b, s, z, c, m, k, n,
-                                                 group_size, stream);
+      launch_decode_mshare_t<type_id, 4, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                     group_size, stream);
     } else {
-      launch_decode_mshare_t<type_id, 6, HAS_ZP>(a, b, s, z, c, m, k, n,
-                                                 group_size, stream);
+      launch_decode_mshare_t<type_id, 6, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                     group_size, stream);
     }
   } else {
     dim3 grid((m + 15) / 16, n / kBlockN);
-    swordfish_decode_kernel<type_id, false, 1, HAS_ZP>
+    swordfish_decode_kernel<type_id, false, 1, HAS_ZP, W8>
         <<<grid, kDecodeThreads, 0, stream>>>(
             reinterpret_cast<const scalar_t*>(a), b,
             reinterpret_cast<const scalar_t*>(s),
@@ -234,8 +241,11 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
 torch::stable::Tensor swordfish_mm(
     torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
     torch::stable::Tensor& group_scales,
-    std::optional<torch::stable::Tensor> const& group_zps, int64_t group_size,
-    int64_t size_k, int64_t size_n) {
+    std::optional<torch::stable::Tensor> const& group_zps, int64_t num_bits,
+    int64_t group_size, int64_t size_k, int64_t size_n) {
+  STD_TORCH_CHECK(num_bits == 4 || num_bits == 8,
+                  "swordfish supports 4-bit and 8-bit weights");
+  const bool w8 = num_bits == 8;
   STD_TORCH_CHECK(shape_ok(size_k, size_n), "swordfish ABI v1 requires K % ",
                   kBlockK, " == 0 and N % ", kBlockN, " == 0; got K=", size_k,
                   " N=", size_n);
@@ -252,11 +262,12 @@ torch::stable::Tensor swordfish_mm(
 
   const int64_t nb = num_blocks_n(size_n);
   const int64_t kb = num_blocks_k(size_k);
+  const int64_t words = w8 ? kBlockInt32_8 : kBlockInt32;
   STD_TORCH_CHECK(
       b_packed.scalar_type() == torch::headeronly::ScalarType::Int &&
           b_packed.dim() == 3 && b_packed.size(0) == nb &&
-          b_packed.size(1) == kb && b_packed.size(2) == kBlockInt32,
-      "b_packed must be int32 [", nb, ", ", kb, ", ", kBlockInt32, "]");
+          b_packed.size(1) == kb && b_packed.size(2) == words,
+      "b_packed must be int32 [", nb, ", ", kb, ", ", words, "]");
 
   int64_t num_groups = 1;
   if (group_size != -1) {
@@ -274,6 +285,7 @@ torch::stable::Tensor swordfish_mm(
                   "group_scales must be [", num_groups, ", ", size_n, "]");
   const bool has_zp = group_zps.has_value();
   if (has_zp) {
+    STD_TORCH_CHECK(!w8, "zero points are a 4-bit (AWQ/HQQ) feature");
     STD_TORCH_CHECK(group_zps->scalar_type() == a_st &&
                         group_zps->dim() == 2 &&
                         group_zps->size(0) == num_groups &&
@@ -286,7 +298,7 @@ torch::stable::Tensor swordfish_mm(
 
   if (use_prefill(size_m, a_st, group_size, size_k, size_n)) {
     return swordfish_prefill_mm(a, b_packed, group_scales, group_zps,
-                                group_size, size_k, size_n);
+                                num_bits, group_size, size_k, size_n);
   }
 
   const int32_t device_index = a.get_device_index();
@@ -308,6 +320,10 @@ torch::stable::Tensor swordfish_mm(
       launch_decode<aphrodite::kFloat16.id(), true>(
           a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n,
           group_size, stream);
+    } else if (w8) {
+      launch_decode<aphrodite::kFloat16.id(), false, true>(
+          a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n,
+          group_size, stream);
     } else {
       launch_decode<aphrodite::kFloat16.id(), false>(
           a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n,
@@ -316,6 +332,10 @@ torch::stable::Tensor swordfish_mm(
   } else {
     if (has_zp) {
       launch_decode<aphrodite::kBFloat16.id(), true>(
+          a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n,
+          group_size, stream);
+    } else if (w8) {
+      launch_decode<aphrodite::kBFloat16.id(), false, true>(
           a_ptr, b_ptr, s_ptr, z_ptr, c_ptr, size_m, size_k, size_n,
           group_size, stream);
     } else {

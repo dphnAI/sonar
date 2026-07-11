@@ -29,11 +29,14 @@ __host__ __device__ inline constexpr int64_t subtile_byte_offset(int t) {
 //   marlin_idx(row, col) = row * (N*2) + col
 //   swordfish word w of block (nb,kb):  t = w / 128, c = w % 128
 //     -> marlin row = 4*kb + t, marlin col = 128*nb + c
+// kTileInt32 = int32 words per marlin 16x64 tile: 128 at 4-bit, 256 at
+// 8-bit (where the flat layout is int32[K/16][N*4]).
+template <int kTileInt32 = 128>
 __host__ __device__ inline constexpr int64_t marlin_word_index(
     int64_t nb, int64_t kb, int w, int64_t n) {
-  const int t = w / 128;
-  const int c = w % 128;
-  return (4 * kb + t) * (n * 2) + 128 * nb + c;
+  const int t = w / kTileInt32;
+  const int c = w % kTileInt32;
+  return (4 * kb + t) * (n * kTileInt32 / 64) + kTileInt32 * nb + c;
 }
 
 }  // namespace swordfish

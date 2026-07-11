@@ -1555,10 +1555,11 @@ def swordfish_prepack_B(
     b_q_weight: torch.Tensor,
     size_k: int,
     size_n: int,
+    num_bits: int = 4,
 ) -> torch.Tensor:
-    """Pack a GPTQ int4 weight (int32 [K/8, N]) into Swordfish ABI v1
-    (int32 [NB, KB, 512] block-linear)."""
-    return torch.ops._C.swordfish_prepack_B(b_q_weight, size_k, size_n)
+    """Pack a GPTQ int weight (int32 [K*bits/32, N]) into Swordfish ABI v1
+    (int32 [NB, KB, 512*bits/4] block-linear)."""
+    return torch.ops._C.swordfish_prepack_B(b_q_weight, size_k, size_n, num_bits)
 
 
 if hasattr(torch.ops._C, "swordfish_prepack_B"):
@@ -1568,9 +1569,10 @@ if hasattr(torch.ops._C, "swordfish_prepack_B"):
         b_q_weight: torch.Tensor,
         size_k: int,
         size_n: int,
+        num_bits: int,
     ) -> torch.Tensor:
         return torch.empty(
-            (size_n // 64, size_k // 64, 512),
+            (size_n // 64, size_k // 64, 128 * num_bits),
             dtype=torch.int32,
             device=b_q_weight.device,
         )
@@ -1584,12 +1586,13 @@ def swordfish_mm(
     size_k: int,
     size_n: int,
     group_zps: torch.Tensor | None = None,
+    num_bits: int = 4,
 ) -> torch.Tensor:
-    """w4a16 GEMM: a [M, K] fp16/bf16 times a Swordfish ABI v1 packed weight
-    (int32 [NB, KB, 512]) with per-group scales [groups, N]. group_zps holds
-    prescaled (8 - zp) * scale rows for zero-point checkpoints (AWQ/HQQ)."""
+    """w4a16/w8a16 GEMM: a [M, K] fp16/bf16 times a Swordfish ABI v1 packed
+    weight with per-group scales [groups, N]. group_zps holds prescaled
+    (8 - zp) * scale rows for zero-point checkpoints (AWQ/HQQ, 4-bit only)."""
     return torch.ops._C.swordfish_mm(
-        a, b_packed, group_scales, group_zps, group_size, size_k, size_n
+        a, b_packed, group_scales, group_zps, num_bits, group_size, size_k, size_n
     )
 
 
@@ -1601,6 +1604,7 @@ if hasattr(torch.ops._C, "swordfish_mm"):
         b_packed: torch.Tensor,
         group_scales: torch.Tensor,
         group_zps: torch.Tensor | None,
+        num_bits: int,
         group_size: int,
         size_k: int,
         size_n: int,
@@ -1616,12 +1620,13 @@ def swordfish_prefill_mm(
     size_k: int,
     size_n: int,
     group_zps: torch.Tensor | None = None,
+    num_bits: int = 4,
 ) -> torch.Tensor:
     """w4a16 prefill GEMM (sm100 tcgen05 mixed-input mainloop fork): a [M, K]
     bf16 times a Swordfish ABI v1 packed weight (int32 [NB, KB, 512]) with
     bf16 per-group scales [groups, N]. v1: group_size 128, K/N % 128 == 0."""
     return torch.ops._C.swordfish_prefill_mm(
-        a, b_packed, group_scales, group_zps, group_size, size_k, size_n
+        a, b_packed, group_scales, group_zps, num_bits, group_size, size_k, size_n
     )
 
 
@@ -1633,6 +1638,7 @@ if hasattr(torch.ops._C, "swordfish_prefill_mm"):
         b_packed: torch.Tensor,
         group_scales: torch.Tensor,
         group_zps: torch.Tensor | None,
+        num_bits: int,
         group_size: int,
         size_k: int,
         size_n: int,

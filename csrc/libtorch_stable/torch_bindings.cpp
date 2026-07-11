@@ -113,23 +113,23 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
   // Swordfish ABI v1 block-linear layout.
   ops.def(
       "swordfish_prepack_B(Tensor b_q_weight, SymInt size_k, "
-      "SymInt size_n) -> Tensor");
+      "SymInt size_n, int num_bits) -> Tensor");
   // conditionally compiled so impl registrations are in source file
 
   // swordfish w4a16 decode GEMM over the ABI v1 packed weight. group_zps
   // holds prescaled (8 - zp) * scale per group when present (AWQ/HQQ).
   ops.def(
       "swordfish_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
-      "Tensor? group_zps, int group_size, SymInt size_k, SymInt size_n) "
-      "-> Tensor");
+      "Tensor? group_zps, int num_bits, int group_size, SymInt size_k, "
+      "SymInt size_n) -> Tensor");
   // conditionally compiled so impl registrations are in source file
 
   // swordfish w4a16 prefill GEMM (sm100 tcgen05 mixed-input mainloop fork)
   // over the same ABI v1 packed weight.
   ops.def(
       "swordfish_prefill_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
-      "Tensor? group_zps, int group_size, SymInt size_k, SymInt size_n) "
-      "-> Tensor");
+      "Tensor? group_zps, int num_bits, int group_size, SymInt size_k, "
+      "SymInt size_n) -> Tensor");
   // conditionally compiled so impl registrations are in source file
 #endif
 

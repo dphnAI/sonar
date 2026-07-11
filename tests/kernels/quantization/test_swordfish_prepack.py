@@ -121,5 +121,17 @@ def test_prepack_opcheck():
     gptq = _gptq_pack(q_w, size_k, size_n).to(DEVICE)
     opcheck(
         torch.ops._C.swordfish_prepack_B,
-        (gptq, size_k, size_n),
+        (gptq, size_k, size_n, 4),
     )
+
+
+@pytest.mark.parametrize("shape", [(64, 64), (256, 128), (2048, 4096)])
+def test_prepack_bit_exact_8bit(shape):
+    size_k, size_n = shape
+    g = torch.Generator(device="cpu").manual_seed(size_k + size_n)
+    q_w = torch.randint(0, 256, (size_k, size_n), generator=g, dtype=torch.int32)
+    ref = swordfish_pack_weights_ref(q_w, size_k, size_n, num_bits=8)
+    gptq = pack_rows(q_w, 8, size_k, size_n).to(DEVICE)
+    got = ops.swordfish_prepack_B(gptq, size_k, size_n, num_bits=8)
+    assert got.shape == (size_n // 64, size_k // 64, 1024)
+    assert torch.equal(got.cpu(), ref)

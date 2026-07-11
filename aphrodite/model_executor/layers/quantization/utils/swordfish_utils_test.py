@@ -22,7 +22,7 @@ from aphrodite.scalar_type import ScalarType, scalar_types
 SWORDFISH_BLOCK_N = 64
 SWORDFISH_BLOCK_K = 64
 SWORDFISH_BLOCK_INT32 = 512
-SWORDFISH_SUPPORTED_QUANT_TYPES = [scalar_types.uint4b8]
+SWORDFISH_SUPPORTED_QUANT_TYPES = [scalar_types.uint4b8, scalar_types.uint8b128]
 SWORDFISH_SUPPORTED_GROUP_SIZES = [-1, 64, 128]
 
 
@@ -35,24 +35,27 @@ def swordfish_shape_ok(size_k: int, size_n: int) -> bool:
     )
 
 
-def swordfish_pack_weights_ref(q_w: torch.Tensor, size_k: int, size_n: int) -> torch.Tensor:
-    """Pack unpacked int4 codes q_w [K, N] (values 0..15, u4b8 domain) into the
-    Swordfish ABI v1 tensor: int32 [NB, KB, 512]."""
+def swordfish_pack_weights_ref(
+    q_w: torch.Tensor, size_k: int, size_n: int, num_bits: int = 4
+) -> torch.Tensor:
+    """Pack unpacked int codes q_w [K, N] into the Swordfish ABI v1 tensor:
+    int32 [NB, KB, 512] at 4-bit or [NB, KB, 1024] at 8-bit."""
     assert swordfish_shape_ok(size_k, size_n), (size_k, size_n)
     assert q_w.shape == (size_k, size_n)
 
-    # Stage 1, Marlin permutation and nibble pack, int32 [K/16, N*2].
-    perm = get_weight_perm(num_bits=4)
-    marlin_flat = marlin_weights(q_w, size_k, size_n, num_bits=4, perm=perm)
-    assert marlin_flat.shape == (size_k // 16, size_n * 2)
+    # Stage 1, Marlin permutation and pack, int32 [K/16, N*32/(32/bits)/16].
+    tile_int32 = 128 * num_bits // 4
+    perm = get_weight_perm(num_bits=num_bits)
+    marlin_flat = marlin_weights(q_w, size_k, size_n, num_bits=num_bits, perm=perm)
+    assert marlin_flat.shape == (size_k // 16, size_n * tile_int32 // 64)
 
-    # Stage 2, block re-tile to (NB, KB, 512).
+    # Stage 2, block re-tile to (NB, KB, words).
     kb = size_k // SWORDFISH_BLOCK_K
     nb = size_n // SWORDFISH_BLOCK_N
-    # rows split as (KB, 4) k16-slices, cols as (NB, 128) int32 runs
-    x = marlin_flat.reshape(kb, 4, nb, 128)
-    x = x.permute(2, 0, 1, 3)  # (NB, KB, 4, 128)
-    return x.reshape(nb, kb, SWORDFISH_BLOCK_INT32).contiguous()
+    # rows split as (KB, 4) k16-slices, cols as (NB, tile) int32 runs
+    x = marlin_flat.reshape(kb, 4, nb, tile_int32)
+    x = x.permute(2, 0, 1, 3)  # (NB, KB, 4, tile)
+    return x.reshape(nb, kb, 4 * tile_int32).contiguous()
 
 
 def swordfish_quantize(
@@ -72,7 +75,7 @@ def swordfish_quantize(
     w_ref, q_w, s, _, _ = gptq_quantize_weights(
         w, quant_type, group_size, act_order=False
     )
-    packed = swordfish_pack_weights_ref(q_w, size_k, size_n)
+    packed = swordfish_pack_weights_ref(q_w, size_k, size_n, quant_type.size_bits)
     return w_ref, packed, s
 
 

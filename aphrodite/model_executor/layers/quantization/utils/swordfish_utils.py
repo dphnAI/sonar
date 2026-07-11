@@ -18,7 +18,7 @@ SWORDFISH_BLOCK_K = 64
 def query_swordfish_supported_quant_types(zero_points: bool) -> list[ScalarType]:
     if zero_points:
         return [scalar_types.uint4]
-    return [scalar_types.uint4b8]
+    return [scalar_types.uint4b8, scalar_types.uint8b128]
 
 
 def query_swordfish_supported_group_sizes(act_type: torch.dtype) -> list[int]:

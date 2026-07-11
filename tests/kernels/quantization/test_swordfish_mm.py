@@ -75,7 +75,7 @@ def test_swordfish_mm_opcheck():
     w = torch.randn((k, n), dtype=torch.float16, device=DEVICE) / (k**0.5)
     _, packed, scales = swordfish_quantize(w, QT, 128)
     a = torch.randn((m, k), dtype=torch.float16, device=DEVICE)
-    opcheck(torch.ops._C.swordfish_mm, (a, packed, scales, None, 128, k, n))
+    opcheck(torch.ops._C.swordfish_mm, (a, packed, scales, None, 4, 128, k, n))
 
 
 @pytest.mark.parametrize("dtype", DTYPES)
@@ -127,4 +127,39 @@ def test_swordfish_mm_awq_large_m():
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_mm(a, packed, scales, 128, k, n, group_zps=zps_neg)
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+
+
+@pytest.mark.parametrize("mnk", MNK)
+@pytest.mark.parametrize("group", GROUPS)
+@pytest.mark.parametrize("dtype", DTYPES)
+def test_swordfish_mm_8bit_correct(mnk, group, dtype):
+    m, k, n = mnk
+    if group != -1 and k % group != 0:
+        pytest.skip("k not divisible by group")
+
+    torch.manual_seed(k * 3 + n + m)
+    w = torch.randn((k, n), dtype=dtype, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales = swordfish_quantize(w, scalar_types.uint8b128, group)
+
+    a = torch.randn((m, k), dtype=dtype, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+
+    out = ops.swordfish_mm(a, packed, scales, group, k, n, num_bits=8)
+
+    assert out.shape == (m, n)
+    torch.testing.assert_close(
+        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
+    )
+
+
+def test_swordfish_mm_8bit_large_m():
+    # M > 96 with bf16 routes through the 8-bit prefill mainloop.
+    m, k, n = 256, 1024, 256
+    torch.manual_seed(5)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales = swordfish_quantize(w, scalar_types.uint8b128, 128)
+    a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    out = ops.swordfish_mm(a, packed, scales, 128, k, n, num_bits=8)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

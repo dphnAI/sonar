@@ -25,25 +25,31 @@ namespace swordfish {
 namespace {
 
 // One CTA per output block: 512 threads gather the block's int32 words from
-// the flat Marlin layout. Writes are perfectly coalesced; reads are 128-int32
-// runs from 4 Marlin rows.
+// the flat Marlin layout (two words each at 8-bit). Writes are perfectly
+// coalesced; reads are tile-sized runs from 4 Marlin rows.
+template <int kTileInt32>
 __global__ void retile_marlin_to_blocks(const int32_t* __restrict__ marlin,
                                         int32_t* __restrict__ out,
                                         int64_t num_kb, int64_t size_n) {
+  constexpr int kWords = 4 * kTileInt32;
   const int64_t nb = blockIdx.x;
   const int64_t kb = blockIdx.y;
-  const int w = threadIdx.x;  // 0..511
-  const int64_t dst = (nb * num_kb + kb) * kBlockInt32 + w;
-  out[dst] = marlin[marlin_word_index(nb, kb, w, size_n)];
+  for (int w = threadIdx.x; w < kWords; w += kBlockInt32) {
+    const int64_t dst = (nb * num_kb + kb) * kWords + w;
+    out[dst] = marlin[marlin_word_index<kTileInt32>(nb, kb, w, size_n)];
+  }
 }
 
 }  // namespace
 
 torch::stable::Tensor swordfish_prepack_B(torch::stable::Tensor& b_q_weight,
-                                          int64_t size_k, int64_t size_n) {
+                                          int64_t size_k, int64_t size_n,
+                                          int64_t num_bits) {
   STD_TORCH_CHECK(shape_ok(size_k, size_n), "swordfish ABI v1 requires K % ",
                   kBlockK, " == 0 and N % ", kBlockN, " == 0; got K=", size_k,
                   " N=", size_n, " (v1 tail policy: reject)");
+  STD_TORCH_CHECK(num_bits == 4 || num_bits == 8,
+                  "swordfish supports 4-bit and 8-bit weights");
 
   const int32_t device_index = b_q_weight.get_device_index();
   torch::stable::accelerator::DeviceGuard device_guard(device_index);
@@ -54,20 +60,27 @@ torch::stable::Tensor swordfish_prepack_B(torch::stable::Tensor& b_q_weight,
       {0}, torch::headeronly::ScalarType::Int, std::nullopt,
       b_q_weight.device());
   torch::stable::Tensor marlin_flat = gptq_marlin_repack(
-      b_q_weight, empty_perm, size_k, size_n, /*num_bits=*/4,
+      b_q_weight, empty_perm, size_k, size_n, num_bits,
       /*is_a_8bit=*/false);
 
-  // Stage 2: re-tile to (NB, KB, 512) int32 blocks.
+  // Stage 2: re-tile to (NB, KB, 512|1024) int32 blocks.
   const int64_t nb = num_blocks_n(size_n);
   const int64_t kb = num_blocks_k(size_k);
+  const int64_t words = num_bits == 8 ? kBlockInt32_8 : kBlockInt32;
   torch::stable::Tensor out = torch::stable::empty(
-      {nb, kb, int64_t(kBlockInt32)}, torch::headeronly::ScalarType::Int,
-      std::nullopt, b_q_weight.device());
+      {nb, kb, words}, torch::headeronly::ScalarType::Int, std::nullopt,
+      b_q_weight.device());
 
   dim3 grid(nb, kb);
-  retile_marlin_to_blocks<<<grid, kBlockInt32, 0, stream>>>(
-      reinterpret_cast<const int32_t*>(marlin_flat.const_data_ptr()),
-      reinterpret_cast<int32_t*>(out.mutable_data_ptr()), kb, size_n);
+  if (num_bits == 8) {
+    retile_marlin_to_blocks<256><<<grid, kBlockInt32, 0, stream>>>(
+        reinterpret_cast<const int32_t*>(marlin_flat.const_data_ptr()),
+        reinterpret_cast<int32_t*>(out.mutable_data_ptr()), kb, size_n);
+  } else {
+    retile_marlin_to_blocks<128><<<grid, kBlockInt32, 0, stream>>>(
+        reinterpret_cast<const int32_t*>(marlin_flat.const_data_ptr()),
+        reinterpret_cast<int32_t*>(out.mutable_data_ptr()), kb, size_n);
+  }
 
   return out;
 }

@@ -93,6 +93,28 @@ __device__ __forceinline__ void dequant_u4b8_bf16x2(uint32_t q,
                     reinterpret_cast<__nv_bfloat162 const&>(kSub));
 }
 
+// u8b128 -> bf16x2 pair dequant (marlin dequant<nv_bfloat162, kU8B128>, the
+// FasterTransformer fp32-bias idiom). Under the 8-bit pack interleave
+// {0,2,1,3} one word yields the same fragment pair as the 4-bit dequant of
+// one nibble plane: frag[0] = perm values (0,1), frag[1] = values (2,3).
+__device__ __forceinline__ void dequant_u8b128_bf16x2(uint32_t q,
+                                                      __nv_bfloat162 frag[2]) {
+  float f[4];
+  uint32_t* fc = reinterpret_cast<uint32_t*>(f);
+  static constexpr uint32_t kBase = 0x4B000000;
+  fc[0] = __byte_perm(q, kBase, 0x7650);
+  fc[1] = __byte_perm(q, kBase, 0x7652);
+  fc[2] = __byte_perm(q, kBase, 0x7651);
+  fc[3] = __byte_perm(q, kBase, 0x7653);
+  f[0] -= 8388736.f;
+  f[1] -= 8388736.f;
+  f[2] -= 8388736.f;
+  f[3] -= 8388736.f;
+  uint32_t* out = reinterpret_cast<uint32_t*>(frag);
+  out[0] = __byte_perm(fc[0], fc[1], 0x7632);
+  out[1] = __byte_perm(fc[2], fc[3], 0x7632);
+}
+
 }  // namespace swordfish_detail
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -120,7 +142,8 @@ template <
   class GmemTiledCopyB_,
   class SmemLayoutAtomsB_,
   class CopyAtomsB_,
-  class TransformB_>
+  class TransformB_,
+  int WBits = 4>
 struct SwordfishMainloopSm100MixedInput {
 public:
   //
@@ -264,8 +287,10 @@ public:
   // dependent only on CUTLASS/CUDA).
   static constexpr int kBlockN = 64;         // columns per packed block
   static constexpr int kBlockK = 64;         // K rows per packed block
-  static constexpr int kSubTileBytes = 512;  // one marlin 16x64 int4 tile
-  static constexpr int kBlockBytes = 2048;   // 4 sub-tiles
+  static_assert(WBits == 4 || WBits == 8, "swordfish weights are 4 or 8 bit");
+  static constexpr int kSubTileBytes = WBits == 8 ? 1024 : 512;  // 16x64 tile
+  static constexpr int kBlockBytes = 4 * kSubTileBytes;
+  static constexpr int kBlockRows = kBlockBytes / 256;  // TMA inner rows
 
   // Full MMA-tile weight-N drives the packed-A gmem tiler so the tile
   // coordinate matches the scheduler. Per-CTA weight-N drives the smem
@@ -285,9 +310,9 @@ public:
   // in 2-SM the load loop maps the cluster's weight-N tile coord to this CTA's
   // 128-col half via kAtomCtasM*coord + atom_half.
   using SmemLayoutA = Layout<
-      Shape< _256, _8, Int<kBlocksPerTileK>, Int<kBlocksPerTileN>, Int<DispatchPolicy::Load2TransformPipelineStageCount>>,
+      Shape< _256, Int<kBlockRows>, Int<kBlocksPerTileK>, Int<kBlocksPerTileN>, Int<DispatchPolicy::Load2TransformPipelineStageCount>>,
       Stride<_1, _256, Int<kBlockBytes>, Int<kBlocksPerTileK * kBlockBytes>, Int<kStageBytes>>>;
-  using SwordfishTilerA = Shape<_256, _8, Int<kBlocksPerTileK>, Int<kBlocksPerTileN>>;
+  using SwordfishTilerA = Shape<_256, Int<kBlockRows>, Int<kBlocksPerTileK>, Int<kBlocksPerTileN>>;
 
   // B (activations) staging: stock (lines 320-323).
   using SmemLayoutB = decltype(UMMA::tile_to_mma_shape(
@@ -430,7 +455,7 @@ public:
                                         make_tile(typename TiledMma::AtomThrID{})));
 
     // CHANGE (1): TMA over the packed byte tensor (256, 8, KB, NB).
-    using GmemLayoutAPacked = Layout<Shape<_256, _8, int32_t, int32_t>,
+    using GmemLayoutAPacked = Layout<Shape<_256, Int<kBlockRows>, int32_t, int32_t>,
                                      Stride<_1, _256, Int<kBlockBytes>, int64_t>>;
     using TMA_A = decltype(make_tma_copy(
         GmemTiledCopyA{},
@@ -488,7 +513,7 @@ public:
 
     // Packed operand as a dense byte tensor (ABI invariant I3).
     auto gA_layout = make_layout(
-        make_shape(_256{}, _8{}, blocks_k, blocks_n),
+        make_shape(_256{}, Int<kBlockRows>{}, blocks_k, blocks_n),
         make_stride(_1{}, _256{}, Int<kBlockBytes>{}, int64_t(kBlockBytes) * blocks_k));
     Tensor tensor_a = make_tensor(
         make_gmem_ptr(reinterpret_cast<uint8_t const*>(args.ptr_A)), gA_layout);
@@ -865,15 +890,20 @@ public:
 
       // ---- pull this thread's packed words and scales into registers
       // (this warp's share of the block: sub-tiles [sh, sh+kSubTilesPerWarp))
-      uint32_t w[kSubTilesPerWarp][4];  // [sub-tile within share][word 4T+j]
+      uint32_t w[kSubTilesPerWarp][WBits == 8 ? 8 : 4];
       uint8_t const* blk = smem_a_base
           + load2transform_consumer_index * kStageBytes
           + (nbi * kBlocksPerTileK + kbi) * kBlockBytes
-          + lane * 16;
+          + lane * (WBits == 8 ? 32 : 16);
       CUTLASS_PRAGMA_UNROLL
       for (int si = 0; si < kSubTilesPerWarp; si++) {
         uint4 v = *reinterpret_cast<uint4 const*>(blk + (sh + si) * kSubTileBytes);
         w[si][0] = v.x; w[si][1] = v.y; w[si][2] = v.z; w[si][3] = v.w;
+        if constexpr (WBits == 8) {
+          uint4 v1 = *reinterpret_cast<uint4 const*>(
+              blk + (sh + si) * kSubTileBytes + 16);
+          w[si][4] = v1.x; w[si][5] = v1.y; w[si][6] = v1.z; w[si][7] = v1.w;
+        }
       }
 
       NonVoidElementScale const* srow = smem_s_base
@@ -916,8 +946,13 @@ public:
           ElementAMma* const row0 = stage_base + (nbi * 8 + 2 * j) * 512;
           ElementAMma* const row1 = row0 + 512;
           __nv_bfloat162 f0[2], f1[2];
-          swordfish_detail::dequant_u4b8_bf16x2(w[si][j], f0);
-          swordfish_detail::dequant_u4b8_bf16x2(w[si][j] >> 8, f1);
+          if constexpr (WBits == 8) {
+            swordfish_detail::dequant_u8b128_bf16x2(w[si][2 * j], f0);
+            swordfish_detail::dequant_u8b128_bf16x2(w[si][2 * j + 1], f1);
+          } else {
+            swordfish_detail::dequant_u4b8_bf16x2(w[si][j], f0);
+            swordfish_detail::dequant_u4b8_bf16x2(w[si][j] >> 8, f1);
+          }
           if constexpr (HasZp) {
             f0[0] = __hfma2(f0[0], sreg[j][0], zreg[j][0]);
             f0[1] = __hfma2(f0[1], sreg[j][0], zreg[j][0]);
