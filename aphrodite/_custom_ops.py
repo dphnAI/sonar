@@ -1620,6 +1620,43 @@ if hasattr(torch.ops._C, "swordfish_mm"):
         return torch.empty((a.shape[0], size_n), dtype=a.dtype, device=a.device)
 
 
+def swordfish_dequant_dense(
+    b_packed: torch.Tensor,
+    group_scales: torch.Tensor,
+    group_zps: torch.Tensor | None,
+    num_bits: int,
+    group_size: int,
+    size_k: int,
+    size_n: int,
+    transpose: bool,
+) -> torch.Tensor:
+    """Dequantize Swordfish-packed weights to dense fp16/bf16, [K, N] or
+    out-major [N, K], with an optional leading expert dimension."""
+    return torch.ops._C.swordfish_dequant_dense(
+        b_packed, group_scales, group_zps, num_bits, group_size, size_k,
+        size_n, transpose,
+    )
+
+
+if hasattr(torch.ops._C, "swordfish_dequant_dense"):
+
+    @register_fake("_C::swordfish_dequant_dense")
+    def swordfish_dequant_dense_fake(
+        b_packed: torch.Tensor,
+        group_scales: torch.Tensor,
+        group_zps: torch.Tensor | None,
+        num_bits: int,
+        group_size: int,
+        size_k: int,
+        size_n: int,
+        transpose: bool,
+    ) -> torch.Tensor:
+        shape = (size_n, size_k) if transpose else (size_k, size_n)
+        if b_packed.dim() == 4:
+            shape = (b_packed.shape[0],) + shape
+        return torch.empty(shape, dtype=group_scales.dtype, device=b_packed.device)
+
+
 def swordfish_moe_mm(
     a: torch.Tensor,
     b_packed: torch.Tensor,

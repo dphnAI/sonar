@@ -45,6 +45,13 @@ SWORDFISH_MOE_BATCHED_THRESHOLD = 32
 # small ones (Thor class); big parts stay on the fused 32-token blocks.
 SWORDFISH_MOE_GROUPED_THRESHOLD = 128
 SWORDFISH_MOE_GROUPED_MAX_SMS = 40
+# Average tokens per expert above which the problem is compute-bound and
+# dequantizing every expert once into a dense buffer, then running the
+# stock bf16 triton fused-MoE kernels, beats the fused int paths. Small
+# parts lack the dense rate to amortize the dequant (Thor loses at every M)
+# so the tier needs a datacenter-class part.
+SWORDFISH_MOE_DENSE_THRESHOLD = 192
+SWORDFISH_MOE_DENSE_MIN_SMS = 100
 
 
 @functools.cache
@@ -212,6 +219,16 @@ class SwordfishExperts(mk.FusedMoEExpertsModular):
         if global_num_experts == -1:
             global_num_experts = E
         if (
+            M * topk >= SWORDFISH_MOE_DENSE_THRESHOLD * E
+            and _sm_count() >= SWORDFISH_MOE_DENSE_MIN_SMS
+        ):
+            self._apply_dense(
+                output, hidden_states, w1, w2, topk_weights, topk_ids,
+                activation, M, N, K, topk, global_num_experts, expert_map,
+                apply_router_weight_on_input,
+            )
+            return
+        if (
             M * topk >= SWORDFISH_MOE_GROUPED_THRESHOLD * E
             and _sm_count() <= SWORDFISH_MOE_GROUPED_MAX_SMS
             and expert_map is None
@@ -292,6 +309,48 @@ class SwordfishExperts(mk.FusedMoEExpertsModular):
         )
 
         ops.moe_sum(intermediate_cache3.view(M, topk, K), output)
+
+    def _apply_dense(
+        self,
+        output: torch.Tensor,
+        hidden_states: torch.Tensor,
+        w1: torch.Tensor,
+        w2: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        activation: MoEActivation,
+        M: int,
+        N: int,
+        K: int,
+        topk: int,
+        global_num_experts: int,
+        expert_map: torch.Tensor | None,
+        apply_router_weight_on_input: bool,
+    ) -> None:
+        from aphrodite.model_executor.layers.fused_moe.fused_moe import (
+            fused_experts,
+        )
+
+        group_size = self.group_size
+        num_bits = self.num_bits
+        w1_dense = ops.swordfish_dequant_dense(
+            w1, self.w1_scale, None, num_bits, group_size, K, 2 * N, True
+        )
+        w2_dense = ops.swordfish_dequant_dense(
+            w2, self.w2_scale, None, num_bits, group_size, N, K, True
+        )
+        out = fused_experts(
+            hidden_states,
+            w1_dense,
+            w2_dense,
+            topk_weights,
+            topk_ids,
+            activation=activation,
+            apply_router_weight_on_input=apply_router_weight_on_input,
+            global_num_experts=global_num_experts,
+            expert_map=expert_map,
+        )
+        output.copy_(out)
 
     def _apply_grouped(
         self,

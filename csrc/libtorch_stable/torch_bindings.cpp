@@ -124,6 +124,14 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "SymInt size_k, SymInt size_n) -> Tensor");
   // conditionally compiled so impl registrations are in source file
 
+  // swordfish dequant to dense fp16/bf16, optionally out-major transposed
+  // and expert-stacked, for the dense tiers.
+  ops.def(
+      "swordfish_dequant_dense(Tensor b_packed, Tensor group_scales, "
+      "Tensor? group_zps, int num_bits, int group_size, SymInt size_k, "
+      "SymInt size_n, bool transpose) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
   // swordfish fused-MoE decode GEMM: one persistent Stream-K launch over
   // per-expert ABI v1 weights, token-sorted by moe_align_block_size(16).
   ops.def(
