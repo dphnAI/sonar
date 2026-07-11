@@ -764,7 +764,10 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
   endif()
 
   # Only build AllSpark kernels if we are building for at least some compatible archs.
-  cuda_archs_loose_intersection(ALLSPARK_ARCHS "8.0;8.6;8.7;8.9" "${CUDA_ARCHS}")
+  # 8.0+PTX JIT-forwards onto Blackwell like marlin; the kernel is plain
+  # mma.sync + cp.async and its large-M path is dequant + cuBLAS, which owns
+  # channelwise w8a16 prefill on sm100/sm110.
+  cuda_archs_loose_intersection(ALLSPARK_ARCHS "8.0+PTX" "${CUDA_ARCHS}")
   if (ALLSPARK_ARCHS)
     set(ALLSPARK_SRCS
        "csrc/libtorch_stable/quantization/gptq_allspark/allspark_repack.cu"
