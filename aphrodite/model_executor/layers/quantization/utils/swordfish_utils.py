@@ -24,9 +24,11 @@ def query_swordfish_supported_quant_types(zero_points: bool) -> list[ScalarType]
 def query_swordfish_supported_group_sizes(act_type: torch.dtype) -> list[int]:
     if act_type not in (torch.float16, torch.bfloat16):
         return []
-    # Group 32 and channelwise run on the decode kernels at every M; the
-    # tcgen05 prefill covers groups 64 and 128.
-    return [-1, 32, 64, 128]
+    # The ops accept channelwise (-1) but only on the decode kernels, so
+    # prefill would regress against the dequant-then-dense-GEMM backends
+    # (AllSpark at int8, Marlin at int4). Auto-selection declines it and
+    # lets those take channelwise checkpoints.
+    return [32, 64, 128]
 
 
 def check_swordfish_supports_shape(
