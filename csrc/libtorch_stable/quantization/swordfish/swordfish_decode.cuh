@@ -427,4 +427,234 @@ __global__ void swordfish_decode_kernel(
   }
 }
 
+// Stream-K decode for the fused window (M 17 to 96). Persistent CTAs; one
+// unit of flat work is one k16-slice pair of one (m-group, n64-column)
+// tile, and each warp owns a contiguous range of units. The m-group index
+// varies fastest after the pair so consecutive segments in a warp's range
+// revisit the same weight column while it is L2-resident. Accumulators
+// flush through red.global at segment boundaries into a launcher-zeroed C,
+// so a tile's K slices may come from any number of warps with no locks and
+// no fixup pass. This removes split-K heuristics and wave quantization for
+// the window entirely.
+template <aphrodite::ScalarTypeId type_id, int M_TILES>
+__global__ void swordfish_decode_streamk_kernel(
+    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
+    const int32_t* __restrict__ B,
+    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
+    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
+    int M, int K, int N, int group_size, int m_groups) {
+  constexpr int kStagesT = M_TILES == 1 ? kStages : (M_TILES == 2 ? 4 : 3);
+  using Dtype = marlin::MarlinScalarType<type_id>;
+  using scalar_t = typename Dtype::scalar_t;
+  using scalar_t2 = typename Dtype::scalar_t2;
+  using FragA = typename Dtype::FragA;
+  using FragB = typename Dtype::FragB;
+  using FragC = typename Dtype::FragC;
+
+  const int lane = threadIdx.x % 32;
+  const int warp = threadIdx.x / 32;
+  const int group_id = lane / 4;
+  const int tig = lane % 4;
+  const int ldsm_row = lane & 15;
+  const int ldsm_col = (lane >> 4) << 3;
+  const int ia_row = lane >> 1;
+  const int ia_c0 = 16 * (lane & 1);
+
+  const int num_pairs = K / (2 * kMarlinTileK);
+  const int nb_cnt = N / kBlockN;
+  const int num_kb = K / kBlockK;
+  const int ppg = group_size > 0 ? group_size / 32 : INT_MAX;
+  const scalar_t2 zero2 = Dtype::num2num2(Dtype::float2num(0.0f));
+  const uint64_t bpol = l2_evict_first_policy();
+
+  const int64_t total = int64_t(m_groups) * nb_cnt * num_pairs;
+  const int total_warps = gridDim.x * kDecodeWarps;
+  const int64_t per = (total + total_warps - 1) / total_warps;
+  int64_t w = int64_t(blockIdx.x * kDecodeWarps + warp) * per;
+  const int64_t w_end = w + per < total ? w + per : total;
+
+  __shared__ int4 bstage[kDecodeWarps][kStagesT][2 * 32];
+  __shared__ scalar_t astage[kDecodeWarps][kStagesT][M_TILES][16][32];
+
+  FragC acc[M_TILES][4][2];
+  scalar_t2 s_reg[4][2];
+
+  while (w < w_end) {
+    const int64_t cg = w / num_pairs;
+    const int p_beg = int(w - cg * num_pairs);
+    const int col = int(cg / m_groups);
+    const int g_idx = int(cg - int64_t(col) * m_groups);
+    const int p_end =
+        int(int64_t(num_pairs) < p_beg + (w_end - w) ? int64_t(num_pairs)
+                                                     : p_beg + (w_end - w));
+    w += p_end - p_beg;
+
+    const int m_base = g_idx * (16 * M_TILES);
+    const int col_base = col * kBlockN;
+
+    int row0[M_TILES];
+    bool r0ok[M_TILES], r1ok[M_TILES];
+#pragma unroll
+    for (int t = 0; t < M_TILES; t++) {
+      row0[t] = m_base + 16 * t + group_id;
+      r0ok[t] = row0[t] < M;
+      r1ok[t] = row0[t] + 8 < M;
+    }
+#pragma unroll
+    for (int t = 0; t < M_TILES; t++)
+#pragma unroll
+      for (int j = 0; j < 4; j++)
+#pragma unroll
+        for (int b = 0; b < 2; b++)
+#pragma unroll
+          for (int i = 0; i < 4; i++) acc[t][j][b][i] = 0.0f;
+
+    auto fetch_scale_row = [&](int g) -> scalar_t2 {
+      return reinterpret_cast<const scalar_t2*>(S + int64_t(g) * N +
+                                                col_base)[lane];
+    };
+    auto expand_scales = [&](scalar_t2 mine) {
+      const uint32_t sel = group_id & 1;
+#pragma unroll
+      for (int j = 0; j < 4; j++) {
+#pragma unroll
+        for (int b = 0; b < 2; b++) {
+          const scalar_t2 v = __shfl_sync(
+              0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
+          const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
+          const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
+          s_reg[j][b] =
+              Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
+        }
+      }
+    };
+    auto load_a = [&](const scalar_t (*sa)[32], int ks, FragA& fa) {
+      ldsm4<type_id>(fa, &sa[ldsm_row][ldsm_col + ks]);
+    };
+    auto process_slice = [&](const FragA (&fa)[M_TILES],
+                             const marlin::I4& bq) {
+#pragma unroll
+      for (int j = 0; j < 4; j++) {
+        const int b_quant_0 = bq.elems[j];
+        const int b_quant_1 = b_quant_0 >> 8;
+        FragB frag_b0, frag_b1;
+        marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+            b_quant_0, reinterpret_cast<scalar_t2*>(&frag_b0));
+        marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
+            b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
+        frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
+        frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
+        frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
+        frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
+#pragma unroll
+        for (int t = 0; t < M_TILES; t++) {
+          marlin::mma<type_id, false>(fa[t], frag_b0, acc[t][j][0]);
+          marlin::mma<type_id, false>(fa[t], frag_b1, acc[t][j][1]);
+        }
+      }
+    };
+    auto process_pair = [&](int aslot, const int4* buf) {
+      FragA fa0[M_TILES], fa1[M_TILES];
+#pragma unroll
+      for (int t = 0; t < M_TILES; t++) {
+        load_a(astage[warp][aslot][t], 0, fa0[t]);
+        load_a(astage[warp][aslot][t], 16, fa1[t]);
+      }
+      const marlin::I4 bq0 = *reinterpret_cast<const marlin::I4*>(&buf[lane]);
+      const marlin::I4 bq1 =
+          *reinterpret_cast<const marlin::I4*>(&buf[32 + lane]);
+      process_slice(fa0, bq0);
+      process_slice(fa1, bq1);
+    };
+
+    const int32_t* ipair_ptr =
+        B + int64_t(col) * num_kb * kBlockInt32 + p_beg * kPairInt32 + 4 * lane;
+    bool ia_okt[M_TILES];
+    const scalar_t* ia_ptr[M_TILES];
+#pragma unroll
+    for (int t = 0; t < M_TILES; t++) {
+      const int r = m_base + 16 * t + ia_row;
+      ia_okt[t] = r < M;
+      ia_ptr[t] = A + (ia_okt[t] ? r : 0) * K + 32 * p_beg + ia_c0;
+    }
+    int ipend = p_end - p_beg;
+
+    auto issue_pair = [&](int slot) {
+      if (ipend > 0) {
+        ipend--;
+        cp_async4_evict_first(&bstage[warp][slot][lane], ipair_ptr, bpol);
+        cp_async4_evict_first(&bstage[warp][slot][32 + lane],
+                              ipair_ptr + kPairInt32 / 2, bpol);
+        ipair_ptr += kPairInt32;
+#pragma unroll
+        for (int t = 0; t < M_TILES; t++) {
+          if (ia_okt[t]) {
+            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0],
+                              ia_ptr[t]);
+            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0 + 8],
+                              ia_ptr[t] + 8);
+          }
+          ia_ptr[t] += 32;
+        }
+      }
+      marlin::cp_async_fence();
+    };
+
+    int g = 0;
+    int left = INT_MAX;
+    const int g_last =
+        group_size > 0 && p_beg < p_end ? (32 * (p_end - 1)) / group_size : 0;
+    scalar_t2 s_next = zero2;
+    if (p_beg < p_end) {
+      if (group_size > 0) {
+        g = p_beg / ppg;
+        left = ppg - p_beg % ppg;
+      }
+      expand_scales(fetch_scale_row(g));
+      if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+    }
+
+#pragma unroll
+    for (int st = 0; st < kStagesT - 1; st++) issue_pair(st);
+
+    int slot = 0;
+    int islot = kStagesT - 1;
+    for (int p = p_beg; p < p_end; p++) {
+      issue_pair(islot);
+      if (++islot == kStagesT) islot = 0;
+      marlin::cp_async_wait<kStagesT - 2>();
+      if (left == 0) {
+        ++g;
+        expand_scales(s_next);
+        if (g + 1 <= g_last) s_next = fetch_scale_row(g + 1);
+        left = ppg;
+      }
+      process_pair(slot, bstage[warp][slot]);
+      left--;
+      if (++slot == kStagesT) slot = 0;
+    }
+
+    // Segment flush into the launcher-zeroed C.
+#pragma unroll
+    for (int t = 0; t < M_TILES; t++) {
+#pragma unroll
+      for (int j = 0; j < 4; j++) {
+#pragma unroll
+        for (int b = 0; b < 2; b++) {
+          const int cc = col_base + 8 * (2 * j + b) + 2 * tig;
+          const float4 v = *reinterpret_cast<float4*>(&acc[t][j][b]);
+          if (r0ok[t])
+            red_add2(
+                reinterpret_cast<scalar_t2*>(C + int64_t(row0[t]) * N + cc),
+                Dtype::nums2num2(Dtype::float2num(v.x), Dtype::float2num(v.y)));
+          if (r1ok[t])
+            red_add2(
+                reinterpret_cast<scalar_t2*>(C + int64_t(row0[t] + 8) * N + cc),
+                Dtype::nums2num2(Dtype::float2num(v.z), Dtype::float2num(v.w)));
+        }
+      }
+    }
+  }
+}
+
 }  // namespace swordfish

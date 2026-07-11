@@ -66,10 +66,10 @@ def test_swordfish_mm_correct(mnk, group, dtype):
 
 
 def test_swordfish_mm_opcheck():
-    # M > 47 with fp16 exercises the deterministic decode epilogue. The
+    # M > 96 with fp16 exercises the deterministic decode epilogue. The
     # atomic window's summation order varies run to run, which opcheck's
     # trace comparison flags, and fp16 never routes to the prefill kernel.
-    m, k, n = 64, 512, 128
+    m, k, n = 128, 512, 128
     torch.manual_seed(1)
     w = torch.randn((k, n), dtype=torch.float16, device=DEVICE) / (k**0.5)
     _, packed, scales = swordfish_quantize(w, QT, 128)
@@ -79,10 +79,11 @@ def test_swordfish_mm_opcheck():
 
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_swordfish_mm_determinism(dtype):
-    # M > 47 exercises the deterministic paths, fp16 through the
+    # M > 96 exercises the deterministic paths, fp16 through the
     # smem-reduction decode epilogue and bf16 through the tcgen05 prefill.
-    # M <= 47 uses the atomic epilogue, which is not run-stable by design.
-    m, k, n = 64, 1024, 256
+    # The window below uses the atomic epilogue, which is not run-stable by
+    # design.
+    m, k, n = 128, 1024, 256
     torch.manual_seed(9)
     w = torch.randn((k, n), dtype=dtype, device=DEVICE) / (k**0.5)
     _, packed, scales = swordfish_quantize(w, QT, 128)

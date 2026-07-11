@@ -28,13 +28,66 @@ namespace {
 // branch is traced by torch.compile at one representative M and baked into
 // the compiled graph. Here the true runtime M decides on every call and on
 // every captured CUDA graph.
-inline constexpr int64_t kPrefillMinM = 48;
-
 inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st,
                         int64_t group_size, int64_t k, int64_t n) {
-  return m >= kPrefillMinM &&
-         a_st == torch::headeronly::ScalarType::BFloat16 &&
-         group_size == 128 && k % 128 == 0 && n % 128 == 0;
+  if (a_st != torch::headeronly::ScalarType::BFloat16 || group_size != 128 ||
+      k % 128 != 0 || n % 128 != 0) {
+    return false;
+  }
+  // The prefill grid launches about n/128 CTAs per M tile. When that fills
+  // the machine the tcgen05 path wins from M 48 up; when it underfills
+  // (many SMs, narrow N), the Stream-K decode window carries [17, 96).
+  static int sms = 0;
+  if (sms == 0) {
+    cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
+    if (sms <= 0) sms = 1;
+  }
+  const bool prefill_fills = n / 128 >= sms;
+  return m >= 96 || (m >= 48 && prefill_fills);
+}
+
+inline int cached_sm_count() {
+  static int sms = 0;
+  if (sms == 0) {
+    cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
+    if (sms <= 0) sms = 1;
+  }
+  return sms;
+}
+
+template <aphrodite::ScalarTypeId type_id, int T>
+void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
+                             void* c, int m, int k, int n, int group_size,
+                             cudaStream_t stream) {
+  using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
+  constexpr int kStagesT = T == 1 ? kStages : (T == 2 ? 4 : 3);
+  static int ctas_per_sm = 0;
+  if (ctas_per_sm == 0) {
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &ctas_per_sm, swordfish_decode_streamk_kernel<type_id, T>,
+        kDecodeThreads, 0);
+    if (ctas_per_sm <= 0) ctas_per_sm = 2;
+  }
+  int sms = 0;
+  cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
+  const int m_tiles = (m + 15) / 16;
+  const int m_groups = (m_tiles + T - 1) / T;
+  const int nb = n / kBlockN;
+  const int num_pairs = k / 32;
+  const int64_t total = int64_t(m_groups) * nb * num_pairs;
+  // Cap the grid so every warp gets at least a pipeline's worth of pairs.
+  const int64_t max_warps = total / (2 * kStagesT) > 0 ? total / (2 * kStagesT) : 1;
+  int ctas = ctas_per_sm * sms;
+  if (int64_t(ctas) * kDecodeWarps > max_warps) {
+    ctas = int((max_warps + kDecodeWarps - 1) / kDecodeWarps);
+  }
+  if (ctas < 1) ctas = 1;
+  cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
+  swordfish_decode_streamk_kernel<type_id, T><<<ctas, kDecodeThreads, 0,
+                                                stream>>>(
+      reinterpret_cast<const scalar_t*>(a), b,
+      reinterpret_cast<const scalar_t*>(s), reinterpret_cast<scalar_t*>(c),
+      m, k, n, group_size, m_groups);
 }
 
 template <aphrodite::ScalarTypeId type_id, int T>
@@ -98,13 +151,27 @@ template <aphrodite::ScalarTypeId type_id>
 void launch_decode(const void* a, const int32_t* b, const void* s, void* c,
                    int m, int k, int n, int group_size, cudaStream_t stream) {
   using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
-  // Sub-prefill window. One CTA fuses T m16 tiles against one weight stream
-  // (each packed word dequants once and fans out to T mmas), so the window
-  // streams the weights exactly once per column, and split-K fills the
-  // machine at narrow N.
-  if (m <= 47) {
-    const int T = m <= 16 ? 1 : (m <= 32 ? 2 : 3);
-    launch_decode_atomic<type_id>(T, a, b, s, c, m, k, n, group_size, stream);
+  if (m <= 16) {
+    // Tuned single-tile path with in-kernel C zeroing and heuristic split-K.
+    launch_decode_atomic<type_id>(1, a, b, s, c, m, k, n, group_size, stream);
+  } else if (m <= 96) {
+    // Window dispatch. When columns alone fill the machine the fused atomic
+    // grid (in-kernel zeroing, no memset) is already balanced; otherwise
+    // Stream-K hands each warp a contiguous flat range of (fused tile,
+    // column, pair) work and the atomic epilogue merges segments, removing
+    // split-K heuristics and wave quantization.
+    const int T = m <= 32 ? 2 : 3;
+    const bool wide_n = n / kBlockN >= 4 * cached_sm_count();
+    if (wide_n && m <= 47) {
+      launch_decode_atomic<type_id>(T, a, b, s, c, m, k, n, group_size,
+                                    stream);
+    } else if (T == 2) {
+      launch_decode_streamk_t<type_id, 2>(a, b, s, c, m, k, n, group_size,
+                                          stream);
+    } else {
+      launch_decode_streamk_t<type_id, 3>(a, b, s, c, m, k, n, group_size,
+                                          stream);
+    }
   } else {
     dim3 grid((m + 15) / 16, n / kBlockN);
     swordfish_decode_kernel<type_id, false><<<grid, kDecodeThreads, 0, stream>>>(
