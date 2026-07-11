@@ -65,7 +65,10 @@ __global__ void swordfish_dequant_dense_kernel(
   if constexpr (HAS_ZP) Z += expert * int64_t(num_groups) * N;
   W += expert * int64_t(K) * N;
 
-  __shared__ scalar_t tile[4][16][64];
+  // Rows padded 64 -> 72: a 128 B row stride puts every same-column store
+  // across rows on one shared-memory bank; 144 B keeps the 16-byte
+  // alignment the vector reads need while spreading rows over the banks.
+  __shared__ scalar_t tile[4][16][72];
 
   const int4* buf = reinterpret_cast<const int4*>(
       B + (int64_t(nb) * num_kb + kb) * kBlockW +
