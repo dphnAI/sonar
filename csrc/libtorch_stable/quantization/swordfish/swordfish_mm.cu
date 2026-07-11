@@ -68,18 +68,22 @@ inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st,
 }
 
 // Above this M the problem is compute-bound and dequant-once + dense
-// cuBLAS outruns the fused mixed-input mainloops, so the tier takes over on
-// parts with a datacenter-class dense rate. Thor's dense rate is below its
-// tcgen05 mixed-input throughput, so it never crosses.
-inline int dense_tier_min_m(int sms, bool w8) {
+// cuBLAS outruns the fused mixed-input mainloops, so the tier takes over.
+// 8-bit crosses earlier than 4-bit because the mixed-input pipeline moves
+// twice the weight bytes through the transform. On few-SM parts the dense
+// rate only clears the 4-bit weight stream's bandwidth win at 8 bits, and
+// K-heavy shapes pay proportionally more dequant per flop, so they cross
+// later still.
+inline int dense_tier_min_m(int sms, bool w8, int64_t size_k, int64_t size_n) {
   static const int v = [] {
     const char* e = std::getenv("APHRODITE_SWORDFISH_DENSE_M");
     return e != nullptr && e[0] != '\0' ? std::atoi(e) : 0;
   }();
   if (v != 0) return v;
-  if (sms < 100) return INT_MAX;
-  // Measured B200 crossovers; 8-bit crosses earlier because the mixed-input
-  // pipeline moves twice the weight bytes through the transform.
+  if (sms < 100) {
+    if (!w8) return INT_MAX;
+    return size_k >= 2 * size_n ? 8192 : 2048;
+  }
   return w8 ? 1024 : 4096;
 }
 
@@ -328,7 +332,7 @@ torch::stable::Tensor swordfish_mm(
                     "perm must be int32 [", size_k, "]");
   }
 
-  if (size_m >= dense_tier_min_m(cached_sm_count(), w8) &&
+  if (size_m >= dense_tier_min_m(cached_sm_count(), w8, size_k, size_n) &&
       !force_deterministic()) {
     const int32_t device_index = a.get_device_index();
     torch::stable::accelerator::DeviceGuard device_guard(device_index);
