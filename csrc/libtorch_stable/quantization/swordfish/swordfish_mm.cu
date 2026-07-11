@@ -233,7 +233,14 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
     // column, pair) work and the atomic epilogue merges segments, removing
     // split-K heuristics and wave quantization.
     const bool wide_n = n / kBlockN >= 4 * cached_sm_count();
-    if (wide_n && m <= 47) {
+    // On many-SM parts the whole [17, 48] band belongs to the fused atomic
+    // grid at any width: its CTA shares one weight stream across four
+    // warps, where Stream-K's warp-private B and A staging pays for itself
+    // only when the machine is small enough for warps to get long claims.
+    // Few-SM parts keep Stream-K outside wide N (measured 0.73-0.96 of
+    // marlin the other way around on 20 SMs).
+    const bool band_atomic = cached_sm_count() >= 100 && m <= 48;
+    if (band_atomic || (wide_n && m <= 47)) {
       launch_decode_atomic<type_id, HAS_ZP, W8>(m <= 32 ? 2 : 3, a, b, s, z,
                                                 c, m, k, n, group_size,
                                                 stream);
