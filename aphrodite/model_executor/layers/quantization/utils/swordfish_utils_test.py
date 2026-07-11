@@ -79,6 +79,30 @@ def swordfish_quantize(
     return w_ref, packed, s
 
 
+def swordfish_quantize_act_order(
+    w: torch.Tensor,
+    quant_type: ScalarType,
+    group_size: int,
+):
+    """Quantize fp weight [K, N] GPTQ-style WITH act_order and pack the
+    row-sorted weight. Returns (w_ref, packed, scales, sort_indices); the
+    caller permutes activation columns by sort_indices before the GEMM."""
+    from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
+        gptq_quantize_weights,
+        sort_weights,
+    )
+
+    assert quant_type in SWORDFISH_SUPPORTED_QUANT_TYPES
+    size_k, size_n = w.shape
+
+    w_ref, q_w, s, g_idx, _ = gptq_quantize_weights(
+        w, quant_type, group_size, act_order=True
+    )
+    q_w, g_idx, sort_indices = sort_weights(q_w, g_idx)
+    packed = swordfish_pack_weights_ref(q_w, size_k, size_n, quant_type.size_bits)
+    return w_ref, packed, s, sort_indices.to(torch.int)
+
+
 def swordfish_quantize_awq(
     w: torch.Tensor,
     group_size: int,

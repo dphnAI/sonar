@@ -4,6 +4,8 @@
 // [K/16, N*2] int32 layout into (NB, KB, 512) int32 blocks. Runs once at
 // weight load.
 
+#include <optional>
+
 #include <torch/csrc/stable/accelerator.h>
 #include <torch/csrc/stable/library.h>
 #include <torch/csrc/stable/ops.h>
@@ -42,9 +44,10 @@ __global__ void retile_marlin_to_blocks(const int32_t* __restrict__ marlin,
 
 }  // namespace
 
-torch::stable::Tensor swordfish_prepack_B(torch::stable::Tensor& b_q_weight,
-                                          int64_t size_k, int64_t size_n,
-                                          int64_t num_bits) {
+torch::stable::Tensor swordfish_prepack_B(
+    torch::stable::Tensor& b_q_weight,
+    std::optional<torch::stable::Tensor> const& perm, int64_t size_k,
+    int64_t size_n, int64_t num_bits) {
   STD_TORCH_CHECK(shape_ok(size_k, size_n), "swordfish ABI v1 requires K % ",
                   kBlockK, " == 0 and N % ", kBlockN, " == 0; got K=", size_k,
                   " N=", size_n, " (v1 tail policy: reject)");
@@ -55,12 +58,15 @@ torch::stable::Tensor swordfish_prepack_B(torch::stable::Tensor& b_q_weight,
   torch::stable::accelerator::DeviceGuard device_guard(device_index);
   const cudaStream_t stream = get_current_cuda_stream(device_index);
 
-  // Stage 1: Marlin in-tile permutation (no act_order in v1 -> empty perm).
-  torch::stable::Tensor empty_perm = torch::stable::empty(
-      {0}, torch::headeronly::ScalarType::Int, std::nullopt,
-      b_q_weight.device());
+  // Stage 1: Marlin in-tile permutation. A non-empty perm applies the
+  // act_order row sort (g_idx argsort) during the repack.
+  torch::stable::Tensor perm_t =
+      perm.has_value() ? *perm
+                       : torch::stable::empty(
+                             {0}, torch::headeronly::ScalarType::Int,
+                             std::nullopt, b_q_weight.device());
   torch::stable::Tensor marlin_flat = gptq_marlin_repack(
-      b_q_weight, empty_perm, size_k, size_n, num_bits,
+      b_q_weight, perm_t, size_k, size_n, num_bits,
       /*is_a_8bit=*/false);
 
   // Stage 2: re-tile to (NB, KB, 512|1024) int32 blocks.

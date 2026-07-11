@@ -1556,10 +1556,12 @@ def swordfish_prepack_B(
     size_k: int,
     size_n: int,
     num_bits: int = 4,
+    perm: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Pack a GPTQ int weight (int32 [K*bits/32, N]) into Swordfish ABI v1
-    (int32 [NB, KB, 512*bits/4] block-linear)."""
-    return torch.ops._C.swordfish_prepack_B(b_q_weight, size_k, size_n, num_bits)
+    (int32 [NB, KB, 512*bits/4] block-linear). perm applies the act_order
+    row sort during the repack."""
+    return torch.ops._C.swordfish_prepack_B(b_q_weight, perm, size_k, size_n, num_bits)
 
 
 if hasattr(torch.ops._C, "swordfish_prepack_B"):
@@ -1567,6 +1569,7 @@ if hasattr(torch.ops._C, "swordfish_prepack_B"):
     @register_fake("_C::swordfish_prepack_B")
     def swordfish_prepack_B_fake(
         b_q_weight: torch.Tensor,
+        perm: torch.Tensor | None,
         size_k: int,
         size_n: int,
         num_bits: int,

@@ -12,6 +12,7 @@ import torch
 from aphrodite import _custom_ops as ops
 from aphrodite.model_executor.layers.quantization.utils.swordfish_utils_test import (
     swordfish_quantize,
+    swordfish_quantize_act_order,
     swordfish_quantize_awq,
 )
 from aphrodite.platforms import current_platform
@@ -162,4 +163,21 @@ def test_swordfish_mm_8bit_large_m():
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_mm(a, packed, scales, 128, k, n, num_bits=8)
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+
+
+@pytest.mark.parametrize("mnk", [(8, 512, 256), (33, 2048, 1024), (256, 2048, 512)])
+@pytest.mark.parametrize("bits", [4, 8])
+def test_swordfish_mm_act_order(mnk, bits):
+    # The row sort realigns group boundaries, so the kernel runs the plain
+    # grouped path; only the activation columns carry the permutation.
+    m, k, n = mnk
+    qt = scalar_types.uint4b8 if bits == 4 else scalar_types.uint8b128
+    torch.manual_seed(k + n + m + bits)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales, sort_indices = swordfish_quantize_act_order(w, qt, 128)
+    a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    a_sorted = ops.permute_cols(a, sort_indices)
+    out = ops.swordfish_mm(a_sorted, packed, scales, 128, k, n, num_bits=bits)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

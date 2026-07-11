@@ -112,7 +112,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
   // swordfish (sm100/sm110 w4a16): pack a GPTQ int4 weight into the
   // Swordfish ABI v1 block-linear layout.
   ops.def(
-      "swordfish_prepack_B(Tensor b_q_weight, SymInt size_k, "
+      "swordfish_prepack_B(Tensor b_q_weight, Tensor? perm, SymInt size_k, "
       "SymInt size_n, int num_bits) -> Tensor");
   // conditionally compiled so impl registrations are in source file
 

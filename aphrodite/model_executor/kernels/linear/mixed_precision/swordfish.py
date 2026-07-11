@@ -6,6 +6,9 @@
 import torch
 
 from aphrodite import _custom_ops as ops
+from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
+    marlin_sort_g_idx,
+)
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import unpack_cols
 from aphrodite.model_executor.layers.quantization.utils.swordfish_utils import (
     check_swordfish_supports_shape,
@@ -41,8 +44,12 @@ class SwordfishLinearKernel(MPLinearKernel):
                 f"10.x or 11.x), got {capability}",
             )
 
-        if c.has_g_idx:
-            return False, "Act reordering (g_idx) not supported by Swordfish v1"
+        if c.has_g_idx and c.partition_weight_shape[0] != c.full_weight_shape[0]:
+            return (
+                False,
+                "Act reordering with a partial K (row-parallel TP) not "
+                "supported by Swordfish",
+            )
 
         supported_types = query_swordfish_supported_quant_types(c.zero_points)
         if c.weight_type not in supported_types:
@@ -69,11 +76,25 @@ class SwordfishLinearKernel(MPLinearKernel):
         c = self.config
         size_k, size_n = c.partition_weight_shape
 
+        # Act-order rows sort by group at prepack; scales then apply in the
+        # plain grouped order and only the activation columns need the sort
+        # permutation at run time.
+        if c.has_g_idx:
+            g_idx, g_idx_sort_indices = marlin_sort_g_idx(
+                getattr(layer, self.w_gidx_name)
+            )
+            self._transform_param(layer, self.w_gidx_name, lambda _: g_idx)
+            layer.g_idx_sort_indices = g_idx_sort_indices
+
         def transform_w_q(x):
             assert isinstance(x, BaseAphroditeParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1, packed_dim=0)
             x.data = ops.swordfish_prepack_B(
-                x.data.contiguous(), size_k, size_n, c.weight_type.size_bits
+                x.data.contiguous(),
+                size_k,
+                size_n,
+                c.weight_type.size_bits,
+                perm=layer.g_idx_sort_indices if c.has_g_idx else None,
             )
             return x
 
@@ -121,6 +142,9 @@ class SwordfishLinearKernel(MPLinearKernel):
 
         x_2d = x.reshape(-1, x.shape[-1])
         out_shape = x.shape[:-1] + (c.partition_weight_shape[1],)
+
+        if c.has_g_idx:
+            x_2d = ops.permute_cols(x_2d, layer.g_idx_sort_indices)
 
         # The decode/prefill crossover lives inside the C++ op. A Python
         # branch would be baked in at torch.compile trace time.

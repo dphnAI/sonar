@@ -121,7 +121,7 @@ def test_prepack_opcheck():
     gptq = _gptq_pack(q_w, size_k, size_n).to(DEVICE)
     opcheck(
         torch.ops._C.swordfish_prepack_B,
-        (gptq, size_k, size_n, 4),
+        (gptq, None, size_k, size_n, 4),
     )
 
 
