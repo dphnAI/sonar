@@ -229,3 +229,19 @@ def test_swordfish_mm_dense_tier_act_order(monkeypatch):
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_mm(a, packed, scales, 128, k, n, perm=sort_indices)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+
+
+def test_swordfish_mm_channelwise_replication():
+    # The python layer replicates a channelwise scale row to group 128;
+    # the two presentations must agree bit for bit.
+    m, k, n = 64, 1024, 512
+    torch.manual_seed(4)
+    w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
+    w_ref, packed, scales = swordfish_quantize(w, QT, -1)
+    rep = scales.expand(k // 128, n).contiguous()
+    o_cw = ops.swordfish_mm(a := torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE),
+                            packed, scales, -1, k, n)
+    o_g = ops.swordfish_mm(a, packed, rep, 128, k, n)
+    ref = a.to(torch.float32) @ w_ref.to(torch.float32)
+    torch.testing.assert_close(o_g.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
+    torch.testing.assert_close(o_cw.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

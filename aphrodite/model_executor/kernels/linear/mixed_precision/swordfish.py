@@ -102,6 +102,11 @@ class SwordfishLinearKernel(MPLinearKernel):
             assert isinstance(x, BaseAphroditeParameter)
             permute_param_layout_(x, input_dim=0, output_dim=1)
             x.data = x.data.contiguous()
+            # Channelwise checkpoints replicate their single scale row to
+            # group 128, which buys the full grouped machinery (tcgen05
+            # prefill, the dense tier) for kilobytes of duplicate scales.
+            if c.group_size == -1:
+                x.data = x.data.expand(size_k // 128, size_n).contiguous()
             return x
 
         self._transform_param(layer, self.w_q_name, transform_w_q)
@@ -149,7 +154,7 @@ class SwordfishLinearKernel(MPLinearKernel):
             x_2d,
             w_q,
             w_s,
-            c.group_size,
+            128 if c.group_size == -1 else c.group_size,
             c.partition_weight_shape[0],
             c.partition_weight_shape[1],
             group_zps=w_zp,
