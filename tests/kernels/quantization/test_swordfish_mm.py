@@ -30,6 +30,8 @@ QT = scalar_types.uint4b8
 # (M, K, N) decode sweep including regime boundaries, plus K/N variety
 MNK = [
     (1, 256, 128),
+    (52, 1024, 256),
+    (60, 11008, 256),
     (2, 256, 128),
     (4, 512, 256),
     (8, 4096, 4096),

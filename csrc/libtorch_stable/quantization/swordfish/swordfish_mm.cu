@@ -59,7 +59,12 @@ inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st,
     if (sms <= 0) sms = 1;
   }
   const bool prefill_fills = n / 128 >= sms;
-  return m >= 96 || (m >= 48 && prefill_fills);
+  // The four-tile decode window carries [48, 56) even at wide N; the
+  // tcgen05 wave only pulls ahead of it from 56 rows up. K-heavy narrow-N
+  // shapes keep Stream-K through [96, 128) on many-SM parts, where a single
+  // underfilled tcgen05 wave loses to it.
+  if (m >= 96 && m < 128 && k >= 2 * n && n / 128 < sms / 4) return false;
+  return m >= 96 || (m >= 56 && prefill_fills);
 }
 
 // Above this M the problem is compute-bound and dequant-once + dense
@@ -105,7 +110,9 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
                              const void* z, void* c, int m, int k, int n,
                              int group_size, cudaStream_t stream) {
   using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
-  constexpr int kStagesT = T == 1 ? kStages : (T == 2 ? 4 : 3);
+  constexpr int kStagesT =
+      T == 1 ? kStages
+             : (T == 2 ? (W8 ? 5 : 4) : (T == 3 ? 3 : (W8 ? 4 : 2)));
   constexpr int kUnitK = W8 ? 16 : 32;
   static int ctas_per_sm = 0;
   if (ctas_per_sm == 0) {
@@ -132,40 +139,6 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
   cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
   swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8>
       <<<ctas, kDecodeThreads, 0, stream>>>(
-          reinterpret_cast<const scalar_t*>(a), b,
-          reinterpret_cast<const scalar_t*>(s),
-          reinterpret_cast<const scalar_t*>(z),
-          reinterpret_cast<scalar_t*>(c), m, k, n, group_size, m_groups);
-}
-
-template <aphrodite::ScalarTypeId type_id, int W, bool HAS_ZP,
-          bool W8 = false>
-void launch_decode_mshare_t(const void* a, const int32_t* b, const void* s,
-                            const void* z, void* c, int m, int k, int n,
-                            int group_size, cudaStream_t stream) {
-  using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
-  static int ctas_per_sm = 0;
-  if (ctas_per_sm == 0) {
-    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &ctas_per_sm,
-        swordfish_decode_mshare_kernel<type_id, W, HAS_ZP, W8>, W * 32, 0);
-    if (ctas_per_sm <= 0) ctas_per_sm = 1;
-  }
-  int sms = cached_sm_count();
-  const int m_tiles = (m + 15) / 16;
-  const int m_groups = (m_tiles + W - 1) / W;
-  const int nb = n / kBlockN;
-  const int num_chunks = k / (W8 ? 32 : 64);
-  const int64_t total = int64_t(m_groups) * nb * num_chunks;
-  int ctas = ctas_per_sm * sms;
-  // Fill is load-bearing; a grid capped toward long unbroken segments
-  // measured far worse. Only bound by available work.
-  const int64_t max_ctas = total / 6 > 0 ? total / 6 : 1;
-  if (ctas > max_ctas) ctas = int(max_ctas);
-  if (ctas < 1) ctas = 1;
-  cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
-  swordfish_decode_mshare_kernel<type_id, W, HAS_ZP, W8>
-      <<<ctas, W * 32, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(a), b,
           reinterpret_cast<const scalar_t*>(s),
           reinterpret_cast<const scalar_t*>(z),
@@ -249,7 +222,7 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
     // Tuned single-tile path with in-kernel C zeroing and heuristic split-K.
     launch_decode_atomic<type_id, HAS_ZP, W8>(1, a, b, s, z, c, m, k, n,
                                               group_size, stream);
-  } else if (m <= 96) {
+  } else if (m <= 127) {
     // Window dispatch. When columns alone fill the machine the fused atomic
     // grid (in-kernel zeroing, no memset) is already balanced; otherwise
     // Stream-K hands each warp a contiguous flat range of (fused tile,
@@ -263,18 +236,18 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
     } else if (m <= 32) {
       launch_decode_streamk_t<type_id, 2, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
                                                       group_size, stream);
-    } else if (m <= 47) {
+    } else if (m <= 48) {
       launch_decode_streamk_t<type_id, 3, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
                                                       group_size, stream);
     } else if (m <= 64) {
-      // M-shared CTA for the band the prefill crossover leaves to decode on
-      // many-SM parts. W warps, one m16 tile each for the whole K range, so
-      // the weight stream covers all rows once.
-      launch_decode_mshare_t<type_id, 4, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
-                                                     group_size, stream);
+      // Four-tile fusion amortizes the dequant across the whole band; the
+      // m-shared CTA it replaces dequantized the same weights once per warp
+      // and issued 2.7x the instructions for it.
+      launch_decode_streamk_t<type_id, 4, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                      group_size, stream);
     } else {
-      launch_decode_mshare_t<type_id, 6, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
-                                                     group_size, stream);
+      launch_decode_streamk_t<type_id, 3, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
+                                                      group_size, stream);
     }
   } else {
     dim3 grid((m + 15) / 16, n / kBlockN);

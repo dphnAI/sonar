@@ -112,7 +112,12 @@ __global__ void swordfish_decode_kernel(
   // Pipeline depth scales inversely with M_TILES. Compute per staged pair
   // grows with the tile count, so fewer stages hide the same copy latency,
   // and the astage footprint stays inside the 48 KB static smem budget.
-  constexpr int kStagesT = M_TILES == 1 ? kStages : (M_TILES == 2 ? 4 : 3);
+  // 8-bit units are half the activation bytes, so the fused tiers run
+  // deeper pipelines in the same smem.
+  constexpr int kStagesT =
+      M_TILES == 1 ? kStages
+                   : (M_TILES == 2 ? (W8 ? 5 : 4)
+                                   : (M_TILES == 3 ? 3 : (W8 ? 4 : 2)));
   // A staging unit stays 1 KB of packed weights at both widths: a k32 slice
   // pair at 4-bit, a single k16 slice at 8-bit (deeper W8 pipelines fit the
   // freed smem but measured flat).
@@ -500,7 +505,12 @@ __global__ void swordfish_decode_streamk_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
     typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
     int M, int K, int N, int group_size, int m_groups) {
-  constexpr int kStagesT = M_TILES == 1 ? kStages : (M_TILES == 2 ? 4 : 3);
+  // 8-bit units are half the activation bytes, so the fused tiers run
+  // deeper pipelines in the same smem.
+  constexpr int kStagesT =
+      M_TILES == 1 ? kStages
+                   : (M_TILES == 2 ? (W8 ? 5 : 4)
+                                   : (M_TILES == 3 ? 3 : (W8 ? 4 : 2)));
   // A staging unit stays 1 KB of packed weights at both widths: a k32 slice
   // pair at 4-bit, a single k16 slice at 8-bit (deeper W8 pipelines fit the
   // freed smem but measured flat).
@@ -717,15 +727,20 @@ __global__ void swordfish_decode_streamk_kernel(
       }
     }
 
+    // The two-unit W8 step issues two copies per iteration, so its
+    // prologue holds one slot fewer or the second issue of the first
+    // iteration would overwrite the oldest unprocessed stage.
+    constexpr int kPrologue = W8 ? kStagesT - 2 : kStagesT - 1;
 #pragma unroll
-    for (int st = 0; st < kStagesT - 1; st++) issue_pair(st);
+    for (int st = 0; st < kPrologue; st++) issue_pair(st);
 
+    // At two stages the historical wait<kStagesT - 2> is wait<0>, which
+    // drains the copy issued THIS iteration and serializes the pipeline;
+    // one group must stay in flight.
+    constexpr int kWaitN = kStagesT == 2 ? 1 : kStagesT - 2;
     int slot = 0;
-    int islot = kStagesT - 1;
-    for (int p = p_beg; p < p_end; p++) {
-      issue_pair(islot);
-      if (++islot == kStagesT) islot = 0;
-      marlin::cp_async_wait<kStagesT - 2>();
+    int islot = kPrologue;
+    auto step = [&](int p) {
       if (left == 0) {
         ++g;
         expand_row(s_next, s_reg);
@@ -739,6 +754,37 @@ __global__ void swordfish_decode_streamk_kernel(
       process_pair(slot, bstage[warp][slot]);
       left--;
       if (++slot == kStagesT) slot = 0;
+    };
+    if constexpr (W8) {
+      // A single k16 unit leaves one thin dequant chain exposed to the
+      // staging-buffer load latency (short-scoreboard dominates profiles);
+      // stepping two units per wait restores k32 of independent work.
+      // Both stepped slots must be complete, so the two-step wait leaves
+      // kStagesT - 2 groups in flight (zero at two stages).
+      constexpr int kWaitN2 = kStagesT - 2;
+      int p = p_beg;
+      for (; p + 1 < p_end; p += 2) {
+        issue_pair(islot);
+        if (++islot == kStagesT) islot = 0;
+        issue_pair(islot);
+        if (++islot == kStagesT) islot = 0;
+        marlin::cp_async_wait<kWaitN2>();
+        step(p);
+        step(p + 1);
+      }
+      for (; p < p_end; p++) {
+        issue_pair(islot);
+        if (++islot == kStagesT) islot = 0;
+        marlin::cp_async_wait<kWaitN>();
+        step(p);
+      }
+    } else {
+      for (int p = p_beg; p < p_end; p++) {
+        issue_pair(islot);
+        if (++islot == kStagesT) islot = 0;
+        marlin::cp_async_wait<kWaitN>();
+        step(p);
+      }
     }
 
     // Segment flush into the launcher-zeroed C.
@@ -758,291 +804,6 @@ __global__ void swordfish_decode_streamk_kernel(
             red_add2(
                 reinterpret_cast<scalar_t2*>(C + int64_t(row0[t] + 8) * N + cc),
                 Dtype::nums2num2(Dtype::float2num(v.z), Dtype::float2num(v.w)));
-        }
-      }
-    }
-  }
-}
-
-// M-shared decode for M 33 to 96 at narrow N. W warps each own one m16 tile
-// for the WHOLE K range, so the CTA streams each weight chunk exactly once
-// for up to 96 rows (the Marlin CTA shape). Weights stage once per CTA in
-// two-pair chunks that all warps consume in lockstep; activations stage per
-// warp. The pipeline step is [issue chunk into the freed slot] [wait]
-// [barrier] [process two pairs] [barrier]. The trailing barrier gates slot
-// reuse, since the issue at step c writes the slot processed at step c-1.
-// Work distribution is per-CTA Stream-K over (m-group, column, chunk) with
-// the m-group index fastest, flushed through red.global at boundaries.
-template <aphrodite::ScalarTypeId type_id, int W, bool HAS_ZP = false,
-          bool W8 = false>
-__global__ void swordfish_decode_mshare_kernel(
-    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
-    const int32_t* __restrict__ B,
-    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
-    const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
-    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
-    int M, int K, int N, int group_size, int m_groups) {
-  static_assert(W == 4 || W == 6, "supported m-share widths");
-  // Chunk size trades barrier rate against pipeline depth inside the 48 KB
-  // smem budget. W=4 affords 4-pair chunks at 2 stages (one barrier pair per
-  // 64 mmas per warp); W=6 fits 2-pair chunks at 3 stages.
-  constexpr int kCP = 2;  // pairs per chunk (4-pair chunks at 2 stages
-                          // measured worse; shallow pipelines lose more
-                          // than the halved barrier rate gains)
-  constexpr int kSt = 3;
-  constexpr int kUnitK = W8 ? 16 : 32;
-  static_assert(!(W8 && HAS_ZP), "8-bit weights carry no zero points");
-  using Dtype = marlin::MarlinScalarType<type_id>;
-  using scalar_t = typename Dtype::scalar_t;
-  using scalar_t2 = typename Dtype::scalar_t2;
-  using FragA = typename Dtype::FragA;
-  using FragB = typename Dtype::FragB;
-  using FragC = typename Dtype::FragC;
-
-  const int tid = threadIdx.x;
-  const int lane = tid % 32;
-  const int warp = tid / 32;
-  const int group_id = lane / 4;
-  const int tig = lane % 4;
-  const int ldsm_row = lane & 15;
-  const int ldsm_col = (lane >> 4) << 3;
-  const int ia_row = lane >> 1;
-  const int ia_c0 = (kUnitK / 2) * (lane & 1);
-
-  const int num_pairs = K / kUnitK;
-  const int num_chunks = num_pairs / kCP;
-  const int nb_cnt = N / kBlockN;
-  const int num_kb = K / kBlockK;
-  const int ppg = group_size > 0 ? group_size / kUnitK : INT_MAX;
-  const scalar_t2 zero2 = Dtype::num2num2(Dtype::float2num(0.0f));
-  const uint64_t bpol = l2_evict_first_policy();
-
-  const int64_t total = int64_t(m_groups) * nb_cnt * num_chunks;
-  const int64_t per = (total + gridDim.x - 1) / gridDim.x;
-  int64_t w = int64_t(blockIdx.x) * per;
-  const int64_t w_end = w + per < total ? w + per : total;
-
-  // Weights once per CTA, activations per warp.
-  __shared__ int4 bstage[kSt][kCP][64];
-  __shared__ scalar_t astage[W][kSt][kCP][16][kUnitK];
-
-  FragC acc[4][2];
-  scalar_t2 s_reg[4][2];
-  scalar_t2 z_reg[4][2];
-
-  // B copy assignment. The chunk is kCP 1 KB pairs = kCP*64 16-byte units,
-  // spread over the CTA's threads; each thread copies kBU units.
-  constexpr int kThreads = W * 32;
-  constexpr int kBU = (kCP * 64 + kThreads - 1) / kThreads;  // units/thread
-  const int b_unit0 = tid;  // unit u covers pair u/64, slot (u%64)
-  auto b_src_off = [&](int u) -> int {
-    const int uu = u % 64;
-    if constexpr (W8) return (u / 64) * kPairInt32 + 4 * uu;
-    return (u / 64) * kPairInt32 +
-           (uu < 32 ? 4 * uu : kPairInt32 / 2 + 4 * (uu - 32));
-  };
-
-  while (w < w_end) {
-    const int64_t cg = w / num_chunks;
-    const int c_beg = int(w - cg * num_chunks);
-    const int col = int(cg / m_groups);
-    const int g_idx = int(cg - int64_t(col) * m_groups);
-    const int c_end =
-        int(int64_t(num_chunks) < c_beg + (w_end - w) ? int64_t(num_chunks)
-                                                      : c_beg + (w_end - w));
-    w += c_end - c_beg;
-
-    const int m_base = g_idx * (16 * W) + 16 * warp;  // this warp's tile
-    const int col_base = col * kBlockN;
-    const int row0 = m_base + group_id;
-    const bool r0ok = row0 < M;
-    const bool r1ok = row0 + 8 < M;
-    const bool a_ok = (m_base + ia_row) < M;
-
-#pragma unroll
-    for (int j = 0; j < 4; j++)
-#pragma unroll
-      for (int b = 0; b < 2; b++)
-#pragma unroll
-        for (int i = 0; i < 4; i++) acc[j][b][i] = 0.0f;
-
-    auto fetch_row = [&](const scalar_t* base, int g) -> scalar_t2 {
-      return reinterpret_cast<const scalar_t2*>(base + int64_t(g) * N +
-                                                col_base)[lane];
-    };
-    auto expand_row = [&](scalar_t2 mine, scalar_t2 (&dst)[4][2]) {
-      const uint32_t sel = group_id & 1;
-#pragma unroll
-      for (int j = 0; j < 4; j++) {
-#pragma unroll
-        for (int b = 0; b < 2; b++) {
-          const scalar_t2 v = __shfl_sync(
-              0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
-          const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
-          const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
-          dst[j][b] =
-              Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
-        }
-      }
-    };
-    auto process_slice = [&](const FragA& fa, const marlin::I4& bqa,
-                             const marlin::I4& bqb) {
-#pragma unroll
-      for (int j = 0; j < 4; j++) {
-        FragB frag_b0, frag_b1;
-        if constexpr (W8) {
-          const marlin::I4& src = j < 2 ? bqa : bqb;
-          marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
-              src.elems[(2 * j) & 3], reinterpret_cast<scalar_t2*>(&frag_b0));
-          marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
-              src.elems[(2 * j + 1) & 3],
-              reinterpret_cast<scalar_t2*>(&frag_b1));
-        } else {
-          const int b_quant_0 = bqa.elems[j];
-          const int b_quant_1 = b_quant_0 >> 8;
-          marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
-              b_quant_0, reinterpret_cast<scalar_t2*>(&frag_b0));
-          marlin::dequant<scalar_t2, aphrodite::kU4B8.id(), false>(
-              b_quant_1, reinterpret_cast<scalar_t2*>(&frag_b1));
-        }
-        if constexpr (HAS_ZP) {
-          frag_b0[0] = __hfma2(frag_b0[0], s_reg[j][0], z_reg[j][0]);
-          frag_b0[1] = __hfma2(frag_b0[1], s_reg[j][0], z_reg[j][0]);
-          frag_b1[0] = __hfma2(frag_b1[0], s_reg[j][1], z_reg[j][1]);
-          frag_b1[1] = __hfma2(frag_b1[1], s_reg[j][1], z_reg[j][1]);
-        } else {
-          frag_b0[0] = __hmul2(frag_b0[0], s_reg[j][0]);
-          frag_b0[1] = __hmul2(frag_b0[1], s_reg[j][0]);
-          frag_b1[0] = __hmul2(frag_b1[0], s_reg[j][1]);
-          frag_b1[1] = __hmul2(frag_b1[1], s_reg[j][1]);
-        }
-        marlin::mma<type_id, false>(fa, frag_b0, acc[j][0]);
-        marlin::mma<type_id, false>(fa, frag_b1, acc[j][1]);
-      }
-    };
-    auto process_pair = [&](int slot, int pi) {
-      FragA fa0, fa1;
-      ldsm4<type_id>(fa0, &astage[warp][slot][pi][ldsm_row][ldsm_col]);
-      const int4* buf = bstage[slot][pi];
-      if constexpr (W8) {
-        const marlin::I4 bq0 =
-            *reinterpret_cast<const marlin::I4*>(&buf[2 * lane]);
-        const marlin::I4 bq1 =
-            *reinterpret_cast<const marlin::I4*>(&buf[2 * lane + 1]);
-        process_slice(fa0, bq0, bq1);
-      } else {
-        ldsm4<type_id>(fa1, &astage[warp][slot][pi][ldsm_row][ldsm_col + 16]);
-        const marlin::I4 bq0 =
-            *reinterpret_cast<const marlin::I4*>(&buf[lane]);
-        const marlin::I4 bq1 =
-            *reinterpret_cast<const marlin::I4*>(&buf[32 + lane]);
-        process_slice(fa0, bq0, bq0);
-        process_slice(fa1, bq1, bq1);
-      }
-    };
-
-    const int32_t* b_col =
-        B + int64_t(col) * num_kb * (W8 ? kBlockInt32_8 : kBlockInt32);
-    const int32_t* ichunk_base = b_col + kCP * c_beg * kPairInt32;
-    const scalar_t* ia_ptr =
-        A + (a_ok ? m_base + ia_row : 0) * K + kUnitK * kCP * c_beg + ia_c0;
-    int icend = c_end - c_beg;
-
-    auto issue_chunk = [&](int slot) {
-      if (icend > 0) {
-        icend--;
-#pragma unroll
-        for (int bu = 0; bu < kBU; bu++) {
-          const int u = b_unit0 + bu * kThreads;
-          if (u < kCP * 64) {
-            cp_async4_evict_first(
-                &bstage[slot][u / 64][u % 64], ichunk_base + b_src_off(u),
-                bpol);
-          }
-        }
-        ichunk_base += kCP * kPairInt32;
-        if (a_ok) {
-#pragma unroll
-          for (int pi = 0; pi < kCP; pi++) {
-            marlin::cp_async4(&astage[warp][slot][pi][ia_row][ia_c0],
-                              ia_ptr + kUnitK * pi);
-            if constexpr (!W8) {
-              marlin::cp_async4(&astage[warp][slot][pi][ia_row][ia_c0 + 8],
-                                ia_ptr + kUnitK * pi + 8);
-            }
-          }
-        }
-        ia_ptr += kUnitK * kCP;
-      }
-      marlin::cp_async_fence();
-    };
-
-    int g = 0;
-    int left = INT_MAX;
-    const int p_last = kCP * c_end - 1;
-    const int g_last = group_size > 0 ? (kUnitK * p_last) / group_size : 0;
-    scalar_t2 s_next = zero2;
-    scalar_t2 z_next = zero2;
-    if (c_beg < c_end) {
-      const int p0 = kCP * c_beg;
-      if (group_size > 0) {
-        g = p0 / ppg;
-        left = ppg - p0 % ppg;
-      }
-      expand_row(fetch_row(S, g), s_reg);
-      if constexpr (HAS_ZP) expand_row(fetch_row(Z, g), z_reg);
-      if (g + 1 <= g_last) {
-        s_next = fetch_row(S, g + 1);
-        if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
-      }
-    }
-
-#pragma unroll
-    for (int st = 0; st < kSt - 1; st++) issue_chunk(st);
-
-    int slot = 0;
-    int islot = kSt - 1;
-    for (int c = c_beg; c < c_end; c++) {
-      issue_chunk(islot);
-      if (++islot == kSt) islot = 0;
-      marlin::cp_async_wait<kSt - 2>();
-      __syncthreads();
-#pragma unroll
-      for (int pi = 0; pi < kCP; pi++) {
-        if (left == 0) {
-          ++g;
-          expand_row(s_next, s_reg);
-          if constexpr (HAS_ZP) expand_row(z_next, z_reg);
-          if (g + 1 <= g_last) {
-            s_next = fetch_row(S, g + 1);
-            if constexpr (HAS_ZP) z_next = fetch_row(Z, g + 1);
-          }
-          left = ppg;
-        }
-        process_pair(slot, pi);
-        left--;
-      }
-      __syncthreads();
-      if (++slot == kSt) slot = 0;
-    }
-
-    // Per-warp segment flush into the launcher-zeroed C.
-    if (r0ok || r1ok) {
-#pragma unroll
-      for (int j = 0; j < 4; j++) {
-#pragma unroll
-        for (int b = 0; b < 2; b++) {
-          const int cc = col_base + 8 * (2 * j + b) + 2 * tig;
-          const float4 v = *reinterpret_cast<float4*>(&acc[j][b]);
-          if (r0ok)
-            red_add2(reinterpret_cast<scalar_t2*>(C + int64_t(row0) * N + cc),
-                     Dtype::nums2num2(Dtype::float2num(v.x),
-                                      Dtype::float2num(v.y)));
-          if (r1ok)
-            red_add2(
-                reinterpret_cast<scalar_t2*>(C + int64_t(row0 + 8) * N + cc),
-                Dtype::nums2num2(Dtype::float2num(v.z),
-                                 Dtype::float2num(v.w)));
         }
       }
     }
