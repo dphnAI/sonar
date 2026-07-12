@@ -108,6 +108,47 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "marlin_int4_fp8_preprocess(Tensor qweight, "
       "Tensor? qzeros_or_none, bool inplace) -> Tensor");
   // conditionally compiled so impl registrations are in source file
+
+  // swordfish (sm100/sm110 w4a16): pack a GPTQ int4 weight into the
+  // Swordfish ABI v1 block-linear layout.
+  ops.def(
+      "swordfish_prepack_B(Tensor b_q_weight, Tensor? perm, SymInt size_k, "
+      "SymInt size_n, int num_bits) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
+  // swordfish w4a16 decode GEMM over the ABI v1 packed weight. group_zps
+  // holds prescaled (8 - zp) * scale per group when present (AWQ/HQQ).
+  ops.def(
+      "swordfish_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
+      "Tensor? group_zps, Tensor? perm, int num_bits, int group_size, "
+      "SymInt size_k, SymInt size_n) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
+  // swordfish dequant to dense fp16/bf16, optionally out-major transposed
+  // and expert-stacked, for the dense tiers.
+  ops.def(
+      "swordfish_dequant_dense(Tensor b_packed, Tensor group_scales, "
+      "Tensor? group_zps, int num_bits, int group_size, SymInt size_k, "
+      "SymInt size_n, bool transpose) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
+  // swordfish fused-MoE decode GEMM: one persistent Stream-K launch over
+  // per-expert ABI v1 weights, token-sorted by moe_align_block_size(16).
+  ops.def(
+      "swordfish_moe_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
+      "Tensor sorted_token_ids, Tensor expert_ids, "
+      "Tensor num_tokens_post_padded, Tensor? topk_weights, "
+      "int moe_block_size, int top_k, bool mul_topk_weights, int num_bits, "
+      "int group_size, SymInt size_k, SymInt size_n) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
+
+  // swordfish w4a16 prefill GEMM (sm100 tcgen05 mixed-input mainloop fork)
+  // over the same ABI v1 packed weight.
+  ops.def(
+      "swordfish_prefill_mm(Tensor a, Tensor b_packed, Tensor group_scales, "
+      "Tensor? group_zps, int num_bits, int group_size, SymInt size_k, "
+      "SymInt size_n) -> Tensor");
+  // conditionally compiled so impl registrations are in source file
 #endif
 
 #ifndef USE_ROCM

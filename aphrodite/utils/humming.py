@@ -38,10 +38,36 @@ _EXPORTS: dict[str, str] = {
 }
 
 
+_sm110_compat_applied = False
+
+
+def _apply_sm110_compat() -> None:
+    """Humming ships no sm110 support: its heuristics map has no 11.0 entry
+    and Jetson does not expose the NVML clock/bus-width queries its roofline
+    estimates rely on. The sm100 heuristics work unchanged on sm110, so map
+    them in and pin the two roofline numbers to Thor's."""
+    global _sm110_compat_applied
+    if _sm110_compat_applied:
+        return
+    _sm110_compat_applied = True
+    import torch
+
+    if not torch.cuda.is_available() or torch.cuda.get_device_capability() != (11, 0):
+        return
+    from humming.tune import heuristics_map
+    from humming.tune.sm100 import Sm100Heuristics
+    from humming.utils import device as humming_device
+
+    heuristics_map.setdefault(110, Sm100Heuristics)
+    humming_device.calculate_gpu_bandwidth = lambda gpu_index=0: 273.0
+    humming_device.estimate_tensorcore_max_tops = lambda gpu_index=0: 250
+
+
 def __getattr__(name: str) -> Any:
     spec = _EXPORTS.get(name)
     if spec is None:
         raise AttributeError(f"module 'aphrodite.utils.humming' has no attribute {name!r}")
+    _apply_sm110_compat()
     if ":" in spec:
         mod_path, attr = spec.split(":", 1)
         obj = getattr(importlib.import_module(mod_path), attr)

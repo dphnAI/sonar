@@ -57,6 +57,9 @@ from aphrodite.model_executor.kernels.linear.mixed_precision.marlin import (
 from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (
     RDNA3W4A16LinearKernel,
 )
+from aphrodite.model_executor.kernels.linear.mixed_precision.swordfish import (
+    SwordfishLinearKernel,
+)
 from aphrodite.model_executor.kernels.linear.mixed_precision.triton_w4a16 import (
     TritonW4A16LinearKernel,
 )
@@ -275,6 +278,12 @@ _LINEAR_BACKEND_KERNEL_MAP: dict[str, set[type]] = {
     "machete": {
         MacheteLinearKernel,
     },
+    "swordfish": {
+        SwordfishLinearKernel,
+    },
+    "allspark": {
+        AllSparkLinearKernel,
+    },
     "fbgemm": {
         FbgemmNvFp4LinearKernel,
     },
@@ -391,6 +400,7 @@ _POSSIBLE_WFP8A16_KERNELS: dict[PlatformEnum, list[type[FP8ScaledMMLinearKernel]
 _POSSIBLE_KERNELS: dict[PlatformEnum, list[type[MPLinearKernel]]] = {
     PlatformEnum.CUDA: [
         CutlassW4A8LinearKernel,
+        SwordfishLinearKernel,
         MacheteLinearKernel,
         AllSparkLinearKernel,
         MarlinLinearKernel,
@@ -1037,6 +1047,7 @@ __all__ = [
     "ExllamaLinearKernel",
     "MacheteLinearKernel",
     "MarlinLinearKernel",
+    "SwordfishLinearKernel",
     "TritonW4A16LinearKernel",
     "XPUW4A8IntLinearKernel",
     "XPUwNa16LinearKernel",

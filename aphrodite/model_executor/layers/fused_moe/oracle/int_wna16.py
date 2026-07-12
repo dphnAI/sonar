@@ -24,6 +24,9 @@ from aphrodite.model_executor.layers.fused_moe.experts.marlin_moe import (
     MarlinExperts,
     MarlinExpertsBase,
 )
+from aphrodite.model_executor.layers.fused_moe.experts.swordfish_moe import (
+    SwordfishExperts,
+)
 from aphrodite.model_executor.layers.fused_moe.experts.trtllm_mxint4_moe import (
     TrtLlmMxint4ExpertsMonolithic,
 )
@@ -45,6 +48,7 @@ logger = init_logger(__name__)
 
 
 class WNA16MoEBackend(Enum):
+    SWORDFISH = "SWORDFISH"
     MARLIN = "MARLIN"
     BATCHED_MARLIN = "BATCHED_MARLIN"
     HUMMING = "HUMMING"
@@ -69,6 +73,8 @@ def backend_to_kernel_cls(
             HummingGroupedExperts,
             HummingIndexedExperts,
         ]
+    elif backend == WNA16MoEBackend.SWORDFISH:
+        return [SwordfishExperts]
     elif backend == WNA16MoEBackend.MARLIN:
         return [MarlinExperts]
     elif backend == WNA16MoEBackend.BATCHED_MARLIN:
@@ -102,6 +108,7 @@ def _get_priority_backends() -> list[WNA16MoEBackend]:
 
     _AVAILABLE_BACKENDS = [
         WNA16MoEBackend.FLASHINFER_TRTLLM,
+        WNA16MoEBackend.SWORDFISH,
         WNA16MoEBackend.MARLIN,
         WNA16MoEBackend.BATCHED_MARLIN,
         WNA16MoEBackend.HUMMING,
@@ -112,6 +119,7 @@ def _get_priority_backends() -> list[WNA16MoEBackend]:
 def map_wna16_backend(runner_backend: MoEBackend) -> WNA16MoEBackend:
     """Map user's MoEBackend to WNA16MoEBackend."""
     mapping = {
+        "swordfish": WNA16MoEBackend.SWORDFISH,
         "marlin": WNA16MoEBackend.MARLIN,
         "humming": WNA16MoEBackend.HUMMING,
         "flashinfer_trtllm": WNA16MoEBackend.FLASHINFER_TRTLLM,
@@ -253,11 +261,12 @@ def make_wna16_moe_kernel(
     )
 
     # Currently, we only support TrtLlmMxint4ExpertsMonolithic, MarlinExperts,
-    # BatchedMarlinExperts, XPUExpertsWNA16, CPUExpertsInt4, and the Humming
-    # grouped/indexed experts.
+    # BatchedMarlinExperts, SwordfishExperts, XPUExpertsWNA16, CPUExpertsInt4,
+    # and the Humming grouped/indexed experts.
     allowed_experts: tuple[type[mk.FusedMoEExperts], ...] = (
         MarlinExperts,
         BatchedMarlinExperts,
+        SwordfishExperts,
         TrtLlmMxint4ExpertsMonolithic,
         XPUExpertsWNA16,
         CPUExpertsInt4,
@@ -620,6 +629,96 @@ def _process_weights_marlin(
         w2_input_global_scale,
         w13_bias_out,
         w2_bias_out,
+    )
+
+
+def _process_weights_swordfish(
+    input_dtype: torch.dtype | None,
+    num_bits: int,
+    pack_factor: int,
+    group_size: int,
+    actorder: str | None,
+    is_sym: bool,
+    w13_qweight: torch.Tensor,
+    w2_qweight: torch.Tensor,
+    w13_scales: torch.Tensor,
+    w2_scales: torch.Tensor,
+    w13_qzeros: torch.Tensor | None = None,
+    w2_qzeros: torch.Tensor | None = None,
+    w13_bias: torch.Tensor | None = None,
+    w2_bias: torch.Tensor | None = None,
+) -> tuple[
+    torch.Tensor,  # w13_qweight
+    torch.Tensor,  # w2_qweight
+    torch.Tensor,  # w13_scales
+    torch.Tensor,  # w2_scales
+    torch.Tensor,  # w13_g_idx
+    torch.Tensor,  # w2_g_idx
+    torch.Tensor,  # w13_g_idx_sort_indices
+    torch.Tensor,  # w2_g_idx_sort_indices
+    torch.Tensor | None,  # w13_qzeros
+    torch.Tensor | None,  # w2_qzeros
+    torch.Tensor | None,  # w13_input_global_scale
+    torch.Tensor | None,  # w2_input_global_scale
+    torch.Tensor | None,  # w13_bias
+    torch.Tensor | None,  # w2_bias
+]:
+    """Swordfish weight post-processing shared by the SWORDFISH backend.
+
+    Prepacks the GPTQ int32 [K / pack_factor, N] weights per expert into the
+    Swordfish block-linear layout. Scales stay in the plain checkpoint layout
+    [E, K / group_size, N], only made contiguous.
+    """
+    # These limits are not visible to the oracle kernel predicates (the
+    # weight QuantKey does not carry group_size or act_order), so they are
+    # validated here with a pointer to the marlin fallback.
+    if not is_sym or w13_qzeros is not None or w2_qzeros is not None:
+        raise ValueError("Swordfish MoE v1 supports only symmetric quantization. Set moe_backend='marlin'.")
+    if actorder == "group":
+        raise ValueError("Swordfish MoE v1 does not support act_order. Set moe_backend='marlin'.")
+    if group_size not in (-1, 64, 128):
+        raise ValueError(f"Swordfish MoE v1 does not support group_size={group_size}. Set moe_backend='marlin'.")
+    if w13_bias is not None or w2_bias is not None:
+        raise ValueError("Swordfish MoE v1 does not support bias. Set moe_backend='marlin'.")
+    assert input_dtype is None or input_dtype.itemsize == 2, "Swordfish MoE runs on 16-bit activations"
+
+    num_experts = w13_qweight.shape[0]
+    device = w13_qweight.device
+
+    def prepack(qweight: torch.Tensor) -> torch.Tensor:
+        size_k = qweight.shape[1] * pack_factor
+        size_n = qweight.shape[2]
+        return torch.stack(
+            [ops.swordfish_prepack_B(qweight[e].contiguous(), size_k, size_n, num_bits) for e in range(num_experts)],
+            dim=0,
+        ).contiguous()
+
+    swordfish_w13_qweight = prepack(w13_qweight)
+    swordfish_w2_qweight = prepack(w2_qweight)
+    swordfish_w13_scales = w13_scales.contiguous()
+    swordfish_w2_scales = w2_scales.contiguous()
+
+    def empty_g_idx() -> torch.nn.Parameter:
+        return torch.nn.Parameter(
+            torch.empty((num_experts, 0), dtype=torch.int32, device=device),
+            requires_grad=False,
+        )
+
+    return (
+        swordfish_w13_qweight,
+        swordfish_w2_qweight,
+        swordfish_w13_scales,
+        swordfish_w2_scales,
+        empty_g_idx(),
+        empty_g_idx(),
+        empty_g_idx(),
+        empty_g_idx(),
+        None,  # w13_qzeros
+        None,  # w2_qzeros
+        None,  # w13_input_global_scale
+        None,  # w2_input_global_scale
+        None,  # w13_bias
+        None,  # w2_bias
     )
 
 
@@ -1024,6 +1123,45 @@ def convert_to_wna16_moe_kernel_format(
 
         convert_to_humming_moe_kernel_format(layer, quant_config=_humming_wna16_weight_schema(quant_config))
         return None
+
+    if backend == WNA16MoEBackend.SWORDFISH:
+        from aphrodite.model_executor.layers.quantization.auto_gptq import (
+            AutoGPTQConfig,
+        )
+
+        if isinstance(quant_config, AutoGPTQConfig):
+            num_bits = quant_config.quant_type.size_bits
+            pack_factor = quant_config.pack_factor
+            group_size = quant_config.group_size
+            actorder = "group" if quant_config.desc_act else None
+            is_sym = quant_config.is_sym
+        elif isinstance(quant_config, QuantizationArgs):
+            num_bits = quant_config.num_bits
+            pack_factor = 32 // quant_config.num_bits
+            group_size = quant_config.group_size
+            actorder = quant_config.actorder
+            is_sym = quant_config.symmetric
+        else:
+            raise TypeError(
+                "Swordfish WNA16 MoE backend requires AutoGPTQConfig or "
+                f"QuantizationArgs, got {type(quant_config).__name__}."
+            )
+        return _process_weights_swordfish(
+            input_dtype,
+            num_bits,
+            pack_factor,
+            group_size,
+            actorder,
+            is_sym,
+            w13,
+            w2,
+            w13_scale,
+            w2_scale,
+            w13_qzeros,
+            w2_qzeros,
+            w13_bias,
+            w2_bias,
+        )
 
     if backend in (
         WNA16MoEBackend.MARLIN,

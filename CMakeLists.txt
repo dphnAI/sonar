@@ -538,6 +538,34 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       SRCS "${APHRODITE_STABLE_EXT_SRC}"
       CUDA_ARCHS "${CUDA_ARCHS}")
 
+    #
+    # Swordfish kernels: w4a16 GEMM for the Blackwell sm100 family
+    # (datacenter sm100 + Thor sm110). Family (f) variants need CUDA >= 13.0;
+    # older toolchains fall back to arch-exact sm100.
+    #
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
+      cuda_archs_loose_intersection(SWORDFISH_ARCHS "10.0f;11.0f" "${CUDA_ARCHS}")
+    else()
+      cuda_archs_loose_intersection(SWORDFISH_ARCHS "10.0a" "${CUDA_ARCHS}")
+    endif()
+    if(SWORDFISH_ARCHS)
+      set(SWORDFISH_SRCS
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_prepack.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_mm.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_moe.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_dense_tier.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_prefill.cu"
+        "csrc/libtorch_stable/quantization/swordfish/swordfish_prefill_f16.cu")
+      set_gencode_flags_for_srcs(
+        SRCS "${SWORDFISH_SRCS}"
+        CUDA_ARCHS "${SWORDFISH_ARCHS}")
+      list(APPEND APHRODITE_STABLE_EXT_SRC "${SWORDFISH_SRCS}")
+      message(STATUS "Building Swordfish kernels for archs: ${SWORDFISH_ARCHS}")
+    else()
+      message(STATUS "Not building Swordfish kernels as no compatible archs "
+                     "found in CUDA target architectures")
+    endif()
+
     if(COOPERATIVE_TOPK_ARCHS)
       list(APPEND APHRODITE_STABLE_EXT_SRC
         "csrc/libtorch_stable/cooperative_topk.cu")
@@ -737,7 +765,10 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
   endif()
 
   # Only build AllSpark kernels if we are building for at least some compatible archs.
-  cuda_archs_loose_intersection(ALLSPARK_ARCHS "8.0;8.6;8.7;8.9" "${CUDA_ARCHS}")
+  # 8.0+PTX JIT-forwards onto Blackwell like marlin; the kernel is plain
+  # mma.sync + cp.async and its large-M path is dequant + cuBLAS, which owns
+  # channelwise w8a16 prefill on sm100/sm110.
+  cuda_archs_loose_intersection(ALLSPARK_ARCHS "8.0+PTX" "${CUDA_ARCHS}")
   if (ALLSPARK_ARCHS)
     set(ALLSPARK_SRCS
        "csrc/libtorch_stable/quantization/gptq_allspark/allspark_repack.cu"

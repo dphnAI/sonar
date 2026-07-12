@@ -22,8 +22,8 @@ def check_allspark_supported_dtype_shape(
     capability_tuple = current_platform.get_device_capability()
     device_capability = -1 if capability_tuple is None else capability_tuple.to_int()
 
-    # For Ampere GPU
-    if device_capability >= 80 and device_capability < 90:
+    # The Ampere kernels run unchanged on later architectures.
+    if device_capability >= 80:
         if group_size != -1:
             return (
                 False,
