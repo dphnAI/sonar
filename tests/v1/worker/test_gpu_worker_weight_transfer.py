@@ -19,7 +19,9 @@ class _RecordingEngine:
         self.raise_on_update = raise_on_update
         self.started = False
         self.finished = False
+        self.reset_count = 0
         self.update_calls: list[dict] = []
+        self.supports_draft_weight_update = True
 
     def start_weight_update(self) -> None:
         self.started = True
@@ -31,6 +33,9 @@ class _RecordingEngine:
 
     def finish_weight_update(self) -> None:
         self.finished = True
+
+    def reset_weight_update_target(self) -> None:
+        self.reset_count += 1
 
 
 def _make_worker(engine: _RecordingEngine | None) -> Worker:
@@ -54,6 +59,7 @@ def test_start_update_finish_delegates_to_engine():
 
     Worker.finish_weight_update(worker)
     assert engine.finished is True
+    assert engine.reset_count == 1
     assert worker._weight_update_active is False
 
 
@@ -85,6 +91,7 @@ def test_update_resets_active_on_error():
         Worker.update_weights(worker, {"names": ["w"]})
 
     # A failed update ends the session so the next start is clean.
+    assert engine.reset_count == 1
     assert worker._weight_update_active is False
 
 
