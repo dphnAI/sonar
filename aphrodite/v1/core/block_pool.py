@@ -250,7 +250,7 @@ class BlockPool:
             return
         new_full_blocks = blocks[num_cached_blocks:num_full_blocks]
         assert block_mask is None or len(block_mask) == len(new_full_blocks)
-        block_hashes = resolve_block_hashes(request, self.hash_block_size, block_size)
+        block_hashes = resolve_block_hashes(request.block_hashes, self.hash_block_size, block_size)
         assert len(block_hashes) >= num_full_blocks
 
         new_block_hashes = block_hashes[num_cached_blocks:]
@@ -354,7 +354,7 @@ class BlockPool:
         if not self.enable_kv_cache_events or num_cached_blocks == 0:
             return
 
-        block_hashes = resolve_block_hashes(request, self.hash_block_size, block_size)
+        block_hashes = resolve_block_hashes(request.block_hashes, self.hash_block_size, block_size)
         assert len(block_hashes) >= num_cached_blocks
 
         cached_hashes: list[ExternalBlockHash] = []
@@ -538,6 +538,18 @@ class BlockPool:
         else:
             self.cached_block_hashes_by_block.setdefault(block.block_id, set()).add(block_hash_with_group_id)
         self.cached_block_hash_to_block.insert(block_hash_with_group_id, block)
+
+    def move_block_hashes(
+        self,
+        src_block: KVCacheBlock,
+        dst_block: KVCacheBlock,
+    ) -> None:
+        """Re-point ``src_block``'s prefix-cache entries to ``dst_block``."""
+        assert dst_block.block_hash is None
+        assert dst_block.block_id not in self.cached_block_hashes_by_block
+        num_tokens = src_block.block_hash_num_tokens
+        for block_hash in self._remove_cached_block_hashes(src_block):
+            self._insert_block_hash(block_hash, dst_block, num_tokens=num_tokens)
 
     def get_new_blocks(self, num_blocks: int) -> list[KVCacheBlock]:
         """Get new blocks from the free block pool.
