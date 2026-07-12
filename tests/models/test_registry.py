@@ -46,9 +46,9 @@ def test_registry_imports(model_arch):
                 "terratorch is not installed; temporarily skipped while PyPI has `lightning` quarantined (see #41376)"
             )
 
-    # DSpark draft model is NVIDIA-only; class is stubbed to None on ROCm/XPU.
-    if model_arch == "DSparkDraftModel" and not current_platform.is_cuda():
-        pytest.skip("DSparkDraftModel is only supported on CUDA")
+    # DSpark draft model is supported on CUDA and ROCm; stubbed to None on XPU.
+    if model_arch == "DSparkDraftModel" and not (current_platform.is_cuda() or current_platform.is_rocm()):
+        pytest.skip("DSparkDraftModel is only supported on CUDA and ROCm")
 
     # Ensure all model classes can be imported successfully
     model_cls = ModelRegistry._try_load_model_cls(model_arch)
