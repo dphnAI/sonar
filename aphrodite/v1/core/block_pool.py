@@ -364,9 +364,7 @@ class BlockPool:
             block_start = i * block_size
             block_end = block_start + block_size
             cached_hashes.append(maybe_convert_block_hash(block_hashes[i]))
-            extra_keys, curr_mm_idx = generate_block_hash_extra_keys(
-                request, block_start, block_end, curr_mm_idx
-            )
+            extra_keys, curr_mm_idx = generate_block_hash_extra_keys(request, block_start, block_end, curr_mm_idx)
             extra_keys_list.append(extra_keys)
 
         self.kv_event_queue.append(
