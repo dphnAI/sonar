@@ -286,15 +286,15 @@ class HpcAttentionBackend(AttentionBackend):
         head_size: int,
         cache_dtype_str: str = "auto",
     ) -> tuple[int, ...]:
-        return (num_blocks, 2, block_size, num_kv_heads, head_size)
+        return (num_blocks, num_kv_heads, block_size, 2 * head_size)
 
     @staticmethod
     def get_kv_cache_stride_order(
         include_num_layers_dimension: bool = False,
     ) -> tuple[int, ...]:
         if include_num_layers_dimension:
-            return (1, 0, 2, 3, 4, 5)
-        return (0, 1, 2, 3, 4)
+            return (1, 0, 3, 2, 4)
+        return (0, 2, 1, 3)
 
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
@@ -431,11 +431,12 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
 
         # Write KV cache if not already done by HpcRopeNorm.
         if self.kv_sharing_target_layer_name is None and not hpc_kv_written:
+            key_cache, value_cache = kv_cache.transpose(1, 2).split(self.head_size, dim=-1)
             torch.ops._C_cache_ops.reshape_and_cache_flash(
                 key,
                 value,
-                kv_cache[:, 0],
-                kv_cache[:, 1],
+                key_cache,
+                value_cache,
                 attn_metadata.slot_mapping,
                 self.kv_cache_dtype,
                 layer._k_scale,
@@ -445,6 +446,7 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
         if self.use_fp8:
             torch_dtype = _get_fp8_dtype_for_kv_cache(self.kv_cache_dtype)
             kv_cache = kv_cache.view(torch_dtype)
+        key_cache, value_cache = kv_cache.transpose(1, 2).split(self.head_size, dim=-1)
 
         if self.use_fp8:
             if not hpc_kv_written:
@@ -476,8 +478,8 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
             if self.use_fp8:
                 hpc.attention_with_kvcache_prefill_fp8(
                     q_prefill,
-                    kv_cache[:, 0],
-                    kv_cache[:, 1],
+                    key_cache,
+                    value_cache,
                     hpc_prefill_q_scale,
                     k_scale,
                     v_scale,
@@ -491,8 +493,8 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
             else:
                 hpc.attention_with_kvcache_prefill_bf16(
                     q_prefill,
-                    kv_cache[:, 0],
-                    kv_cache[:, 1],
+                    key_cache,
+                    value_cache,
                     cu_seqlens_prefill,
                     block_table_prefill,
                     seq_lens_prefill,
@@ -513,8 +515,8 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
             if self.use_fp8:
                 hpc.attention_decode_fp8(
                     q_decode,
-                    kv_cache[:, 0],
-                    kv_cache[:, 1],
+                    key_cache,
+                    value_cache,
                     block_table_decode,
                     num_seq_kvcache,
                     hpc_decode_q_scale,
@@ -534,8 +536,8 @@ class HpcAttentionImpl(AttentionImpl[HpcAttnMetadata]):
             else:
                 hpc.attention_decode_bf16(
                     q_decode,
-                    kv_cache[:, 0],
-                    kv_cache[:, 1],
+                    key_cache,
+                    value_cache,
                     block_table_decode,
                     num_seq_kvcache,
                     mtp=mtp,

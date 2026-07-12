@@ -436,6 +436,7 @@ def reshape_and_cache_kernel_flash_diffkv(
     value_stride: tl.int64,
     block_stride: tl.int64,
     page_stride: tl.int64,
+    head_stride: tl.int64,
     num_heads: tl.constexpr,
     head_size_k: tl.constexpr,
     head_size_v: tl.constexpr,
@@ -460,7 +461,7 @@ def reshape_and_cache_kernel_flash_diffkv(
     src_key_idx = token_idx * key_stride + tile_i * head_size_k
     src_value_idx = token_idx * value_stride + tile_i * head_size_v
 
-    tgt_idx = block_idx * block_stride + block_offset * page_stride + tile_i * (head_size_k + head_size_v)
+    tgt_idx = block_idx * block_stride + block_offset * page_stride + tile_i * head_stride
 
     # [TILE_SIZE]
     key_load = tl.load(key_ptr + src_key_idx + tile_offs, mask=tile_offs < head_size_k)
@@ -499,7 +500,7 @@ def reshape_and_cache_kernel_flash_diffkv(
 def triton_reshape_and_cache_flash_diffkv(
     key: torch.Tensor,  # [num_tokens, num_heads, head_size]
     value: torch.Tensor,  # [num_tokens, num_heads, head_size_v]
-    # [num_blocks, block_size, num_heads, head_size + head_size_v]
+    # Strided [num_blocks, block_size, num_heads, head_size + head_size_v].
     kv_cache: torch.Tensor,
     slot_mapping: torch.Tensor,  # [num_tokens]
     kv_cache_dtype: str,  # "auto", "fp8"
@@ -515,6 +516,7 @@ def triton_reshape_and_cache_flash_diffkv(
     v_stride = value.stride()[0]
     block_stride = kv_cache.stride()[0]
     page_stride = kv_cache.stride()[1]
+    head_stride = kv_cache.stride()[2]
 
     kv_cache_torch_dtype = current_platform.fp8_dtype() if is_quantized_kv_cache(kv_cache_dtype) else kv_cache.dtype
 
@@ -552,6 +554,7 @@ def triton_reshape_and_cache_flash_diffkv(
         value_stride=v_stride,
         block_stride=block_stride,
         page_stride=page_stride,
+        head_stride=head_stride,
         num_heads=num_heads,
         head_size_k=head_size_k,
         head_size_v=head_size_v,

@@ -10,7 +10,12 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import torch
 
-from aphrodite.config import AphroditeConfig, get_current_aphrodite_config, get_layers_from_aphrodite_config
+from aphrodite.config import (
+    AphroditeConfig,
+    get_current_aphrodite_config,
+    get_layers_from_aphrodite_config,
+    set_current_aphrodite_config,
+)
 from aphrodite.distributed.kv_transfer.kv_connector.factory import KVConnectorFactory
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
@@ -326,14 +331,15 @@ def get_current_attn_backends(
     logger.debug("No layers found in the Aphrodite config. Falling back to default attention backend.")
     from aphrodite.v1.attention.selector import get_attn_backend
 
-    return [
-        get_attn_backend(
-            head_size=aphrodite_config.model_config.get_head_size(),
-            dtype=aphrodite_config.model_config.dtype,
-            kv_cache_dtype=aphrodite_config.cache_config.cache_dtype,
-            use_mla=aphrodite_config.model_config.use_mla,
-        )
-    ]
+    with set_current_aphrodite_config(aphrodite_config):
+        return [
+            get_attn_backend(
+                head_size=aphrodite_config.model_config.get_head_size(),
+                dtype=aphrodite_config.model_config.dtype,
+                kv_cache_dtype=aphrodite_config.cache_config.cache_dtype,
+                use_mla=aphrodite_config.model_config.use_mla,
+            )
+        ]
 
 
 def get_current_attn_backend(
@@ -396,8 +402,6 @@ class TransferTopology:
 
         self._engines: dict[tuple[EngineId, int], EngineTransferInfo] = {}
 
-        # Figure out whether the first dimension of the cache is K/V
-        # or num_blocks.
         attn_backend = self.attn_backends[0]
         if not self.is_mamba:
             _MOCK_BLOCK_SIZE = 16
@@ -408,10 +412,16 @@ class TransferTopology:
                 head_size=1,
             )
             logger.debug("Test kv_cache_shape: %s", kv_cache_shape)
-        # Non-MLA backends caches have 5 dims [num_blocks, 2, H,N,D],
-        # we just mock num_blocks to 1 for the dimension check below.
-        # Hybrid SSM models assume a single blocks_first layout
-        self._is_kv_layout_blocks_first = self.is_mamba or (len(kv_cache_shape) == 5 and kv_cache_shape[0] == 1)
+            assert kv_cache_shape[0] == 1, (
+                "KV cache layout must be blocks-first; expected mocked "
+                f"num_blocks=1 in leading dim, got shape {kv_cache_shape}."
+            )
+            if not self.is_mla:
+                assert len(kv_cache_shape) == 4, (
+                    "Attention KV cache layout must be standardized as "
+                    "[num_blocks, num_kv_heads, block_size, content_size], "
+                    f"got shape {kv_cache_shape}."
+                )
 
         self._cross_layers_blocks = False
         if self.tensor_shape is not None:
@@ -466,26 +476,16 @@ class TransferTopology:
     # ============================================================
 
     @property
-    def is_kv_layout_blocks_first(self) -> bool:
-        return self._is_kv_layout_blocks_first
-
-    @property
     def cross_layers_blocks(self) -> bool:
         return self._cross_layers_blocks
 
     @property
     def virtually_split_kv_in_blocks(self) -> bool:
-        # Whether to logically split each block into K and V halves.
-        # Applies when K/V are interleaved within each block (blocks-first),
-        # but NOT when cross-layer blocks are used — cross-layer blocks have
-        # per-layer K/V interleaving (L0_K, L0_V, L1_K, L1_V, ...) so a
-        # simple half-split does not separate K from V.
-        return self._is_kv_layout_blocks_first and not self._cross_layers_blocks
-
-    @property
-    def split_k_and_v(self) -> bool:
-        # Whether to register regions for K and V separately (when present).
-        return not (self._cross_layers_blocks or self.is_mla or self.is_kv_layout_blocks_first)
+        # Whether to logically split each block into two separately-indexable
+        # sub-regions. With K and V packed into the content dim, an attention
+        # block transfers as a single unit. Only Mamba still needs this, to
+        # index its two state regions separately.
+        return self.is_mamba and not self._cross_layers_blocks
 
     # ============================================================
     # Common methods
@@ -580,8 +580,9 @@ class TransferTopology:
             # Swap [2<>num_blocks] dims for hybrid SSM layout.
             cache = cache.transpose(0, 1)
 
-        # Regular case: backends like FA register K/V in separate regions
-        return cache if self.split_k_and_v else [cache]
+        # K and V are packed into one tensor (content dim), so each layer
+        # registers as a single region.
+        return [cache]
 
     def describe(self, remote_engine_id: EngineId, remote_pp_rank: int = 0) -> str:
         """One-line summary of transfer config for logging."""

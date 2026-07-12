@@ -9,7 +9,7 @@ import torch
 from aphrodite import _custom_ops as ops
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import scaled_dequantize
 from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import nvfp4_kv_cache_split_views, set_random_seed
+from aphrodite.utils.torch_utils import nvfp4_split_data_scale, set_random_seed
 from tests.kernels.utils import DEFAULT_OPCHECK_TEST_UTILS, opcheck
 
 COPYING_DIRECTION = [("cuda", "cpu"), ("cuda", "cuda"), ("cpu", "cuda")]
@@ -246,8 +246,8 @@ def test_reshape_and_cache_flash(
     nvfp4_key_data = None
     nvfp4_value_data = None
     if kv_cache_dtype == "nvfp4":
-        (nvfp4_key_data,), (key_scale_cache,) = nvfp4_kv_cache_split_views(key_cache)
-        (nvfp4_value_data,), (value_scale_cache,) = nvfp4_kv_cache_split_views(value_cache)
+        nvfp4_key_data, key_scale_cache = nvfp4_split_data_scale(key_cache)
+        nvfp4_value_data, value_scale_cache = nvfp4_split_data_scale(value_cache)
 
     if kv_cache_dtype == "nvfp4":
         # Global scale = amax / 448 (per-tensor)
