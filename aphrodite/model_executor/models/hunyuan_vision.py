@@ -73,6 +73,7 @@ from aphrodite.multimodal.processing import (
     BaseProcessingInfo,
     PromptReplacement,
     PromptUpdate,
+    PromptUpdateDetails,
 )
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.transformers_utils.configs.hunyuan_vl import (
@@ -721,8 +722,10 @@ class HunYuanVLMultiModalProcessor(BaseMultiModalProcessor[HunYuanVLProcessingIn
         hf_processor = self.info.get_hf_processor(**hf_processor_mm_kwargs)
         image_processor = self.info.get_image_processor(**hf_processor_mm_kwargs)
 
-        placeholder = {
+        token_ids = {
             "image": hf_processor.image_token_id,
+            "image_start": hf_processor.image_start_token_id,
+            "image_end": hf_processor.image_end_token_id,
         }
 
         merge_size = image_processor.merge_size
@@ -734,12 +737,15 @@ class HunYuanVLMultiModalProcessor(BaseMultiModalProcessor[HunYuanVLProcessingIn
 
             _, grid_h, grid_w = grid_thw
             num_tokens = (int(grid_h) // merge_size) * (int(grid_w) // merge_size + 1) + 2
-            return [placeholder[modality]] * num_tokens
+            tokens = (
+                [token_ids[f"{modality}_start"]] + [token_ids[modality]] * num_tokens + [token_ids[f"{modality}_end"]]
+            )
+            return PromptUpdateDetails.select_token_id(tokens, token_ids[modality])
 
         return [
             PromptReplacement(
                 modality=modality,
-                target=[placeholder[modality]],
+                target=[token_ids[modality]],
                 replacement=partial(get_replacement_hunyuan_vl, modality=modality),
             )
             for modality in ("image",)
