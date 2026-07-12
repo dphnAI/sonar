@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 from typing import TYPE_CHECKING, Any, cast
 
+import torch
+
 from aphrodite.config import AphroditeConfig, get_layers_from_aphrodite_config
 from aphrodite.distributed import get_dcp_group, get_pcp_group
 
@@ -55,3 +57,7 @@ def get_total_cp_world_size():
         # DCP might not be initialized in testing
         dcp_world_size = 1
     return dcp_world_size * pcp_world_size
+
+
+def should_skip_dcp_context_attention(context_kv_lens: torch.Tensor) -> bool:
+    return bool(context_kv_lens.max().item() == 0)
