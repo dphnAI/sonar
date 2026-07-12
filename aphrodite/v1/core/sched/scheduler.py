@@ -245,6 +245,7 @@ class Scheduler(SchedulerInterface):
         # Create the KV cache manager.
         if hash_block_size is None:
             hash_block_size = block_size
+        self.hash_block_size = hash_block_size
         self.kv_cache_manager = KVCacheManager(
             kv_cache_config=kv_cache_config,
             max_model_len=self.max_model_len,
@@ -279,6 +280,7 @@ class Scheduler(SchedulerInterface):
         self.has_mamba_layers = kv_cache_config.has_mamba_layers
         self.needs_kv_cache_zeroing = kv_cache_config.needs_kv_cache_zeroing
         self.need_mamba_block_aligned_split = self.has_mamba_layers and self.cache_config.mamba_cache_mode == "align"
+        self.mamba_partial_cache_hit = self.need_mamba_block_aligned_split and self.hash_block_size < self.block_size
 
         # Counts of non-empty steps scheduled / processed. update_from_output
         # is called once per scheduled step in FIFO order, so these stay in sync.
@@ -344,15 +346,27 @@ class Scheduler(SchedulerInterface):
             if self.requires_eagle_cache_drop:
                 last_cache_position = max(last_cache_position - block_size, 0)
             num_computed_tokens_after_sched = num_computed_tokens + num_new_tokens
-            if num_computed_tokens_after_sched < last_cache_position:
-                # align to block_size
-                num_new_tokens = num_new_tokens // block_size * block_size
+            next_boundary = (num_computed_tokens // block_size + 1) * block_size
+            if (
+                num_computed_tokens % block_size != 0
+                and next_boundary <= last_cache_position
+                and num_computed_tokens_after_sched > next_boundary
+            ):
+                num_new_tokens = next_boundary - num_computed_tokens
+            elif num_computed_tokens_after_sched < last_cache_position:
+                aligned_end = num_computed_tokens_after_sched // block_size * block_size
+                num_new_tokens = max(aligned_end - num_computed_tokens, 0)
             elif num_computed_tokens < last_cache_position < num_computed_tokens_after_sched:
                 # force to cache the last chunk
                 num_new_tokens = last_cache_position - num_computed_tokens
-            else:
-                # prefill the last few tokens
-                pass
+            elif self.mamba_partial_cache_hit:
+                tail_boundary = request.num_prompt_tokens // self.hash_block_size * self.hash_block_size
+                if (
+                    num_computed_tokens < tail_boundary < num_computed_tokens_after_sched
+                    and tail_boundary < request.num_prompt_tokens
+                    and tail_boundary > last_cache_position
+                ):
+                    num_new_tokens = tail_boundary - num_computed_tokens
 
             # Marconi cache admission optimization:
             # cache common prefixes by scheduling num_new_tokens = common prefix length
@@ -997,6 +1011,10 @@ class Scheduler(SchedulerInterface):
         # does not grow unbounded; only kv-cache zeroing consumes them.
         new_attn_block_ids = self.kv_cache_manager.take_new_block_ids()
         new_block_ids_to_zero = (new_attn_block_ids or None) if self.needs_kv_cache_zeroing else None
+        kv_cache_block_copies, cow_retained_blocks = self.kv_cache_manager.take_kv_cache_block_copies()
+        if kv_cache_block_copies:
+            self._free_cow_retained_blocks(cow_retained_blocks, self.sched_step_seq + 1)
+        pending_kv_cache_block_copies = kv_cache_block_copies or None
 
         # Dynamic speculative decoding: compute optimal K
         num_spec_tokens_to_schedule = self.num_spec_tokens
@@ -1019,6 +1037,7 @@ class Scheduler(SchedulerInterface):
             finished_req_ids=self.finished_req_ids,
             free_encoder_mm_hashes=self.encoder_cache_manager.get_freed_mm_hashes(),
             new_block_ids_to_zero=new_block_ids_to_zero,
+            kv_cache_block_copies=pending_kv_cache_block_copies,
             num_spec_tokens_to_schedule=num_spec_tokens_to_schedule,
         )
 
@@ -1970,11 +1989,18 @@ class Scheduler(SchedulerInterface):
         if blocks:
             self.deferred_frees.append((self.sched_step_seq, blocks))
 
+    def _free_cow_retained_blocks(self, blocks: list[KVCacheBlock], fence_seq: int) -> None:
+        """Release CoW copy retentions once their copy step is processed."""
+        if not self.defer_block_free or fence_seq <= self.processed_step_seq:
+            self.kv_cache_manager.block_pool.free_blocks(blocks)
+            return
+        self.deferred_frees.append((fence_seq, blocks[::-1]))
+
     def _drain_deferred_frees(self):
         """Return deferred blocks whose fence step has completed.
 
-        Entries are appended with monotonically non-decreasing fences, so
-        stop at the first one that is still pending.
+        Fences are appended in near-monotonic order; stop at the first pending
+        one, and any satisfied entry behind it is freed later.
         """
         while self.deferred_frees:
             fence, _ = self.deferred_frees[0]
@@ -2200,6 +2226,7 @@ class Scheduler(SchedulerInterface):
             new_computed_blocks=self.kv_cache_manager.empty_kv_cache_blocks.blocks,
             num_encoder_tokens=0,
             total_computed_tokens=request.num_computed_tokens,
+            num_local_computed_tokens=request.num_computed_tokens,
             num_tokens_main_model=full_num_tokens,
             apply_admission_cap=True,
         )

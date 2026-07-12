@@ -4,13 +4,16 @@ import itertools
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
+from typing import ClassVar
 
 from aphrodite.utils.math_utils import cdiv
 from aphrodite.v1.core.block_pool import BlockPool
 from aphrodite.v1.core.kv_cache_utils import (
     BlockHashList,
+    BlockHashListWithBlockSize,
     BlockHashWithGroupId,
     KVCacheBlock,
+    resolve_block_hashes,
 )
 from aphrodite.v1.kv_cache_interface import (
     ChunkedLocalAttentionSpec,
@@ -35,6 +38,8 @@ class SingleTypeKVCacheManager(ABC):
     An abstract base class for a manager that handle the kv cache management
     logic of one specific type of attention layer.
     """
+
+    supports_fine_grained_hash_lookup: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -106,9 +111,21 @@ class SingleTypeKVCacheManager(ABC):
         # determining the attention groups.
         self.use_eagle = False
 
+        # Partial-hit copy-on-write bookkeeping. Populated only by fine-grained
+        # managers (full attention, mamba "align"); harmlessly empty elsewhere.
+        self._partial_hit_reqs: dict[str, tuple[int, KVCacheBlock]] = {}
+        self._pending_cow_copies: list[tuple[KVCacheBlock, KVCacheBlock]] = []
+
     @classmethod
     def _get_num_evictable_blocks(cls, blocks: Sequence[KVCacheBlock]):
         return sum(blk.ref_cnt == 0 and not blk.is_null for blk in blocks)
+
+    def _has_partial_local_hit(
+        self,
+        new_computed_blocks: Sequence[KVCacheBlock],
+        num_local_computed_tokens: int,
+    ) -> bool:
+        return len(new_computed_blocks) > 0 and num_local_computed_tokens % self.block_size != 0
 
     def get_num_blocks_to_allocate(
         self,
@@ -116,6 +133,7 @@ class SingleTypeKVCacheManager(ABC):
         num_tokens: int,
         new_computed_blocks: Sequence[KVCacheBlock],
         total_computed_tokens: int,
+        num_local_computed_tokens: int,
         num_tokens_main_model: int,
         apply_admission_cap: bool = False,
     ) -> int:
@@ -185,6 +203,8 @@ class SingleTypeKVCacheManager(ABC):
         # ref_cnt == 0), it will be removed from the free queue when touched by
         # the allocated request, so we must count it in the free-capacity check.
         num_evictable_blocks = self._get_num_evictable_blocks(new_computed_blocks[num_skipped_new_computed_blocks:])
+        if self._has_partial_local_hit(new_computed_blocks, num_local_computed_tokens):
+            num_new_blocks += 1
         return num_new_blocks + num_evictable_blocks
 
     def add_local_computed_blocks(
@@ -234,6 +254,10 @@ class SingleTypeKVCacheManager(ABC):
         # them so cache_blocks() will not try to re-cache blocks that already
         # have a block_hash set.
         self.num_cached_block[request_id] = len(req_blocks)
+        if self._has_partial_local_hit(new_computed_blocks, num_local_computed_tokens):
+            block_idx = num_local_computed_tokens // self.block_size
+            self._partial_hit_reqs[request_id] = (block_idx, new_computed_blocks[-1])
+            self.num_cached_block[request_id] = block_idx
 
     def allocate_external_computed_blocks(
         self,
@@ -287,23 +311,52 @@ class SingleTypeKVCacheManager(ABC):
         Returns:
             The new allocated blocks.
         """
+        cow_blocks: list[KVCacheBlock] = []
+        if request_id in self._partial_hit_reqs:
+            block_idx, source_block = self._partial_hit_reqs.pop(request_id)
+            cow_block = self.block_pool.get_new_blocks(1)[0]
+            self._apply_cow(request_id, block_idx, source_block, cow_block)
+            if self._record_new_block_ids:
+                self.new_block_ids.append(cow_block.block_id)
+            cow_blocks.append(cow_block)
+
         req_blocks = self.req_to_blocks[request_id]
         num_required_blocks = cdiv(num_tokens, self.block_size)
         num_new_blocks = num_required_blocks - len(req_blocks)
         if num_new_blocks <= 0:
-            return []
+            return cow_blocks
         else:
             new_blocks = self.block_pool.get_new_blocks(num_new_blocks)
             req_blocks.extend(new_blocks)
             if self._record_new_block_ids:
                 self.new_block_ids.extend(b.block_id for b in new_blocks)
-            return new_blocks
+            return cow_blocks + new_blocks
 
     def take_new_block_ids(self) -> list[int]:
         """Drain and return block IDs allocated since the last call."""
         ids = self.new_block_ids
         self.new_block_ids = []
         return ids
+
+    def take_pending_cow_copies(self) -> list[tuple[KVCacheBlock, KVCacheBlock]]:
+        pending_copies = self._pending_cow_copies
+        self._pending_cow_copies = []
+        return pending_copies
+
+    def _apply_cow(
+        self,
+        request_id: str,
+        block_idx: int,
+        source_block: KVCacheBlock,
+        cow_block: KVCacheBlock,
+    ) -> None:
+        req_blocks = self.req_to_blocks[request_id]
+        assert block_idx < len(req_blocks)
+        assert req_blocks[block_idx] is source_block
+        assert not source_block.is_null and source_block.ref_cnt > 0
+        req_blocks[block_idx] = cow_block
+        self._pending_cow_copies.append((source_block, cow_block))
+        cow_block.ref_cnt += 1
 
     def cache_blocks(
         self,
@@ -386,6 +439,7 @@ class SingleTypeKVCacheManager(ABC):
         # Default to [] in case a request is freed (aborted) before alloc.
         req_blocks = self.req_to_blocks.pop(request_id, [])
         self.num_cached_block.pop(request_id, None)
+        self._partial_hit_reqs.pop(request_id, None)
         return req_blocks
 
     def free(self, request_id: str) -> None:
@@ -427,7 +481,7 @@ class SingleTypeKVCacheManager(ABC):
         alignment_tokens: int,
         dcp_world_size: int = 1,
         pcp_world_size: int = 1,
-    ) -> tuple[list[KVCacheBlock], ...]:
+    ) -> tuple[tuple[list[KVCacheBlock], ...], int]:
         """
         Get the longest cache hit prefix of the blocks that is not longer than
         `max_length`. The prefix should be a common prefix hit for all the
@@ -551,6 +605,8 @@ class SingleTypeKVCacheManager(ABC):
 
 
 class FullAttentionManager(SingleTypeKVCacheManager):
+    supports_fine_grained_hash_lookup: ClassVar[bool] = True
+
     @classmethod
     def find_longest_cache_hit(
         cls,
@@ -563,35 +619,93 @@ class FullAttentionManager(SingleTypeKVCacheManager):
         alignment_tokens: int,
         dcp_world_size: int = 1,
         pcp_world_size: int = 1,
-    ) -> tuple[list[KVCacheBlock], ...]:
+    ) -> tuple[tuple[list[KVCacheBlock], ...], int]:
         assert isinstance(kv_cache_spec, FullAttentionSpec | ChunkedLocalAttentionSpec), (
             "FullAttentionManager can only be used for full attention and chunked local attention groups"
         )
-        computed_blocks: tuple[list[KVCacheBlock], ...] = tuple([] for _ in range(len(kv_cache_group_ids)))
         block_size = kv_cache_spec.block_size
         if dcp_world_size * pcp_world_size > 1:
             block_size *= dcp_world_size * pcp_world_size
-        max_num_blocks = max_length // block_size
-        for block_hash in itertools.islice(block_hashes, max_num_blocks):
-            # block_hashes is a chain of block hashes. If a block hash is not
-            # in the cached_block_hash_to_id, the following block hashes are
-            # not computed yet for sure.
-            if cached_block := block_pool.get_cached_block(block_hash, kv_cache_group_ids):
-                for computed, cached in zip(computed_blocks, cached_block):
-                    computed.append(cached)
-            else:
+        block_hashes = resolve_block_hashes(
+            block_hashes,
+            block_pool.hash_block_size,
+            block_size,
+            supports_fine_grained_hash_lookup=cls.supports_fine_grained_hash_lookup,
+            alignment_tokens=alignment_tokens,
+        )
+
+        fine_grained = alignment_tokens < block_size and block_size % alignment_tokens == 0
+        if fine_grained:
+            assert isinstance(block_hashes, list)
+            full_block_hashes: BlockHashList = BlockHashListWithBlockSize(block_hashes, alignment_tokens, block_size)
+        else:
+            full_block_hashes = block_hashes
+
+        computed_blocks: tuple[list[KVCacheBlock], ...] = tuple([] for _ in range(len(kv_cache_group_ids)))
+        for block_hash in itertools.islice(full_block_hashes, max_length // block_size):
+            cached_block = block_pool.get_cached_block(block_hash, kv_cache_group_ids)
+            if not cached_block:
                 break
-        if drop_eagle_block and computed_blocks[0]:
-            # Need to drop the last matched block if eagle is enabled.
-            for computed in computed_blocks:
-                computed.pop()
-        while (
-            block_size != alignment_tokens  # Faster for common case.
-            and len(computed_blocks[0]) * block_size % alignment_tokens != 0
-        ):
-            for computed in computed_blocks:
-                computed.pop()
-        return computed_blocks
+            for computed, cached in zip(computed_blocks, cached_block):
+                computed.append(cached)
+        hit_length = len(computed_blocks[0]) * block_size
+
+        if fine_grained:
+            assert isinstance(block_hashes, list)
+            scale_factor = block_size // alignment_tokens
+            first_partial_idx = len(computed_blocks[0]) * scale_factor
+            max_partial_idx = min(
+                first_partial_idx + scale_factor - 1,
+                max_length // alignment_tokens,
+                len(block_hashes),
+            )
+            for fine_idx in range(max_partial_idx - 1, first_partial_idx - 1, -1):
+                cached_tail = block_pool.get_cached_block(block_hashes[fine_idx], kv_cache_group_ids)
+                if not cached_tail:
+                    continue
+                for computed, cached in zip(computed_blocks, cached_tail):
+                    computed.append(cached)
+                hit_length = (fine_idx + 1) * alignment_tokens
+                break
+
+        if drop_eagle_block and hit_length > 0:
+            hit_length -= min(alignment_tokens, block_size)
+        hit_length -= hit_length % alignment_tokens
+        num_blocks = cdiv(hit_length, block_size)
+        for computed in computed_blocks:
+            del computed[num_blocks:]
+        return computed_blocks, hit_length
+
+    def cache_blocks(
+        self,
+        request: Request,
+        num_tokens: int,
+        retention_interval: int | None = None,
+    ) -> None:
+        super().cache_blocks(request, num_tokens, retention_interval=retention_interval)
+        hash_block_size = self.block_pool.hash_block_size
+        if self.block_size != hash_block_size:
+            self._cache_partial_tail_block(request, num_tokens)
+
+    def _cache_partial_tail_block(self, request: Request, num_tokens: int) -> None:
+        hash_block_size = self.block_pool.hash_block_size
+        boundary_tokens = request.num_prompt_tokens // hash_block_size * hash_block_size
+        if boundary_tokens == 0 or boundary_tokens > num_tokens:
+            return
+        if boundary_tokens % self.block_size == 0:
+            return
+
+        blocks = self.req_to_blocks[request.request_id]
+        block_idx = boundary_tokens // self.block_size
+        if block_idx >= len(blocks):
+            return
+        self.block_pool.cache_partial_block(
+            request=request,
+            block=blocks[block_idx],
+            num_tokens=boundary_tokens,
+            kv_cache_group_id=self.kv_cache_group_id,
+            block_size=self.block_size,
+        )
 
     def get_num_common_prefix_blocks(self, running_request_id: str) -> int:
         blocks = self.req_to_blocks[running_request_id]
@@ -674,12 +788,22 @@ class SlidingWindowManager(SingleTypeKVCacheManager):
         alignment_tokens: int,
         dcp_world_size: int = 1,
         pcp_world_size: int = 1,
-    ) -> tuple[list[KVCacheBlock], ...]:
+    ) -> tuple[tuple[list[KVCacheBlock], ...], int]:
         assert isinstance(kv_cache_spec, SlidingWindowSpec), (
             "SlidingWindowManager can only be used for sliding window groups"
         )
         assert dcp_world_size == 1, "DCP not support sliding window attn now."
         assert pcp_world_size == 1, "PCP not support sliding window attn now."
+        assert alignment_tokens % kv_cache_spec.block_size == 0, (
+            "SlidingWindowManager does not support fine-grained (partial) cache hits"
+        )
+        block_hashes = resolve_block_hashes(
+            block_hashes,
+            block_pool.hash_block_size,
+            kv_cache_spec.block_size,
+            supports_fine_grained_hash_lookup=cls.supports_fine_grained_hash_lookup,
+            alignment_tokens=alignment_tokens,
+        )
 
         # The number of contiguous blocks needed for a prefix cache hit.
         sliding_window_contiguous_blocks = cls._contiguous_blocks_for_hit(
@@ -692,7 +816,9 @@ class SlidingWindowManager(SingleTypeKVCacheManager):
         # sliding_window_contiguous_blocks),
         # which is good for low cache hit rate scenarios.
         max_num_blocks = max_length // kv_cache_spec.block_size
-        computed_blocks = tuple([block_pool.null_block] * max_num_blocks for _ in range(len(kv_cache_group_ids)))
+        computed_blocks: tuple[list[KVCacheBlock], ...] = tuple(
+            [block_pool.null_block] * max_num_blocks for _ in range(len(kv_cache_group_ids))
+        )
         block_size = kv_cache_spec.block_size
         num_contiguous_blocks = 0
         match_found = False
@@ -739,7 +865,8 @@ class SlidingWindowManager(SingleTypeKVCacheManager):
             while block_size != alignment_tokens and len(computed_blocks[0]) * block_size % alignment_tokens != 0:
                 for computed in computed_blocks:
                     computed.pop()
-        return computed_blocks
+        hit_length = len(computed_blocks[0]) * block_size
+        return computed_blocks, hit_length
 
     @classmethod
     def reachable_block_mask(
@@ -860,7 +987,7 @@ class ChunkedLocalAttentionManager(SingleTypeKVCacheManager):
         alignment_tokens: int,
         dcp_world_size: int = 1,
         pcp_world_size: int = 1,
-    ) -> tuple[list[KVCacheBlock], ...]:
+    ) -> tuple[tuple[list[KVCacheBlock], ...], int]:
         """
         For chunked local attention, we need to find the longest cache hit
         prefix of the blocks that is not longer than `max_length`. The prefix
@@ -905,6 +1032,13 @@ class ChunkedLocalAttentionManager(SingleTypeKVCacheManager):
         assert kv_cache_spec.block_size == alignment_tokens, (
             "KV cache groups with different block sizes are not compatible with chunked local attention now"
         )
+        block_hashes = resolve_block_hashes(
+            block_hashes,
+            block_pool.hash_block_size,
+            kv_cache_spec.block_size,
+            supports_fine_grained_hash_lookup=cls.supports_fine_grained_hash_lookup,
+            alignment_tokens=alignment_tokens,
+        )
         max_num_blocks = max_length // kv_cache_spec.block_size
         if max_length > 0:
             local_attention_start_idx = (
@@ -927,7 +1061,8 @@ class ChunkedLocalAttentionManager(SingleTypeKVCacheManager):
                     computed.append(cached)
             else:
                 break
-        return computed_blocks
+        hit_length = len(computed_blocks[0]) * kv_cache_spec.block_size
+        return computed_blocks, hit_length
 
     def get_num_skipped_tokens(self, num_computed_tokens: int) -> int:
         """
@@ -981,11 +1116,15 @@ class ChunkedLocalAttentionManager(SingleTypeKVCacheManager):
 
 
 class MambaManager(SingleTypeKVCacheManager):
+    supports_fine_grained_hash_lookup: ClassVar[bool] = True
+
     def __init__(self, kv_cache_spec: MambaSpec, block_pool: BlockPool, **kwargs) -> None:
         super().__init__(kv_cache_spec, block_pool, **kwargs)
-        self.cached_blocks_this_step: set[BlockHashWithGroupId] = set()
+        # Mamba align mode uses the spec block size for its recurrent state.
+        self.block_size = kv_cache_spec.block_size
         self.mamba_cache_mode = kv_cache_spec.mamba_cache_mode
         self.num_speculative_blocks: int = kv_cache_spec.num_speculative_blocks
+        self.cached_blocks_this_step: set[BlockHashWithGroupId] = set()
         if self.mamba_cache_mode == "align":
             # Mapping from request ID to the index of the block
             # allocated in the previous step
@@ -1005,13 +1144,38 @@ class MambaManager(SingleTypeKVCacheManager):
         alignment_tokens: int,
         dcp_world_size: int = 1,
         pcp_world_size: int = 1,
-    ) -> tuple[list[KVCacheBlock], ...]:
+    ) -> tuple[tuple[list[KVCacheBlock], ...], int]:
         assert isinstance(kv_cache_spec, MambaSpec), "MambaManager can only be used for mamba groups"
         assert dcp_world_size == 1, "DCP not support mamba now."
         assert pcp_world_size == 1, "PCP not support mamba now."
+        block_hashes = resolve_block_hashes(
+            block_hashes,
+            block_pool.hash_block_size,
+            kv_cache_spec.block_size,
+            supports_fine_grained_hash_lookup=cls.supports_fine_grained_hash_lookup,
+            alignment_tokens=alignment_tokens,
+        )
         computed_blocks: tuple[list[KVCacheBlock], ...] = tuple([] for _ in range(len(kv_cache_group_ids)))
+        hit_length = 0
 
         block_size = kv_cache_spec.block_size
+        if alignment_tokens < block_size and block_size % alignment_tokens == 0:
+            assert isinstance(block_hashes, list)
+            hash_block_size = alignment_tokens
+            scale_factor = block_size // hash_block_size
+            max_num_partial_units = min(max_length // hash_block_size, len(block_hashes))
+            for fine_idx in range(max_num_partial_units - 1, -1, -1):
+                num_tokens = (fine_idx + 1) * hash_block_size
+                block_hash = block_hashes[fine_idx]
+                if cached_block := block_pool.get_cached_block(block_hash, kv_cache_group_ids):
+                    block_idx = fine_idx // scale_factor
+                    for computed, cached in zip(computed_blocks, cached_block):
+                        computed.extend([block_pool.null_block] * block_idx)
+                        computed.append(cached)
+                    hit_length = num_tokens
+                    break
+            return computed_blocks, hit_length
+
         max_num_blocks = max_length // block_size
         # Search from right to left and early stop when a match is found.
         for i in range(max_num_blocks - 1, -1, -1):
@@ -1031,9 +1195,10 @@ class MambaManager(SingleTypeKVCacheManager):
                     # so we insert dummy blocks at the beginning:
                     computed.extend([block_pool.null_block] * i)
                     computed.append(cached)
+                hit_length = (i + 1) * block_size
                 break  # we just need the last match - early stopping
 
-        return computed_blocks
+        return computed_blocks, hit_length
 
     @classmethod
     def reachable_block_mask(
@@ -1126,6 +1291,7 @@ class MambaManager(SingleTypeKVCacheManager):
         num_tokens: int,
         new_computed_blocks: Sequence[KVCacheBlock],
         total_computed_tokens: int,
+        num_local_computed_tokens: int,
         num_tokens_main_model: int,
         apply_admission_cap: bool = False,
     ) -> int:
@@ -1146,6 +1312,7 @@ class MambaManager(SingleTypeKVCacheManager):
                 num_tokens,
                 new_computed_blocks,
                 total_computed_tokens,
+                num_local_computed_tokens,
                 num_tokens_main_model,
                 apply_admission_cap=apply_admission_cap,
             )
@@ -1161,15 +1328,19 @@ class MambaManager(SingleTypeKVCacheManager):
             # num_tokens can include draft tokens that will later be rejected.
             num_required_blocks = cdiv(num_tokens, self.block_size) + self.num_speculative_blocks
             num_new_blocks = num_required_blocks - len(new_computed_blocks) - len(self.req_to_blocks[request_id])
+            has_partial_hit = (
+                self._has_partial_local_hit(new_computed_blocks, num_local_computed_tokens)
+                or request_id in self._partial_hit_reqs
+            )
+            if has_partial_hit:
+                num_new_blocks = max(num_new_blocks, 0) + 1
             if num_new_blocks > 0:
                 if request_id in self._allocated_block_reqs:
                     # Old request. Needs at most 1 more blocks as we can reuse the
                     # speculative blocks in previous step.
-                    num_new_blocks = 1
+                    num_new_blocks = 1 + int(has_partial_hit)
                 else:
-                    # First prefill. Allocate 1 block for running state and the
-                    # speculative blocks.
-                    num_new_blocks = 1 + self.num_speculative_blocks
+                    num_new_blocks = 1 + self.num_speculative_blocks + int(has_partial_hit)
 
             num_evictable_computed_blocks = self._get_num_evictable_blocks(new_computed_blocks)
             return num_new_blocks + num_evictable_computed_blocks
@@ -1193,9 +1364,11 @@ class MambaManager(SingleTypeKVCacheManager):
             # NOTE(tdouble): this is an over-estimate of how many blocks we need because
             # num_tokens can include draft tokens that will later be rejected.
             num_required_blocks = cdiv(num_tokens, self.block_size) + self.num_speculative_blocks
+            partial_hit = self._partial_hit_reqs.get(request_id)
+            has_partial_hit = partial_hit is not None
             # `num_required_blocks` might be less than `len(req_blocks)` if blocks are
             # over-allocated at last round.
-            if num_required_blocks <= len(req_blocks):
+            if num_required_blocks <= len(req_blocks) and not has_partial_hit:
                 return []
             else:
                 prev_block_len = len(req_blocks)
@@ -1224,14 +1397,33 @@ class MambaManager(SingleTypeKVCacheManager):
                         else:
                             break
                 num_new_blocks = num_required_blocks - len(req_blocks)
+                if has_partial_hit:
+                    num_new_blocks = max(num_new_blocks, 0) + 1
                 if blocks_allocated:
-                    assert num_new_blocks <= 1
+                    assert num_new_blocks <= 1 + int(has_partial_hit)
                 else:
-                    assert num_new_blocks <= self.num_speculative_blocks + 1
+                    assert num_new_blocks <= self.num_speculative_blocks + 1 + int(has_partial_hit)
                 new_blocks = self.block_pool.get_new_blocks(num_new_blocks)
+                returned_blocks = req_blocks[prev_block_len:]
+                if partial_hit is not None:
+                    block_idx, source_block = partial_hit
+                    cow_block = new_blocks[0]
+                    new_blocks = new_blocks[1:]
+                    if blocks_allocated:
+                        assert req_blocks[block_idx] is source_block
+                        self.block_pool.move_block_hashes(source_block, cow_block)
+                        self._pending_cow_copies.append((source_block, cow_block))
+                        source_block.ref_cnt += 1
+                        if cow_block.block_hash is not None:
+                            self.cached_blocks_this_step.add(cow_block.block_hash)
+                    else:
+                        self._apply_cow(request_id, block_idx, source_block, cow_block)
+                        returned_blocks = [cow_block] + returned_blocks
                 req_blocks.extend(new_blocks)
                 self._allocated_block_reqs.add(request_id)
-                return req_blocks[prev_block_len:]
+                self._partial_hit_reqs.pop(request_id, None)
+                returned_blocks.extend(new_blocks)
+                return returned_blocks
 
     def pop_blocks_for_free(self, request_id: str) -> list[KVCacheBlock]:
         if self.mamba_cache_mode == "align":
@@ -1256,6 +1448,10 @@ class MambaManager(SingleTypeKVCacheManager):
         num_cached_blocks_before = self.num_cached_block.get(request.request_id, 0)
         super().cache_blocks(request, num_tokens, retention_interval=retention_interval)
         num_cached_blocks_after = self.num_cached_block.get(request.request_id, 0)
+        if self.mamba_cache_mode == "align":
+            partial_hash = self._cache_partial_tail_block(request, num_tokens)
+            if partial_hash is not None:
+                self.cached_blocks_this_step.add(partial_hash)
         if num_cached_blocks_after > num_cached_blocks_before:
             for block in self.req_to_blocks[request.request_id][num_cached_blocks_before:num_cached_blocks_after]:
                 # Skip null blocks (align-mode skipped states) and blocks that
@@ -1268,6 +1464,42 @@ class MambaManager(SingleTypeKVCacheManager):
 
     def new_step_starts(self) -> None:
         self.cached_blocks_this_step.clear()
+
+    def _cache_partial_tail_block(
+        self,
+        request: Request,
+        num_tokens: int,
+    ) -> BlockHashWithGroupId | None:
+        hash_block_size = self.block_pool.hash_block_size
+        if self.block_size == hash_block_size:
+            return None
+        if num_tokens % self.block_size == 0:
+            return None
+        if num_tokens % hash_block_size != 0:
+            return None
+        latest_prompt_hash_boundary = request.num_prompt_tokens // hash_block_size * hash_block_size
+        if num_tokens != latest_prompt_hash_boundary:
+            return None
+
+        block_idx = num_tokens // self.block_size
+        blocks = self.req_to_blocks[request.request_id]
+        if block_idx >= len(blocks):
+            return None
+        source_block = blocks[block_idx]
+        if source_block.is_null:
+            return None
+
+        partial_hash = self.block_pool.cache_partial_block(
+            request=request,
+            block=source_block,
+            num_tokens=num_tokens,
+            kv_cache_group_id=self.kv_cache_group_id,
+            block_size=self.block_size,
+        )
+        if partial_hash is not None:
+            self._partial_hit_reqs[request.request_id] = (block_idx, source_block)
+            self.num_cached_block[request.request_id] = block_idx
+        return partial_hash
 
 
 class CrossAttentionManager(SingleTypeKVCacheManager):
@@ -1320,7 +1552,7 @@ class CrossAttentionManager(SingleTypeKVCacheManager):
         alignment_tokens: int,
         dcp_world_size: int = 1,
         pcp_world_size: int = 1,
-    ) -> tuple[list[KVCacheBlock], ...]:
+    ) -> tuple[tuple[list[KVCacheBlock], ...], int]:
         assert isinstance(kv_cache_spec, CrossAttentionSpec), (
             "CrossAttentionManager can only be used for cross-attention groups"
         )

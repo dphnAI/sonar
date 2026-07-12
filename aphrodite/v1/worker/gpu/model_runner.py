@@ -112,7 +112,7 @@ from aphrodite.v1.worker.gpu.spec_decode.utils import DraftTokensHandler
 from aphrodite.v1.worker.gpu.states import RequestState
 from aphrodite.v1.worker.gpu.structured_outputs import StructuredOutputsWorker
 from aphrodite.v1.worker.lora_model_runner_mixin import LoRAModelRunnerMixin
-from aphrodite.v1.worker.utils import KVBlockZeroer
+from aphrodite.v1.worker.utils import KVBlockZeroer, copy_kv_cache_blocks_inplace
 
 logger = init_logger(__name__)
 
@@ -795,6 +795,12 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         if scheduler_output.new_block_ids_to_zero:
             assert self.kv_block_zeroer is not None
             self.kv_block_zeroer.zero_block_ids(scheduler_output.new_block_ids_to_zero)
+        if scheduler_output.kv_cache_block_copies:
+            copy_kv_cache_blocks_inplace(
+                self.kv_caches,
+                self.kv_cache_config.num_blocks,
+                scheduler_output.kv_cache_block_copies,
+            )
 
     def prepare_inputs(self, scheduler_output: SchedulerOutput, batch_desc: BatchExecutionDescriptor) -> InputBatch:
         num_tokens = scheduler_output.total_num_scheduled_tokens
