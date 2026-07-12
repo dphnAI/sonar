@@ -973,6 +973,7 @@ class OpenAIServingChat(GenerateBaseServing):
             prompt_token_ids=(final_res.prompt_token_ids if request.return_token_ids else None),
             prompt_text=prompt_text,
             kv_transfer_params=final_res.kv_transfer_params,
+            ec_transfer_params=final_res.ec_transfer_params,
             metrics=per_request_metrics,
         )
 
