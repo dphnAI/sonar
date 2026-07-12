@@ -501,7 +501,7 @@ impl ChatRenderer for FakeChatBackend {
         let placeholder = self
             .multimodal_model_info
             .as_ref()
-            .map(|info| info.placeholder_token())
+            .and_then(|info| info.placeholder_token(llm_multimodal::Modality::Image))
             .unwrap_or("<image>");
         let mut prompt = String::new();
         for message in &request.messages {
@@ -541,7 +541,9 @@ fn render_fake_content(content: &ChatContent, placeholder: &str) -> aphrodite_ch
             for part in parts {
                 match part {
                     ChatContentPart::Text { text } => out.push_str(text),
-                    ChatContentPart::ImageUrl { .. } => out.push_str(placeholder),
+                    ChatContentPart::ImageUrl { .. } | ChatContentPart::VideoUrl { .. } => {
+                        out.push_str(placeholder)
+                    }
                 }
             }
             out
@@ -562,8 +564,10 @@ fn qwen_multimodal_model_info() -> aphrodite_chat::multimodal::MultimodalModelIn
     let info = aphrodite_chat::multimodal::MultimodalModelInfo::from_paths(
         "qwen2-vl-test".to_string(),
         Some("qwen2_vl".to_string()),
-        Some(&config_path),
-        None,
+        aphrodite_chat::multimodal::MultimodalConfigFiles {
+            config: Some(&config_path),
+            ..Default::default()
+        },
         Arc::new(fake_chat_tokenizer()),
     )
     .expect("load multimodal info")
