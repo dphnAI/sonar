@@ -168,7 +168,7 @@ def test_swordfish_mm_8bit_large_m():
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
 
 
-@pytest.mark.parametrize("mnk", [(8, 512, 256), (33, 2048, 1024), (256, 2048, 512)])
+@pytest.mark.parametrize("mnk", [(1, 512, 256), (8, 512, 256), (16, 4096, 512), (33, 2048, 1024), (256, 2048, 512), (512, 1024, 512)])
 @pytest.mark.parametrize("bits", [4, 8])
 def test_swordfish_mm_act_order(mnk, bits):
     # The row sort realigns group boundaries, so the kernel runs the plain

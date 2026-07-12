@@ -115,6 +115,43 @@ inline void launch_zero_c(void* c, int64_t m, int64_t n,
       <<<blocks, threads, 0, stream>>>(reinterpret_cast<int4*>(c), vecs);
 }
 
+// Fused act_order prep for the decode window: writes the column-sorted
+// activation copy and zeroes the output in one launch, replacing the
+// separate permute_cols and zero nodes (each in-graph node and its
+// engine/launch gap costs about a microsecond per GEMM at bs=1). Thread i
+// of the permute range loads its perm entry coalesced and gathers one
+// activation half; the tail range zeroes C in int4 stores.
+template <typename scalar_t>
+__global__ void swordfish_prep_kernel(
+    const scalar_t* __restrict__ a, const int32_t* __restrict__ perm,
+    scalar_t* __restrict__ a_perm, int4* __restrict__ c, int64_t m,
+    int64_t k, int64_t c_vecs) {
+  const int64_t idx = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
+  const int64_t perm_work = m * k;
+  if (idx < perm_work) {
+    const int64_t r = idx / k;
+    const int64_t i = idx - r * k;
+    a_perm[r * k + i] = a[r * k + perm[i]];
+  } else if (idx - perm_work < c_vecs) {
+    const int4 z = {0, 0, 0, 0};
+    c[idx - perm_work] = z;
+  }
+}
+
+template <typename scalar_t>
+inline void launch_prep(const void* a, const int32_t* perm, void* a_perm,
+                        void* c, int64_t m, int64_t k, int64_t n,
+                        cudaStream_t stream) {
+  const int64_t c_vecs = m * n * int64_t(sizeof(scalar_t)) / sizeof(int4);
+  const int64_t work = m * k + c_vecs;
+  const int threads = 256;
+  const int blocks = int((work + threads - 1) / threads);
+  swordfish_prep_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
+      reinterpret_cast<const scalar_t*>(a), perm,
+      reinterpret_cast<scalar_t*>(a_perm), reinterpret_cast<int4*>(c), m, k,
+      c_vecs);
+}
+
 // ATOMIC_EPI replaces the cross-warp smem reduction with red.global adds
 // into a zeroed C, freeing 16 KB smem per CTA and both __syncthreads, and
 // making cross-CTA split-K free. Summation order is nondeterministic. The
