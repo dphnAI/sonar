@@ -204,6 +204,7 @@ def test_sampling_metadata_in_input_batch(device: str, batch_size: int):
         vocab_size=1024,
         block_sizes=[1],
         kernel_block_sizes=[1],
+        max_num_blocks_per_req=[1024],
     )
     reqs: list[CachedRequestState] = []
     req_id_reqs = {}
@@ -286,6 +287,7 @@ def test_swap_states_in_input_batch(device: str, batch_size: int, swap_list: lis
         vocab_size=1024,
         block_sizes=[1],
         kernel_block_sizes=[1],
+        max_num_blocks_per_req=[1024],
     )
     ref_input_batch: InputBatch = InputBatch(
         max_num_reqs=batch_size,
@@ -295,6 +297,7 @@ def test_swap_states_in_input_batch(device: str, batch_size: int, swap_list: lis
         vocab_size=1024,
         block_sizes=[1],
         kernel_block_sizes=[1],
+        max_num_blocks_per_req=[1024],
     )
 
     reqs: list[CachedRequestState] = []
