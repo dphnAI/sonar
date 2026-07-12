@@ -16,6 +16,7 @@ from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_world_size,
     tensor_model_parallel_all_gather,
+    tensor_model_parallel_reduce_scatter,
 )
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import Attention
@@ -187,13 +188,17 @@ class Qwen3NextSparseMoeBlock(nn.Module):
             shared_expert_gate=self.shared_expert_gate if self.shared_expert is None else None,
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        already_sequence_parallel: bool = False,
+    ) -> torch.Tensor:
         # NOTE: hidden_states can have either 1D or 2D shape.
         orig_shape = hidden_states.shape
         num_tokens, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        if self.is_sequence_parallel:
+        if self.is_sequence_parallel and not already_sequence_parallel:
             hidden_states = sequence_parallel_chunk(hidden_states)
 
         if self.experts.is_internal_router:
@@ -204,7 +209,7 @@ class Qwen3NextSparseMoeBlock(nn.Module):
             router_logits, _ = self.gate(hidden_states)
             final_hidden_states = self.experts(hidden_states=hidden_states, router_logits=router_logits)
 
-        if self.is_sequence_parallel:
+        if self.is_sequence_parallel and not already_sequence_parallel:
             final_hidden_states = tensor_model_parallel_all_gather(final_hidden_states, 0)
             final_hidden_states = final_hidden_states[:num_tokens]
 
@@ -218,6 +223,7 @@ class Qwen3NextAttention(nn.Module):
         model_config: ModelConfig | None = None,
         cache_config: CacheConfig | None = None,
         quant_config: QuantizationConfig | None = None,
+        reduce_results: bool = True,
         prefix: str = "",
     ) -> None:
         super().__init__()
@@ -258,6 +264,7 @@ class Qwen3NextAttention(nn.Module):
             self.total_num_heads * self.head_dim,
             config.hidden_size,
             bias=False,
+            reduce_results=reduce_results,
             quant_config=quant_config,
             prefix=f"{prefix}.o_proj",
         )
@@ -380,9 +387,18 @@ class Qwen3NextDecoderLayer(nn.Module):
         model_config = aphrodite_config.model_config
         cache_config = aphrodite_config.cache_config
         quant_config = aphrodite_config.quant_config
+        parallel_config = aphrodite_config.parallel_config
 
         self.layer_type = layer_type
         self.layer_idx = extract_layer_index(prefix)
+
+        mlp_only_layers = [] if not hasattr(config, "mlp_only_layers") else config.mlp_only_layers
+        is_moe_layer = (self.layer_idx not in mlp_only_layers) and (
+            config.num_experts > 0 and (self.layer_idx + 1) % config.decoder_sparse_step == 0
+        )
+        self.use_attn_reduce_scatter_for_moe = (
+            parallel_config.use_sequence_parallel_moe and parallel_config.pipeline_parallel_size == 1 and is_moe_layer
+        )
 
         if self.layer_type == "linear_attention":
             self.linear_attn = QwenGatedDeltaNetAttention(
@@ -390,6 +406,7 @@ class Qwen3NextDecoderLayer(nn.Module):
                 aphrodite_config=aphrodite_config,
                 prefix=f"{prefix}.linear_attn",
                 gqa_interleaved_layout=True,
+                reduce_results=not self.use_attn_reduce_scatter_for_moe,
             )
         elif self.layer_type == "full_attention":
             self.self_attn = Qwen3NextAttention(
@@ -397,15 +414,13 @@ class Qwen3NextDecoderLayer(nn.Module):
                 model_config=model_config,
                 cache_config=cache_config,
                 quant_config=quant_config,
+                reduce_results=not self.use_attn_reduce_scatter_for_moe,
                 prefix=f"{prefix}.self_attn",
             )
         else:
             raise ValueError(f"Invalid layer_type {self.layer_type}")
 
-        mlp_only_layers = [] if not hasattr(config, "mlp_only_layers") else config.mlp_only_layers
-        if (self.layer_idx not in mlp_only_layers) and (
-            config.num_experts > 0 and (self.layer_idx + 1) % config.decoder_sparse_step == 0
-        ):
+        if is_moe_layer:
             self.mlp = Qwen3NextSparseMoeBlock(
                 aphrodite_config=aphrodite_config,
                 prefix=f"{prefix}.mlp",
@@ -446,11 +461,20 @@ class Qwen3NextDecoderLayer(nn.Module):
         positions: torch.Tensor = None,
         **kwargs: object,
     ):
+        full_num_tokens = positions.shape[-1]
+        input_is_sequence_parallel = (
+            self.use_attn_reduce_scatter_for_moe and residual is not None and hidden_states.shape[0] != full_num_tokens
+        )
+
         if residual is None:
             residual = hidden_states
             hidden_states = self.input_layernorm(hidden_states)
         else:
             hidden_states, residual = self.input_layernorm(hidden_states, residual)
+
+        if input_is_sequence_parallel:
+            hidden_states = tensor_model_parallel_all_gather(hidden_states, 0)
+            hidden_states = hidden_states[:full_num_tokens]
 
         if self.layer_type == "linear_attention":
             hidden_states = self.linear_attn(hidden_states=hidden_states)
@@ -468,9 +492,23 @@ class Qwen3NextDecoderLayer(nn.Module):
             else:
                 hidden_states = hidden_states * (self.attn_layer_scale.to(hidden_states.dtype) + 1)
 
+        if self.use_attn_reduce_scatter_for_moe:
+            tp_world_size = get_tensor_model_parallel_world_size()
+            sp_pad = (-hidden_states.shape[0]) % tp_world_size
+            hidden_states = torch.nn.functional.pad(hidden_states, (0, 0, 0, sp_pad))
+            hidden_states = tensor_model_parallel_reduce_scatter(hidden_states, 0)
+            if not input_is_sequence_parallel:
+                residual = sequence_parallel_chunk(residual)
+
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
-        hidden_states = self.mlp(hidden_states)
+        if self.use_attn_reduce_scatter_for_moe:
+            hidden_states = self.mlp(
+                hidden_states,
+                already_sequence_parallel=True,
+            )
+        else:
+            hidden_states = self.mlp(hidden_states)
 
         if self.layer_scale:
             if len(hidden_states.shape) == 2:
@@ -482,6 +520,24 @@ class Qwen3NextDecoderLayer(nn.Module):
                 hidden_states = hidden_states * (self.ffn_layer_scale.to(hidden_states.dtype) + 1)
 
         return hidden_states, residual
+
+
+def _all_gather_hidden_and_residual(
+    hidden_states: torch.Tensor,
+    residual: torch.Tensor | None,
+    full_num_tokens: int,
+    hidden_size: int,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    if residual is None:
+        hidden_states = tensor_model_parallel_all_gather(hidden_states, 0)
+        hidden_states = hidden_states[:full_num_tokens]
+        return hidden_states, None
+
+    combined_states = torch.cat([hidden_states, residual], dim=-1)
+    combined_states = tensor_model_parallel_all_gather(combined_states, 0)
+    combined_states = combined_states[:full_num_tokens]
+    hidden_states, residual = combined_states.split([hidden_size, hidden_size], dim=-1)
+    return hidden_states, residual
 
 
 @support_torch_compile
@@ -536,6 +592,8 @@ class Qwen3NextModel(nn.Module, EagleModelMixin):
         else:
             self.norm = PPMissingLayer()
 
+        self.aux_hidden_state_layers: tuple[int, ...] = ()
+
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         return self.embed_tokens(input_ids)
 
@@ -557,20 +615,42 @@ class Qwen3NextModel(nn.Module, EagleModelMixin):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
+        full_num_tokens = positions.shape[-1]
         aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)
         for layer_idx, layer in enumerate(
             islice(self.layers, self.start_layer, self.end_layer),
             start=self.start_layer,
         ):
+            if hidden_states.shape[0] != full_num_tokens and not layer.use_attn_reduce_scatter_for_moe:
+                hidden_states, residual = _all_gather_hidden_and_residual(
+                    hidden_states,
+                    residual,
+                    full_num_tokens,
+                    self.config.hidden_size,
+                )
             hidden_states, residual = layer(
                 positions=positions,
                 hidden_states=hidden_states,
                 residual=residual,
             )
+            if (layer_idx + 1) in self.aux_hidden_state_layers and hidden_states.shape[0] != full_num_tokens:
+                hidden_states, residual = _all_gather_hidden_and_residual(
+                    hidden_states,
+                    residual,
+                    full_num_tokens,
+                    self.config.hidden_size,
+                )
             self._maybe_add_hidden_state(aux_hidden_states, layer_idx + 1, hidden_states, residual)
 
         if not get_pp_group().is_last_rank:
             return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+        if hidden_states.shape[0] != full_num_tokens:
+            hidden_states, residual = _all_gather_hidden_and_residual(
+                hidden_states,
+                residual,
+                full_num_tokens,
+                self.config.hidden_size,
+            )
         hidden_states, _ = self.norm(hidden_states, residual)
         if aux_hidden_states:
             return hidden_states, aux_hidden_states
