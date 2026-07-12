@@ -567,7 +567,14 @@ class AllReduceFusedAddGemmaRMSNormPattern(BasePattern):
             )
             return allreduce[1], allreduce[2]
 
-        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
+        pm.register_replacement(
+            pattern,
+            replacement,
+            self.get_inputs(),
+            pm.fwd_only,
+            pm_pass,
+            extra_check=_norm_input_weight_dtype_match,
+        )
 
         first_return_only = lambda fn: lambda a, b, c: fn(a, b, c)[0]
 
@@ -722,7 +729,14 @@ class AllReduceFusedAddRMSNormStaticQuantFP8Pattern(BasePattern):
             # quant_out, rms_norm_residual
             return allreduce[4], allreduce[2]
 
-        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
+        pm.register_replacement(
+            pattern,
+            replacement,
+            self.get_inputs(),
+            pm.fwd_only,
+            pm_pass,
+            extra_check=_norm_input_weight_dtype_match,
+        )
 
 
 class AllReduceFusedRMSNormStaticQuantNVFP4Pattern(BasePattern):
@@ -899,7 +913,14 @@ class AllReduceFusedAddRMSNormStaticQuantNVFP4Pattern(BasePattern):
             # quant_out, rms_norm_residual, output_scale
             return allreduce[4], allreduce[2], allreduce[5]
 
-        pm.register_replacement(pattern, replacement, self.get_inputs(), pm.fwd_only, pm_pass)
+        pm.register_replacement(
+            pattern,
+            replacement,
+            self.get_inputs(),
+            pm.fwd_only,
+            pm_pass,
+            extra_check=_norm_input_weight_dtype_match,
+        )
 
 
 class AllReduceFusionPass(AphroditePatternMatcherPass):
