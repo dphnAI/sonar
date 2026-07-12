@@ -862,6 +862,10 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, OfflineInferenceMixin):
         """Finish the current weight update."""
         self.llm_engine.collective_rpc("finish_weight_update")
 
+    def start_draft_weight_update(self) -> None:
+        """Start a new weight update targeting the speculative draft model."""
+        self.llm_engine.collective_rpc("start_draft_weight_update")
+
     def __repr__(self) -> str:
         """Return a transformers-style hierarchical view of the model."""
         # Cache the result to avoid repeated collective_rpc calls
