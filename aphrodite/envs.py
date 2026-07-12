@@ -1411,11 +1411,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS": lambda: (
         None
         if "APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS" not in os.environ
-        else [
-            v.strip()
-            for v in os.environ["APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS"].split(",")
-            if v.strip()
-        ]
+        else [v.strip() for v in os.environ["APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS"].split(",") if v.strip()]
     ),
     # Flashinfer fused allreduce backend.
     "APHRODITE_FLASHINFER_ALLREDUCE_BACKEND": env_with_choices(
