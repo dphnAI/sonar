@@ -197,6 +197,7 @@ if TYPE_CHECKING:
     APHRODITE_BLOCKSCALE_FP8_GEMM_FLASHINFER: bool = True
     APHRODITE_USE_FLASHINFER_MOE_INT4: bool = False
     APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR: str | None = None
+    APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS: list[str] | None = None
     APHRODITE_FLASHINFER_ALLREDUCE_BACKEND: Literal["auto", "trtllm", "mnnvl"] = "auto"
     APHRODITE_FLASHINFER_WORKSPACE_BUFFER_SIZE: int = 394 * 1024 * 1024
     APHRODITE_XGRAMMAR_CACHE_MB: int = 0
@@ -1404,6 +1405,18 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "MOONCAKE_REQUESTER_LOCAL_HOSTNAME": lambda: os.getenv("MOONCAKE_REQUESTER_LOCAL_HOSTNAME"),
     # Override the directory for the FlashInfer autotune config cache.
     "APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR": lambda: os.getenv("APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR", None),
+    # Comma-separated FlashInfer op names to exclude from autotuning, using
+    # the heuristic fallback tactic instead. Unset: skip "fp4_gemm" when the
+    # CuTe-DSL NVFP4 linear kernel is selected. Empty: skip nothing.
+    "APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS": lambda: (
+        None
+        if "APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS" not in os.environ
+        else [
+            v.strip()
+            for v in os.environ["APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS"].split(",")
+            if v.strip()
+        ]
+    ),
     # Flashinfer fused allreduce backend.
     "APHRODITE_FLASHINFER_ALLREDUCE_BACKEND": env_with_choices(
         "APHRODITE_FLASHINFER_ALLREDUCE_BACKEND",
@@ -1869,6 +1882,7 @@ def compile_factors() -> dict[str, object]:
         "APHRODITE_DEBUG_LOG_API_SERVER_RESPONSE",
         "APHRODITE_TUNED_CONFIG_FOLDER",
         "APHRODITE_FLASHINFER_AUTOTUNE_CACHE_DIR",
+        "APHRODITE_FLASHINFER_AUTOTUNE_SKIP_OPS",
         "APHRODITE_ENGINE_ITERATION_TIMEOUT_S",
         "APHRODITE_HTTP_TIMEOUT_KEEP_ALIVE",
         "APHRODITE_EXECUTE_MODEL_TIMEOUT_SECONDS",
