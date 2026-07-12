@@ -41,7 +41,7 @@
       "default": "0"
     },
     "TORCH_CUDA_ARCH_LIST": {
-      "default": "7.5 8.0 8.6 8.9 9.0 10.0 12.0+PTX"
+      "default": "7.5 8.0 8.6 8.9 9.0 10.0 11.0 12.0+PTX"
     },
     "DEEPEP_COMMIT_HASH": {
       "default": "73b6ea4"
