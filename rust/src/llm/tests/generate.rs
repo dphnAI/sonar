@@ -334,7 +334,6 @@ async fn collect_output_aggregates_raw_tokens_logprobs_and_terminal_metadata() {
                 send_outputs(
                     push,
                     RequestBatchOutputs {
-                        engine_index: 0,
                         outputs: vec![
                             EngineCoreOutput {
                                 prefill_stats: Some(PrefillStats {
@@ -361,7 +360,7 @@ async fn collect_output_aggregates_raw_tokens_logprobs_and_terminal_metadata() {
                                 None,
                             ),
                         ],
-                        finished_requests: None,
+                        ..Default::default()
                     }
                     .into(),
                 )
