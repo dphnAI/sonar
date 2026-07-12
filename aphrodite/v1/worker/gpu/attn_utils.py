@@ -204,7 +204,9 @@ def _reshape_attention_kv_cache(
         assert inv_order[0] == 0
         page_bytes = prod(kv_cache_shape[1:]) * get_dtype_size(dtype)
         kv_cache = (
-            kv_raw_tensor.view(-1, block_stride)[:, offset : offset + page_bytes].view(dtype).view(kv_cache_shape)
+            kv_raw_tensor.view(-1, block_stride)[:, offset : offset + page_bytes]
+            .view(dtype)
+            .view(permuted_kv_cache_shape)
         )
     elif kv_cache_spec.page_size_padded is not None:
         # Use a strided view to skip the padding between physical pages.
