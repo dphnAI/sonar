@@ -12,7 +12,12 @@ import torch
 
 import aphrodite.v1.core.kv_cache_manager as kv_cache_manager
 import aphrodite.v1.core.kv_cache_utils as kv_cache_utils
-from aphrodite.distributed.kv_events import AllBlocksCleared, BlockRemoved, BlockStored
+from aphrodite.distributed.kv_events import (
+    MEDIUM_GPU,
+    AllBlocksCleared,
+    BlockRemoved,
+    BlockStored,
+)
 from aphrodite.lora.request import LoRARequest
 from aphrodite.multimodal.inputs import (
     MultiModalFeatureSpec,
@@ -2293,6 +2298,104 @@ def test_block_removed_event_group_idx(group_id: int):
     assert len(removed_events) == 2
     for event in removed_events:
         assert event.group_idx == group_id
+
+
+def test_emit_cached_block_events():
+    block_size = 4
+    num_cached_blocks = 3
+    kv_cache_group_id = 1
+    num_tokens = block_size * 4
+
+    pool = BlockPool(
+        num_gpu_blocks=8,
+        enable_caching=True,
+        hash_block_size=block_size,
+        enable_kv_cache_events=True,
+    )
+
+    req = make_request(
+        "req_emit_cached",
+        prompt_token_ids=list(range(num_tokens)),
+        block_size=block_size,
+        hash_fn=sha256,
+    )
+    free_before = pool.get_num_free_blocks()
+    assert len(pool.cached_block_hash_to_block) == 0
+
+    pool.emit_cached_block_events(
+        request=req,
+        num_cached_blocks=num_cached_blocks,
+        block_size=block_size,
+        kv_cache_group_id=kv_cache_group_id,
+    )
+
+    assert pool.get_num_free_blocks() == free_before
+    assert len(pool.cached_block_hash_to_block) == 0
+
+    events = pool.take_events()
+    assert len(events) == 1
+    event = events[0]
+    assert isinstance(event, BlockStored)
+
+    expected_hashes = [kv_cache_utils.maybe_convert_block_hash(req.block_hashes[i]) for i in range(num_cached_blocks)]
+    assert event.block_hashes == expected_hashes
+    assert event.parent_block_hash is None
+    assert event.token_ids == list(req.all_token_ids[: num_cached_blocks * block_size])
+    assert event.group_idx == kv_cache_group_id
+    assert event.block_size == block_size
+    assert event.medium == MEDIUM_GPU
+    assert event.lora_id is None
+    assert event.lora_name is None
+
+
+def test_emit_cached_block_events_disabled():
+    block_size = 4
+    pool = BlockPool(
+        num_gpu_blocks=8,
+        enable_caching=True,
+        hash_block_size=block_size,
+        enable_kv_cache_events=False,
+    )
+    req = make_request(
+        "req_emit_disabled",
+        prompt_token_ids=list(range(block_size * 4)),
+        block_size=block_size,
+        hash_fn=sha256,
+    )
+
+    pool.emit_cached_block_events(
+        request=req,
+        num_cached_blocks=3,
+        block_size=block_size,
+        kv_cache_group_id=0,
+    )
+
+    assert pool.take_events() == []
+
+
+def test_emit_cached_block_events_zero_cached():
+    block_size = 4
+    pool = BlockPool(
+        num_gpu_blocks=8,
+        enable_caching=True,
+        hash_block_size=block_size,
+        enable_kv_cache_events=True,
+    )
+    req = make_request(
+        "req_emit_zero",
+        prompt_token_ids=list(range(block_size * 4)),
+        block_size=block_size,
+        hash_fn=sha256,
+    )
+
+    pool.emit_cached_block_events(
+        request=req,
+        num_cached_blocks=0,
+        block_size=block_size,
+        kv_cache_group_id=0,
+    )
+
+    assert pool.take_events() == []
 
 
 def test_eagle_enabled_removes_last_block():
