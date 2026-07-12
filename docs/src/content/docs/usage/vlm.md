@@ -125,11 +125,12 @@ export APHRODITE_IMAGE_FETCH_TIMEOUT=<timeout>
 ### Video Decoding Backend
 
 Aphrodite decodes video bytes into frames using a selectable decoding backend.
-Three FFmpeg-backed software backends are supported:
+The following decoding backends are supported:
 
 - `opencv` (default): OpenCV-based decoder.
 - `pyav`: PyAV decoder.
 - `torchcodec`: TorchCodec (PyTorch-native) decoder.
+- `deepstream`: NVIDIA DeepStream (NVDEC) GPU decoder.
 
 `torchcodec` lets you choose which FFmpeg version is used, while `opencv` and
 `pyav` rely on whichever FFmpeg build they were linked against.
@@ -152,6 +153,55 @@ TorchCodec-specific parameters:
 ```bash
 aphrodite run Qwen/Qwen3-VL-30B-A3B-Instruct \
   --media-io-kwargs '{"video": {"backend": "torchcodec", "seek_mode": "approximate", "num_ffmpeg_threads": 4}}'
+```
+
+#### GPU Video Decoding with DeepStream (NVDEC)
+
+By default Aphrodite decodes video on the CPU. On NVIDIA GPUs you can instead
+decode directly on the hardware video engine (NVDEC) with the DeepStream
+backend, which keeps decoding off the CPU and can significantly increase video
+throughput.
+
+Install the backend (Linux x86-64 only):
+
+```bash
+pip install aphrodite-engine[deepstream]
+```
+
+The pip wheel bundles the DeepStream libraries but still relies on a few system
+packages that pip cannot install. On Ubuntu:
+
+```bash
+apt-get install -y \
+  gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-libav \
+  python3-gi python3-gst-1.0 libv4l-0 cuda-libraries-13-0
+```
+
+Select the backend either with an environment variable:
+
+```bash
+export APHRODITE_VIDEO_LOADER_BACKEND=deepstream
+aphrodite run Qwen/Qwen3-VL-30B-A3B-Instruct
+```
+
+or per request via `--media-io-kwargs`:
+
+```bash
+aphrodite run Qwen/Qwen3-VL-30B-A3B-Instruct \
+  --media-io-kwargs '{"video": {"backend": "deepstream"}}'
+```
+
+DeepStream-specific parameters:
+
+- `pool_size`: Number of GPU decode workers in the process-wide decode pool
+  (clamped to `[1, 16]`). When unset it defaults to
+  `APHRODITE_MEDIA_LOADING_THREAD_COUNT` (default `8`). The pool is a
+  singleton, so the first request's value wins.
+
+```bash
+aphrodite run Qwen/Qwen3-VL-30B-A3B-Instruct \
+  --media-io-kwargs '{"video": {"backend": "deepstream", "pool_size": 12}}'
 ```
 
 :::tip
