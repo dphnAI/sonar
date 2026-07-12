@@ -74,7 +74,8 @@ inline bool use_prefill(int64_t m, torch::headeronly::ScalarType a_st,
 // rate only clears the 4-bit weight stream's bandwidth win at 8 bits, and
 // K-heavy shapes pay proportionally more dequant per flop, so they cross
 // later still.
-inline int dense_tier_min_m(int sms, bool w8, int64_t size_k, int64_t size_n) {
+inline int dense_tier_min_m(int sms, bool w8, int64_t size_k, int64_t size_n,
+                            bool has_perm) {
   static const int v = [] {
     const char* e = std::getenv("APHRODITE_SWORDFISH_DENSE_M");
     return e != nullptr && e[0] != '\0' ? std::atoi(e) : 0;
@@ -84,6 +85,11 @@ inline int dense_tier_min_m(int sms, bool w8, int64_t size_k, int64_t size_n) {
     if (!w8) return INT_MAX;
     return size_k >= 2 * size_n ? 8192 : 2048;
   }
+  // act_order crosses much earlier outside wide N: the fused paths pay the
+  // activation sort and per-group scale gathers that the dense tier folds
+  // into its weight scatter for free (K-heavy shapes halve at M >= 512).
+  // Wide N stays fused, where the K*N dequant write dominates instead.
+  if (has_perm && size_n <= 2 * size_k) return 512;
   return w8 ? 1024 : 4096;
 }
 
@@ -367,7 +373,8 @@ torch::stable::Tensor swordfish_mm(
                     "perm must be int32 [", size_k, "]");
   }
 
-  if (size_m >= dense_tier_min_m(cached_sm_count(), w8, size_k, size_n) &&
+  if (size_m >= dense_tier_min_m(cached_sm_count(), w8, size_k, size_n,
+                                 has_perm) &&
       !force_deterministic()) {
     const int32_t device_index = a.get_device_index();
     torch::stable::accelerator::DeviceGuard device_guard(device_index);
