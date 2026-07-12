@@ -174,6 +174,12 @@ void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
   // the machine, since slicing shortens the per-warp pipeline and raises
   // atomic contention.
   int split = target / (nb * m_ctas);
+  // On few-SM parts, columns alone reaching the machine is enough. K-slices
+  // beyond that shorten the latency-bound per-warp chains and buy the
+  // launcher memset, measured 8-15 percent slower at M=1 narrow N on 20
+  // SMs. Many-SM parts want the occupancy target: the same sweep run the
+  // other way is 2-3x slower at split 1 on 148 SMs.
+  if (sms < 100 && nb * m_ctas >= sms) split = 1;
   // Keep at least 2*kStagesT pairs per warp so the pipeline reaches steady
   // state within a slice.
   const int max_split =
