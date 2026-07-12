@@ -134,6 +134,7 @@ def _generate_fake_sampling_metadata(
         aphrodite_config.scheduler_config.max_num_seqs,
         num_spec,
         device,
+        is_pin_memory=False,
     )
     fake_sampling_metadata = SamplingMetadata(
         temperature=torch.full((batch_size,), 0.0),
@@ -813,6 +814,7 @@ def test_maybe_create_thinking_budget_holder_without_reasoning():
             cfg.scheduler_config.max_num_seqs,
             0,
             torch.device("cpu"),
+            is_pin_memory=False,
         )
         is None
     )
@@ -1180,12 +1182,17 @@ def test_thinking_budget_long_thinking_section_end_marker_found_at_correct_index
         out.append(tok)
         h.update_state([out], None, None)
         assert h._state[0]["end_thinking"] == -1  # not present yet
-    expected_end_idx = len(out)  # marker appended next
     out.extend(end)
     h.update_state([out], None, None)
 
-    assert h._state[0]["start_thinking"] == 0
-    assert h._state[0]["end_thinking"] == expected_end_idx
+    # After a natural exit, start_thinking and end_thinking are reset to -1
+    # (state machine prepared for next block). Verify the exit happened at the
+    # correct position by checking scan_offset (set to len(output) after exit).
+    assert not h._state[0]["in_think"], "Should have exited think mode after </think>"
+    assert h._state[0]["start_thinking"] == -1, "start_thinking should be reset after natural exit"
+    assert h._state[0]["scan_offset"] == len(out), (
+        f"scan_offset should point past the end marker; expected {len(out)}, got {h._state[0]['scan_offset']}"
+    )
 
 
 # --- Thinking budget re-entry tests (issue #43708) ---
@@ -1306,3 +1313,197 @@ class TestThinkingBudgetReentry:
 
         assert not holder._state[0]["in_end"]
         assert not holder._state[0]["in_think"]
+
+
+# --- Thinking budget natural-end re-entry tests (issue #45974) ---
+# After a model naturally emits </think> before exhausting its budget,
+# subsequent <think> blocks must still be tracked and budget-enforced.
+
+
+class TestThinkingBudgetNaturalEndReentry:
+    """Tests for thinking budget enforcement across multiple think blocks."""
+
+    THINK_START = 100
+    THINK_END_SINGLE = [200]
+    THINK_END_MULTI = [200, 201, 202]
+    BUDGET = 10
+    CONTENT_TOKEN = 50
+    THINK_TOKEN = 60
+
+    @staticmethod
+    def _make_holder(end_token_ids: list[int]) -> ThinkingBudgetStateHolder:
+        class FakeReasoningConfig:
+            reasoning_start_token_ids = [TestThinkingBudgetNaturalEndReentry.THINK_START]
+            reasoning_end_token_ids: list[int] = []
+            enabled = True
+
+        cfg = FakeReasoningConfig()
+        cfg.reasoning_end_token_ids = end_token_ids
+        return ThinkingBudgetStateHolder(
+            reasoning_config=cfg,
+            max_num_seqs=8,
+            num_spec_tokens=0,
+            device=torch.device("cpu"),
+            is_pin_memory=False,
+        )
+
+    @staticmethod
+    def _sync_batch(
+        holder: ThinkingBudgetStateHolder,
+        budget: int,
+        prompt_tok_ids: list[int] | None = None,
+    ) -> None:
+        holder.sync_batch(
+            BatchUpdate(
+                batch_size=1,
+                removed=(),
+                added=[
+                    (
+                        0,
+                        SamplingParams(thinking_token_budget=budget),
+                        prompt_tok_ids,
+                        [],
+                    )
+                ],
+                moved=(),
+            )
+        )
+
+    @staticmethod
+    def _step(holder: ThinkingBudgetStateHolder, output_tok_ids: list[int]) -> None:
+        holder.update_state(
+            output_token_ids=[output_tok_ids],
+            spec_token_ids=None,
+            repeat_indices=None,
+        )
+
+    def _natural_block(
+        self,
+        holder: ThinkingBudgetStateHolder,
+        output: list[int],
+        num_think_tokens: int,
+        end_token_ids: list[int],
+    ) -> None:
+        output.append(self.THINK_START)
+        self._step(holder, list(output))
+        for _ in range(num_think_tokens):
+            output.append(self.THINK_TOKEN)
+            self._step(holder, list(output))
+        for tok in end_token_ids:
+            output.append(tok)
+            self._step(holder, list(output))
+
+    def _assert_reentry_enforced(
+        self,
+        holder: ThinkingBudgetStateHolder,
+        output: list[int],
+        budget: int,
+    ) -> None:
+        output.append(self.THINK_START)
+        self._step(holder, list(output))
+        for _ in range(budget + 1):
+            output.append(self.THINK_TOKEN)
+            self._step(holder, list(output))
+        assert holder._state[0]["in_end"]
+
+    def test_natural_end_reentry_single_token(self):
+        holder = self._make_holder(self.THINK_END_SINGLE)
+        self._sync_batch(holder, self.BUDGET)
+        output: list[int] = []
+
+        self._natural_block(holder, output, 6, self.THINK_END_SINGLE)
+        assert not holder._state[0]["in_end"]
+        assert not holder._state[0]["in_think"]
+
+        output.extend([self.CONTENT_TOKEN] * 3)
+        self._step(holder, list(output))
+        self._assert_reentry_enforced(holder, output, self.BUDGET)
+
+    def test_natural_end_reentry_multi_token(self):
+        holder = self._make_holder(self.THINK_END_MULTI)
+        self._sync_batch(holder, self.BUDGET)
+        output: list[int] = []
+
+        self._natural_block(holder, output, 4, self.THINK_END_MULTI)
+        assert not holder._state[0]["in_think"]
+
+        output.extend([self.CONTENT_TOKEN] * 5)
+        self._step(holder, list(output))
+        self._assert_reentry_enforced(holder, output, self.BUDGET)
+
+    def test_natural_end_immediate_reentry(self):
+        holder = self._make_holder(self.THINK_END_SINGLE)
+        self._sync_batch(holder, self.BUDGET)
+        output: list[int] = []
+
+        self._natural_block(holder, output, 5, self.THINK_END_SINGLE)
+        self._assert_reentry_enforced(holder, output, self.BUDGET)
+
+    def test_multiple_natural_reentries(self):
+        holder = self._make_holder(self.THINK_END_SINGLE)
+        self._sync_batch(holder, self.BUDGET)
+        output: list[int] = []
+
+        self._natural_block(holder, output, 4, self.THINK_END_SINGLE)
+        output.extend([self.CONTENT_TOKEN] * 2)
+        self._step(holder, list(output))
+        self._natural_block(holder, output, 3, self.THINK_END_SINGLE)
+        output.extend([self.CONTENT_TOKEN] * 2)
+        self._step(holder, list(output))
+        self._assert_reentry_enforced(holder, output, self.BUDGET)
+
+    def test_natural_then_forced_in_block_2(self):
+        budget = 5
+        holder = self._make_holder(self.THINK_END_SINGLE)
+        self._sync_batch(holder, budget)
+        output: list[int] = []
+
+        self._natural_block(holder, output, 3, self.THINK_END_SINGLE)
+        assert not holder._state[0]["in_end"]
+
+        output.extend([self.CONTENT_TOKEN] * 3)
+        self._step(holder, list(output))
+        self._assert_reentry_enforced(holder, output, budget)
+
+    def test_budget_one_natural_end_reentry(self):
+        budget = 1
+        holder = self._make_holder(self.THINK_END_SINGLE)
+        self._sync_batch(holder, budget)
+        output: list[int] = []
+
+        self._natural_block(holder, output, 0, self.THINK_END_SINGLE)
+        assert not holder._state[0]["in_end"]
+
+        output.extend([self.CONTENT_TOKEN] * 3)
+        self._step(holder, list(output))
+        self._assert_reentry_enforced(holder, output, budget)
+
+    def test_partial_end_sequence_in_content(self):
+        holder = self._make_holder(self.THINK_END_MULTI)
+        self._sync_batch(holder, self.BUDGET)
+        output: list[int] = []
+
+        self._natural_block(holder, output, 3, self.THINK_END_MULTI)
+        output.extend([self.CONTENT_TOKEN, 200, 201, self.CONTENT_TOKEN])
+        self._step(holder, list(output))
+        self._assert_reentry_enforced(holder, output, self.BUDGET)
+
+    def test_continue_thinking_natural_end_reentry(self):
+        holder = self._make_holder(self.THINK_END_SINGLE)
+        prompt_tok_ids = [self.THINK_START]
+        self._sync_batch(holder, self.BUDGET, prompt_tok_ids=prompt_tok_ids)
+        assert holder._state[0]["continue_thinking"]
+
+        output = list(prompt_tok_ids)
+        for _ in range(4):
+            output.append(self.THINK_TOKEN)
+            self._step(holder, list(output))
+        output.append(self.THINK_END_SINGLE[0])
+        self._step(holder, list(output))
+
+        assert not holder._state[0]["in_think"]
+        assert not holder._state[0]["continue_thinking"]
+
+        output.extend([self.CONTENT_TOKEN] * 3)
+        self._step(holder, list(output))
+        self._assert_reentry_enforced(holder, output, self.BUDGET)
