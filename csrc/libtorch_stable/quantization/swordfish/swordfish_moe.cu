@@ -309,7 +309,7 @@ void launch_moe(const void* a, const int32_t* b, const void* s, void* c,
   int sms = 0;
   cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
   constexpr int kUnitK = W8 ? 16 : 32;
-  cudaMemsetAsync(c, 0, size_t(total_tokens) * n * sizeof(scalar_t), stream);
+  launch_zero_c<scalar_t>(c, total_tokens, n, stream);
   // Host-side upper bound on work keeps tiny batches from launching idle
   // CTAs; the true total is device-side.
   const int64_t max_total =
