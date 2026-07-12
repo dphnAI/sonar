@@ -306,7 +306,19 @@ torch::stable::Tensor swordfish_mm(
       "b_packed must be int32 [", nb, ", ", kb, ", ", words, "]");
 
   int64_t num_groups = 1;
-  if (group_size != -1) {
+  // Channelwise checkpoints arrive as group -1 with the single scale row
+  // replicated to group 128 by the weight loader. The grouped tiers
+  // (tcgen05 prefill, dense dequant) consume the replicated rows as g128;
+  // the decode kernels take the native -1 path, which reads row 0 once and
+  // skips the per-group fetch/expand bookkeeping the duplicate rows would
+  // otherwise re-run at every 128-row boundary.
+  int64_t tier_group = group_size;
+  if (group_size == -1) {
+    if (group_scales.size(0) == size_k / 128) {
+      num_groups = size_k / 128;
+      tier_group = 128;
+    }
+  } else {
     // The decode mainloop consumes k16-slice PAIRS (k32) with scales hoisted
     // per pair, so a scale group must cover whole pairs.
     STD_TORCH_CHECK(group_size > 0 && size_k % group_size == 0 &&
@@ -359,7 +371,7 @@ torch::stable::Tensor swordfish_mm(
                  : nullptr,
         c.mutable_data_ptr(), w_dense.mutable_data_ptr(),
         a_st == torch::headeronly::ScalarType::Half, w8, has_zp, int(size_m),
-        int(size_k), int(size_n), int(group_size), stream);
+        int(size_k), int(size_n), int(tier_group), stream);
     return c;
   }
 
@@ -367,9 +379,9 @@ torch::stable::Tensor swordfish_mm(
   // the sort here (previously the python layer's ops.permute_cols call).
   torch::stable::Tensor a_used = has_perm ? permute_cols(a, *perm) : a;
 
-  if (use_prefill(size_m, a_st, w8, group_size, size_k, size_n)) {
+  if (use_prefill(size_m, a_st, w8, tier_group, size_k, size_n)) {
     return swordfish_prefill_mm(a_used, b_packed, group_scales, group_zps,
-                                num_bits, group_size, size_k, size_n);
+                                num_bits, tier_group, size_k, size_n);
   }
 
   const int32_t device_index = a.get_device_index();

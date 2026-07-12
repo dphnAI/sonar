@@ -154,7 +154,7 @@ class SwordfishLinearKernel(MPLinearKernel):
             x_2d,
             w_q,
             w_s,
-            128 if c.group_size == -1 else c.group_size,
+            c.group_size,
             c.partition_weight_shape[0],
             c.partition_weight_shape[1],
             group_zps=w_zp,
