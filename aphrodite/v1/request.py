@@ -96,6 +96,8 @@ class Request:
 
         # P/D: Connector-specific KV transfer parameters.
         self.kv_transfer_params: dict[str, Any] | None = None
+        # E/P/D: Connector-specific encoder-cache transfer parameters.
+        self.ec_transfer_params: dict[str, Any] | None = None
         self.kv_cache_report_mode = "incremental"
 
         if pooling_params is not None:
@@ -110,6 +112,7 @@ class Request:
 
             if sampling_params.extra_args is not None:
                 self.kv_transfer_params = sampling_params.extra_args.get("kv_transfer_params")
+                self.ec_transfer_params = sampling_params.extra_args.get("ec_transfer_params")
                 self.kv_cache_report_mode = sampling_params.extra_args.get("kv_cache_report_mode", "incremental")
         else:
             raise ValueError("sampling_params and pooling_params can't both be unset")

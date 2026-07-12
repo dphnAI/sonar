@@ -137,6 +137,10 @@ class AnthropicMessagesRequest(BaseModel):
         default=None,
         description="KVTransfer parameters used for disaggregated serving.",
     )
+    ec_transfer_params: dict[str, Any] | None = Field(
+        default=None,
+        description="ECTransfer parameters used for encoder-cache disaggregated serving.",
+    )
     chat_template_kwargs: dict[str, Any] | None = Field(
         default=None,
         description=(
@@ -208,6 +212,7 @@ class AnthropicMessagesResponse(BaseModel):
 
     # Aphrodite-specific fields that are not in Anthropic spec
     kv_transfer_params: dict[str, Any] | None = Field(default=None, description="KVTransfer parameters.")
+    ec_transfer_params: dict[str, Any] | None = Field(default=None, description="ECTransfer parameters.")
 
     def model_post_init(self, __context):
         if not self.id:

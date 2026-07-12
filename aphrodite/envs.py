@@ -207,6 +207,8 @@ if TYPE_CHECKING:
     APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION: bool = False
     APHRODITE_NIXL_SIDE_CHANNEL_HOST: str = "localhost"
     APHRODITE_NIXL_SIDE_CHANNEL_PORT: int = 5600
+    APHRODITE_EC_SIDE_CHANNEL_HOST: str = "localhost"
+    APHRODITE_EC_SIDE_CHANNEL_PORT: int = 5601
     APHRODITE_MOONCAKE_BOOTSTRAP_PORT: int = 8998
     APHRODITE_MOONCAKE_STORE_TIER_LOG: bool = False
     APHRODITE_MOONCAKE_LOAD_RECV_THREADS: int = 1
@@ -1383,6 +1385,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "APHRODITE_NIXL_SIDE_CHANNEL_HOST": lambda: os.getenv("APHRODITE_NIXL_SIDE_CHANNEL_HOST", "localhost"),
     # Port used for NIXL handshake between remote agents.
     "APHRODITE_NIXL_SIDE_CHANNEL_PORT": lambda: int(os.getenv("APHRODITE_NIXL_SIDE_CHANNEL_PORT", "5600")),
+    # IP address used for the EC connector's ZMQ side channel
+    # (producer ROUTER bind, consumer DEALER dial).
+    "APHRODITE_EC_SIDE_CHANNEL_HOST": lambda: os.getenv("APHRODITE_EC_SIDE_CHANNEL_HOST", "localhost"),
+    # Port for the EC connector's ZMQ side channel; advertised to peers
+    # via `ec_transfer_params.peer_port` on the producer's response.
+    "APHRODITE_EC_SIDE_CHANNEL_PORT": lambda: int(os.getenv("APHRODITE_EC_SIDE_CHANNEL_PORT", "5601")),
     # Port used for Mooncake handshake between remote agents.
     "APHRODITE_MOONCAKE_BOOTSTRAP_PORT": lambda: int(os.getenv("APHRODITE_MOONCAKE_BOOTSTRAP_PORT", "8998")),
     # Log per-batch memory/disk tier breakdown on external GETs.
