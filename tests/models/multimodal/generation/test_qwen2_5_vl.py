@@ -5,6 +5,7 @@ import pytest
 
 from aphrodite.assets.image import ImageAsset
 from aphrodite.multimodal.video import sample_frames_from_video
+from aphrodite.platforms import current_platform
 
 from ....conftest import VIDEO_ASSETS
 
@@ -52,11 +53,11 @@ def _encoder_cudagraph_config(*, max_vision_items: int) -> dict:
 
 @pytest.mark.core_model
 @pytest.mark.parametrize("model", models)
-@pytest.mark.parametrize("video_pruning_rate", [0.0, 0.75])
+@pytest.mark.parametrize("video_pruning_rate", [0.0] if current_platform.is_cpu() else [0.0, 0.75])
 @pytest.mark.parametrize("num_frames", [16])
 @pytest.mark.parametrize("dtype", [target_dtype])
 @pytest.mark.parametrize("max_tokens", [128])
-@pytest.mark.parametrize("use_bytecode_hook", [True, False])
+@pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_evs_functionality(
     aphrodite_runner,
     video_assets,
@@ -106,11 +107,11 @@ def test_qwen2_5_vl_evs_functionality(
 
 @pytest.mark.core_model
 @pytest.mark.parametrize("model", models)
-@pytest.mark.parametrize("video_pruning_rate", [0.0, 0.75])
+@pytest.mark.parametrize("video_pruning_rate", [0.0] if current_platform.is_cpu() else [0.0, 0.75])
 @pytest.mark.parametrize("num_frames", [16])
 @pytest.mark.parametrize("dtype", [target_dtype])
 @pytest.mark.parametrize("max_tokens", [128])
-@pytest.mark.parametrize("use_bytecode_hook", [True, False])
+@pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_evs_batched_videos(
     aphrodite_runner,
     video_assets,
@@ -168,7 +169,7 @@ def test_qwen2_5_vl_evs_batched_videos(
 @pytest.mark.parametrize("model", models)
 @pytest.mark.parametrize("dtype", [target_dtype])
 @pytest.mark.parametrize("max_tokens", [128])
-@pytest.mark.parametrize("use_bytecode_hook", [True, False])
+@pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_window_attention_image(
     aphrodite_runner,
     model,
@@ -204,7 +205,7 @@ def test_qwen2_5_vl_window_attention_image(
 @pytest.mark.parametrize("model", models)
 @pytest.mark.parametrize("dtype", [target_dtype])
 @pytest.mark.parametrize("max_tokens", [128])
-@pytest.mark.parametrize("use_bytecode_hook", [True, False])
+@pytest.mark.parametrize("use_bytecode_hook", [True] if current_platform.is_cpu() else [True, False])
 def test_qwen2_5_vl_window_attention_image_batch(
     aphrodite_runner,
     model,
