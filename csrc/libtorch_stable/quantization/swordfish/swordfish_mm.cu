@@ -115,7 +115,7 @@ inline int cached_sm_count() {
 }
 
 template <aphrodite::ScalarTypeId type_id, int T, bool HAS_ZP,
-          bool W8 = false>
+          bool W8 = false, bool CTA_QUAD = false>
 void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
                              const void* z, void* c, int m, int k, int n,
                              int group_size, cudaStream_t stream,
@@ -129,7 +129,7 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
   if (ctas_per_sm == 0) {
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
         &ctas_per_sm,
-        swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8>,
+        swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8, CTA_QUAD>,
         kDecodeThreads, 0);
     if (ctas_per_sm <= 0) ctas_per_sm = 2;
   }
@@ -137,18 +137,27 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
   cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
   const int m_tiles = (m + 15) / 16;
   const int m_groups = (m_tiles + T - 1) / T;
-  const int nb = n / kBlockN;
+  const int nb = n / (CTA_QUAD ? kBlockN * kDecodeWarps : kBlockN);
   const int num_pairs = k / kUnitK;
   const int64_t total = int64_t(m_groups) * nb * num_pairs;
-  // Cap the grid so every warp gets at least a pipeline's worth of pairs.
-  const int64_t max_warps = total / (2 * kStagesT) > 0 ? total / (2 * kStagesT) : 1;
   int ctas = ctas_per_sm * sms;
-  if (int64_t(ctas) * kDecodeWarps > max_warps) {
-    ctas = int((max_warps + kDecodeWarps - 1) / kDecodeWarps);
+  if (CTA_QUAD) {
+    // Quad claims are CTA-granular: keep them tens of units long so the
+    // claim, flush, and atomic costs amortize, and stop at the number of
+    // claims rather than idling CTAs.
+    const int64_t max_ctas = total / 32 > 0 ? total / 32 : 1;
+    if (ctas > max_ctas) ctas = int(max_ctas);
+  } else {
+    // Cap the grid so every warp gets at least a pipeline's worth of pairs.
+    const int64_t max_warps =
+        total / (2 * kStagesT) > 0 ? total / (2 * kStagesT) : 1;
+    if (int64_t(ctas) * kDecodeWarps > max_warps) {
+      ctas = int((max_warps + kDecodeWarps - 1) / kDecodeWarps);
+    }
   }
   if (ctas < 1) ctas = 1;
   if (!c_zeroed) launch_zero_c<scalar_t>(c, m, n, stream);
-  swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8>
+  swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8, CTA_QUAD>
       <<<ctas, kDecodeThreads, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(a), b,
           reinterpret_cast<const scalar_t*>(s),
@@ -262,6 +271,15 @@ void launch_decode(const void* a, const int32_t* b, const void* s,
       launch_decode_atomic<type_id, HAS_ZP, W8>(m <= 32 ? 2 : 3, a, b, s, z,
                                                 c, m, k, n, group_size,
                                                 stream, c_zeroed);
+    } else if (m <= 48 && n % (4 * kBlockN) == 0) {
+      // Few-SM band: CTA-granular claims over n256 column quads.
+      if (m <= 32) {
+        launch_decode_streamk_t<type_id, 2, HAS_ZP, W8, true>(
+            a, b, s, z, c, m, k, n, group_size, stream, c_zeroed);
+      } else {
+        launch_decode_streamk_t<type_id, 3, HAS_ZP, W8, true>(
+            a, b, s, z, c, m, k, n, group_size, stream, c_zeroed);
+      }
     } else if (m <= 32) {
       launch_decode_streamk_t<type_id, 2, HAS_ZP, W8>(a, b, s, z, c, m, k, n,
                                                       group_size, stream,

@@ -555,8 +555,14 @@ __global__ void swordfish_decode_kernel(
 // so a tile's K slices may come from any number of warps with no locks and
 // no fixup pass. This removes split-K heuristics and wave quantization for
 // the window entirely.
+// CTA_QUAD maps claims at CTA granularity over n256 column quads: the four
+// warps take the four adjacent n64 columns of one quad over a common
+// (m-group, k-range) claim. Per-warp staging, pipeline, and epilogue are
+// untouched -- the quad buys 4x-amortized claim bookkeeping and adjacent
+// column addressing (the four B streams walk consecutive column blocks and
+// all four warps touch the same A slices while they are L2-resident).
 template <aphrodite::ScalarTypeId type_id, int M_TILES, bool HAS_ZP = false,
-          bool W8 = false>
+          bool W8 = false, bool CTA_QUAD = false>
 __global__ void swordfish_decode_streamk_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ A,
     const int32_t* __restrict__ B,
@@ -592,16 +598,18 @@ __global__ void swordfish_decode_streamk_kernel(
   const int ia_c0 = (kUnitK / 2) * (lane & 1);
 
   const int num_pairs = K / kUnitK;
-  const int nb_cnt = N / kBlockN;
+  const int nb_cnt = N / (CTA_QUAD ? kBlockN * kDecodeWarps : kBlockN);
   const int num_kb = K / kBlockK;
   const int ppg = group_size > 0 ? group_size / kUnitK : INT_MAX;
   const scalar_t2 zero2 = Dtype::num2num2(Dtype::float2num(0.0f));
   const uint64_t bpol = l2_evict_first_policy();
 
   const int64_t total = int64_t(m_groups) * nb_cnt * num_pairs;
-  const int total_warps = gridDim.x * kDecodeWarps;
-  const int64_t per = (total + total_warps - 1) / total_warps;
-  int64_t w = int64_t(blockIdx.x * kDecodeWarps + warp) * per;
+  const int total_claimers =
+      CTA_QUAD ? gridDim.x : gridDim.x * kDecodeWarps;
+  const int64_t per = (total + total_claimers - 1) / total_claimers;
+  int64_t w =
+      int64_t(CTA_QUAD ? blockIdx.x : blockIdx.x * kDecodeWarps + warp) * per;
   const int64_t w_end = w + per < total ? w + per : total;
 
   __shared__ int4 bstage[kDecodeWarps][kStagesT][2 * 32];
@@ -614,8 +622,10 @@ __global__ void swordfish_decode_streamk_kernel(
   while (w < w_end) {
     const int64_t cg = w / num_pairs;
     const int p_beg = int(w - cg * num_pairs);
-    const int col = int(cg / m_groups);
-    const int g_idx = int(cg - int64_t(col) * m_groups);
+    const int col_claim = int(cg / m_groups);
+    const int col =
+        CTA_QUAD ? col_claim * kDecodeWarps + warp : col_claim;
+    const int g_idx = int(cg - int64_t(col_claim) * m_groups);
     const int p_end =
         int(int64_t(num_pairs) < p_beg + (w_end - w) ? int64_t(num_pairs)
                                                      : p_beg + (w_end - w));
