@@ -93,6 +93,28 @@ __device__ __forceinline__ void red_add2(scalar_t2* p, scalar_t2 v) {
   }
 }
 
+// Grid-stride C zeroing for the atomic paths. A cudaMemsetAsync node runs
+// on the copy engine, and in a captured decode graph every compute-to-copy
+// transition costs an engine-switch gap -- at one memset per GEMM that idle
+// time measured ~90 us per decoded token on B200. A trivial kernel stays on
+// the compute engine.
+template <typename scalar_t>
+__global__ void swordfish_zero_c_kernel(int4* __restrict__ c, int64_t vecs) {
+  const int64_t i = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
+  const int4 z = {0, 0, 0, 0};
+  if (i < vecs) c[i] = z;
+}
+
+template <typename scalar_t>
+inline void launch_zero_c(void* c, int64_t m, int64_t n,
+                          cudaStream_t stream) {
+  const int64_t vecs = m * n * int64_t(sizeof(scalar_t)) / sizeof(int4);
+  const int threads = 256;
+  const int blocks = int((vecs + threads - 1) / threads);
+  swordfish_zero_c_kernel<scalar_t>
+      <<<blocks, threads, 0, stream>>>(reinterpret_cast<int4*>(c), vecs);
+}
+
 // ATOMIC_EPI replaces the cross-warp smem reduction with red.global adds
 // into a zeroed C, freeing 16 KB smem per CTA and both __syncthreads, and
 // making cross-CTA split-K free. Summation order is nondeterministic. The

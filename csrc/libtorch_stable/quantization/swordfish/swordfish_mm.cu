@@ -140,7 +140,7 @@ void launch_decode_streamk_t(const void* a, const int32_t* b, const void* s,
     ctas = int((max_warps + kDecodeWarps - 1) / kDecodeWarps);
   }
   if (ctas < 1) ctas = 1;
-  cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
+  launch_zero_c<scalar_t>(c, m, n, stream);
   swordfish_decode_streamk_kernel<type_id, T, HAS_ZP, W8>
       <<<ctas, kDecodeThreads, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(a), b,
@@ -189,7 +189,7 @@ void launch_decode_atomic_t(const void* a, const int32_t* b, const void* s,
   // At split 1 each CTA zeroes its exclusive C tile in-kernel. At split > 1
   // tiles are shared and the memset is required.
   if (split > 1) {
-    cudaMemsetAsync(c, 0, size_t(m) * n * sizeof(scalar_t), stream);
+    launch_zero_c<scalar_t>(c, m, n, stream);
   }
   swordfish_decode_kernel<type_id, true, T, HAS_ZP, W8>
       <<<sgrid, kDecodeThreads, 0, stream>>>(
