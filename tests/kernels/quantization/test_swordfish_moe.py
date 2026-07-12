@@ -63,14 +63,23 @@ def test_swordfish_moe_mm(m, bits, mul_topk, block):
     topk_weights = topk_weights.float().contiguous()
     topk_ids = topk_ids.to(torch.int32).contiguous()
 
-    sorted_ids, expert_ids, num_post_padded = moe_align_block_size(
-        topk_ids, block, e
-    )
+    sorted_ids, expert_ids, num_post_padded = moe_align_block_size(topk_ids, block, e)
 
     out = ops.swordfish_moe_mm(
-        a, b_packed, group_scales, sorted_ids, expert_ids, num_post_padded,
-        topk_weights if mul_topk else None, block, top_k, mul_topk, bits,
-        group, k, n,
+        a,
+        b_packed,
+        group_scales,
+        sorted_ids,
+        expert_ids,
+        num_post_padded,
+        topk_weights if mul_topk else None,
+        block,
+        top_k,
+        mul_topk,
+        bits,
+        group,
+        k,
+        n,
     )
     ref = _moe_ref(a, w_refs, topk_ids, topk_weights, top_k, mul_topk)
 
@@ -99,8 +108,20 @@ def test_swordfish_moe_mm_top1_w2_style():
     sorted_ids, expert_ids, num_post_padded = moe_align_block_size(ids, 16, e)
 
     out = ops.swordfish_moe_mm(
-        a, b_packed, group_scales, sorted_ids, expert_ids, num_post_padded,
-        weights, 16, 1, True, 4, group, k, n,
+        a,
+        b_packed,
+        group_scales,
+        sorted_ids,
+        expert_ids,
+        num_post_padded,
+        weights,
+        16,
+        1,
+        True,
+        4,
+        group,
+        k,
+        n,
     )
     ref = _moe_ref(a, w_refs, ids, weights, 1, True)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)

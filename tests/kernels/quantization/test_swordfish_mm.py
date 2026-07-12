@@ -64,9 +64,7 @@ def test_swordfish_mm_correct(mnk, group, dtype):
     assert out.shape == (m, n)
     assert out.dtype == dtype
     # machete-style tolerance
-    torch.testing.assert_close(
-        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
-    )
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2)
 
 
 def test_swordfish_mm_opcheck():
@@ -116,9 +114,7 @@ def test_swordfish_mm_awq_correct(mnk, group, dtype):
 
     assert out.shape == (m, n)
     assert out.dtype == dtype
-    torch.testing.assert_close(
-        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
-    )
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2)
 
 
 def test_swordfish_mm_awq_large_m():
@@ -151,9 +147,7 @@ def test_swordfish_mm_8bit_correct(mnk, group, dtype):
     out = ops.swordfish_mm(a, packed, scales, group, k, n, num_bits=8)
 
     assert out.shape == (m, n)
-    torch.testing.assert_close(
-        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
-    )
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2)
 
 
 def test_swordfish_mm_8bit_large_m():
@@ -168,7 +162,9 @@ def test_swordfish_mm_8bit_large_m():
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
 
 
-@pytest.mark.parametrize("mnk", [(1, 512, 256), (8, 512, 256), (16, 4096, 512), (33, 2048, 1024), (256, 2048, 512), (512, 1024, 512)])
+@pytest.mark.parametrize(
+    "mnk", [(1, 512, 256), (8, 512, 256), (16, 4096, 512), (33, 2048, 1024), (256, 2048, 512), (512, 1024, 512)]
+)
 @pytest.mark.parametrize("bits", [4, 8])
 def test_swordfish_mm_act_order(mnk, bits):
     # The row sort realigns group boundaries, so the kernel runs the plain
@@ -180,8 +176,7 @@ def test_swordfish_mm_act_order(mnk, bits):
     w_ref, packed, scales, sort_indices = swordfish_quantize_act_order(w, qt, 128)
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
-    out = ops.swordfish_mm(a, packed, scales, 128, k, n, num_bits=bits,
-                           perm=sort_indices)
+    out = ops.swordfish_mm(a, packed, scales, 128, k, n, num_bits=bits, perm=sort_indices)
     torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=8e-2)
 
 
@@ -198,9 +193,7 @@ def test_swordfish_mm_dense_tier(bits, dtype, monkeypatch):
     a = torch.randn((m, k), dtype=dtype, device=DEVICE)
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_mm(a, packed, scales, 128, k, n, num_bits=bits)
-    torch.testing.assert_close(
-        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2
-    )
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=5e-2 if dtype == torch.float16 else 8e-2)
 
 
 def test_swordfish_mm_dense_tier_awq(monkeypatch):
@@ -222,9 +215,7 @@ def test_swordfish_mm_dense_tier_act_order(monkeypatch):
     m, k, n = 128, 1024, 512
     torch.manual_seed(7)
     w = torch.randn((k, n), dtype=torch.bfloat16, device=DEVICE) / (k**0.5)
-    w_ref, packed, scales, sort_indices = swordfish_quantize_act_order(
-        w, scalar_types.uint4b8, 128
-    )
+    w_ref, packed, scales, sort_indices = swordfish_quantize_act_order(w, scalar_types.uint4b8, 128)
     a = torch.randn((m, k), dtype=torch.bfloat16, device=DEVICE)
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_mm(a, packed, scales, 128, k, n, perm=sort_indices)

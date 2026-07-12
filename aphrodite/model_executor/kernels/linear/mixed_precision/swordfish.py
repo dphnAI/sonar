@@ -40,35 +40,29 @@ class SwordfishLinearKernel(MPLinearKernel):
         if capability is None or capability.major not in (10, 11):
             return (
                 False,
-                "Swordfish requires the sm100 family (compute capability "
-                f"10.x or 11.x), got {capability}",
+                f"Swordfish requires the sm100 family (compute capability 10.x or 11.x), got {capability}",
             )
 
         if c.has_g_idx and c.partition_weight_shape[0] != c.full_weight_shape[0]:
             return (
                 False,
-                "Act reordering with a partial K (row-parallel TP) not "
-                "supported by Swordfish",
+                "Act reordering with a partial K (row-parallel TP) not supported by Swordfish",
             )
 
         supported_types = query_swordfish_supported_quant_types(c.zero_points)
         if c.weight_type not in supported_types:
             return (
                 False,
-                f"Quant type ({c.weight_type}) not supported by Swordfish v1, "
-                f"supported: {supported_types}",
+                f"Quant type ({c.weight_type}) not supported by Swordfish v1, supported: {supported_types}",
             )
 
         if c.group_size not in query_swordfish_supported_group_sizes(c.act_type):
             return (
                 False,
-                f"Group size ({c.group_size}) / act type ({c.act_type}) not "
-                "supported by Swordfish v1",
+                f"Group size ({c.group_size}) / act type ({c.act_type}) not supported by Swordfish v1",
             )
 
-        return check_swordfish_supports_shape(
-            c.partition_weight_shape[0], c.partition_weight_shape[1]
-        )
+        return check_swordfish_supports_shape(c.partition_weight_shape[0], c.partition_weight_shape[1])
 
     # weight_packed has {input_dim 0, output_dim 1, packed_dim 0} and
     # weight_scale has {input_dim 0, output_dim 1}.
@@ -80,9 +74,8 @@ class SwordfishLinearKernel(MPLinearKernel):
         # plain grouped order and only the activation columns need the sort
         # permutation at run time.
         if c.has_g_idx:
-            g_idx, g_idx_sort_indices = marlin_sort_g_idx(
-                getattr(layer, self.w_gidx_name)
-            )
+            assert self.w_gidx_name is not None
+            g_idx, g_idx_sort_indices = marlin_sort_g_idx(getattr(layer, self.w_gidx_name))
             self._transform_param(layer, self.w_gidx_name, lambda _: g_idx)
             layer.g_idx_sort_indices = g_idx_sort_indices
 

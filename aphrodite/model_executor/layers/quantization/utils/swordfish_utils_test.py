@@ -27,17 +27,10 @@ SWORDFISH_SUPPORTED_GROUP_SIZES = [-1, 32, 64, 128]
 
 
 def swordfish_shape_ok(size_k: int, size_n: int) -> bool:
-    return (
-        size_k > 0
-        and size_n > 0
-        and size_k % SWORDFISH_BLOCK_K == 0
-        and size_n % SWORDFISH_BLOCK_N == 0
-    )
+    return size_k > 0 and size_n > 0 and size_k % SWORDFISH_BLOCK_K == 0 and size_n % SWORDFISH_BLOCK_N == 0
 
 
-def swordfish_pack_weights_ref(
-    q_w: torch.Tensor, size_k: int, size_n: int, num_bits: int = 4
-) -> torch.Tensor:
+def swordfish_pack_weights_ref(q_w: torch.Tensor, size_k: int, size_n: int, num_bits: int = 4) -> torch.Tensor:
     """Pack unpacked int codes q_w [K, N] into the Swordfish ABI v1 tensor:
     int32 [NB, KB, 512] at 4-bit or [NB, KB, 1024] at 8-bit."""
     assert swordfish_shape_ok(size_k, size_n), (size_k, size_n)
@@ -72,9 +65,7 @@ def swordfish_quantize(
     assert quant_type in SWORDFISH_SUPPORTED_QUANT_TYPES
     size_k, size_n = w.shape
 
-    w_ref, q_w, s, _, _ = gptq_quantize_weights(
-        w, quant_type, group_size, act_order=False
-    )
+    w_ref, q_w, s, _, _ = gptq_quantize_weights(w, quant_type, group_size, act_order=False)
     packed = swordfish_pack_weights_ref(q_w, size_k, size_n, quant_type.size_bits)
     return w_ref, packed, s
 
@@ -95,9 +86,7 @@ def swordfish_quantize_act_order(
     assert quant_type in SWORDFISH_SUPPORTED_QUANT_TYPES
     size_k, size_n = w.shape
 
-    w_ref, q_w, s, g_idx, _ = gptq_quantize_weights(
-        w, quant_type, group_size, act_order=True
-    )
+    w_ref, q_w, s, g_idx, _ = gptq_quantize_weights(w, quant_type, group_size, act_order=True)
     q_w, g_idx, sort_indices = sort_weights(q_w, g_idx)
     packed = swordfish_pack_weights_ref(q_w, size_k, size_n, quant_type.size_bits)
     return w_ref, packed, s, sort_indices.to(torch.int)

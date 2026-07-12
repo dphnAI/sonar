@@ -23,10 +23,11 @@ torch::stable::Tensor swordfish_prefill_mm(
     std::optional<torch::stable::Tensor> const& group_zps, int64_t num_bits,
     int64_t group_size, int64_t size_k, int64_t size_n) {
 #if defined(CUTLASS_ARCH_MMA_SM100_SUPPORTED)
-  STD_TORCH_CHECK(shape_ok(size_k, size_n) && size_k % 128 == 0 &&
-                      size_n % 128 == 0,
-                  "swordfish prefill v1 requires K % 128 == 0 and "
-                  "N % 128 == 0; got K=", size_k, " N=", size_n);
+  STD_TORCH_CHECK(
+      shape_ok(size_k, size_n) && size_k % 128 == 0 && size_n % 128 == 0,
+      "swordfish prefill v1 requires K % 128 == 0 and "
+      "N % 128 == 0; got K=",
+      size_k, " N=", size_n);
   STD_TORCH_CHECK(a.dim() == 2 && a.size(1) == size_k,
                   "a must be [M, K] with K=", size_k);
   STD_TORCH_CHECK(a.stride(1) == 1 && a.stride(0) == size_k,
@@ -39,7 +40,8 @@ torch::stable::Tensor swordfish_prefill_mm(
                   "group_scales dtype must match a");
   STD_TORCH_CHECK(group_size == 32 || group_size == 64 || group_size == 128,
                   "swordfish prefill supports group sizes 32, 64 and 128; "
-                  "got ", group_size);
+                  "got ",
+                  group_size);
 
   STD_TORCH_CHECK(num_bits == 4 || num_bits == 8,
                   "swordfish supports 4-bit and 8-bit weights");
@@ -60,12 +62,10 @@ torch::stable::Tensor swordfish_prefill_mm(
                   "group_scales must be [", num_groups, ", ", size_n, "]");
   const bool has_zp = group_zps.has_value();
   if (has_zp) {
-    STD_TORCH_CHECK(group_zps->scalar_type() == a_st &&
-                        group_zps->dim() == 2 &&
-                        group_zps->size(0) == num_groups &&
-                        group_zps->size(1) == size_n,
-                    "group_zps must be [", num_groups, ", ", size_n,
-                    "] with a's dtype");
+    STD_TORCH_CHECK(
+        group_zps->scalar_type() == a_st && group_zps->dim() == 2 &&
+            group_zps->size(0) == num_groups && group_zps->size(1) == size_n,
+        "group_zps must be [", num_groups, ", ", size_n, "] with a's dtype");
   }
 
   const int64_t size_m = a.size(0);
@@ -85,15 +85,13 @@ torch::stable::Tensor swordfish_prefill_mm(
                   "8-bit prefill supports group_size 128 only");
   const void* zp_ptr = has_zp ? group_zps->const_data_ptr() : nullptr;
   if (a_st == torch::headeronly::ScalarType::Half) {
-    prefill::run_prefill_all<cutlass::half_t>(a, b_packed, group_scales,
-                                              zp_ptr, has_zp, w8,
-                                              int(group_size), c, M, N, K,
-                                              stream);
+    prefill::run_prefill_all<cutlass::half_t>(a, b_packed, group_scales, zp_ptr,
+                                              has_zp, w8, int(group_size), c, M,
+                                              N, K, stream);
   } else {
-    prefill::run_prefill_all<cutlass::bfloat16_t>(a, b_packed, group_scales,
-                                                  zp_ptr, has_zp, w8,
-                                                  int(group_size), c, M, N, K,
-                                                  stream);
+    prefill::run_prefill_all<cutlass::bfloat16_t>(
+        a, b_packed, group_scales, zp_ptr, has_zp, w8, int(group_size), c, M, N,
+        K, stream);
   }
   return c;
 #else

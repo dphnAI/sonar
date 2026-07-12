@@ -53,9 +53,7 @@ def test_swordfish_prefill_mm_correct(mnk):
     out = ops.swordfish_prefill_mm(a, packed, scales, GROUP, k, n)
 
     assert out.shape == (m, n)
-    torch.testing.assert_close(
-        out.to(torch.float32), ref, rtol=1e-1, atol=5e-2
-    )
+    torch.testing.assert_close(out.to(torch.float32), ref, rtol=1e-1, atol=5e-2)
 
 
 def test_swordfish_prefill_mm_opcheck():
@@ -117,6 +115,8 @@ def test_swordfish_prefill_mm_dtypes_groups(mnk, dtype, group):
     ref = a.to(torch.float32) @ w_ref.to(torch.float32)
     out = ops.swordfish_prefill_mm(a, packed, scales, group, k, n)
     torch.testing.assert_close(
-        out.to(torch.float32), ref, rtol=1e-1,
+        out.to(torch.float32),
+        ref,
+        rtol=1e-1,
         atol=5e-2 if dtype == torch.float16 else 8e-2,
     )

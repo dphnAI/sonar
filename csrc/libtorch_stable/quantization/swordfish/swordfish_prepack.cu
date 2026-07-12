@@ -61,21 +61,21 @@ torch::stable::Tensor swordfish_prepack_B(
   // Stage 1: Marlin in-tile permutation. A non-empty perm applies the
   // act_order row sort (g_idx argsort) during the repack.
   torch::stable::Tensor perm_t =
-      perm.has_value() ? *perm
-                       : torch::stable::empty(
-                             {0}, torch::headeronly::ScalarType::Int,
-                             std::nullopt, b_q_weight.device());
-  torch::stable::Tensor marlin_flat = gptq_marlin_repack(
-      b_q_weight, perm_t, size_k, size_n, num_bits,
-      /*is_a_8bit=*/false);
+      perm.has_value()
+          ? *perm
+          : torch::stable::empty({0}, torch::headeronly::ScalarType::Int,
+                                 std::nullopt, b_q_weight.device());
+  torch::stable::Tensor marlin_flat =
+      gptq_marlin_repack(b_q_weight, perm_t, size_k, size_n, num_bits,
+                         /*is_a_8bit=*/false);
 
   // Stage 2: re-tile to (NB, KB, 512|1024) int32 blocks.
   const int64_t nb = num_blocks_n(size_n);
   const int64_t kb = num_blocks_k(size_k);
   const int64_t words = num_bits == 8 ? kBlockInt32_8 : kBlockInt32;
-  torch::stable::Tensor out = torch::stable::empty(
-      {nb, kb, words}, torch::headeronly::ScalarType::Int, std::nullopt,
-      b_q_weight.device());
+  torch::stable::Tensor out =
+      torch::stable::empty({nb, kb, words}, torch::headeronly::ScalarType::Int,
+                           std::nullopt, b_q_weight.device());
 
   dim3 grid(nb, kb);
   if (num_bits == 8) {

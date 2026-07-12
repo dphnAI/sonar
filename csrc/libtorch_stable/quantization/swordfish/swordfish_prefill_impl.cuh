@@ -45,9 +45,12 @@ using EpilogueSchedule = cutlass::epilogue::TmaWarpSpecialized2Sm;
 using LayoutC = cutlass::layout::RowMajor;
 constexpr int AlignmentC = 8;  // 128b / 16b elems, fp16 and bf16 alike
 
-using StrideA = cutlass::gemm::TagToStrideA_t<cutlass::layout::RowMajor>;  // packed slot (unused)
-using StrideB = cutlass::gemm::TagToStrideB_t<
-    typename cutlass::layout::LayoutTranspose<cutlass::layout::RowMajor>::type>;  // activations
+using StrideA =
+    cutlass::gemm::TagToStrideA_t<cutlass::layout::RowMajor>;  // packed slot
+                                                               // (unused)
+using StrideB =
+    cutlass::gemm::TagToStrideB_t<typename cutlass::layout::LayoutTranspose<
+        cutlass::layout::RowMajor>::type>;  // activations
 
 static constexpr cute::UMMA::Major UmmaMajorA = cute::UMMA::Major::K;
 static constexpr cute::UMMA::Major UmmaMajorB = cute::UMMA::Major::K;
@@ -63,61 +66,75 @@ struct PrefillCfg {
   using MmaType = TAct;
   using MmaTileShape = Shape<_256, Int<kTileN>, _128>;
   // A third element in the A tuple enables the collective's zero-point row.
-  using ElementPairA = cute::conditional_t<kHasZp,
-      cute::tuple<uint8_t, MmaType, MmaType>, cute::tuple<uint8_t, MmaType>>;
+  using ElementPairA =
+      cute::conditional_t<kHasZp, cute::tuple<uint8_t, MmaType, MmaType>,
+                          cute::tuple<uint8_t, MmaType>>;
   using ScaleConfig = cutlass::detail::Sm100MixedInputBlockwiseScaleConfig<
       /*GranN=*/1, kGran>;
   using LayoutScale = decltype(ScaleConfig::deduce_layout_scale());
   using StridePairA = decltype(cute::make_tuple(StrideA{}, LayoutScale{}));
 
-  using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
-      ArchTag, OperatorClass,
-      MmaTileShape, ClusterShape,
-      cutlass::epilogue::collective::EpilogueTileAuto,
-      ElementAccumulator, ElementAccumulator,
-      MmaType, typename cutlass::layout::LayoutTranspose<LayoutC>::type, AlignmentC,
-      MmaType, typename cutlass::layout::LayoutTranspose<LayoutC>::type, AlignmentC,
-      EpilogueSchedule
-    >::CollectiveOp;
+  using CollectiveEpilogue =
+      typename cutlass::epilogue::collective::CollectiveBuilder<
+          ArchTag, OperatorClass, MmaTileShape, ClusterShape,
+          cutlass::epilogue::collective::EpilogueTileAuto, ElementAccumulator,
+          ElementAccumulator, MmaType,
+          typename cutlass::layout::LayoutTranspose<LayoutC>::type, AlignmentC,
+          MmaType, typename cutlass::layout::LayoutTranspose<LayoutC>::type,
+          AlignmentC, EpilogueSchedule>::CollectiveOp;
 
   // The CUTLASS convenience builder has no branch for 2-SM atoms with
   // smem-sourced A, so the SS atom is constructed directly. M is the full
   // cluster tile-M spanning both CTAs.
   using TiledMma = decltype(cute::make_tiled_mma(
       cute::SM100_MMA_F16BF16_2x1SM_SS<MmaType, MmaType, ElementAccumulator,
-          256, kTileN, UmmaMajorA, UmmaMajorB>{}));
+                                       256, kTileN, UmmaMajorA, UmmaMajorB>{}));
 
   // partition_shape_A/B take CTA-local shapes for a 2-SM atom.
   using CtaShape = decltype(shape_div(MmaTileShape{}, ClusterShape{}));
-  using MmaShapeA_MK = decltype(partition_shape_A(TiledMma{}, make_shape(cute::size<0>(CtaShape{}),
-                                                                         cute::size<2>(CtaShape{}))));
-  using MmaShapeB_NK = decltype(partition_shape_B(TiledMma{}, make_shape(cute::size<1>(CtaShape{}),
-                                                                         cute::size<2>(CtaShape{}))));
-  using BlockTileA_M = decltype(cute::size<0,0>(MmaShapeA_MK{}) * cute::size<1>(MmaShapeA_MK{}));
-  using BlockTileA_K = decltype(cute::size<0,1>(MmaShapeA_MK{}) * cute::size<2>(MmaShapeA_MK{}));
-  using BlockTileB_N = decltype(cute::size<0,0>(MmaShapeB_NK{}) * cute::size<1>(MmaShapeB_NK{}));
-  using BlockTileB_K = decltype(cute::size<0,1>(MmaShapeB_NK{}) * cute::size<2>(MmaShapeB_NK{}));
+  using MmaShapeA_MK = decltype(partition_shape_A(
+      TiledMma{},
+      make_shape(cute::size<0>(CtaShape{}), cute::size<2>(CtaShape{}))));
+  using MmaShapeB_NK = decltype(partition_shape_B(
+      TiledMma{},
+      make_shape(cute::size<1>(CtaShape{}), cute::size<2>(CtaShape{}))));
+  using BlockTileA_M = decltype(cute::size<0, 0>(MmaShapeA_MK{}) *
+                                cute::size<1>(MmaShapeA_MK{}));
+  using BlockTileA_K = decltype(cute::size<0, 1>(MmaShapeA_MK{}) *
+                                cute::size<2>(MmaShapeA_MK{}));
+  using BlockTileB_N = decltype(cute::size<0, 0>(MmaShapeB_NK{}) *
+                                cute::size<1>(MmaShapeB_NK{}));
+  using BlockTileB_K = decltype(cute::size<0, 1>(MmaShapeB_NK{}) *
+                                cute::size<2>(MmaShapeB_NK{}));
 
-  using SmemLayoutAtomACompute = decltype(cutlass::gemm::collective::detail::sm100_smem_selector<
-      UmmaMajorA, MmaType, BlockTileA_M, BlockTileA_K>());
-  using SmemLayoutAtomPairA = cutlass::gemm::collective::detail::CollectiveMmaEmulatedLayoutAtomType<
-      SmemLayoutAtomACompute, SmemLayoutAtomACompute>;
-  using CopyAtomPairA = cutlass::gemm::collective::detail::CollectiveMmaEmulatedCopyType<
-      Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, uint8_t>,
-      Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, MmaType>>;
+  using SmemLayoutAtomACompute =
+      decltype(cutlass::gemm::collective::detail::sm100_smem_selector<
+               UmmaMajorA, MmaType, BlockTileA_M, BlockTileA_K>());
+  using SmemLayoutAtomPairA =
+      cutlass::gemm::collective::detail::CollectiveMmaEmulatedLayoutAtomType<
+          SmemLayoutAtomACompute, SmemLayoutAtomACompute>;
+  using CopyAtomPairA =
+      cutlass::gemm::collective::detail::CollectiveMmaEmulatedCopyType<
+          Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, uint8_t>,
+          Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, MmaType>>;
 
-  using SmemLayoutAtomB = decltype(cutlass::gemm::collective::detail::sm100_smem_selector<
-      UmmaMajorB, MmaType, BlockTileB_N, BlockTileB_K>());
-  using SmemLayoutAtomPairB = cutlass::gemm::collective::detail::CollectiveMmaEmulatedLayoutAtomType<
-      SmemLayoutAtomB, SmemLayoutAtomB>;
-  using CopyAtomPairB = cutlass::gemm::collective::detail::CollectiveMmaEmulatedCopyType<
-      Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, MmaType>,
-      Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, MmaType>>;
+  using SmemLayoutAtomB =
+      decltype(cutlass::gemm::collective::detail::sm100_smem_selector<
+               UmmaMajorB, MmaType, BlockTileB_N, BlockTileB_K>());
+  using SmemLayoutAtomPairB =
+      cutlass::gemm::collective::detail::CollectiveMmaEmulatedLayoutAtomType<
+          SmemLayoutAtomB, SmemLayoutAtomB>;
+  using CopyAtomPairB =
+      cutlass::gemm::collective::detail::CollectiveMmaEmulatedCopyType<
+          Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, MmaType>,
+          Copy_Atom<AutoVectorizingCopyWithAssumedAlignment<128>, MmaType>>;
 
   // Pipeline stage counts, derived from the smem budget.
-  static constexpr int kSmemCapacity = cutlass::gemm::collective::detail::sm100_smem_capacity_bytes;
+  static constexpr int kSmemCapacity =
+      cutlass::gemm::collective::detail::sm100_smem_capacity_bytes;
   static constexpr int kKernelCarveout = 2048;
-  static constexpr int kEpilogueBytes = int(sizeof(typename CollectiveEpilogue::SharedStorage));
+  static constexpr int kEpilogueBytes =
+      int(sizeof(typename CollectiveEpilogue::SharedStorage));
   // TMEM is 512 columns and an accumulator stage needs kTileN of them.
   static constexpr int kAccumStages = 512 / kTileN;
   // B stage is the CTA's half of the N-split activation tile, kTileN/2 rows.
@@ -126,40 +143,38 @@ struct PrefillCfg {
                                           (kHasZp ? 256 : 0);
   static constexpr int kComputeStageBytes = 32768 + 32;
   static constexpr int kT2MStages = 2;
-  static constexpr int kAvail = kSmemCapacity - kKernelCarveout - kEpilogueBytes
-                              - kAccumStages * 32 - kT2MStages * kComputeStageBytes;
-  static constexpr int kL2TStages = kAvail / kInputStageBytes < 4 ? kAvail / kInputStageBytes : 4;
+  static constexpr int kAvail = kSmemCapacity - kKernelCarveout -
+                                kEpilogueBytes - kAccumStages * 32 -
+                                kT2MStages * kComputeStageBytes;
+  static constexpr int kL2TStages =
+      kAvail / kInputStageBytes < 4 ? kAvail / kInputStageBytes : 4;
   static_assert(kL2TStages >= 2, "not enough SMEM for two input stages");
 
-  using CollectiveMainloop = cutlass::gemm::collective::SwordfishMainloopSm100MixedInput<
-      kL2TStages, kT2MStages, /*SchedulerStages=*/3, kAccumStages, ClusterShape,
-      MmaTileShape,
-      ElementPairA, StridePairA,
-      MmaType, StrideB,
-      TiledMma,
-      cute::SM90_TMA_LOAD, SmemLayoutAtomPairA, CopyAtomPairA, cute::identity,
-      // Activations must use the cta_group::2 TMA. The 2x1SM atom N-splits B
-      // across the CTA pair and the leader's MMA reads the peer's half, so
-      // the copy must deliver both halves with one arrival on the leader's
-      // barrier. A per-CTA TMA arrives at local barriers and races.
-      cute::SM100_TMA_2SM_LOAD, SmemLayoutAtomPairB, CopyAtomPairB,
-      cute::identity, kWBits>;
+  using CollectiveMainloop =
+      cutlass::gemm::collective::SwordfishMainloopSm100MixedInput<
+          kL2TStages, kT2MStages, /*SchedulerStages=*/3, kAccumStages,
+          ClusterShape, MmaTileShape, ElementPairA, StridePairA, MmaType,
+          StrideB, TiledMma, cute::SM90_TMA_LOAD, SmemLayoutAtomPairA,
+          CopyAtomPairA, cute::identity,
+          // Activations must use the cta_group::2 TMA. The 2x1SM atom N-splits
+          // B across the CTA pair and the leader's MMA reads the peer's half,
+          // so the copy must deliver both halves with one arrival on the
+          // leader's barrier. A per-CTA TMA arrives at local barriers and
+          // races.
+          cute::SM100_TMA_2SM_LOAD, SmemLayoutAtomPairB, CopyAtomPairB,
+          cute::identity, kWBits>;
 
   // Forked kernel layer whose warp layout derives from the collective's
   // NumTransformationThreads.
   using GemmKernel = cutlass::gemm::kernel::SwordfishPrefillKernel<
-      Shape<int, int, int, int>,
-      CollectiveMainloop,
-      CollectiveEpilogue,
-      void>;
+      Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>;
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
 };
 
 template <class Cfg>
 void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
          torch::stable::Tensor& group_scales, const void* zp_ptr,
-         torch::stable::Tensor& c, int M, int N, int K,
-         cudaStream_t stream) {
+         torch::stable::Tensor& c, int M, int N, int K, cudaStream_t stream) {
   using Gemm = typename Cfg::Gemm;
   using GemmKernel = typename Cfg::GemmKernel;
   using MmaType = typename Cfg::MmaType;
@@ -173,7 +188,8 @@ void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
   int m_chunk = int(kAChunkBytes / (int64_t(K) * 2));
   m_chunk = std::max(256, (m_chunk / 128) * 128);
 
-  LayoutScale layout_S = ScaleConfig::tile_atom_to_shape_scale(cute::make_shape(N, K, 1));
+  LayoutScale layout_S =
+      ScaleConfig::tile_atom_to_shape_scale(cute::make_shape(N, K, 1));
   auto* c_base = reinterpret_cast<MmaType*>(c.mutable_data_ptr());
   const auto* a_base = reinterpret_cast<MmaType const*>(a.const_data_ptr());
 
@@ -183,7 +199,8 @@ void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
   for (int m0 = 0; m0 < M; m0 += m_chunk) {
     const int mc = std::min(m_chunk, M - m0);
 
-    auto stride_act = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(mc, K, 1));
+    auto stride_act =
+        cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(mc, K, 1));
     auto stride_c = cutlass::make_cute_packed_stride(
         typename GemmKernel::StrideC{}, cute::make_shape(N, mc, 1));
     auto stride_d = cutlass::make_cute_packed_stride(
@@ -195,8 +212,8 @@ void run(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
     typename Gemm::Arguments arguments{
         cutlass::gemm::GemmUniversalMode::kGemm,
         {N, mc, K, 1},
-        {reinterpret_cast<uint8_t const*>(b_packed.const_data_ptr()),
-         StrideA{}, a_base + int64_t(m0) * K, stride_act,
+        {reinterpret_cast<uint8_t const*>(b_packed.const_data_ptr()), StrideA{},
+         a_base + int64_t(m0) * K, stride_act,
          reinterpret_cast<MmaType const*>(group_scales.const_data_ptr()),
          layout_S, reinterpret_cast<MmaType const*>(zp_ptr)},
         {{1.0f, 0.0f}, c_ptr, stride_c, c_ptr, stride_d}};
@@ -237,8 +254,8 @@ void run_prefill_all(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
   // the way K-heavy shapes do, so 8-bit always runs 256x128.
   const bool narrow = w8 || (K >= 2 * N && K >= 8192);
   if (w8) {
-    run<PrefillCfg<128, false, 8, TAct>>(a, b_packed, group_scales, nullptr,
-                                         c, M, N, K, stream);
+    run<PrefillCfg<128, false, 8, TAct>>(a, b_packed, group_scales, nullptr, c,
+                                         M, N, K, stream);
   } else if (gran == 32) {
     if (has_zp) {
       if (narrow) {
@@ -274,18 +291,18 @@ void run_prefill_all(torch::stable::Tensor& a, torch::stable::Tensor& b_packed,
   } else {
     if (has_zp) {
       if (narrow) {
-        run<PrefillCfg<128, true, 4, TAct>>(a, b_packed, group_scales, zp_ptr, c, M,
-                                   N, K, stream);
+        run<PrefillCfg<128, true, 4, TAct>>(a, b_packed, group_scales, zp_ptr,
+                                            c, M, N, K, stream);
       } else {
-        run<PrefillCfg<256, true, 4, TAct>>(a, b_packed, group_scales, zp_ptr, c, M,
-                                   N, K, stream);
+        run<PrefillCfg<256, true, 4, TAct>>(a, b_packed, group_scales, zp_ptr,
+                                            c, M, N, K, stream);
       }
     } else if (narrow) {
-      run<PrefillCfg<128, false, 4, TAct>>(a, b_packed, group_scales,
-                                           nullptr, c, M, N, K, stream);
+      run<PrefillCfg<128, false, 4, TAct>>(a, b_packed, group_scales, nullptr,
+                                           c, M, N, K, stream);
     } else {
-      run<PrefillCfg<256, false, 4, TAct>>(a, b_packed, group_scales,
-                                           nullptr, c, M, N, K, stream);
+      run<PrefillCfg<256, false, 4, TAct>>(a, b_packed, group_scales, nullptr,
+                                           c, M, N, K, stream);
     }
   }
 }

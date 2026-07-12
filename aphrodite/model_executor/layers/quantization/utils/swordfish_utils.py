@@ -29,9 +29,7 @@ def query_swordfish_supported_group_sizes(act_type: torch.dtype) -> list[int]:
     return [-1, 32, 64, 128]
 
 
-def check_swordfish_supports_shape(
-    in_features: int, out_features: int
-) -> tuple[bool, str | None]:
+def check_swordfish_supports_shape(in_features: int, out_features: int) -> tuple[bool, str | None]:
     if in_features % SWORDFISH_BLOCK_K != 0:
         return (
             False,

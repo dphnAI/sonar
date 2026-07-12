@@ -106,8 +106,7 @@ __global__ void swordfish_zero_c_kernel(int4* __restrict__ c, int64_t vecs) {
 }
 
 template <typename scalar_t>
-inline void launch_zero_c(void* c, int64_t m, int64_t n,
-                          cudaStream_t stream) {
+inline void launch_zero_c(void* c, int64_t m, int64_t n, cudaStream_t stream) {
   const int64_t vecs = m * n * int64_t(sizeof(scalar_t)) / sizeof(int4);
   const int threads = 256;
   const int blocks = int((vecs + threads - 1) / threads);
@@ -122,10 +121,11 @@ inline void launch_zero_c(void* c, int64_t m, int64_t n,
 // of the permute range loads its perm entry coalesced and gathers one
 // activation half; the tail range zeroes C in int4 stores.
 template <typename scalar_t>
-__global__ void swordfish_prep_kernel(
-    const scalar_t* __restrict__ a, const int32_t* __restrict__ perm,
-    scalar_t* __restrict__ a_perm, int4* __restrict__ c, int64_t m,
-    int64_t k, int64_t c_vecs) {
+__global__ void swordfish_prep_kernel(const scalar_t* __restrict__ a,
+                                      const int32_t* __restrict__ perm,
+                                      scalar_t* __restrict__ a_perm,
+                                      int4* __restrict__ c, int64_t m,
+                                      int64_t k, int64_t c_vecs) {
   const int64_t idx = blockIdx.x * int64_t(blockDim.x) + threadIdx.x;
   const int64_t perm_work = m * k;
   if (idx < perm_work) {
@@ -163,8 +163,8 @@ __global__ void swordfish_decode_kernel(
     const int32_t* __restrict__ B,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
-    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
-    int M, int K, int N, int group_size) {
+    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C, int M,
+    int K, int N, int group_size) {
   static_assert(M_TILES >= 1 && M_TILES <= 3, "supported m-tile fusion: 1-3");
   static_assert(M_TILES == 1 || ATOMIC_EPI,
                 "multi-m-tile is an atomic-epilogue configuration");
@@ -174,9 +174,9 @@ __global__ void swordfish_decode_kernel(
   // 8-bit units are half the activation bytes, so the fused tiers run
   // deeper pipelines in the same smem.
   constexpr int kStagesT =
-      M_TILES == 1 ? kStages
-                   : (M_TILES == 2 ? (W8 ? 5 : 4)
-                                   : (M_TILES == 3 ? 3 : (W8 ? 4 : 2)));
+      M_TILES == 1
+          ? kStages
+          : (M_TILES == 2 ? (W8 ? 5 : 4) : (M_TILES == 3 ? 3 : (W8 ? 4 : 2)));
   // A staging unit stays 1 KB of packed weights at both widths: a k32 slice
   // pair at 4-bit, a single k16 slice at 8-bit (deeper W8 pipelines fit the
   // freed smem but measured flat).
@@ -194,8 +194,8 @@ __global__ void swordfish_decode_kernel(
   const int group_id = lane / 4;
   const int tig = lane % 4;  // thread-in-group
 
-  const int nb = blockIdx.y;                        // n64 block-column
-  const int m_base = blockIdx.x * (16 * M_TILES);   // first m16 tile
+  const int nb = blockIdx.y;                       // n64 block-column
+  const int m_base = blockIdx.x * (16 * M_TILES);  // first m16 tile
   const int col_base = nb * kBlockN;
   const int num_kb = K / kBlockK;
 
@@ -230,8 +230,8 @@ __global__ void swordfish_decode_kernel(
       const int rows = min(16 * M_TILES, M - m_base);
       auto* c2 = reinterpret_cast<scalar_t2*>(C);
       for (int i = threadIdx.x; i < rows * 32; i += kDecodeThreads) {
-        c2[int64_t(m_base + (i >> 5)) * (N >> 1) + (col_base >> 1) +
-           (i & 31)] = zero2;
+        c2[int64_t(m_base + (i >> 5)) * (N >> 1) + (col_base >> 1) + (i & 31)] =
+            zero2;
       }
       __syncthreads();  // tile zeroed before any warp's atomic epilogue
     }
@@ -258,7 +258,7 @@ __global__ void swordfish_decode_kernel(
   // guards never store.
   const int ldsm_row = lane & 15;
   const int ldsm_col = (lane >> 4) << 3;
-  auto load_a = [&](const scalar_t (*sa)[kUnitK], int ks, FragA& fa) {
+  auto load_a = [&](const scalar_t(*sa)[kUnitK], int ks, FragA& fa) {
     ldsm4<type_id>(fa, &sa[ldsm_row][ldsm_col + ks]);
   };
 
@@ -275,15 +275,15 @@ __global__ void swordfish_decode_kernel(
     return reinterpret_cast<const scalar_t2*>(base + int64_t(g) * N +
                                               col_base)[lane];
   };
-  auto expand_row = [&](scalar_t2 mine, scalar_t2 (&dst)[4][2]) {
+  auto expand_row = [&](scalar_t2 mine, scalar_t2(&dst)[4][2]) {
     const uint32_t sel = group_id & 1;  // half index within the shfl'd pair
 #pragma unroll
     for (int j = 0; j < 4; j++) {
 #pragma unroll
       for (int b = 0; b < 2; b++) {
         // half index i = 16j + 8b + group_id -> lane i/2, element i%2
-        const scalar_t2 v = __shfl_sync(
-            0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
+        const scalar_t2 v =
+            __shfl_sync(0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
         const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
         const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
         dst[j][b] = Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
@@ -293,7 +293,7 @@ __global__ void swordfish_decode_kernel(
 
   // One k16 slice. Dequant the lane's word once, scale once, then fan the
   // mma out across the CTA's m16 tiles.
-  auto process_slice = [&](const FragA (&fa)[M_TILES], const marlin::I4& bqa,
+  auto process_slice = [&](const FragA(&fa)[M_TILES], const marlin::I4& bqa,
                            const marlin::I4& bqb) {
 #pragma unroll
     for (int j = 0; j < 4; j++) {
@@ -304,8 +304,7 @@ __global__ void swordfish_decode_kernel(
         marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
             src.elems[(2 * j) & 3], reinterpret_cast<scalar_t2*>(&frag_b0));
         marlin::dequant<scalar_t2, aphrodite::kU8B128.id(), false>(
-            src.elems[(2 * j + 1) & 3],
-            reinterpret_cast<scalar_t2*>(&frag_b1));
+            src.elems[(2 * j + 1) & 3], reinterpret_cast<scalar_t2*>(&frag_b1));
       } else {
         const int b_quant_0 = bqa.elems[j];
         const int b_quant_1 = b_quant_0 >> 8;
@@ -338,7 +337,7 @@ __global__ void swordfish_decode_kernel(
   };
 
   // One pair = two consecutive k16 slices from one staged buffer.
-  auto process_pair = [&](int p, const scalar_t (*sa)[16][kUnitK],
+  auto process_pair = [&](int p, const scalar_t(*sa)[16][kUnitK],
                           const int4* buf) {
     FragA fa0[M_TILES], fa1[M_TILES];
     if constexpr (ATOMIC_EPI) {
@@ -381,8 +380,7 @@ __global__ void swordfish_decode_kernel(
   const int slice_pairs = (num_pairs + gridDim.z - 1) / gridDim.z;
   const int s_beg = blockIdx.z * slice_pairs;
   const int s_end = min(s_beg + slice_pairs, num_pairs);
-  const int pairs_per_warp =
-      (s_end - s_beg + kDecodeWarps - 1) / kDecodeWarps;
+  const int pairs_per_warp = (s_end - s_beg + kDecodeWarps - 1) / kDecodeWarps;
   const int p_beg = s_beg + warp * pairs_per_warp;
   const int p_end = min(p_beg + pairs_per_warp, s_end);
 
@@ -416,8 +414,7 @@ __global__ void swordfish_decode_kernel(
   // both measurable in this loop. Offsets fit int32 for every shape the
   // host validates.
   const uint64_t bpol = l2_evict_first_policy();
-  const int32_t* ipair_ptr =
-      b_col + p_beg * kPairInt32 + (W8 ? 8 : 4) * lane;
+  const int32_t* ipair_ptr = b_col + p_beg * kPairInt32 + (W8 ? 8 : 4) * lane;
   const int ia_row = lane >> 1;
   const int ia_c0 = (kUnitK / 2) * (lane & 1);
   // Per-tile activation cursors. Only valid rows are staged, since clamping
@@ -436,10 +433,9 @@ __global__ void swordfish_decode_kernel(
     if (ipend > 0) {
       ipend--;
       if constexpr (W8) {
-        cp_async4_evict_first(&bstage[warp][slot][2 * lane], ipair_ptr,
+        cp_async4_evict_first(&bstage[warp][slot][2 * lane], ipair_ptr, bpol);
+        cp_async4_evict_first(&bstage[warp][slot][2 * lane + 1], ipair_ptr + 4,
                               bpol);
-        cp_async4_evict_first(&bstage[warp][slot][2 * lane + 1],
-                              ipair_ptr + 4, bpol);
       } else {
         cp_async4_evict_first(&bstage[warp][slot][lane], ipair_ptr, bpol);
         cp_async4_evict_first(&bstage[warp][slot][32 + lane],
@@ -450,8 +446,7 @@ __global__ void swordfish_decode_kernel(
 #pragma unroll
         for (int t = 0; t < M_TILES; t++) {
           if (ia_okt[t]) {
-            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0],
-                              ia_ptr[t]);
+            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0], ia_ptr[t]);
             if constexpr (!W8) {
               marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0 + 8],
                                 ia_ptr[t] + 8);
@@ -504,7 +499,8 @@ __global__ void swordfish_decode_kernel(
                 Dtype::nums2num2(Dtype::float2num(v.x), Dtype::float2num(v.y)));
           if (r1ok[t])
             red_add2(
-                reinterpret_cast<scalar_t2*>(C + int64_t(row0[t] + 8) * N + col),
+                reinterpret_cast<scalar_t2*>(C + int64_t(row0[t] + 8) * N +
+                                             col),
                 Dtype::nums2num2(Dtype::float2num(v.z), Dtype::float2num(v.w)));
         }
       }
@@ -568,14 +564,14 @@ __global__ void swordfish_decode_streamk_kernel(
     const int32_t* __restrict__ B,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
-    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C,
-    int M, int K, int N, int group_size, int m_groups) {
+    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ C, int M,
+    int K, int N, int group_size, int m_groups) {
   // 8-bit units are half the activation bytes, so the fused tiers run
   // deeper pipelines in the same smem.
   constexpr int kStagesT =
-      M_TILES == 1 ? kStages
-                   : (M_TILES == 2 ? (W8 ? 5 : 4)
-                                   : (M_TILES == 3 ? 3 : (W8 ? 4 : 2)));
+      M_TILES == 1
+          ? kStages
+          : (M_TILES == 2 ? (W8 ? 5 : 4) : (M_TILES == 3 ? 3 : (W8 ? 4 : 2)));
   // A staging unit stays 1 KB of packed weights at both widths: a k32 slice
   // pair at 4-bit, a single k16 slice at 8-bit (deeper W8 pipelines fit the
   // freed smem but measured flat).
@@ -605,8 +601,7 @@ __global__ void swordfish_decode_streamk_kernel(
   const uint64_t bpol = l2_evict_first_policy();
 
   const int64_t total = int64_t(m_groups) * nb_cnt * num_pairs;
-  const int total_claimers =
-      CTA_QUAD ? gridDim.x : gridDim.x * kDecodeWarps;
+  const int total_claimers = CTA_QUAD ? gridDim.x : gridDim.x * kDecodeWarps;
   const int64_t per = (total + total_claimers - 1) / total_claimers;
   int64_t w =
       int64_t(CTA_QUAD ? blockIdx.x : blockIdx.x * kDecodeWarps + warp) * per;
@@ -623,8 +618,7 @@ __global__ void swordfish_decode_streamk_kernel(
     const int64_t cg = w / num_pairs;
     const int p_beg = int(w - cg * num_pairs);
     const int col_claim = int(cg / m_groups);
-    const int col =
-        CTA_QUAD ? col_claim * kDecodeWarps + warp : col_claim;
+    const int col = CTA_QUAD ? col_claim * kDecodeWarps + warp : col_claim;
     const int g_idx = int(cg - int64_t(col_claim) * m_groups);
     const int p_end =
         int(int64_t(num_pairs) < p_beg + (w_end - w) ? int64_t(num_pairs)
@@ -655,26 +649,25 @@ __global__ void swordfish_decode_streamk_kernel(
       return reinterpret_cast<const scalar_t2*>(base + int64_t(g) * N +
                                                 col_base)[lane];
     };
-    auto expand_row = [&](scalar_t2 mine, scalar_t2 (&dst)[4][2]) {
+    auto expand_row = [&](scalar_t2 mine, scalar_t2(&dst)[4][2]) {
       const uint32_t sel = group_id & 1;
 #pragma unroll
       for (int j = 0; j < 4; j++) {
 #pragma unroll
         for (int b = 0; b < 2; b++) {
-          const scalar_t2 v = __shfl_sync(
-              0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
+          const scalar_t2 v =
+              __shfl_sync(0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
           const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
           const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
-          dst[j][b] =
-              Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
+          dst[j][b] = Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
         }
       }
     };
-    auto load_a = [&](const scalar_t (*sa)[kUnitK], int ks, FragA& fa) {
+    auto load_a = [&](const scalar_t(*sa)[kUnitK], int ks, FragA& fa) {
       ldsm4<type_id>(fa, &sa[ldsm_row][ldsm_col + ks]);
     };
-    auto process_slice = [&](const FragA (&fa)[M_TILES],
-                             const marlin::I4& bqa, const marlin::I4& bqb) {
+    auto process_slice = [&](const FragA(&fa)[M_TILES], const marlin::I4& bqa,
+                             const marlin::I4& bqb) {
 #pragma unroll
       for (int j = 0; j < 4; j++) {
         FragB frag_b0, frag_b1;
@@ -725,8 +718,7 @@ __global__ void swordfish_decode_streamk_kernel(
             *reinterpret_cast<const marlin::I4*>(&buf[2 * lane + 1]);
         process_slice(fa0, bq0, bq1);
       } else {
-        const marlin::I4 bq0 =
-            *reinterpret_cast<const marlin::I4*>(&buf[lane]);
+        const marlin::I4 bq0 = *reinterpret_cast<const marlin::I4*>(&buf[lane]);
         const marlin::I4 bq1 =
             *reinterpret_cast<const marlin::I4*>(&buf[32 + lane]);
         process_slice(fa0, bq0, bq0);
@@ -751,8 +743,7 @@ __global__ void swordfish_decode_streamk_kernel(
       if (ipend > 0) {
         ipend--;
         if constexpr (W8) {
-          cp_async4_evict_first(&bstage[warp][slot][2 * lane], ipair_ptr,
-                                bpol);
+          cp_async4_evict_first(&bstage[warp][slot][2 * lane], ipair_ptr, bpol);
           cp_async4_evict_first(&bstage[warp][slot][2 * lane + 1],
                                 ipair_ptr + 4, bpol);
         } else {
@@ -764,8 +755,7 @@ __global__ void swordfish_decode_streamk_kernel(
 #pragma unroll
         for (int t = 0; t < M_TILES; t++) {
           if (ia_okt[t]) {
-            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0],
-                              ia_ptr[t]);
+            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0], ia_ptr[t]);
             if constexpr (!W8) {
               marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0 + 8],
                                 ia_ptr[t] + 8);
@@ -779,8 +769,9 @@ __global__ void swordfish_decode_streamk_kernel(
 
     int g = 0;
     int left = INT_MAX;
-    const int g_last =
-        group_size > 0 && p_beg < p_end ? (kUnitK * (p_end - 1)) / group_size : 0;
+    const int g_last = group_size > 0 && p_beg < p_end
+                           ? (kUnitK * (p_end - 1)) / group_size
+                           : 0;
     scalar_t2 s_next = zero2;
     scalar_t2 z_next = zero2;
     if (p_beg < p_end) {

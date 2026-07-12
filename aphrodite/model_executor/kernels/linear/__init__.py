@@ -54,11 +54,11 @@ from aphrodite.model_executor.kernels.linear.mixed_precision.machete import (
 from aphrodite.model_executor.kernels.linear.mixed_precision.marlin import (
     MarlinLinearKernel,
 )
-from aphrodite.model_executor.kernels.linear.mixed_precision.swordfish import (
-    SwordfishLinearKernel,
-)
 from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (
     RDNA3W4A16LinearKernel,
+)
+from aphrodite.model_executor.kernels.linear.mixed_precision.swordfish import (
+    SwordfishLinearKernel,
 )
 from aphrodite.model_executor.kernels.linear.mixed_precision.triton_w4a16 import (
     TritonW4A16LinearKernel,

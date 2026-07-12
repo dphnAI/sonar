@@ -18,10 +18,10 @@
 #include "libtorch_stable/torch_utils.h"
 #include "swordfish_decode.cuh"
 
-#define SWORDFISH_CHECK_CUBLAS(cmd)                             \
-  do {                                                          \
-    cublasStatus_t e = cmd;                                     \
-    STD_TORCH_CHECK(e == CUBLAS_STATUS_SUCCESS,                 \
+#define SWORDFISH_CHECK_CUBLAS(cmd)                                \
+  do {                                                             \
+    cublasStatus_t e = cmd;                                        \
+    STD_TORCH_CHECK(e == CUBLAS_STATUS_SUCCESS,                    \
                     "swordfish dense tier cuBLAS error ", int(e)); \
   } while (0)
 
@@ -40,8 +40,8 @@ __global__ void swordfish_dequant_dense_kernel(
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ S,
     const typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ Z,
     const int32_t* __restrict__ perm,
-    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ W,
-    int K, int N, int group_size) {
+    typename marlin::MarlinScalarType<type_id>::scalar_t* __restrict__ W, int K,
+    int N, int group_size) {
   using Dtype = marlin::MarlinScalarType<type_id>;
   using scalar_t = typename Dtype::scalar_t;
   using scalar_t2 = typename Dtype::scalar_t2;
@@ -144,8 +144,8 @@ __global__ void swordfish_dequant_dense_kernel(
       scalar_t run[16];
 #pragma unroll
       for (int r = 0; r < 16; r++) run[r] = tile[warp][r][nn];
-      int4* dst = reinterpret_cast<int4*>(
-          &W[int64_t(nb * kBlockN + nn) * K + k_base]);
+      int4* dst =
+          reinterpret_cast<int4*>(&W[int64_t(nb * kBlockN + nn) * K + k_base]);
       dst[0] = *reinterpret_cast<const int4*>(&run[0]);
       dst[1] = *reinterpret_cast<const int4*>(&run[8]);
     }
@@ -167,8 +167,8 @@ __global__ void swordfish_dequant_dense_kernel(
 
 void swordfish_dense_tier_mm(const void* a, const int32_t* b, const void* s,
                              const void* z, const int32_t* perm, void* c,
-                             void* w_dense, bool is_half, bool w8,
-                             bool has_zp, int m, int k, int n, int group_size,
+                             void* w_dense, bool is_half, bool w8, bool has_zp,
+                             int m, int k, int n, int group_size,
                              cudaStream_t stream) {
   dim3 grid(n / kBlockN, k / kBlockK, 1);
   const auto run = [&](auto tid, auto w8c, auto zpc) {
@@ -176,13 +176,13 @@ void swordfish_dense_tier_mm(const void* a, const int32_t* b, const void* s,
     using scalar_t = typename marlin::MarlinScalarType<kTid>::scalar_t;
     swordfish_dequant_dense_kernel<kTid, decltype(w8c)::value,
                                    decltype(zpc)::value>
-        <<<grid, 128, 0, stream>>>(
-            b, reinterpret_cast<const scalar_t*>(s),
-            reinterpret_cast<const scalar_t*>(z), perm,
-            reinterpret_cast<scalar_t*>(w_dense), k, n, group_size);
+        <<<grid, 128, 0, stream>>>(b, reinterpret_cast<const scalar_t*>(s),
+                                   reinterpret_cast<const scalar_t*>(z), perm,
+                                   reinterpret_cast<scalar_t*>(w_dense), k, n,
+                                   group_size);
   };
-  using kF16 = std::integral_constant<aphrodite::ScalarTypeId,
-                                      aphrodite::kFloat16.id()>;
+  using kF16 =
+      std::integral_constant<aphrodite::ScalarTypeId, aphrodite::kFloat16.id()>;
   using kBF16 = std::integral_constant<aphrodite::ScalarTypeId,
                                        aphrodite::kBFloat16.id()>;
   using kT = std::true_type;
@@ -240,17 +240,16 @@ torch::stable::Tensor swordfish_dequant_dense(
   const cudaStream_t stream = get_current_cuda_stream(device_index);
 
   torch::stable::Tensor out =
-      stacked ? torch::stable::empty(
-                    transpose ? std::initializer_list<int64_t>{experts, size_n,
-                                                               size_k}
-                              : std::initializer_list<int64_t>{experts, size_k,
-                                                               size_n},
-                    a_st, std::nullopt, b_packed.device())
-              : torch::stable::empty(
-                    transpose
-                        ? std::initializer_list<int64_t>{size_n, size_k}
-                        : std::initializer_list<int64_t>{size_k, size_n},
-                    a_st, std::nullopt, b_packed.device());
+      stacked
+          ? torch::stable::empty(
+                transpose
+                    ? std::initializer_list<int64_t>{experts, size_n, size_k}
+                    : std::initializer_list<int64_t>{experts, size_k, size_n},
+                a_st, std::nullopt, b_packed.device())
+          : torch::stable::empty(
+                transpose ? std::initializer_list<int64_t>{size_n, size_k}
+                          : std::initializer_list<int64_t>{size_k, size_n},
+                a_st, std::nullopt, b_packed.device());
 
   dim3 grid(size_n / kBlockN, size_k / kBlockK, experts);
   const auto* b = reinterpret_cast<const int32_t*>(b_packed.const_data_ptr());
@@ -264,13 +263,13 @@ torch::stable::Tensor swordfish_dequant_dense(
     using scalar_t = typename marlin::MarlinScalarType<kTid>::scalar_t;
     swordfish_dequant_dense_kernel<kTid, decltype(w8c)::value,
                                    decltype(zpc)::value, decltype(trc)::value>
-        <<<grid, 128, 0, stream>>>(
-            b, reinterpret_cast<const scalar_t*>(sp),
-            reinterpret_cast<const scalar_t*>(zp), nullptr,
-            reinterpret_cast<scalar_t*>(wp), k, n, gs);
+        <<<grid, 128, 0, stream>>>(b, reinterpret_cast<const scalar_t*>(sp),
+                                   reinterpret_cast<const scalar_t*>(zp),
+                                   nullptr, reinterpret_cast<scalar_t*>(wp), k,
+                                   n, gs);
   };
-  using kF16 = std::integral_constant<aphrodite::ScalarTypeId,
-                                      aphrodite::kFloat16.id()>;
+  using kF16 =
+      std::integral_constant<aphrodite::ScalarTypeId, aphrodite::kFloat16.id()>;
   using kBF16 = std::integral_constant<aphrodite::ScalarTypeId,
                                        aphrodite::kBFloat16.id()>;
   using kT = std::true_type;

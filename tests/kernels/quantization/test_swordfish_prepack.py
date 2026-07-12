@@ -68,8 +68,7 @@ def test_prepack_bit_exact(shape):
     assert got.dtype == torch.int32
     assert tuple(got.shape) == (size_n // 64, size_k // 64, SWORDFISH_BLOCK_INT32)
     assert torch.equal(got.cpu(), ref.cpu()), (
-        f"prepack mismatch at shape {shape}: "
-        f"first diff word {torch.nonzero(got.cpu() != ref.cpu())[0].tolist()}"
+        f"prepack mismatch at shape {shape}: first diff word {torch.nonzero(got.cpu() != ref.cpu())[0].tolist()}"
     )
 
 
@@ -84,11 +83,7 @@ def test_prepack_roundtrip(shape):
 
     # Rebuild the flat Marlin layout from blocks (inverse of stage 2).
     nb, kb = size_n // 64, size_k // 64
-    marlin_flat = (
-        packed.reshape(nb, kb, 4, 128)
-        .permute(1, 2, 0, 3)
-        .reshape(size_k // 16, size_n * 2)
-    )
+    marlin_flat = packed.reshape(nb, kb, 4, 128).permute(1, 2, 0, 3).reshape(size_k // 16, size_n * 2)
 
     # Index-tracked inverse of stage 1, the permutation run on an index grid.
     perm = get_weight_perm(num_bits=4)
@@ -108,10 +103,8 @@ def test_prepack_rejects_bad_shapes(shape):
     size_k, size_n = shape
     assert not swordfish_shape_ok(size_k, size_n)
     # build a plausibly-shaped gptq tensor; op must reject on k/n args
-    gptq = torch.zeros(
-        (max(size_k // 8, 1), size_n), dtype=torch.int32, device=DEVICE
-    )
-    with pytest.raises(Exception):
+    gptq = torch.zeros((max(size_k // 8, 1), size_n), dtype=torch.int32, device=DEVICE)
+    with pytest.raises(RuntimeError):
         ops.swordfish_prepack_B(gptq, size_k, size_n)
 
 

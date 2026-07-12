@@ -218,13 +218,21 @@ class SwordfishExperts(mk.FusedMoEExpertsModular):
 
         if global_num_experts == -1:
             global_num_experts = E
-        if (
-            M * topk >= SWORDFISH_MOE_DENSE_THRESHOLD * E
-            and _sm_count() >= SWORDFISH_MOE_DENSE_MIN_SMS
-        ):
+        if M * topk >= SWORDFISH_MOE_DENSE_THRESHOLD * E and _sm_count() >= SWORDFISH_MOE_DENSE_MIN_SMS:
             self._apply_dense(
-                output, hidden_states, w1, w2, topk_weights, topk_ids,
-                activation, M, N, K, topk, global_num_experts, expert_map,
+                output,
+                hidden_states,
+                w1,
+                w2,
+                topk_weights,
+                topk_ids,
+                activation,
+                M,
+                N,
+                K,
+                topk,
+                global_num_experts,
+                expert_map,
                 apply_router_weight_on_input,
             )
             return
@@ -240,8 +248,18 @@ class SwordfishExperts(mk.FusedMoEExpertsModular):
             and N % 128 == 0
         ):
             self._apply_grouped(
-                output, hidden_states, w1, w2, topk_weights, topk_ids,
-                activation, M, N, K, topk, apply_router_weight_on_input,
+                output,
+                hidden_states,
+                w1,
+                w2,
+                topk_weights,
+                topk_ids,
+                activation,
+                M,
+                N,
+                K,
+                topk,
+                apply_router_weight_on_input,
             )
             return
         block_size = (
@@ -333,12 +351,8 @@ class SwordfishExperts(mk.FusedMoEExpertsModular):
 
         group_size = self.group_size
         num_bits = self.num_bits
-        w1_dense = ops.swordfish_dequant_dense(
-            w1, self.w1_scale, None, num_bits, group_size, K, 2 * N, True
-        )
-        w2_dense = ops.swordfish_dequant_dense(
-            w2, self.w2_scale, None, num_bits, group_size, N, K, True
-        )
+        w1_dense = ops.swordfish_dequant_dense(w1, self.w1_scale, None, num_bits, group_size, K, 2 * N, True)
+        w2_dense = ops.swordfish_dequant_dense(w2, self.w2_scale, None, num_bits, group_size, N, K, True)
         out = fused_experts(
             hidden_states,
             w1_dense,
@@ -374,6 +388,7 @@ class SwordfishExperts(mk.FusedMoEExpertsModular):
         bounds = torch.cumsum(torch.bincount(flat, minlength=E), 0).cpu().tolist()
         a_sorted = hidden_states.index_select(0, order // topk).contiguous()
 
+        assert self.w1_scale is not None and self.w2_scale is not None
         cache1 = torch.empty((M * topk, 2 * N), dtype=hidden_states.dtype, device=hidden_states.device)
         beg = 0
         for e, end in enumerate(bounds):

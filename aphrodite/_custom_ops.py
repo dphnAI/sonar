@@ -1597,10 +1597,7 @@ def swordfish_mm(
     (8 - zp) * scale rows for zero-point checkpoints (AWQ/HQQ, 4-bit only).
     perm is the act_order column sort; the op permutes the activations for
     the fused paths and folds the sort into the dense tier's weight scatter."""
-    return torch.ops._C.swordfish_mm(
-        a, b_packed, group_scales, group_zps, perm, num_bits, group_size,
-        size_k, size_n
-    )
+    return torch.ops._C.swordfish_mm(a, b_packed, group_scales, group_zps, perm, num_bits, group_size, size_k, size_n)
 
 
 if hasattr(torch.ops._C, "swordfish_mm"):
@@ -1633,8 +1630,14 @@ def swordfish_dequant_dense(
     """Dequantize Swordfish-packed weights to dense fp16/bf16, [K, N] or
     out-major [N, K], with an optional leading expert dimension."""
     return torch.ops._C.swordfish_dequant_dense(
-        b_packed, group_scales, group_zps, num_bits, group_size, size_k,
-        size_n, transpose,
+        b_packed,
+        group_scales,
+        group_zps,
+        num_bits,
+        group_size,
+        size_k,
+        size_n,
+        transpose,
     )
 
 
@@ -1651,7 +1654,7 @@ if hasattr(torch.ops._C, "swordfish_dequant_dense"):
         size_n: int,
         transpose: bool,
     ) -> torch.Tensor:
-        shape = (size_n, size_k) if transpose else (size_k, size_n)
+        shape: tuple[int, ...] = (size_n, size_k) if transpose else (size_k, size_n)
         if b_packed.dim() == 4:
             shape = (b_packed.shape[0],) + shape
         return torch.empty(shape, dtype=group_scales.dtype, device=b_packed.device)
@@ -1679,9 +1682,20 @@ def swordfish_moe_mm(
     run the CTA-wide weight-staging kernel for batched shapes. Returns
     [M * top_k, size_n]."""
     return torch.ops._C.swordfish_moe_mm(
-        a, b_packed, group_scales, sorted_token_ids, expert_ids,
-        num_tokens_post_padded, topk_weights, moe_block_size, top_k,
-        mul_topk_weights, num_bits, group_size, size_k, size_n,
+        a,
+        b_packed,
+        group_scales,
+        sorted_token_ids,
+        expert_ids,
+        num_tokens_post_padded,
+        topk_weights,
+        moe_block_size,
+        top_k,
+        mul_topk_weights,
+        num_bits,
+        group_size,
+        size_k,
+        size_n,
     )
 
 
@@ -1704,9 +1718,7 @@ if hasattr(torch.ops._C, "swordfish_moe_mm"):
         size_k: int,
         size_n: int,
     ) -> torch.Tensor:
-        return torch.empty(
-            (a.shape[0] * top_k, size_n), dtype=a.dtype, device=a.device
-        )
+        return torch.empty((a.shape[0] * top_k, size_n), dtype=a.dtype, device=a.device)
 
 
 def swordfish_prefill_mm(
@@ -1722,9 +1734,7 @@ def swordfish_prefill_mm(
     """w4a16 prefill GEMM (sm100 tcgen05 mixed-input mainloop fork): a [M, K]
     bf16 times a Swordfish ABI v1 packed weight (int32 [NB, KB, 512]) with
     bf16 per-group scales [groups, N]. v1: group_size 128, K/N % 128 == 0."""
-    return torch.ops._C.swordfish_prefill_mm(
-        a, b_packed, group_scales, group_zps, num_bits, group_size, size_k, size_n
-    )
+    return torch.ops._C.swordfish_prefill_mm(a, b_packed, group_scales, group_zps, num_bits, group_size, size_k, size_n)
 
 
 if hasattr(torch.ops._C, "swordfish_prefill_mm"):

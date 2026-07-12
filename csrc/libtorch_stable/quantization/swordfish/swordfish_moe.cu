@@ -112,7 +112,8 @@ __global__ void swordfish_decode_moe_kernel(
 #pragma unroll
           for (int i = 0; i < 4; i++) acc[t][j][b][i] = 0.0f;
 
-    const scalar_t* S_e = S + int64_t(eid) * (group_size > 0 ? K / group_size : 1) * N;
+    const scalar_t* S_e =
+        S + int64_t(eid) * (group_size > 0 ? K / group_size : 1) * N;
     auto fetch_row = [&](int g) -> scalar_t2 {
       return reinterpret_cast<const scalar_t2*>(S_e + int64_t(g) * N +
                                                 col_base)[lane];
@@ -123,16 +124,15 @@ __global__ void swordfish_decode_moe_kernel(
       for (int j = 0; j < 4; j++) {
 #pragma unroll
         for (int b = 0; b < 2; b++) {
-          const scalar_t2 v = __shfl_sync(
-              0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
+          const scalar_t2 v =
+              __shfl_sync(0xffffffffu, mine, 8 * j + 4 * b + (group_id >> 1));
           const uint32_t bits = reinterpret_cast<const uint32_t&>(v);
           const uint16_t h16 = sel ? uint16_t(bits >> 16) : uint16_t(bits);
-          s_reg[j][b] =
-              Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
+          s_reg[j][b] = Dtype::num2num2(reinterpret_cast<const scalar_t&>(h16));
         }
       }
     };
-    auto process_slice = [&](const FragA (&fa)[M_TILES], const marlin::I4& bqa,
+    auto process_slice = [&](const FragA(&fa)[M_TILES], const marlin::I4& bqa,
                              const marlin::I4& bqb) {
 #pragma unroll
       for (int j = 0; j < 4; j++) {
@@ -180,8 +180,7 @@ __global__ void swordfish_decode_moe_kernel(
             *reinterpret_cast<const marlin::I4*>(&buf[2 * lane + 1]);
         process_slice(fa0, bq0, bq1);
       } else {
-        const marlin::I4 bq0 =
-            *reinterpret_cast<const marlin::I4*>(&buf[lane]);
+        const marlin::I4 bq0 = *reinterpret_cast<const marlin::I4*>(&buf[lane]);
         const marlin::I4 bq1 =
             *reinterpret_cast<const marlin::I4*>(&buf[32 + lane]);
         process_slice(fa0, bq0, bq0);
@@ -208,8 +207,7 @@ __global__ void swordfish_decode_moe_kernel(
       if (ipend > 0) {
         ipend--;
         if constexpr (W8) {
-          cp_async4_evict_first(&bstage[warp][slot][2 * lane], ipair_ptr,
-                                bpol);
+          cp_async4_evict_first(&bstage[warp][slot][2 * lane], ipair_ptr, bpol);
           cp_async4_evict_first(&bstage[warp][slot][2 * lane + 1],
                                 ipair_ptr + 4, bpol);
         } else {
@@ -221,8 +219,7 @@ __global__ void swordfish_decode_moe_kernel(
 #pragma unroll
         for (int t = 0; t < M_TILES; t++) {
           if (a_okt[t]) {
-            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0],
-                              ia_ptr[t]);
+            marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0], ia_ptr[t]);
             if constexpr (!W8) {
               marlin::cp_async4(&astage[warp][slot][t][ia_row][ia_c0 + 8],
                                 ia_ptr[t] + 8);
@@ -236,8 +233,9 @@ __global__ void swordfish_decode_moe_kernel(
 
     int g = 0;
     int left = INT_MAX;
-    const int g_last =
-        group_size > 0 && p_beg < p_end ? (kUnitK * (p_end - 1)) / group_size : 0;
+    const int g_last = group_size > 0 && p_beg < p_end
+                           ? (kUnitK * (p_end - 1)) / group_size
+                           : 0;
     scalar_t2 s_next = zero2;
     if (p_beg < p_end) {
       if (group_size > 0) {
@@ -283,15 +281,13 @@ __global__ void swordfish_decode_moe_kernel(
           const int cc = col_base + 8 * (2 * j + b) + 2 * tig;
           const float4 v = *reinterpret_cast<float4*>(&acc[t][j][b]);
           if (r0ok[t])
-            red_add2(
-                reinterpret_cast<scalar_t2*>(C + int64_t(id0[t]) * N + cc),
-                Dtype::nums2num2(Dtype::float2num(v.x * wt0),
-                                 Dtype::float2num(v.y * wt0)));
+            red_add2(reinterpret_cast<scalar_t2*>(C + int64_t(id0[t]) * N + cc),
+                     Dtype::nums2num2(Dtype::float2num(v.x * wt0),
+                                      Dtype::float2num(v.y * wt0)));
           if (r1ok[t])
-            red_add2(
-                reinterpret_cast<scalar_t2*>(C + int64_t(id1[t]) * N + cc),
-                Dtype::nums2num2(Dtype::float2num(v.z * wt1),
-                                 Dtype::float2num(v.w * wt1)));
+            red_add2(reinterpret_cast<scalar_t2*>(C + int64_t(id1[t]) * N + cc),
+                     Dtype::nums2num2(Dtype::float2num(v.z * wt1),
+                                      Dtype::float2num(v.w * wt1)));
         }
       }
     }
@@ -301,10 +297,9 @@ __global__ void swordfish_decode_moe_kernel(
 template <aphrodite::ScalarTypeId type_id, bool W8>
 void launch_moe(const void* a, const int32_t* b, const void* s, void* c,
                 const int32_t* sorted_ids, const int32_t* expert_ids,
-                const int32_t* num_post_padded, const float* topk_w,
-                int top_k, bool mul_topk, int total_tokens, int max_blocks,
-                int block_size, int k, int n, int group_size,
-                cudaStream_t stream) {
+                const int32_t* num_post_padded, const float* topk_w, int top_k,
+                bool mul_topk, int total_tokens, int max_blocks, int block_size,
+                int k, int n, int group_size, cudaStream_t stream) {
   using scalar_t = typename marlin::MarlinScalarType<type_id>::scalar_t;
   int sms = 0;
   cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, 0);
@@ -312,8 +307,7 @@ void launch_moe(const void* a, const int32_t* b, const void* s, void* c,
   launch_zero_c<scalar_t>(c, total_tokens, n, stream);
   // Host-side upper bound on work keeps tiny batches from launching idle
   // CTAs; the true total is device-side.
-  const int64_t max_total =
-      int64_t(max_blocks) * (n / kBlockN) * (k / kUnitK);
+  const int64_t max_total = int64_t(max_blocks) * (n / kBlockN) * (k / kUnitK);
   const int64_t max_warps =
       max_total / (2 * kStages) > 0 ? max_total / (2 * kStages) : 1;
   const auto grid = [&](int ctas_per_sm) {
@@ -345,17 +339,16 @@ void launch_moe(const void* a, const int32_t* b, const void* s, void* c,
   static int ctas_per_sm = 0;
   if (ctas_per_sm == 0) {
     cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &ctas_per_sm, swordfish_decode_moe_kernel<type_id, W8>,
-        kDecodeThreads, 0);
+        &ctas_per_sm, swordfish_decode_moe_kernel<type_id, W8>, kDecodeThreads,
+        0);
     if (ctas_per_sm <= 0) ctas_per_sm = 2;
   }
   swordfish_decode_moe_kernel<type_id, W8>
       <<<grid(ctas_per_sm), kDecodeThreads, 0, stream>>>(
           reinterpret_cast<const scalar_t*>(a), b,
-          reinterpret_cast<const scalar_t*>(s),
-          reinterpret_cast<scalar_t*>(c), sorted_ids, expert_ids,
-          num_post_padded, topk_w, top_k, mul_topk, total_tokens, k, n,
-          group_size);
+          reinterpret_cast<const scalar_t*>(s), reinterpret_cast<scalar_t*>(c),
+          sorted_ids, expert_ids, num_post_padded, topk_w, top_k, mul_topk,
+          total_tokens, k, n, group_size);
 }
 
 }  // namespace
@@ -400,16 +393,15 @@ torch::stable::Tensor swordfish_moe_mm(
   if (group_size != -1) {
     STD_TORCH_CHECK(group_size > 0 && size_k % group_size == 0 &&
                         group_size % (2 * kMarlinTileK) == 0,
-                    "group_size must be -1 or a multiple of ",
-                    2 * kMarlinTileK, " dividing K; got ", group_size);
+                    "group_size must be -1 or a multiple of ", 2 * kMarlinTileK,
+                    " dividing K; got ", group_size);
     num_groups = size_k / group_size;
   }
-  STD_TORCH_CHECK(group_scales.dim() == 3 &&
-                      group_scales.size(0) == num_experts &&
-                      group_scales.size(1) == num_groups &&
-                      group_scales.size(2) == size_n,
-                  "group_scales must be [", num_experts, ", ", num_groups,
-                  ", ", size_n, "]");
+  STD_TORCH_CHECK(
+      group_scales.dim() == 3 && group_scales.size(0) == num_experts &&
+          group_scales.size(1) == num_groups && group_scales.size(2) == size_n,
+      "group_scales must be [", num_experts, ", ", num_groups, ", ", size_n,
+      "]");
   STD_TORCH_CHECK(
       sorted_token_ids.scalar_type() == torch::headeronly::ScalarType::Int &&
           expert_ids.scalar_type() == torch::headeronly::ScalarType::Int &&
@@ -417,10 +409,10 @@ torch::stable::Tensor swordfish_moe_mm(
               torch::headeronly::ScalarType::Int,
       "alignment buffers must be int32");
   if (mul_topk_weights) {
-    STD_TORCH_CHECK(topk_weights.has_value() &&
-                        topk_weights->scalar_type() ==
-                            torch::headeronly::ScalarType::Float,
-                    "topk_weights must be fp32 when mul_topk_weights");
+    STD_TORCH_CHECK(
+        topk_weights.has_value() &&
+            topk_weights->scalar_type() == torch::headeronly::ScalarType::Float,
+        "topk_weights must be fp32 when mul_topk_weights");
   }
 
   const int64_t total_tokens = a.size(0) * top_k;
@@ -439,8 +431,8 @@ torch::stable::Tensor swordfish_moe_mm(
       reinterpret_cast<const int32_t*>(sorted_token_ids.const_data_ptr());
   const auto* eid_ptr =
       reinterpret_cast<const int32_t*>(expert_ids.const_data_ptr());
-  const auto* npp_ptr = reinterpret_cast<const int32_t*>(
-      num_tokens_post_padded.const_data_ptr());
+  const auto* npp_ptr =
+      reinterpret_cast<const int32_t*>(num_tokens_post_padded.const_data_ptr());
   const float* tw_ptr =
       mul_topk_weights
           ? reinterpret_cast<const float*>(topk_weights->const_data_ptr())
@@ -452,33 +444,29 @@ torch::stable::Tensor swordfish_moe_mm(
     if (w8) {
       launch_moe<aphrodite::kFloat16.id(), true>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
-          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr,
-          int(top_k), mul_topk_weights, int(total_tokens), max_blocks,
-          int(moe_block_size), int(size_k), int(size_n), int(group_size),
-          stream);
+          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
+          mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),
+          int(size_k), int(size_n), int(group_size), stream);
     } else {
       launch_moe<aphrodite::kFloat16.id(), false>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
-          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr,
-          int(top_k), mul_topk_weights, int(total_tokens), max_blocks,
-          int(moe_block_size), int(size_k), int(size_n), int(group_size),
-          stream);
+          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
+          mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),
+          int(size_k), int(size_n), int(group_size), stream);
     }
   } else {
     if (w8) {
       launch_moe<aphrodite::kBFloat16.id(), true>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
-          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr,
-          int(top_k), mul_topk_weights, int(total_tokens), max_blocks,
-          int(moe_block_size), int(size_k), int(size_n), int(group_size),
-          stream);
+          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
+          mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),
+          int(size_k), int(size_n), int(group_size), stream);
     } else {
       launch_moe<aphrodite::kBFloat16.id(), false>(
           a.const_data_ptr(), b_ptr, group_scales.const_data_ptr(),
-          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr,
-          int(top_k), mul_topk_weights, int(total_tokens), max_blocks,
-          int(moe_block_size), int(size_k), int(size_n), int(group_size),
-          stream);
+          c.mutable_data_ptr(), sid_ptr, eid_ptr, npp_ptr, tw_ptr, int(top_k),
+          mul_topk_weights, int(total_tokens), max_blocks, int(moe_block_size),
+          int(size_k), int(size_n), int(group_size), stream);
     }
   }
 
