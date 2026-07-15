@@ -489,7 +489,7 @@ class FakeNixlConnectorWorker(NixlConnectorWorker):
         expected_engine_id: str,
         remote_pp_size: int = 1,
         notif_agents_only: bool = False,
-    ) -> dict[tuple[int, int], str]:
+    ) -> tuple[dict[tuple[int, int], str], float]:
         # Mimic slow _nixl_handshake, as well as bypass zmq communication.
         time.sleep(self._hand_shake_latency)
         # These should've been done in register_kv_caches(), called by
@@ -538,7 +538,8 @@ class FakeNixlConnectorWorker(NixlConnectorWorker):
                 remote_tp_size=remote_tp_size,
             )
             remote_agents[(0, remote_tp_rank)] = remote_agent_name
-        return remote_agents
+        # Handshake bypasses zmq, so report a zero clock offset to the peer.
+        return remote_agents, 0.0
 
 
 class TestNixlHandshake:
@@ -732,7 +733,7 @@ class TestNixlHandshake:
             assert remote_engine_id in worker.dst_xfer_side_handles
             assert set(worker.dst_xfer_side_handles[remote_engine_id].keys()) == set(range(tp_ratio))
 
-        remote_agents = worker._nixl_handshake(
+        remote_agents, _ = worker._nixl_handshake(
             host="localhost",
             port=1234,
             remote_tp_size=4,
@@ -744,7 +745,7 @@ class TestNixlHandshake:
         # discovered. This is not a scenario we actively support right now, but
         # the connector allows it.
         worker.REMOTE_ENGINE_ID = "remote_engine_2"
-        remote_agents = worker._nixl_handshake(
+        remote_agents, _ = worker._nixl_handshake(
             host="localhost",
             port=1234,
             remote_tp_size=6,
@@ -2696,7 +2697,10 @@ def test_compatibility_hash_validation(
 
     # Mock ZMQ socket to return our handshake payload
     mock_socket = MagicMock()
-    mock_socket.recv.return_value = msgspec.msgpack.encode(handshake_payload)
+    mock_socket.recv_multipart.return_value = [
+        msgspec.msgpack.encode(handshake_payload),
+        msgspec.msgpack.encode(time.perf_counter()),
+    ]
 
     # Mock add_remote_agent to avoid actual NIXL operations
     # Patch zmq_ctx to return our mock socket
@@ -2715,7 +2719,7 @@ def test_compatibility_hash_validation(
                     expected_engine_id=FakeNixlConnectorWorker.REMOTE_ENGINE_ID,
                 )
         else:
-            result = decode_worker._nixl_handshake(
+            result, _ = decode_worker._nixl_handshake(
                 host="localhost",
                 port=1234,
                 remote_tp_size=1,
@@ -2797,7 +2801,10 @@ def test_handshake_decode_errors(default_aphrodite_config, dist_init, error_scen
         raise AssertionError(f"{error_scenario} not a valid scenario")
 
     mock_socket = MagicMock()
-    mock_socket.recv.return_value = msg_bytes
+    mock_socket.recv_multipart.return_value = [
+        msg_bytes,
+        msgspec.msgpack.encode(time.perf_counter()),
+    ]
     with (
         patch.object(decode_worker, "add_remote_agent", return_value="fake_agent"),
         patch.object(nixl.base_worker, "zmq_ctx") as mock_zmq_ctx,
