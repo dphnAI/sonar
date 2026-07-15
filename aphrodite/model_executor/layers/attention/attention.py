@@ -577,7 +577,7 @@ class Attention(nn.Module, AttentionLayerBase):
         assert self.attn_type == AttentionType.DECODER
         quant_mode = get_kv_quant_mode(self.kv_cache_dtype)
         if self.sliding_window is not None:
-            assert not aphrodite_config.model_config.use_mla, "MLA is not supported for slidingwindow"
+            assert not self.attn_backend.is_mla(), "MLA is not supported for sliding window"
             shared_page = aphrodite_config.cache_config.skip_page_size_padded
             sw_per_token = SlidingWindowSpec(
                 block_size=1,
