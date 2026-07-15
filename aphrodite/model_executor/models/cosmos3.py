@@ -3,8 +3,6 @@
 
 import regex
 
-from aphrodite.config import AphroditeConfig
-from aphrodite.model_executor.model_loader.default_loader import DefaultModelLoader
 from aphrodite.model_executor.models.qwen3_vl import Qwen3VLForConditionalGeneration
 from aphrodite.model_executor.models.utils import WeightsMapper
 
@@ -48,22 +46,7 @@ class Cosmos3ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         },
     )
 
-    allow_patterns_overrides = ["transformer/*.safetensors"]
-
-    """
-    Cosmos3 checkpoint separates transformer weights and vision_encoder weights
-    into separate directories, as it's in diffusers checkpoint format.
-    Using secondary_weights here to load all necessary weights for
-    the Reasoner-only part.
-    """
-
-    def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
-        super().__init__(aphrodite_config=aphrodite_config, prefix=prefix)
-        self.secondary_weights = [
-            DefaultModelLoader.Source(
-                model_or_path=aphrodite_config.model_config.model,
-                revision=aphrodite_config.model_config.revision,
-                prefix="",
-                allow_patterns_overrides=["vision_encoder/*.safetensors"],
-            ),
-        ]
+    # Cosmos3 unified Diffusers checkpoints store reasoner weights across
+    # transformer/ and vision_encoder/. Match both while excluding VAE and
+    # sound_tokenizer weights; the mapper drops generation-only tensors.
+    allow_patterns_overrides = ["[tv]*er/*.safetensors"]

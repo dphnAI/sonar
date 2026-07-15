@@ -86,6 +86,7 @@ On ROCm platforms, Mistral and Mixtral are capped to 4096 max context length due
 | `ChameleonForConditionalGeneration`      |        Image         |                    `facebook/chameleon-7b` |
 | `ChatGLMModel`                           |        Image         |                        `THUDM/chatglm3-6b` |
 | `Cosmos3ForConditionalGeneration`        |    Image, Video      | `nvidia/Cosmos3-Nano`, `nvidia/Cosmos3-Super` |
+| `Cosmos3EdgeForConditionalGeneration`    |    Image, Video      |                      `nvidia/Cosmos3-Edge` |
 | `InternVLChatModel`                      |        Image         |                   `OpenGVLab/InternVL2-8B` |
 | `LlavaForConditionalGeneration`          |        Image         |                `llava-hf/llava-v1.5-7b-hf` |
 | `LlavaNextForConditionalGeneration`      |        Image         |        `llava-hf/llava-v1.6-mistral-7b-hf` |
