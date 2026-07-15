@@ -18,6 +18,7 @@ Aphrodite supports a large variety of generative Transformer models in [Hugging 
 | `DeciLMForCausalLM`               |                     `DeciLM/DeciLM-7B` |
 | `DeepseekForCausalLM`             |    `deepseek-ai/deepseek-moe-16b-base` |
 | `DeepseekV2ForCausalLM`           |            `deepseek-ai/DeepSeek-V2.5` |
+| `DeepseekV32ForCausalLM`          |            `deepseek-ai/DeepSeek-V3.2` |
 | `ExaoneForCausalLM`               | `LGAI-EXAONE/EXAONE-3.0-7.8B-Instruct` |
 | `FalconForCausalLM`               |                     `tiiuae/falcon-7b` |
 | `GPT2LMHeadModel`                 |                                 `gpt2` |
