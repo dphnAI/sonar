@@ -431,7 +431,11 @@ def convert_linear_layer_to_humming_standard(layer: LinearBase, name_map: dict[s
         setattr(layer, name, param)
 
 
-def prepare_humming_layer(layer: LinearBase, quant_config: dict):
+def prepare_humming_layer(
+    layer: LinearBase,
+    quant_config: dict,
+    input_quant_config: dict | None = None,
+):
     from aphrodite.utils.humming import (
         BaseWeightSchema,
         HummingInputSchema,
@@ -439,7 +443,10 @@ def prepare_humming_layer(layer: LinearBase, quant_config: dict):
     )
 
     weight_schema = BaseWeightSchema.from_config(quant_config)
-    input_schema = HummingInputSchema()
+    if input_quant_config is not None:
+        input_schema = HummingInputSchema.from_config(input_quant_config)
+    else:
+        input_schema = HummingInputSchema()
 
     # ReplicatedLinear has no TP partitioning and so does not set
     # input_size_per_partition; for it that is just input_size. Use hasattr
