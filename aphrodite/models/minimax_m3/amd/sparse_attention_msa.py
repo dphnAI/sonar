@@ -52,10 +52,6 @@ class MiniMaxM3SparseAiterPAImpl(MiniMaxM3SparseImpl):
         if main_md.num_decodes > 0:
             d = main_md.decode
             assert d is not None
-            if d.decode_query_len != 1:
-                raise NotImplementedError(
-                    f"MiniMax-M3 AITER sparse PA does not support speculative decode_query_len={d.decode_query_len}"
-                )
             minimax_m3_sparse_attn_decode_aiter(
                 q[:nd],
                 k_cache,
@@ -68,6 +64,7 @@ class MiniMaxM3SparseAiterPAImpl(MiniMaxM3SparseImpl):
                 out[:nd],
                 k_scale=k_scale,
                 v_scale=v_scale,
+                decode_query_len=d.decode_query_len,
             )
 
         if main_md.num_prefills > 0:
