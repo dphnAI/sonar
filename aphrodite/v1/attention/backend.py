@@ -749,6 +749,10 @@ class AttentionImplBase(ABC, Generic[T]):
     method - subclasses define their own forward interfaces.
     """
 
+    # Whether this impl uses a sparse (top-k) attention path. Used by MLA to
+    # route between the dense-MHA prefill and sparse-MQA paths.
+    is_sparse: ClassVar[bool] = False
+
     # Required attributes that all impls should have
     num_heads: int
     head_size: int
@@ -940,7 +944,6 @@ class MLAAttentionImpl(AttentionImplBase[T], Generic[T]):
     ) -> None:
         raise NotImplementedError
 
-    @abstractmethod
     def forward_mha(
         self,
         q: torch.Tensor,
@@ -1008,6 +1011,8 @@ class SparseMLAAttentionImpl(AttentionImplBase[T], Generic[T]):
     Sparse MLA implementations only support decode (MQA-style) attention.
     They do not support prefill (MHA-style) attention.
     """
+
+    is_sparse: ClassVar[bool] = True
 
     def fused_output_quant_supported(self, quant_key: "QuantKey"):
         """
