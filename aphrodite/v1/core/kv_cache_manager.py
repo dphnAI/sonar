@@ -193,7 +193,7 @@ class KVCacheManager:
         self.prefix_cache_stats = PrefixCacheStats()
         return stats
 
-    def get_computed_blocks(self, request: Request) -> tuple[KVCacheBlocks, int]:
+    def get_computed_blocks(self, request: Request) -> tuple[KVCacheBlocks, int, int]:
         """Get the computed (cached) blocks for the request.
         Note that the computed blocks must be full.
 
@@ -204,13 +204,15 @@ class KVCacheManager:
             A tuple containing:
                 - A list of blocks that are computed for the request.
                 - The number of computed tokens.
+                - A block-aligned shared-prefix boundary that sparse retention
+                  should preserve, or 0 if no such boundary was detected.
         """
         # We skip finding the prefix cache hit when prefix caching is
         # disabled or the request is marked as skipping kv cache read
         # (which happens when the request requires prompt logprobs
         # or calls a pooling model with all pooling).
         if not self.enable_caching or request.skip_reading_prefix_cache:
-            return self.empty_kv_cache_blocks, 0
+            return self.empty_kv_cache_blocks, 0, 0
 
         # NOTE: When all tokens hit the cache, we must recompute the last token
         # to obtain logits. Thus, set max_cache_hit_length to prompt_length - 1.
@@ -219,7 +221,7 @@ class KVCacheManager:
         # num_computed_tokens to be block-size aligned. Removing this limitation
         # could slightly improve performance in the future.
         max_cache_hit_length = request.num_tokens - 1
-        computed_blocks, num_new_computed_tokens = self.coordinator.find_longest_cache_hit(
+        computed_blocks, num_new_computed_tokens, num_uncached = self.coordinator.find_longest_cache_hit(
             request.block_hashes, max_cache_hit_length
         )
 
@@ -248,7 +250,12 @@ class KVCacheManager:
                 preempted=request.num_preemptions > 0,
             )
 
-        return self.create_kv_cache_blocks(computed_blocks), num_new_computed_tokens
+        shared_prefix_boundary = num_new_computed_tokens + num_uncached if num_uncached else 0
+        return (
+            self.create_kv_cache_blocks(computed_blocks),
+            num_new_computed_tokens,
+            shared_prefix_boundary,
+        )
 
     def allocate_slots(
         self,

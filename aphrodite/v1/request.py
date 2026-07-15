@@ -167,6 +167,10 @@ class Request:
         # True if this request is scheduled as a non-final prefill chunk.
         self.is_prefill_chunk = False
 
+        # Block-aligned token position of a proven shared prefix worth pinning
+        # in the sparse prefix cache; 0 means none.
+        self.shared_prefix_boundary = 0
+
         # The number of NaNs in logits. A value greater than 0
         # indicates that the output is corrupted
         self.num_nans_in_logits = 0

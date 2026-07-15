@@ -110,7 +110,7 @@ def test_hybrid_mamba_align_partial_hash_hit():
     )
 
     req0 = make_request("0", [0, 0, 1, 1, 2, 2], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert num_computed == 0
     blocks = manager.allocate_slots(req0, 6, num_computed, computed_blocks)
     assert blocks is not None
@@ -123,7 +123,7 @@ def test_hybrid_mamba_align_partial_hash_hit():
     assert partial_mamba_block[0].block_hash_num_tokens == 6
 
     req1 = make_request("1", [0, 0, 1, 1, 2, 2, 3, 3], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req1)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req1)
     assert num_computed == 6
     assert [len(group) for group in computed_blocks.blocks] == [3, 2]
 
@@ -183,7 +183,7 @@ def test_hybrid_mamba_partial_tail_owner_uses_cow_on_continue():
     )
 
     req0 = make_request("0", [0, 0, 1, 1, 2, 2], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert num_computed == 0
     assert manager.allocate_slots(req0, 6, num_computed, computed_blocks) is not None
 
@@ -252,7 +252,7 @@ def test_hybrid_mamba_partial_tail_owner_continue_preserves_later_hit():
     )
 
     req0 = make_request("0", [0, 0, 1, 1, 2, 2], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert num_computed == 0
     assert manager.allocate_slots(req0, 6, num_computed, computed_blocks) is not None
 
@@ -271,7 +271,7 @@ def test_hybrid_mamba_partial_tail_owner_continue_preserves_later_hit():
     manager.new_step_starts()
 
     req1 = make_request("1", [0, 0, 1, 1, 2, 2, 4, 4], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req1)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req1)
     assert num_computed == 6
     # The later request hits the moved (private-copy) entry, not the source.
     assert computed_blocks.get_block_ids()[1][1] == moved_block_id
@@ -330,7 +330,7 @@ def test_hybrid_mamba_moved_partial_entry_defers_same_step_hit():
     )
 
     req0 = make_request("0", [0, 0, 1, 1, 2, 2], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert num_computed == 0
     assert manager.allocate_slots(req0, 6, num_computed, computed_blocks) is not None
     manager.new_step_starts()
@@ -343,13 +343,13 @@ def test_hybrid_mamba_moved_partial_entry_defers_same_step_hit():
 
     # A request hitting the moved entry in the SAME step must be deferred.
     req1 = make_request("1", [0, 0, 1, 1, 2, 2, 4, 4], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req1)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req1)
     assert num_computed == 6
     assert manager.allocate_slots(req1, 2, num_computed, computed_blocks) is None
 
     # Next step the moved entry is consumable.
     manager.new_step_starts()
-    computed_blocks, num_computed = manager.get_computed_blocks(req1)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req1)
     assert num_computed == 6
     assert manager.allocate_slots(req1, 2, num_computed, computed_blocks) is not None
 
@@ -389,7 +389,7 @@ def test_hybrid_full_attention_partial_hash_hit_uses_cow():
     )
 
     req0 = make_request("0", [0, 0, 1, 1, 2, 2], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert num_computed == 0
     assert manager.allocate_slots(req0, 6, num_computed, computed_blocks) is not None
     manager.free(req0)
@@ -400,7 +400,7 @@ def test_hybrid_full_attention_partial_hash_hit_uses_cow():
     assert partial_full_block is not None
 
     req1 = make_request("1", [0, 0, 1, 1, 2, 2, 3, 3], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req1)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req1)
     assert num_computed == 6
     assert [len(group) for group in computed_blocks.blocks] == [2, 2]
 
@@ -461,7 +461,7 @@ def test_hybrid_partial_hit_cow_target_starts_uncached():
     )
 
     req0 = make_request("0", [0, 0, 1, 1, 2, 2], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert num_computed == 0
     assert manager.allocate_slots(req0, 6, num_computed, computed_blocks) is not None
     manager.free(req0)
@@ -474,7 +474,7 @@ def test_hybrid_partial_hit_cow_target_starts_uncached():
     assert partial_mamba_block is not None
 
     req1 = make_request("1", [0, 0, 1, 1, 2, 2, 3, 3], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req1)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req1)
     assert num_computed == 6
 
     new_blocks = manager.allocate_slots(
@@ -572,7 +572,7 @@ def test_hybrid_partial_hash_truncates_full_attention_hit_length():
         block_size=block_size,
     )
 
-    computed_blocks, num_computed = manager.get_computed_blocks(req)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req)
     assert num_computed == 6
     assert [len(group) for group in computed_blocks.blocks] == [2, 2]
 
@@ -613,7 +613,7 @@ def test_cow_retained_blocks_returned_for_release():
         hash_block_size=hash_block_size,
     )
     req0 = make_request("0", [0, 0, 1, 1, 2, 2], hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert manager.allocate_slots(req0, 6, num_computed, computed_blocks) is not None
 
     # The owner's move queues a copy and retains both endpoints.
@@ -775,7 +775,7 @@ def test_hybrid_partial_hit_with_eagle_stays_within_group_blocks():
     # The owner prefills in scheduler-split style: stop at the block boundary
     # (4), then at the prompt's last hash boundary (6, partial entries).
     req0 = make_request("0", [7] * 6, hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req0)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req0)
     assert manager.allocate_slots(req0, 4, num_computed, computed_blocks) is not None
     req0.num_computed_tokens = 4
     manager.new_step_starts()
@@ -786,7 +786,7 @@ def test_hybrid_partial_hit_with_eagle_stays_within_group_blocks():
     # A longer request with eagle: full attention drops the partial tail, so
     # the joint hit must fall back to the block boundary the FA blocks cover.
     req1 = make_request("1", [7] * 6 + [9] * 2, hash_block_size, sha256)
-    computed_blocks, num_computed = manager.get_computed_blocks(req1)
+    computed_blocks, num_computed, _ = manager.get_computed_blocks(req1)
     assert num_computed == 4
     assert all(len(group) * block_size >= num_computed for group in computed_blocks.blocks)
     assert manager.allocate_slots(req1, 4, num_computed, computed_blocks) is not None
