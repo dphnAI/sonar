@@ -13,6 +13,7 @@ from aphrodite.model_executor.layers.activation import (
     MulAndSilu,
     NewGELU,
     QuickGELU,
+    ReLUSquaredActivation,
     SiluAndMul,
     SiluAndMulWithClamp,
     SwigluOAIAndMul,
@@ -190,6 +191,7 @@ def test_silu_and_mul_with_clamp(
         (FastGELU, torch.ops._C.gelu_fast),
         (NewGELU, torch.ops._C.gelu_new),
         (QuickGELU, torch.ops._C.gelu_quick),
+        (ReLUSquaredActivation, torch.ops._C.relu_squared),
     ],
 )
 @pytest.mark.parametrize("num_tokens", NUM_TOKENS)
