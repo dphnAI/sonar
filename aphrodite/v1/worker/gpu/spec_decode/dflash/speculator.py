@@ -25,6 +25,7 @@ from aphrodite.v1.worker.gpu.spec_decode.dflash.utils import (
 )
 from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
 from aphrodite.v1.worker.gpu.spec_decode.utils import get_parallel_drafting_token_id
+from aphrodite.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
 
@@ -85,7 +86,7 @@ class DFlashSpeculator(DraftModelSpeculator):
             decode_query_len=self.num_query_per_req,
         )
 
-    def capture(self, attn_states: dict | None = None) -> None:
+    def capture(self) -> None:
         logger.info("Capturing model for %s speculator...", self._speculator_name)
         # Reset sampling indices to zero to prevent stale values from prior
         # dummy runs from being baked into the captured graph.
@@ -116,8 +117,16 @@ class DFlashSpeculator(DraftModelSpeculator):
         model_state: ModelState,
         kv_cache_config: KVCacheConfig,
         block_tables: BlockTables,
+        target_input_buffers: InputBuffers,
+        target_attn_groups: list[list[AttentionGroup]],
     ) -> None:
-        super().set_attn(model_state, kv_cache_config, block_tables)
+        super().set_attn(
+            model_state,
+            kv_cache_config,
+            block_tables,
+            target_input_buffers,
+            target_attn_groups,
+        )
 
         self.draft_kv_cache_group_ids = [gid for gid, g in enumerate(self.attn_groups) if g]
         assert self.draft_kv_cache_group_ids, "No draft attention groups found."
