@@ -197,6 +197,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration, Qwen3V
         multimodal_config = aphrodite_config.model_config.multimodal_config
 
         self.config = config
+        self.model_config = aphrodite_config.model_config
         self._tokenizer = cached_tokenizer_from_config(aphrodite_config.model_config)
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
