@@ -162,6 +162,25 @@ def map_unquantized_backend(runner_backend: MoEBackend) -> UnquantizedMoeBackend
     )
 
 
+def _trtllm_bf16_lora_supported(moe_config: FusedMoEConfig) -> bool:
+    """Gate LoRA-enabled BF16 MoE to FlashInfer's TRT-LLM LoRA path."""
+    from aphrodite.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
+        TrtLlmBf16LoRAExperts,
+    )
+
+    if not TrtLlmBf16LoRAExperts._supports_current_device():
+        return False
+    if not TrtLlmBf16LoRAExperts._supports_routing_method(moe_config.routing_method, None, None):
+        return False
+    if not TrtLlmBf16LoRAExperts._supports_parallel_config(moe_config.moe_parallel_config):
+        return False
+    # FlashInfer's TRT-LLM fused-MoE kernel requires the per-partition
+    # intermediate size to be a multiple of 128. Plain TP shards the MoE
+    # intermediate dim (for example, 768 -> 192 at tp=4), which would crash
+    # the kernel at runtime; fall back to Triton in that case.
+    return moe_config.intermediate_size_per_partition % 128 == 0
+
+
 def select_unquantized_moe_backend(
     moe_config: FusedMoEConfig,
 ) -> tuple[UnquantizedMoeBackend, type[mk.FusedMoEExperts] | None]:
@@ -181,6 +200,14 @@ def select_unquantized_moe_backend(
         return UnquantizedMoeBackend.OOT, None
 
     if moe_config.is_lora_enabled:
+        if _trtllm_bf16_lora_supported(moe_config):
+            from aphrodite.model_executor.layers.fused_moe.experts.trtllm_lora_moe import (
+                TrtLlmBf16LoRAExperts,
+            )
+
+            logger.info_once("Using TrtLlmBf16LoRAExperts Unquantized MoE LoRA backend (TrtLlmBf16LoRAExperts).")
+            return UnquantizedMoeBackend.FLASHINFER_TRTLLM, TrtLlmBf16LoRAExperts
+        logger.info_once("Using TRITON Unquantized MoE LoRA backend")
         return UnquantizedMoeBackend.TRITON, backend_to_kernel_cls(UnquantizedMoeBackend.TRITON)[0]
 
     # NOTE: the kernels are selected in the following order.
