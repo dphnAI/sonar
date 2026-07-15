@@ -292,7 +292,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
             return
 
         def _on_handshake(
-            f: Future[dict[tuple[int, int], str]],
+            f: Future[tuple[dict[tuple[int, int], str], float]],
             rid: str = req_id,
             rd: dict[str, Any] = reg_data,
         ) -> None:
@@ -448,7 +448,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
         if decode_engine_id in self._remote_agents:
             return True
         try:
-            remote_agents = self._nixl_handshake(
+            remote_agents, clock_offset = self._nixl_handshake(
                 decode_host,
                 decode_port,
                 decode_tp_size,
@@ -463,6 +463,7 @@ class NixlPushConnectorWorker(NixlBaseConnectorWorker):
             return False
         with self._handshake_lock:
             self._remote_agents[decode_engine_id] = remote_agents
+            self._engine_clock_offset[decode_engine_id] = clock_offset
         logger.info(
             "Push handshake to D %s done (%d agents)",
             decode_engine_id,
