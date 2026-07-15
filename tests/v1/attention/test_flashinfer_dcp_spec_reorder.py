@@ -3,10 +3,15 @@
 """FlashInfer GQA builder: reorder threshold under DCP with spec decode."""
 
 import pytest
+
+from aphrodite.platforms import current_platform
+
+if not current_platform.is_cuda():
+    pytest.skip("FlashInfer backend requires a CUDA platform.", allow_module_level=True)
+
 import torch
 
 from aphrodite.config import SpeculativeConfig, set_current_aphrodite_config
-from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
 from aphrodite.v1.attention.backends.flashinfer import (
     FlashInferDecodeKernel,
@@ -15,9 +20,6 @@ from aphrodite.v1.attention.backends.flashinfer import (
 from aphrodite.v1.attention.backends.utils import PerLayerParameters
 from aphrodite.v1.kv_cache_interface import FullAttentionSpec
 from tests.v1.attention.utils import create_aphrodite_config
-
-if not current_platform.is_cuda():
-    pytest.skip("FlashInfer backend requires a CUDA platform.", allow_module_level=True)
 
 
 def test_flashinfer_gqa_dcp_spec_decode_clamps_reorder_threshold(monkeypatch):
