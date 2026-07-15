@@ -35,9 +35,7 @@ def test_worker_role_builds_only_worker(monkeypatch):
 
 
 def test_request_finished_inherited_noop(monkeypatch):
-    monkeypatch.setattr(
-        ECCPUConnector, "_make_scheduler", lambda self, cfg: MagicMock()
-    )
+    monkeypatch.setattr(ECCPUConnector, "_make_scheduler", lambda self, cfg: MagicMock())
     c = ECCPUConnector(_cfg(), ECConnectorRole.SCHEDULER)
     assert c.request_finished(MagicMock()) == (False, None)
 

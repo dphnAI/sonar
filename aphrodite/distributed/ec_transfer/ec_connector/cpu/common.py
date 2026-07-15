@@ -48,9 +48,7 @@ def _get_encoder_cache_hidden_dim(aphrodite_config: "AphroditeConfig") -> int:
     """
     model_config = aphrodite_config.model_config
     hf_config = getattr(model_config, "hf_config", None)
-    vision_config = (
-        getattr(hf_config, "vision_config", None) if hf_config is not None else None
-    )
+    vision_config = getattr(hf_config, "vision_config", None) if hf_config is not None else None
     if vision_config is not None:
         out_hidden_size = getattr(vision_config, "out_hidden_size", None)
         deepstack_indexes = getattr(vision_config, "deepstack_visual_indexes", None)

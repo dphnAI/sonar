@@ -59,9 +59,7 @@ class ECCPUScheduler:
         entry = self._cache.get(identifier)
         return entry is not None and entry.ready
 
-    def ensure_cache_available(
-        self, request: "Request", num_computed_tokens: int
-    ) -> bool:
+    def ensure_cache_available(self, request: "Request", num_computed_tokens: int) -> bool:
         return True
 
     def update_state_after_alloc(self, request: "Request", index: int) -> None:
@@ -81,12 +79,8 @@ class ECCPUScheduler:
                 self._pending_loads[mm_hash] = list(entry.block_ids)
                 self._unpin_tracker.add(mm_hash, request.request_id)
 
-    def build_connector_meta(
-        self, scheduler_output: "SchedulerOutput"
-    ) -> ECCPUConnectorMetadata:
-        finished = (
-            scheduler_output.finished_req_ids if scheduler_output is not None else set()
-        )
+    def build_connector_meta(self, scheduler_output: "SchedulerOutput") -> ECCPUConnectorMetadata:
+        finished = scheduler_output.finished_req_ids if scheduler_output is not None else set()
 
         for key in self._ready_tracker.step(finished):
             entry = self._cache.get(key)

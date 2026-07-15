@@ -25,9 +25,7 @@ def _wait_for_file_size(fd: int, expected_size: int, timeout: float = 30.0):
         if os.fstat(fd).st_size >= expected_size:
             return
         if time.monotonic() > deadline:
-            raise TimeoutError(
-                f"Timed out waiting for EC mmap file to reach {expected_size} bytes"
-            )
+            raise TimeoutError(f"Timed out waiting for EC mmap file to reach {expected_size} bytes")
         time.sleep(0.005)
 
 
@@ -64,9 +62,7 @@ class ECSharedRegion:
 
         # File descriptor for the shared memory backing file.
         try:
-            self._fd: int | None = os.open(
-                self._mmap_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600
-            )
+            self._fd: int | None = os.open(self._mmap_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
             os.ftruncate(self._fd, total_size_bytes)
             self._is_creator = True
             logger.info(
@@ -97,9 +93,9 @@ class ECSharedRegion:
             self._mmap_obj.madvise(_MADV_POPULATE_WRITE, 0, total_size_bytes)
 
         # (num_blocks, block_size_bytes) int8 tensor over the mmap buffer.
-        self.blocks: torch.Tensor = torch.frombuffer(
-            memoryview(self._mmap_obj), dtype=torch.int8
-        ).view(num_blocks, block_size_bytes)
+        self.blocks: torch.Tensor = torch.frombuffer(memoryview(self._mmap_obj), dtype=torch.int8).view(
+            num_blocks, block_size_bytes
+        )
         # Cached for cudaHostRegister/Unregister and pointer math.
         self._blocks_ptr: int = self.blocks.data_ptr()
         self._blocks_nbytes: int = self.blocks.nbytes
@@ -113,13 +109,10 @@ class ECSharedRegion:
         """
         if self._is_pinned or not torch.cuda.is_available():
             return
-        result = torch.cuda.cudart().cudaHostRegister(
-            self._blocks_ptr, self._blocks_nbytes, 0
-        )
+        result = torch.cuda.cudart().cudaHostRegister(self._blocks_ptr, self._blocks_nbytes, 0)
         if result.value != 0:
             logger.warning(
-                "cudaHostRegister failed (code=%d) — "
-                "transfers will still work but may be slower (unpinned DMA)",
+                "cudaHostRegister failed (code=%d) — transfers will still work but may be slower (unpinned DMA)",
                 result.value,
             )
         else:
@@ -134,9 +127,7 @@ class ECSharedRegion:
                 os.unlink(self._mmap_path)
                 logger.info("Removed EC mmap file %s", self._mmap_path)
             except Exception:
-                logger.warning(
-                    "Failed to unlink path %s", self._mmap_path, exc_info=True
-                )
+                logger.warning("Failed to unlink path %s", self._mmap_path, exc_info=True)
             self._is_creator = False
         if self._is_pinned:
             result = torch.cuda.cudart().cudaHostUnregister(self._blocks_ptr)
