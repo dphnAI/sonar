@@ -303,6 +303,10 @@ class CudaCommunicator(DeviceCommunicatorBase):
         # uses dim=0 with tp-aligned (uniform) shards.
         if dim < 0:
             dim += input_.dim()
+        # On ROCm, the base-class all_gather (all_gather_into_tensor) is faster
+        # than pynccl-based paths for TP forward passes.
+        if current_platform.is_rocm():
+            return super().all_gather(input_, dim)
         if dim == 0 and should_nccl_symm_mem_ag_rs():
             return self._all_gather_symm_mem(input_.contiguous())
         return super().all_gather(input_, dim)
