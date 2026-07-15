@@ -81,3 +81,9 @@ ECConnectorFactory.register_connector(
     "aphrodite.distributed.ec_transfer.ec_connector.example_connector",
     "ECExampleConnector",
 )
+
+ECConnectorFactory.register_connector(
+    "ECCPUConnector",
+    "aphrodite.distributed.ec_transfer.ec_connector.cpu.connector",
+    "ECCPUConnector",
+)
