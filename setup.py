@@ -49,6 +49,11 @@ def should_require_rust_frontend() -> bool:
     return value.lower() not in ("", "0", "false", "no")
 
 
+def should_use_precompiled_rust() -> bool:
+    value = os.getenv("APHRODITE_USE_PRECOMPILED_RUST", "")
+    return value.lower() in ("1", "true", "yes")
+
+
 def get_precompiled_rust_extension_paths() -> list[Path]:
     return sorted((ROOT_DIR / "aphrodite").glob("_rust_*.so"))
 
@@ -716,7 +721,7 @@ else:
 # Rust artifacts, built via setuptools-rust and installed into the package
 # directory alongside the Python modules. Imported lazily: setuptools-rust does
 # not need to be installed when nothing is being built.
-if APHRODITE_USE_PRECOMPILED:
+if APHRODITE_USE_PRECOMPILED or should_use_precompiled_rust():
     rust_extensions = []
 else:
     rust_build = load_module_from_path("rust_build", os.path.join(ROOT_DIR, "tools", "build_rust.py"))
