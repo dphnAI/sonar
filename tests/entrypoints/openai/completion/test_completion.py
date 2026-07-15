@@ -7,6 +7,7 @@ import pytest
 import pytest_asyncio
 import regex as re
 from openai import BadRequestError
+from pydantic import ValidationError
 
 from aphrodite.entrypoints.openai.completion.protocol import CompletionRequest
 from aphrodite.sampling_params import SamplingParams
@@ -173,6 +174,59 @@ async def test_some_logprobs(client: openai.AsyncOpenAI, model_name: str):
     assert choice.logprobs.token_logprobs is not None
     assert choice.logprobs.top_logprobs is not None
     assert 5 <= len(choice.logprobs.top_logprobs[0]) <= 6
+
+
+@pytest.mark.asyncio
+async def test_logprob_token_ids(client: openai.AsyncOpenAI):
+    completion = await client.completions.create(
+        model=MODEL_NAME,
+        prompt="Hello",
+        max_tokens=1,
+        temperature=0.0,
+        logprobs=5,
+        extra_body={
+            "logprob_token_ids": [5000],
+            "allowed_token_ids": [42],
+            "return_tokens_as_token_ids": True,
+        },
+    )
+
+    choice = completion.choices[0]
+    assert choice.logprobs is not None
+    assert choice.logprobs.tokens == ["token_id:42"]
+    assert choice.logprobs.top_logprobs is not None
+    assert set(choice.logprobs.top_logprobs[0]) == {
+        "token_id:42",
+        "token_id:5000",
+    }
+
+
+@pytest.mark.asyncio
+async def test_logprob_token_ids_stream(client: openai.AsyncOpenAI):
+    stream = await client.completions.create(
+        model=MODEL_NAME,
+        prompt="Hello",
+        max_tokens=1,
+        temperature=0.0,
+        logprobs=5,
+        stream=True,
+        extra_body={
+            "logprob_token_ids": [5000],
+            "allowed_token_ids": [42],
+            "return_tokens_as_token_ids": True,
+        },
+    )
+
+    returned_top_logprobs: list[dict[str, float]] = []
+    async for chunk in stream:
+        logprobs = chunk.choices[0].logprobs
+        if logprobs is not None and logprobs.top_logprobs is not None:
+            returned_top_logprobs.extend(
+                top_logprobs for top_logprobs in logprobs.top_logprobs if top_logprobs is not None
+            )
+
+    assert len(returned_top_logprobs) == 1
+    assert set(returned_top_logprobs[0]) == {"token_id:42", "token_id:5000"}
 
 
 @pytest.mark.asyncio
@@ -715,6 +769,56 @@ def test_completion_request_bad_words_to_sampling_params():
 
     assert isinstance(sampling_params, SamplingParams)
     assert sampling_params.bad_words == ["foo", "bar"]
+
+
+def test_completion_request_logprob_token_ids_to_sampling_params():
+    request = CompletionRequest(
+        model="test-model",
+        prompt="Hello",
+        logprobs=5,
+        logprob_token_ids=[5000],
+    )
+
+    sampling_params = request.to_sampling_params(
+        max_tokens=1,
+        default_sampling_params={},
+    )
+
+    assert sampling_params.logprobs is None
+    assert sampling_params.logprob_token_ids == [5000]
+    assert sampling_params.num_logprobs == 1
+
+
+def test_completion_request_rejects_logprob_token_ids_without_logprobs():
+    with pytest.raises(ValidationError, match="logprobs"):
+        CompletionRequest(
+            model="test-model",
+            prompt="Hello",
+            logprob_token_ids=[5000],
+        )
+
+
+def test_completion_request_rejects_logprob_token_ids_without_generated_tokens():
+    with pytest.raises(ValidationError, match="no output tokens are generated"):
+        CompletionRequest(
+            model="test-model",
+            prompt="Hello",
+            echo=True,
+            max_tokens=0,
+            logprobs=5,
+            logprob_token_ids=[5000],
+        )
+
+
+def test_completion_request_rejects_logprob_token_ids_with_beam_search():
+    with pytest.raises(ValidationError, match="beam search"):
+        CompletionRequest(
+            model="test-model",
+            prompt="Hello",
+            logprobs=5,
+            logprob_token_ids=[5000],
+            use_beam_search=True,
+        )
 
 
 def test_completion_request_bad_words_default_empty():
