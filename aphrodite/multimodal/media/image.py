@@ -11,6 +11,7 @@ from PIL import Image
 
 import aphrodite.envs as envs
 from aphrodite.utils.serial_utils import tensor2base64
+from aphrodite.utils.sparse_utils import check_sparse_tensor_invariants_threadsafe
 
 from ..image import convert_image_mode, normalize_image, rgba_to_rgb
 from .base import MediaIO, MediaWithBytes
@@ -118,9 +119,7 @@ class ImageEmbeddingMediaIO(MediaIO[torch.Tensor]):
 
     def _load_pickled_torch(self, data: bytes) -> torch.Tensor:
         buffer = BytesIO(data)
-        # Enable sparse tensor integrity checks to prevent out-of-bounds
-        # writes from maliciously crafted tensors
-        with torch.sparse.check_sparse_tensor_invariants():
+        with check_sparse_tensor_invariants_threadsafe():
             tensor = torch.load(buffer, weights_only=True)
             return tensor.to_dense()
 
@@ -141,7 +140,7 @@ class ImageEmbeddingMediaIO(MediaIO[torch.Tensor]):
         if filepath.suffix == ".npy":
             return torch.from_numpy(np.load(filepath))
 
-        with torch.sparse.check_sparse_tensor_invariants():
+        with check_sparse_tensor_invariants_threadsafe():
             tensor = torch.load(filepath, weights_only=True)
             return tensor.to_dense()
 
