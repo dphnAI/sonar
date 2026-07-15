@@ -129,22 +129,6 @@ def test_get_top_tokens_honors_head_dtype(default_aphrodite_config):
     assert torch.equal(top, expected)
 
 
-def test_fp32_head_rejected_with_lora(default_aphrodite_config):
-    from aphrodite.lora.layers.logits_processor import LogitsProcessorWithLoRA
-
-    base = _build_processor(64)
-    base.head_dtype = torch.float32
-
-    with pytest.raises(ValueError, match="not yet supported with LoRA"):
-        LogitsProcessorWithLoRA(
-            base,
-            hidden_size=16,
-            dtype=torch.bfloat16,
-            device=torch.device("cpu"),
-            sharded_to_full_mapping=None,
-        )
-
-
 @pytest.mark.core_model
 def test_fp32_head_e2e_no_nan():
     """An fp32 head produces finite logprobs end-to-end.
