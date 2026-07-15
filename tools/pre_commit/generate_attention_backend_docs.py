@@ -43,6 +43,7 @@ CUDA_PLATFORM_FILE = REPO_ROOT / "aphrodite" / "platforms" / "cuda.py"
 FA_UTILS_FILE = BACKENDS_DIR / "fa_utils.py"
 FLASHINFER_UTILS_FILE = REPO_ROOT / "aphrodite" / "utils" / "flashinfer.py"
 MLA_ATTENTION_FILE = REPO_ROOT / "aphrodite" / "model_executor" / "layers" / "attention" / "mla_attention.py"
+MLA_PREFILL_REGISTRY_FILE = BACKENDS_DIR / "mla" / "prefill" / "registry.py"
 
 # Backends to skip during doc generation
 SKIP_BACKENDS = {"CUSTOM", "TORCH_SDPA"}
@@ -788,6 +789,249 @@ def parse_flashinfer_trtllm_features() -> dict[str, dict[str, Any]]:
     }
 
 
+def parse_mla_dimensions_call(node: ast.AST | None) -> str | None:
+    """Parse an MLADimensions(...) constructor call."""
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "MLADimensions"):
+        return None
+
+    values: dict[str, int] = {}
+    for keyword in node.keywords:
+        if (
+            keyword.arg in {"qk_nope_head_dim", "qk_rope_head_dim", "v_head_dim"}
+            and isinstance(keyword.value, ast.Constant)
+            and isinstance(keyword.value.value, int)
+        ):
+            values[keyword.arg] = keyword.value.value
+
+    if set(values) != {"qk_nope_head_dim", "qk_rope_head_dim", "v_head_dim"}:
+        return None
+
+    return (
+        f"(qk_nope_head_dim={values['qk_nope_head_dim']}, "
+        f"qk_rope_head_dim={values['qk_rope_head_dim']}, "
+        f"v_head_dim={values['v_head_dim']})"
+    )
+
+
+def parse_supported_mla_dimensions(node: ast.ClassDef) -> list[str]:
+    """Parse supported_mla_dimensions class variable."""
+    for item in node.body:
+        if not (
+            isinstance(item, ast.AnnAssign)
+            and isinstance(item.target, ast.Name)
+            and item.target.id == "supported_mla_dimensions"
+            and isinstance(item.value, ast.List)
+        ):
+            continue
+        dimensions = [parse_mla_dimensions_call(element) for element in item.value.elts]
+        return [dimension for dimension in dimensions if dimension is not None]
+    return []
+
+
+def _parse_mla_dimension_reference(
+    node: ast.AST,
+    named_dimensions: dict[str, str],
+) -> str | None:
+    if isinstance(node, ast.Name):
+        return named_dimensions.get(node.id)
+    return parse_mla_dimensions_call(node)
+
+
+def _parse_mla_dimensions_return(
+    statements: list[ast.stmt],
+    named_dimensions: dict[str, str],
+) -> list[str]:
+    for statement in statements:
+        if not isinstance(statement, ast.Return):
+            continue
+        value = statement.value
+        if not (
+            isinstance(value, ast.Compare)
+            and isinstance(value.left, ast.Name)
+            and value.left.id == "mla_dimensions"
+            and len(value.ops) == 1
+            and len(value.comparators) == 1
+        ):
+            continue
+
+        comparator = value.comparators[0]
+        if isinstance(value.ops[0], ast.Eq):
+            dimension = _parse_mla_dimension_reference(
+                comparator,
+                named_dimensions,
+            )
+            return [dimension] if dimension is not None else []
+        if isinstance(value.ops[0], ast.In) and isinstance(comparator, ast.List | ast.Tuple | ast.Set):
+            dimensions = [_parse_mla_dimension_reference(element, named_dimensions) for element in comparator.elts]
+            return [dimension for dimension in dimensions if dimension is not None]
+    return []
+
+
+def _parse_fa_version_condition(node: ast.AST) -> int | None:
+    if not (
+        isinstance(node, ast.Compare)
+        and len(node.ops) == 1
+        and isinstance(node.ops[0], ast.Eq)
+        and len(node.comparators) == 1
+        and isinstance(node.comparators[0], ast.Constant)
+        and isinstance(node.comparators[0].value, int)
+    ):
+        return None
+
+    left = node.left
+    is_fa_version = isinstance(left, ast.Name) and left.id == "fa_version"
+    is_get_fa_version = (
+        isinstance(left, ast.Call) and isinstance(left.func, ast.Name) and left.func.id == "get_flash_attn_version"
+    )
+    if is_fa_version or is_get_fa_version:
+        return node.comparators[0].value
+    return None
+
+
+def parse_supports_mla_dimensions(
+    method: ast.FunctionDef | None,
+) -> tuple[list[str], dict[int | None, list[str]]]:
+    """Parse dimensions and FA-version branches from a support method."""
+    if method is None:
+        return [], {}
+
+    named_dimensions: dict[str, str] = {}
+    for statement in method.body:
+        if not (
+            isinstance(statement, ast.Assign)
+            and len(statement.targets) == 1
+            and isinstance(statement.targets[0], ast.Name)
+        ):
+            continue
+        dimension = parse_mla_dimensions_call(statement.value)
+        if dimension is not None:
+            named_dimensions[statement.targets[0].id] = dimension
+
+    support_by_version: dict[int | None, list[str]] = {}
+    for statement in method.body:
+        if isinstance(statement, ast.Return):
+            dimensions = _parse_mla_dimensions_return(
+                [statement],
+                named_dimensions,
+            )
+            if dimensions:
+                support_by_version[None] = dimensions
+        elif isinstance(statement, ast.If):
+            fa_version = _parse_fa_version_condition(statement.test)
+            if fa_version is None:
+                continue
+            dimensions = _parse_mla_dimensions_return(
+                statement.body,
+                named_dimensions,
+            )
+            if dimensions:
+                support_by_version[fa_version] = dimensions
+            default_dimensions = _parse_mla_dimensions_return(
+                statement.orelse,
+                named_dimensions,
+            )
+            if default_dimensions:
+                support_by_version[None] = default_dimensions
+
+    supported_dimensions: list[str] = []
+    for dimensions in support_by_version.values():
+        for dimension in dimensions:
+            if dimension not in supported_dimensions:
+                supported_dimensions.append(dimension)
+    return supported_dimensions, support_by_version
+
+
+def parse_mla_prefill_registry() -> dict[str, str]:
+    """Parse the MLA prefill registry enum."""
+    if not MLA_PREFILL_REGISTRY_FILE.exists():
+        return {}
+    tree = ast.parse(MLA_PREFILL_REGISTRY_FILE.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "MLAPrefillBackendEnum":
+            return _extract_enum_values(node)
+    return {}
+
+
+def parse_mla_prefill_backend_file(class_path: str) -> dict[str, Any] | None:
+    """Parse a single MLA prefill backend file."""
+    file_path = get_file_from_class_path(class_path)
+    if file_path is None:
+        return None
+
+    try:
+        tree = ast.parse(file_path.read_text())
+    except Exception:
+        return None
+
+    class_name = class_path.rsplit(".", 1)[1]
+    class_node = find_class_in_ast(tree, class_name)
+    if class_node is None:
+        return None
+
+    dimensions, support_by_version = parse_supports_mla_dimensions(find_method(class_node, "supports_mla_dimensions"))
+    if not dimensions:
+        dimensions = parse_supported_mla_dimensions(class_node)
+
+    return {
+        "description": _mla_prefill_description(class_name),
+        "compute_capability": parse_compute_capability(class_node),
+        "enable": _mla_prefill_enable(class_name),
+        "disable": _mla_prefill_disable(class_name),
+        "supported_mla_dimensions": dimensions,
+        "mla_dimension_support_by_fa_version": support_by_version,
+    }
+
+
+def _mla_prefill_description(class_name: str) -> str:
+    if class_name == "FlashAttnPrefillBackend":
+        return "FlashAttention varlen (FA2/FA3/FA4)"
+    if class_name == "TrtllmRaggedPrefillBackend":
+        return "TensorRT-LLM ragged attention"
+    if class_name == "FlashInferPrefillBackend":
+        return "FlashInfer CUTLASS backend"
+    if class_name == "TokenspeedMLAPrefillBackend":
+        return "TokenSpeed CuTe DSL backend"
+    if class_name == "AiterFlashAttnPrefillBackend":
+        return "ROCm AITER FlashAttention"
+    return ""
+
+
+def _mla_prefill_enable(class_name: str) -> str:
+    if class_name == "FlashAttnPrefillBackend":
+        return "Default fallback"
+    if class_name == "TrtllmRaggedPrefillBackend":
+        return "Default on SM100 when valid"
+    return "Auto-selected when valid"
+
+
+def _mla_prefill_disable(class_name: str) -> str:
+    if class_name == "FlashAttnPrefillBackend":
+        return "Use other backends"
+    return "Select another backend"
+
+
+def _format_mla_dimension_notes(backend_info: dict[str, Any]) -> str:
+    supported_mla_dimensions = backend_info.get("supported_mla_dimensions", [])
+    if not supported_mla_dimensions:
+        return ""
+
+    support_by_version = backend_info.get("mla_dimension_support_by_fa_version", {})
+    if any(version is not None for version in support_by_version):
+        default_dimensions = support_by_version.get(None, [])
+        dimension_notes = []
+        for dimension in supported_mla_dimensions:
+            versions = [
+                f"FA{version}"
+                for version in (2, 3, 4)
+                if dimension in support_by_version.get(version, default_dimensions)
+            ]
+            version_limit = "" if len(versions) == 3 else " only"
+            dimension_notes.append(f"{dimension} ({'/'.join(versions)}{version_limit})")
+        return " or ".join(dimension_notes)
+
+    return " or ".join(supported_mla_dimensions) + " only"
+
+
 def parse_mla_prefill_backends() -> list[dict[str, Any]]:
     """Parse MLA prefill backend options from mla_attention.py.
 
@@ -797,73 +1041,23 @@ def parse_mla_prefill_backends() -> list[dict[str, Any]]:
 
     Returns a list of prefill backend info dicts with their requirements.
     """
-    if not MLA_ATTENTION_FILE.exists():
-        return []
-
-    try:
-        tree = ast.parse(MLA_ATTENTION_FILE.read_text())
-    except Exception:
-        return []
-
-    # Find compute capability requirements by parsing use_* functions
-    trtllm_cc = _find_cc_in_function(tree, "use_trtllm_ragged_deepseek_prefill")
-    flashinfer_cc = _find_cc_in_function(tree, "use_flashinfer_prefill")
-    cudnn_cc = _find_cc_in_function(tree, "use_cudnn_prefill")
-
-    # Build prefill backend list based on what we found
-    # Order matches the priority in MLACommonImpl.__init__
     prefill_backends: list[dict[str, Any]] = []
-
-    # TRT-LLM Ragged (highest priority if available)
-    if trtllm_cc:
+    for backend_name, class_path in parse_mla_prefill_registry().items():
+        if backend_name == "CUSTOM":
+            continue
+        backend_info = parse_mla_prefill_backend_file(class_path)
+        if backend_info is None:
+            continue
         prefill_backends.append(
             {
-                "name": "TRT-LLM Ragged‡",
-                "description": "TensorRT-LLM ragged attention",
-                "compute_capability": trtllm_cc,
-                "enable": "Default on SM100",
-                "disable": "`-ac.use_trtllm_ragged_deepseek_prefill=0`",
-                "notes": "DeepSeek R1 dims only",
+                "name": backend_name,
+                "description": backend_info["description"],
+                "compute_capability": backend_info["compute_capability"],
+                "enable": backend_info["enable"],
+                "disable": backend_info["disable"],
+                "notes": _format_mla_dimension_notes(backend_info),
             }
         )
-
-    # FlashInfer prefill
-    if flashinfer_cc:
-        prefill_backends.append(
-            {
-                "name": "FlashInfer",
-                "description": "FlashInfer CUTLASS backend",
-                "compute_capability": flashinfer_cc,
-                "enable": "`-ac.disable_flashinfer_prefill=0`",
-                "disable": "`-ac.disable_flashinfer_prefill=1`",
-                "notes": "DeepSeek R1 dims only",
-            }
-        )
-
-    # cuDNN prefill
-    if cudnn_cc:
-        prefill_backends.append(
-            {
-                "name": "cuDNN",
-                "description": "cuDNN-based attention",
-                "compute_capability": cudnn_cc,
-                "enable": "`-ac.use_cudnn_prefill=1`",
-                "disable": "`-ac.use_cudnn_prefill=0`",
-                "notes": "",
-            }
-        )
-
-    # FlashAttention is always available as fallback
-    prefill_backends.append(
-        {
-            "name": "FlashAttention",
-            "description": "FlashAttention varlen (FA2/FA3)",
-            "compute_capability": "Any",
-            "enable": "Default fallback",
-            "disable": "Use other backends",
-            "notes": "FA3 on SM90, FA2 otherwise",
-        }
-    )
 
     return prefill_backends
 
