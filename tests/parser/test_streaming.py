@@ -9,6 +9,7 @@ import pytest
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.entrypoints.openai.engine.protocol import DeltaMessage
 from aphrodite.parser.abstract_parser import DelegatingParser
+from aphrodite.parser.engine.registered_adapters import Qwen3ParserReasoningAdapter
 from aphrodite.reasoning.basic_parsers import BaseThinkingReasoningParser
 from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 
@@ -193,10 +194,11 @@ def stream_chunks(parser, tokenizer, chunks, request_obj):
     return results
 
 
-def _boundary_chunks(tokenizer, parser):
+def _boundary_chunks(tokenizer, parser, end_token_id=None):
     """Split MODEL_OUTPUT into 3 chunks that straddle the </think> boundary."""
     token_ids = tokenizer.encode(MODEL_OUTPUT, add_special_tokens=False)
-    end_token_id = parser._reasoning_parser.end_token_id
+    if end_token_id is None:
+        end_token_id = parser._reasoning_parser.end_token_id
     end_idx = token_ids.index(end_token_id)
     return [
         token_ids[: end_idx - 1],
@@ -435,3 +437,232 @@ def test_parse_delta_required_tool_choice_kimi_k2_ids_after_history(tokenizer, r
     _, _, tool_calls = collect_fields(results)
     assert any(tc.id == "functions.get_current_weather:1" for tc in tool_calls)
     assert all(tc.id in (None, "functions.get_current_weather:1") for tc in tool_calls)
+
+
+# ── Engine-based reasoning + non-engine tool parser (Qwen3 + Hermes) ──
+
+
+class Qwen3ReasoningHermesToolParser(DelegatingParser):
+    reasoning_parser_cls = Qwen3ParserReasoningAdapter
+    tool_parser_cls = Hermes2ProToolParser
+
+
+def test_engine_reasoning_hermes_tool_token_by_token(tokenizer, request_obj):
+    """Qwen3 engine reasoning + Hermes tool parser, token-by-token.
+
+    Sanity check that the mixed engine/non-engine configuration works
+    when tokens arrive one at a time (no deferred content).
+    """
+    parser = Qwen3ReasoningHermesToolParser(tokenizer)
+
+    assert parser._reasoning_parser.engine_based_streaming is True
+    assert parser._tool_parser.engine_based_streaming is False
+    assert parser._engine_based is False
+
+    results = stream_text(parser, tokenizer, MODEL_OUTPUT, request_obj, prompt_token_ids=[])
+    reasoning, content, tool_calls = collect_fields(results)
+
+    assert "let me think about this" in reasoning
+    assert content == ""
+    assert len(tool_calls) > 0
+    assert tool_calls[0].function.name == "get_weather"
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
+    assert json.loads(tool_args) == {"city": "Dallas"}
+
+
+def test_engine_reasoning_hermes_tool_boundary(tokenizer, request_obj):
+    """Qwen3 engine reasoning + Hermes tool parser, boundary chunks.
+
+    When </think> and <tool_call> are in the same chunk with aligned
+    text and token IDs, the engine processes both terminals and returns
+    the <tool_call> text as content.
+    """
+    parser = Qwen3ReasoningHermesToolParser(tokenizer)
+    end_token_id = parser._reasoning_parser._parser_engine._reasoning_end_token_id
+    chunks = _boundary_chunks(tokenizer, parser, end_token_id=end_token_id)
+    results = stream_chunks(parser, tokenizer, chunks, request_obj)
+    reasoning, content, tool_calls = collect_fields(results)
+
+    assert "think about this" in reasoning
+    assert content == ""
+    assert len(tool_calls) > 0
+    assert tool_calls[0].function.name == "get_weather"
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
+    assert json.loads(tool_args) == {"city": "Dallas"}
+    assert "tool_call" not in content
+
+
+def test_engine_reasoning_hermes_tool_text_holdback(tokenizer, request_obj):
+    """Qwen3 engine reasoning + Hermes tool parser with engine holdback.
+
+    Simulates stream_interval > 1 where a batched delta contains
+    '</think><'. The '<' is a regular character token, not the
+    <tool_call> special token, so the engine's incremental lexer
+    buffers it (it could be the start of a text terminal like
+    <tool_call>). The buffered '<' is only recoverable via
+    finish_streaming().
+
+    Without the fix, finish_streaming() is never called at the
+    reasoning->tool transition when _engine_based is False, so the '<'
+    is lost and the Hermes parser sees 'tool_call>...' instead of
+    '<tool_call>...'.
+    """
+    parser = Qwen3ReasoningHermesToolParser(tokenizer)
+    vocab = tokenizer.get_vocab()
+    think_end_id = vocab["</think>"]
+    lt_id = vocab["<"]
+
+    token_ids = tokenizer.encode(MODEL_OUTPUT, add_special_tokens=False)
+    end_idx = token_ids.index(think_end_id)
+
+    pre_ids = token_ids[:end_idx]
+    pre_text = tokenizer.decode(pre_ids)
+    holdback_ids = [think_end_id, lt_id]
+    holdback_text = "</think><"
+    rest_text = 'tool_call>\n{"name": "get_weather", "arguments": {"city": "Dallas"}}\n</tool_call>'
+    rest_ids = tokenizer.encode(rest_text, add_special_tokens=False)
+
+    results: list[DeltaMessage | None] = []
+    results.append(
+        parser.parse_delta(
+            pre_text,
+            pre_ids,
+            request_obj,
+            prompt_token_ids=[],
+            finished=False,
+        )
+    )
+    results.append(
+        parser.parse_delta(
+            holdback_text,
+            holdback_ids,
+            request_obj,
+            finished=False,
+        )
+    )
+    results.append(
+        parser.parse_delta(
+            rest_text,
+            rest_ids,
+            request_obj,
+            finished=False,
+        )
+    )
+
+    reasoning, content, tool_calls = collect_fields(results)
+
+    assert "let me think about this" in reasoning
+    assert len(tool_calls) > 0, (
+        "Tool calls lost at engine-reasoning -> tool transition. "
+        "finish_streaming() not called when _engine_based is False."
+    )
+    assert tool_calls[0].function.name == "get_weather"
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
+    assert json.loads(tool_args) == {"city": "Dallas"}
+    assert "tool_call" not in content
+
+
+# ── Engine-based reasoning WITHOUT a tool parser (Qwen3 only) ──
+
+
+class Qwen3ReasoningNoToolParser(DelegatingParser):
+    reasoning_parser_cls = Qwen3ParserReasoningAdapter
+    tool_parser_cls = None
+
+
+def test_engine_reasoning_no_tool_batched_content_passthrough(tokenizer, request_obj):
+    """Qwen3 engine reasoning with NO tool parser, batched boundary.
+
+    The mixed-parser tests above pair the engine reasoning parser with
+    Hermes; this exercises the engine-reasoning-only path through the
+    hoisted finish_streaming() transition. A single batched delta
+    carries ``</think>`` plus the following content. The post-``</think>``
+    text must be emitted as content, and the marker must not leak.
+    """
+    parser = Qwen3ReasoningNoToolParser(tokenizer)
+    assert parser._reasoning_parser.engine_based_streaming is True
+    assert parser._tool_parser is None
+
+    model_output = "<think>let me think about this</think>The answer is 42."
+    end_token_id = parser._reasoning_parser._parser_engine._reasoning_end_token_id
+    token_ids = tokenizer.encode(model_output, add_special_tokens=False)
+    end_idx = token_ids.index(end_token_id)
+    chunks = [token_ids[:end_idx], token_ids[end_idx:]]
+
+    results = stream_chunks(parser, tokenizer, chunks, request_obj)
+    reasoning, content, tool_calls = collect_fields(results)
+
+    assert "let me think about this" in reasoning
+    assert content == "The answer is 42."
+    assert "</think>" not in content
+    assert "</think>" not in reasoning
+    assert len(tool_calls) == 0
+
+
+def _decode_stream_deltas(tokenizer, groups):
+    """Decode token-ID groups via the real incremental ``DecodeStream``."""
+    from tokenizers.decoders import DecodeStream
+
+    stream = DecodeStream(skip_special_tokens=False)
+    inner = tokenizer._tokenizer
+    pairs = []
+    for group in groups:
+        text = ""
+        for token_id in group:
+            piece = stream.step(inner, token_id)
+            if piece:
+                text += piece
+        pairs.append((text, group))
+    return pairs
+
+
+def test_engine_reasoning_hermes_tool_multibyte_holdback(tokenizer, request_obj):
+    """Multi-token character across the reasoning->tool boundary."""
+    parser = Qwen3ReasoningHermesToolParser(tokenizer)
+    vocab = tokenizer.get_vocab()
+    think_end_id = vocab["</think>"]
+    lt_id = vocab["<"]
+
+    city = "東京🧑\u200d🚀"
+    assert len(tokenizer.encode("🧑\u200d🚀", add_special_tokens=False)) > 1
+
+    model_output = (
+        "<think>let me think about this</think>"
+        '<tool_call>\n{"name": "get_weather", '
+        f'"arguments": {{"city": "{city}"}}}}\n</tool_call>'
+    )
+    token_ids = tokenizer.encode(model_output, add_special_tokens=False)
+    end_idx = token_ids.index(think_end_id)
+    pre_ids = token_ids[:end_idx]
+
+    rest_text = f'tool_call>\n{{"name": "get_weather", "arguments": {{"city": "{city}"}}}}\n</tool_call>'
+    rest_ids = tokenizer.encode(rest_text, add_special_tokens=False)
+
+    groups = [pre_ids, [think_end_id, lt_id]] + [[tid] for tid in rest_ids]
+    pairs = _decode_stream_deltas(tokenizer, groups)
+
+    results: list[DeltaMessage | None] = []
+    prompt_token_ids: list[int] | None = []
+    for delta_text, group in pairs:
+        results.append(
+            parser.parse_delta(
+                delta_text,
+                group,
+                request_obj,
+                prompt_token_ids=prompt_token_ids,
+                finished=False,
+            )
+        )
+        prompt_token_ids = None
+
+    reasoning, content, tool_calls = collect_fields(results)
+
+    assert "let me think about this" in reasoning
+    assert len(tool_calls) > 0, (
+        "Tool call lost at engine-reasoning -> tool transition; the "
+        "buffered '<' was not recovered by finish_streaming()."
+    )
+    assert tool_calls[0].function.name == "get_weather"
+    tool_args = "".join(tc.function.arguments for tc in tool_calls if tc.function.arguments)
+    assert json.loads(tool_args) == {"city": city}
+    assert content == ""
