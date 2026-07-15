@@ -81,9 +81,7 @@ class LLBf16Dotprod:
         """Split K into vector loops, scalar rounds, and ragged tail."""
         self.k_main_elems = self._vectorized_elems(k, self.main_vec_width)
         self.k_after_main = k - self.k_main_elems
-        self.k_tail_elems = self._vectorized_elems(
-            self.k_after_main, self.tail_vec_width
-        )
+        self.k_tail_elems = self._vectorized_elems(self.k_after_main, self.tail_vec_width)
         self.k_done_all = self.k_main_elems + self.k_tail_elems
         self.scalar_rem = k - self.k_done_all
         self.ks_full = self.scalar_rem // self.bs
@@ -136,14 +134,10 @@ class LLBf16Dotprod:
         k_offset: cutlass.Constexpr,
         k_extent: cutlass.Constexpr,
     ):
-        k_layout_extent: cutlass.Constexpr = (
-            1 if const_expr(k_extent == 0) else k_extent
-        )
+        k_layout_extent: cutlass.Constexpr = 1 if const_expr(k_extent == 0) else k_extent
 
         if const_expr(k_offset == 0):
-            return cute.local_tile(
-                gX, (cute.size(gX, mode=[0]), k_layout_extent), (0, 0)
-            )
+            return cute.local_tile(gX, (cute.size(gX, mode=[0]), k_layout_extent), (0, 0))
         return cute.local_tile(
             cute.domain_offset((0, k_offset), gX),
             (cute.size(gX, mode=[0]), k_layout_extent),
@@ -258,9 +252,7 @@ class LLBf16Dotprod:
             gB_tail = self._make_k_slice(gB, k_main_elems, k_tail_elems)
             gA_tail_vec = cute.logical_divide(gA_tail, (None, tail_vec_width))
             gB_tail_vec = cute.logical_divide(gB_tail, (None, tail_vec_width))
-            tA_t, tB_t = self._make_thread_vector_slice(
-                gA_tail_vec, gB_tail_vec, tidx, n_idx, bs
-            )
+            tA_t, tB_t = self._make_thread_vector_slice(gA_tail_vec, gB_tail_vec, tidx, n_idx, bs)
             self._vector_dotprod(acc, tA_t, tB_t, M, tail_tiles, 8)
 
         # Full scalar rounds use CuTe width-1 tiles; KS_PART is the ragged tail.
@@ -269,9 +261,7 @@ class LLBf16Dotprod:
             gB_scalar = self._make_k_slice(gB, k_done_all, k_scalar_full)
             gA_scalar_vec = cute.logical_divide(gA_scalar, (None, 1))
             gB_scalar_vec = cute.logical_divide(gB_scalar, (None, 1))
-            tA_s, tB_s = self._make_thread_vector_slice(
-                gA_scalar_vec, gB_scalar_vec, tidx, n_idx, bs
-            )
+            tA_s, tB_s = self._make_thread_vector_slice(gA_scalar_vec, gB_scalar_vec, tidx, n_idx, bs)
             self._vector_dotprod(acc, tA_s, tB_s, M, ks_full, 2)
 
         # Only threads below KS_PART load the ragged tail.
