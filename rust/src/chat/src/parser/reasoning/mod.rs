@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 //! Reasoning parser registration and selection boundary for `aphrodite-chat`.
 
 use std::sync::{Arc, LazyLock};
