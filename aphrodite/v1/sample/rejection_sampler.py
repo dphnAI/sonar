@@ -276,11 +276,9 @@ class RejectionSampler(nn.Module):
     ) -> torch.Tensor:
         has_penalties = not sampling_metadata.no_penalties
         any_penalties_or_bad_words = sampling_metadata.bad_words_token_ids or has_penalties
-        holder = sampling_metadata.thinking_budget_state_holder
-        needs_thinking = holder is not None and holder.has_tracked_requests()
 
         output_token_ids = sampling_metadata.output_token_ids
-        if any_penalties_or_bad_words or needs_thinking:
+        if any_penalties_or_bad_words:
             output_token_ids = self._combine_outputs_with_spec_tokens(
                 output_token_ids,
                 sampling_metadata.spec_token_ids,
@@ -288,7 +286,7 @@ class RejectionSampler(nn.Module):
 
         # Calculate indices of target logits.
         repeat_indices: torch.Tensor | None = None
-        need_repeat_indices = sampling_metadata.allowed_token_ids_mask is not None or has_penalties or needs_thinking
+        need_repeat_indices = sampling_metadata.allowed_token_ids_mask is not None or has_penalties
         if need_repeat_indices:
             num_requests = len(metadata.num_draft_tokens)
             num_draft_tokens = torch.tensor(metadata.num_draft_tokens, device="cpu")
@@ -309,6 +307,7 @@ class RejectionSampler(nn.Module):
         for processor in sampling_metadata.logitsprocs.non_argmax_invariant:
             if isinstance(processor, MinTokensLogitsProcessor):
                 logits = processor.apply_with_spec_decode(logits, metadata.num_draft_tokens)
+        holder = sampling_metadata.thinking_budget_state_holder
         if holder is not None and holder.has_tracked_requests():
             logits = holder.apply_to_logits(
                 logits,
