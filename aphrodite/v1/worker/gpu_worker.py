@@ -466,14 +466,11 @@ class Worker(WorkerBase):
             profile_torch_peak = torch.accelerator.memory_stats(self.device).get("allocated_bytes.all.peak", 0)
 
             # Profile CUDA graph memory if graphs will be captured.
-            # ROCm is included: #44825 moved the profiler to
-            # torch.accelerator.get_memory_info (reliable on ROCm, as used by
-            # the AMD-CI mem tests), and graph_pool_handle resolves to the same
-            # torch.cuda handle the live capture path already uses on ROCm.
-            # XPU stays excluded (see #39977).
+            # Skip on ROCm/HIP/XPU as graph pool handles and get_memory_info
+            # behave differently and can produce incorrect/negative estimates.
             cudagraph_memory_estimate = 0
             if (
-                current_platform.is_cuda_alike()
+                current_platform.is_cuda()
                 and self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
             ):
                 cudagraph_memory_estimate = self.model_runner.profile_cudagraph_memory()
@@ -484,7 +481,8 @@ class Worker(WorkerBase):
             profile_result.non_torch_increase + profile_result.torch_peak_increase + profile_result.weights_memory
         )
 
-        # Respect the opt-in flag as originally designed.
+        # On ROCm, cudagraph_memory_estimate is always 0 so this is a no-op.
+        # On CUDA, respect the opt-in flag as originally designed.
         cudagraph_memory_estimate_applied = (
             cudagraph_memory_estimate if envs.APHRODITE_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS else 0
         )
