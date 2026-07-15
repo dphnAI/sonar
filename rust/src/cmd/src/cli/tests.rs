@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 use expect_test::expect;
 use aphrodite_engine_core_client::TransportMode;
 use aphrodite_server::{Config, HttpListenerMode, ParserSelection, RendererSelection};

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+
 use thiserror::Error;
 use aphrodite_engine_core_client::Error as EngineCoreError;
 use aphrodite_llm::Error as LlmError;
