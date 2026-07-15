@@ -3,7 +3,7 @@
 
 import pytest
 import torch
-from transformers import AutoModelForTokenClassification
+from transformers import AutoModelForMaskedLM, AutoModelForTokenClassification
 
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
@@ -198,3 +198,56 @@ def test_auto_conversion(
         hf_output = hf_output.detach().clone().cpu().float()
         aphrodite_output = aphrodite_output.detach().clone().cpu().float()
         assert torch.allclose(hf_output, aphrodite_output, atol=1e-2)
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        # Original Google checkpoint: legacy `gamma`/`beta` LayerNorm names, an
+        # NSP head (`cls.seq_relationship.*`) and a decoder tied to the input
+        # embeddings (no explicit decoder weight in the checkpoint).
+        "google-bert/bert-base-uncased",
+    ],
+)
+@pytest.mark.parametrize("dtype", ["float"])
+@torch.inference_mode
+def test_bert_for_masked_lm(
+    hf_runner,
+    aphrodite_runner,
+    example_prompts,
+    model: str,
+    dtype: str,
+) -> None:
+    # BertForMaskedLM exposes its MLM head as a token-level pooling task; the
+    # head applies softmax over the vocabulary, so each output row is a
+    # distribution (matching HF's softmax(logits) below).
+    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
+
+    # Use eager attention on ROCm to avoid HF Transformers flash attention
+    # accuracy issues: https://github.com/vllm-project/vllm/issues/30167
+    hf_model_kwargs = {}
+    if current_platform.is_rocm():
+        hf_model_kwargs["attn_implementation"] = "eager"
+
+    with hf_runner(
+        model,
+        dtype=dtype,
+        auto_cls=AutoModelForMaskedLM,
+        model_kwargs=hf_model_kwargs,
+    ) as hf_model:
+        tokenizer = hf_model.tokenizer
+        hf_outputs = []
+        for prompt in example_prompts:
+            inputs = tokenizer([prompt], return_tensors="pt")
+            inputs = hf_model.wrap_device(inputs)
+            output = hf_model.model(**inputs)
+            hf_outputs.append(softmax(output.logits[0]))
+
+    # Compare the per-token vocabulary distributions position by position.
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+        hf_output = hf_output.detach().clone().cpu().float()
+        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
+        assert hf_output.shape == aphrodite_output.shape
+        assert torch.equal(hf_output.argmax(dim=-1), aphrodite_output.argmax(dim=-1))
+        torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
