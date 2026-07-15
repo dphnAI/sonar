@@ -25,6 +25,7 @@ from aphrodite.distributed import get_pp_group, get_tensor_model_parallel_world_
 from aphrodite.forward_context import get_forward_context
 from aphrodite.model_executor.layers.activation import SiluAndMulWithClamp
 from aphrodite.model_executor.layers.attention import Attention
+from aphrodite.model_executor.layers.attention.attention import set_default_quant_scales
 from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
 from aphrodite.model_executor.layers.fused_allreduce_gemma_rms_norm import (
     fused_allreduce_gemma_rms_norm,
@@ -473,6 +474,11 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
         self.layer_name = f"{prefix}.attn"
         self.kv_cache_dtype = cache_config.cache_dtype if cache_config is not None else "auto"
         self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(self.kv_cache_dtype, aphrodite_config.model_config)
+        # MiniMax-M3 sparse attention owns its KV-cache insert/read path instead
+        # of wrapping the generic Attention module. Keep the same runtime scale
+        # attributes so FP8 KV reads can honor Aphrodite's per-layer descale contract.
+        self.calculate_kv_scales = False
+        set_default_quant_scales(self, register_buffer=True)
         # Indexer side-cache dtype, mirroring --kv-cache-dtype for the main
         # cache (--attention-config '{"indexer_kv_dtype": ...}').
         self.indexer_kv_dtype = aphrodite_config.attention_config.indexer_kv_dtype
@@ -488,6 +494,7 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
         self.impl: MiniMaxM3SparseImpl = select_main_impl_cls(  # type: ignore[assignment]
             topk_blocks=sparse_cfg["sparse_topk_blocks"],
             kv_cache_dtype=self.kv_cache_dtype,
+            num_kv_heads=self.num_kv_heads,
         )(
             self.num_heads,
             self.head_dim,
