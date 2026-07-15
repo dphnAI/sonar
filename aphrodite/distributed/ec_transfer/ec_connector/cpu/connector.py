@@ -63,52 +63,36 @@ class ECCPUConnector(ECConnectorBase):
         return ECCPUScheduler(aphrodite_config)
 
     # Worker-side forwarders.
-    def start_load_caches(
-        self, encoder_cache: dict[str, torch.Tensor], **kwargs
-    ) -> None:
+    def start_load_caches(self, encoder_cache: dict[str, torch.Tensor], **kwargs) -> None:
         assert self.connector_worker is not None
         metadata = self._get_connector_metadata()
         assert isinstance(metadata, ECCPUConnectorMetadata)
-        self.connector_worker.start_load_caches(
-            encoder_cache, connector_metadata=metadata
-        )
+        self.connector_worker.start_load_caches(encoder_cache, connector_metadata=metadata)
 
-    def save_caches(
-        self, encoder_cache: dict[str, torch.Tensor], mm_hash: str, **kwargs
-    ) -> None:
+    def save_caches(self, encoder_cache: dict[str, torch.Tensor], mm_hash: str, **kwargs) -> None:
         assert self.connector_worker is not None
         metadata = self._get_connector_metadata()
         assert isinstance(metadata, ECCPUConnectorMetadata)
-        self.connector_worker.save_caches(
-            encoder_cache, mm_hash, connector_metadata=metadata
-        )
+        self.connector_worker.save_caches(encoder_cache, mm_hash, connector_metadata=metadata)
 
     # Scheduler-side forwarders.
     def has_cache_item(self, identifier: str) -> bool:
         assert self.connector_scheduler is not None
         return self.connector_scheduler.has_cache_item(identifier)
 
-    def ensure_cache_available(
-        self, request: "Request", num_computed_tokens: int
-    ) -> bool:
+    def ensure_cache_available(self, request: "Request", num_computed_tokens: int) -> bool:
         assert self.connector_scheduler is not None
-        return self.connector_scheduler.ensure_cache_available(
-            request, num_computed_tokens
-        )
+        return self.connector_scheduler.ensure_cache_available(request, num_computed_tokens)
 
     def update_state_after_alloc(self, request: "Request", index: int) -> None:
         assert self.connector_scheduler is not None
         self.connector_scheduler.update_state_after_alloc(request, index)
 
-    def build_connector_meta(
-        self, scheduler_output: "SchedulerOutput"
-    ) -> ECCPUConnectorMetadata:
+    def build_connector_meta(self, scheduler_output: "SchedulerOutput") -> ECCPUConnectorMetadata:
         assert self.connector_scheduler is not None
         return self.connector_scheduler.build_connector_meta(scheduler_output)
 
-    def get_finished(
-        self, finished_req_ids: set[str]
-    ) -> tuple[set[str] | None, set[str] | None]:
+    def get_finished(self, finished_req_ids: set[str]) -> tuple[set[str] | None, set[str] | None]:
         if self.connector_worker is not None:
             self.connector_worker.flush_saves()
         return None, None

@@ -74,12 +74,9 @@ class EmbeddingCache:
         space even after evicting all evictable entries.
         """
         with self._lock:
-            assert key not in self._entries, (
-                f"EmbeddingCache: duplicate alloc for {key!r}"
-            )
+            assert key not in self._entries, f"EmbeddingCache: duplicate alloc for {key!r}"
             assert n_blocks <= self._num_blocks, (
-                f"EmbeddingCache: {n_blocks} blocks requested but capacity "
-                f"is {self._num_blocks}"
+                f"EmbeddingCache: {n_blocks} blocks requested but capacity is {self._num_blocks}"
             )
             if len(self._free_blocks) + self._evictable_block_count < n_blocks:
                 return None
@@ -93,9 +90,7 @@ class EmbeddingCache:
         """Mark an entry as ready (data is CPU-visible)."""
         with self._lock:
             entry = self._entries[key]
-            assert entry._pin_count == -1, (
-                f"EmbeddingCache: mark_ready on already-ready entry {key!r}"
-            )
+            assert entry._pin_count == -1, f"EmbeddingCache: mark_ready on already-ready entry {key!r}"
             entry.mark_ready()
             self._entries_free_list[key] = None
             self._evictable_block_count += len(entry.block_ids)
@@ -114,9 +109,7 @@ class EmbeddingCache:
         """Unpin an entry. Asserts currently pinned."""
         with self._lock:
             entry = self._entries[key]
-            assert entry._pin_count > 0, (
-                f"EmbeddingCache: unpin of unpinned entry {key!r}"
-            )
+            assert entry._pin_count > 0, f"EmbeddingCache: unpin of unpinned entry {key!r}"
             entry._pin_count -= 1
             if entry._pin_count == 0:
                 self._entries_free_list[key] = None

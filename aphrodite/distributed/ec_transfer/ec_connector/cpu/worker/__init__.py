@@ -58,9 +58,7 @@ class ECCPUWorker:
         # All TP/PCP ranks hold identical encoder output. Only one rank
         # per mmap needs to write — saves host memory bandwidth.
         # DCP is a subdivision of TP, so tp_rank==0 covers it.
-        self._is_save_rank = (
-            get_tensor_model_parallel_rank() == 0 and get_pcp_group().rank_in_group == 0
-        )
+        self._is_save_rank = get_tensor_model_parallel_rank() == 0 and get_pcp_group().rank_in_group == 0
 
         # Dedicated stream for async mmap→GPU loads (overlaps with compute).
         self._load_stream = current_platform.Stream()
@@ -147,11 +145,7 @@ class ECCPUWorker:
         src_base = blocks.data_ptr()
 
         # Pre-filter: only hashes not already in encoder_cache.
-        load_items = {
-            h: idxs
-            for h, idxs in connector_metadata.loads.items()
-            if h not in encoder_cache
-        }
+        load_items = {h: idxs for h, idxs in connector_metadata.loads.items() if h not in encoder_cache}
         if not load_items:
             return
 
@@ -159,9 +153,7 @@ class ECCPUWorker:
 
         with current_platform.stream(self._load_stream):
             # Single contiguous destination buffer for all loads.
-            dst_buf = torch.empty(
-                total_blocks, block_size, dtype=torch.int8, device=device_type
-            )
+            dst_buf = torch.empty(total_blocks, block_size, dtype=torch.int8, device=device_type)
             dst_buf_base = dst_buf.data_ptr()
 
             bufs = self._buf_pool.acquire(total_blocks)
@@ -185,9 +177,7 @@ class ECCPUWorker:
             offset = 0
             for mm_hash, block_ids in load_items.items():
                 n = len(block_ids)
-                encoder_cache[mm_hash] = (
-                    dst_buf[offset : offset + n].view(dtype).reshape(n, -1)
-                )
+                encoder_cache[mm_hash] = dst_buf[offset : offset + n].view(dtype).reshape(n, -1)
                 offset += n
 
         current_platform.current_stream().wait_stream(self._load_stream)

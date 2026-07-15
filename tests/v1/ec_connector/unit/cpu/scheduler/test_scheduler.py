@@ -462,9 +462,7 @@ def test_first_finish_unpins_immediately(monkeypatch):
     assert "a" in meta.loads
 
     # "a" is pinned. Try to evict — must fail.
-    s.update_state_after_alloc(
-        _Request([_Feature("b", length=2)], request_id="req_z"), 0
-    )
+    s.update_state_after_alloc(_Request([_Feature("b", length=2)], request_id="req_z"), 0)
     meta2 = s.build_connector_meta(scheduler_output=None)
     assert "b" not in meta2.saves
 
@@ -472,9 +470,7 @@ def test_first_finish_unpins_immediately(monkeypatch):
     s.build_connector_meta(_SchedulerOutput(finished_req_ids={"req_y"}))
 
     # Next step: "a" is now evictable, so "b" can be allocated.
-    s.update_state_after_alloc(
-        _Request([_Feature("b", length=2)], request_id="req_w"), 0
-    )
+    s.update_state_after_alloc(_Request([_Feature("b", length=2)], request_id="req_w"), 0)
     meta3 = s.build_connector_meta(scheduler_output=None)
     assert "b" in meta3.saves
     s.shutdown()

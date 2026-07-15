@@ -71,9 +71,7 @@ def _aphrodite_config(rank: int = 0) -> Mock:
     return cfg
 
 
-def _meta(
-    *, saves: dict | None = None, loads: dict | None = None
-) -> ECCPUConnectorMetadata:
+def _meta(*, saves: dict | None = None, loads: dict | None = None) -> ECCPUConnectorMetadata:
     return ECCPUConnectorMetadata(saves=saves or {}, loads=loads or {})
 
 
@@ -171,19 +169,15 @@ def test_save_caches_writes_to_assigned_blocks(make_worker, n_elements, n_blocks
         block_byte_end = min(block_byte_start + _BLOCK_SIZE_BYTES, total_bytes)
         n_written = block_byte_end - block_byte_start
         actual_bytes = worker._region.blocks[block_idx, :n_written].view(torch.uint8)
-        assert torch.equal(
-            actual_bytes, expected_bytes[block_byte_start:block_byte_end]
-        ), f"block {block_idx} (slot {slot}) bytes mismatch"
+        assert torch.equal(actual_bytes, expected_bytes[block_byte_start:block_byte_end]), (
+            f"block {block_idx} (slot {slot}) bytes mismatch"
+        )
         if n_written < _BLOCK_SIZE_BYTES:
             tail = worker._region.blocks[block_idx, n_written:]
-            assert torch.all(tail == sentinel), (
-                f"block {block_idx} tail was overwritten"
-            )
+            assert torch.all(tail == sentinel), f"block {block_idx} tail was overwritten"
 
     for idx in set(range(_NUM_BLOCKS)) - set(block_ids):
-        assert torch.all(worker._region.blocks[idx] == sentinel), (
-            f"block {idx} (unassigned) was overwritten"
-        )
+        assert torch.all(worker._region.blocks[idx] == sentinel), f"block {idx} (unassigned) was overwritten"
 
 
 def test_save_caches_noop_when_mm_hash_not_in_saves(make_worker):
@@ -211,9 +205,7 @@ def test_save_caches_noop_for_non_save_rank(make_worker, tp_rank, pcp_rank):
     sentinel = 0x42
     worker._region.blocks.fill_(sentinel)
 
-    worker.save_caches(
-        {"h": torch.zeros(8, dtype=_DTYPE)}, "h", _meta(saves={"h": [0]})
-    )
+    worker.save_caches({"h": torch.zeros(8, dtype=_DTYPE)}, "h", _meta(saves={"h": [0]}))
     worker.flush_saves()
 
     assert torch.all(worker._region.blocks == sentinel)
@@ -263,9 +255,7 @@ def test_start_load_caches_copies_with_correct_shape_dtype_and_bytes(make_worker
     """Single batched load across all hashes with correct byte→dtype→shape."""
     worker = make_worker()
     n_blocks = 3
-    src_orig = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE).reshape(
-        n_blocks, _HIDDEN_DIM
-    )
+    src_orig = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE).reshape(n_blocks, _HIDDEN_DIM)
     src_int8 = src_orig.view(torch.int8).reshape(n_blocks, _BLOCK_SIZE_BYTES)
 
     block_ids = [3, 1, 6]
@@ -293,9 +283,7 @@ def test_start_load_caches_preserves_existing_encoder_cache_entry(make_worker):
     encoder_cache = {"h": sentinel}
     worker.start_load_caches(encoder_cache, _meta(loads={"h": [0]}))
 
-    assert encoder_cache["h"] is sentinel, (
-        "existing encoder_cache entry must not be replaced"
-    )
+    assert encoder_cache["h"] is sentinel, "existing encoder_cache entry must not be replaced"
 
 
 @_requires_cuda
@@ -313,9 +301,7 @@ def test_start_load_caches_skips_cached_and_loads_new_in_same_step(make_worker):
     """Cached entries are preserved while new ones are loaded."""
     worker = make_worker()
     n_blocks = 2
-    src_orig = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE).reshape(
-        n_blocks, _HIDDEN_DIM
-    )
+    src_orig = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE).reshape(n_blocks, _HIDDEN_DIM)
     src_int8 = src_orig.view(torch.int8).reshape(n_blocks, _BLOCK_SIZE_BYTES)
     new_block_ids = [4, 2]
     for i, idx in enumerate(new_block_ids):
@@ -346,9 +332,7 @@ def test_start_load_caches_works_on_all_ranks(make_worker, tp_rank, pcp_rank):
     """All TP/PCP ranks must load from mmap — loads are NOT gated like saves."""
     worker = make_worker(tp_rank=tp_rank, pcp_rank=pcp_rank)
     n_blocks = 2
-    src_orig = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE).reshape(
-        n_blocks, _HIDDEN_DIM
-    )
+    src_orig = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE).reshape(n_blocks, _HIDDEN_DIM)
     src_int8 = src_orig.view(torch.int8).reshape(n_blocks, _BLOCK_SIZE_BYTES)
     block_ids = [1, 3]
     for i, idx in enumerate(block_ids):
@@ -372,9 +356,7 @@ def test_save_then_load_round_trips_bytes(make_worker):
     n_blocks = 3
     block_ids = [5, 1, 6]
 
-    src = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE, device="cuda").reshape(
-        n_blocks, _HIDDEN_DIM
-    )
+    src = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE, device="cuda").reshape(n_blocks, _HIDDEN_DIM)
     worker.save_caches({"h": src}, "h", _meta(saves={"h": block_ids}))
     worker.flush_saves()
 
@@ -508,11 +490,7 @@ def test_shutdown_calls_region_cleanup_and_swallows_errors(caplog):
         worker.shutdown()  # exception must be swallowed
 
     assert mock_region.cleanup.call_count == 2
-    assert any(
-        "worker region cleanup failed" in r.message
-        for r in caplog.records
-        if r.levelno == logging.DEBUG
-    )
+    assert any("worker region cleanup failed" in r.message for r in caplog.records if r.levelno == logging.DEBUG)
 
 
 # ── e2e: scheduler + worker pipeline ────────────────────────────────────────
@@ -551,9 +529,7 @@ def test_e2e_scheduler_worker_save_then_load(make_worker, monkeypatch):
 
     # -- Step 1: scheduler allocates, worker saves --
     n_blocks = 3
-    src = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE, device="cuda").reshape(
-        n_blocks, _HIDDEN_DIM
-    )
+    src = torch.arange(n_blocks * _HIDDEN_DIM, dtype=_DTYPE, device="cuda").reshape(n_blocks, _HIDDEN_DIM)
 
     class _Pos:
         offset = 0
