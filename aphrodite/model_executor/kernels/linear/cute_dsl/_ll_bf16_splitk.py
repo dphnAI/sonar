@@ -136,9 +136,7 @@ class LLBf16SplitK:
         swizzle_bits = min(swizzle_bits, 3)
         # Tile the swizzled atom across (M_or_N, K, stages).
         layout_atom_outer = cute.make_layout((8, major_size), stride=(major_size, 1))
-        layout_atom = cute.make_composed_layout(
-            cute.make_swizzle(swizzle_bits, 3, 3), 0, layout_atom_outer
-        )
+        layout_atom = cute.make_composed_layout(cute.make_swizzle(swizzle_bits, 3, 3), 0, layout_atom_outer)
         return cute.tile_to_shape(layout_atom, smem_tiler, (0, 1, 2))
 
     def _make_gmem_tiled_copy(self, atom_copy, dtype, copy_bits, num_threads):
@@ -146,9 +144,7 @@ class LLBf16SplitK:
         # Lay threads across K so each lane issues one vector copy.
         copy_elems = copy_bits // dtype.width
         k_threads = cute.size(self.tile_k) // copy_elems  # threads along K
-        thread_layout = cute.make_layout(
-            (num_threads // k_threads, k_threads), stride=(k_threads, 1)
-        )
+        thread_layout = cute.make_layout((num_threads // k_threads, k_threads), stride=(k_threads, 1))
         value_layout = cute.make_layout((1, copy_elems))
         return cute.make_tiled_copy_tv(atom_copy, thread_layout, value_layout)
 
@@ -161,9 +157,7 @@ class LLBf16SplitK:
         for v in cutlass.range_constexpr(num_vec):
             # pred_flat is (K_VEC, M/N) for one K_TILE.
             for j in cutlass.range_constexpr(num_mn):
-                pred_flat[v, j] = cute.elem_less(
-                    coord_ktile[(0, v), j], (dim_limit, K_total)
-                )
+                pred_flat[v, j] = cute.elem_less(coord_ktile[(0, v), j], (dim_limit, K_total))
 
     def _make_pred(self, tXcX, k_tile, dim_limit, K_total):
         # pred_flat is (K_VEC, M/N); pred is (K_VEC, M/N, STAGE).
@@ -215,38 +209,22 @@ class LLBf16SplitK:
         """
         bM, bN, bK = self.tile_m, self.tile_n, self.tile_k
         copy_bits: cutlass.Constexpr = self.copy_bits
-        sA_layout = self._make_smem_layout_AB(
-            mA.element_type, copy_bits, (bM, bK, self.num_stages)
-        )
-        sB_layout = self._make_smem_layout_AB(
-            mB.element_type, copy_bits, (bN, bK, self.num_stages)
-        )
+        sA_layout = self._make_smem_layout_AB(mA.element_type, copy_bits, (bM, bK, self.num_stages))
+        sB_layout = self._make_smem_layout_AB(mB.element_type, copy_bits, (bN, bK, self.num_stages))
 
         @cute.struct
         class SharedStorage:
-            a: cute.struct.Align[
-                cute.struct.MemRange[mA.element_type, cute.cosize(sA_layout)], 16
-            ]
-            b: cute.struct.Align[
-                cute.struct.MemRange[mB.element_type, cute.cosize(sB_layout)], 16
-            ]
-            mbar: cute.struct.Align[
-                cute.struct.MemRange[cutlass.Int64, self.num_stages * 2], 8
-            ]
+            a: cute.struct.Align[cute.struct.MemRange[mA.element_type, cute.cosize(sA_layout)], 16]
+            b: cute.struct.Align[cute.struct.MemRange[mB.element_type, cute.cosize(sB_layout)], 16]
+            mbar: cute.struct.Align[cute.struct.MemRange[cutlass.Int64, self.num_stages * 2], 8]
 
         atom_g2s = cute.make_copy_atom(
-            cute.nvgpu.cpasync.CopyG2SOp(
-                cache_mode=cute.nvgpu.cpasync.LoadCacheMode.GLOBAL
-            ),
+            cute.nvgpu.cpasync.CopyG2SOp(cache_mode=cute.nvgpu.cpasync.LoadCacheMode.GLOBAL),
             mA.element_type,
             num_bits_per_copy=copy_bits,
         )  # cp.async GMEM -> SMEM, bypassing L1
-        tiled_copy_A = self._make_gmem_tiled_copy(
-            atom_g2s, mA.element_type, copy_bits, self.num_dma_threads
-        )
-        tiled_copy_B = self._make_gmem_tiled_copy(
-            atom_g2s, mB.element_type, copy_bits, self.num_dma_threads
-        )
+        tiled_copy_A = self._make_gmem_tiled_copy(atom_g2s, mA.element_type, copy_bits, self.num_dma_threads)
+        tiled_copy_B = self._make_gmem_tiled_copy(atom_g2s, mB.element_type, copy_bits, self.num_dma_threads)
         op = cute.nvgpu.warp.MmaF16BF16Op(self.ab_dtype, self.acc_dtype, self.mma_shape)
         # Repeat the m16n8k16 atom along N to cover the CTA output tile.
         perm_mnk = (
@@ -254,9 +232,7 @@ class LLBf16SplitK:
             self.atom_layout[1] * self.mma_shape[1] * (self.tile_n // 8),
             self.atom_layout[2] * self.mma_shape[2],
         )
-        tiled_mma = cute.make_tiled_mma(
-            op, cute.make_layout(self.atom_layout), permutation_mnk=perm_mnk
-        )
+        tiled_mma = cute.make_tiled_mma(op, cute.make_layout(self.atom_layout), permutation_mnk=perm_mnk)
         tiler_mn = (bM, bN)
         grid_m, grid_n = cute.ceil_div(mC.shape, tiler_mn)
         self.kernel(
@@ -315,15 +291,9 @@ class LLBf16SplitK:
         cta_tiler = (bM, bN, bK)
         coord = (bid_m, bid_n, None)  # all K tiles
         # CTA-local tiles.
-        gA = cute.local_tile(
-            mA, tiler=cta_tiler, coord=coord, proj=(1, None, 1)
-        )  # skip N
-        gB = cute.local_tile(
-            mB, tiler=cta_tiler, coord=coord, proj=(None, 1, 1)
-        )  # skip M
-        gC = cute.local_tile(
-            mC, tiler=cta_tiler, coord=coord, proj=(1, 1, None)
-        )  # skip K
+        gA = cute.local_tile(mA, tiler=cta_tiler, coord=coord, proj=(1, None, 1))  # skip N
+        gB = cute.local_tile(mB, tiler=cta_tiler, coord=coord, proj=(None, 1, 1))  # skip M
+        gC = cute.local_tile(mC, tiler=cta_tiler, coord=coord, proj=(1, 1, None))  # skip K
 
         mcA = cute.make_identity_tensor(mA.layout.shape)
         mcB = cute.make_identity_tensor(mB.layout.shape)
@@ -344,12 +314,8 @@ class LLBf16SplitK:
         sB = storage.b.get_tensor(sB_layout)
 
         # Pipeline cp.async producers into MMA consumers.
-        producer_group = pipeline.CooperativeGroup(
-            pipeline.Agent.Thread, self.num_dma_threads
-        )
-        consumer_group = pipeline.CooperativeGroup(
-            pipeline.Agent.Thread, self.num_mma_threads
-        )
+        producer_group = pipeline.CooperativeGroup(pipeline.Agent.Thread, self.num_dma_threads)
+        consumer_group = pipeline.CooperativeGroup(pipeline.Agent.Thread, self.num_mma_threads)
         mainloop_pipeline = pipeline.PipelineCpAsync.create(
             barrier_storage=storage.mbar.data_ptr(),
             num_stages=num_stages,
@@ -381,9 +347,7 @@ class LLBf16SplitK:
             self._fill_pred(tApA_flat, tAcA, k_start, mA.shape[0], K_total)
             self._fill_pred(tBpB_flat, tBcB, k_start, mB.shape[0], K_total)
 
-            producer_state = pipeline.make_pipeline_state(
-                pipeline.PipelineUserType.Producer, num_stages
-            )
+            producer_state = pipeline.make_pipeline_state(pipeline.PipelineUserType.Producer, num_stages)
 
             # Prime the first pipeline stage.
             mainloop_pipeline.producer_acquire(producer_state)
@@ -404,9 +368,7 @@ class LLBf16SplitK:
             mainloop_pipeline.producer_commit(producer_state)
             producer_state.advance()
 
-            for k_tile in cutlass.range(
-                k_start + self.split_k, k_tile_count, self.split_k, unroll=1
-            ):
+            for k_tile in cutlass.range(k_start + self.split_k, k_tile_count, self.split_k, unroll=1):
                 self._fill_pred(tApA_flat, tAcA, k_tile, mA.shape[0], K_total)
                 self._fill_pred(tBpB_flat, tBcB, k_tile, mB.shape[0], K_total)
                 mainloop_pipeline.producer_acquire(producer_state)
@@ -447,9 +409,7 @@ class LLBf16SplitK:
             atom_s2r_A = cute.make_copy_atom(
                 cute.nvgpu.warp.LdMatrix8x8x16bOp(False, 4), mA.element_type
             )  # non-transposed, x4
-            atom_s2r_B = cute.make_copy_atom(
-                cute.nvgpu.warp.LdMatrix8x8x16bOp(False, 4), mB.element_type
-            )
+            atom_s2r_B = cute.make_copy_atom(cute.nvgpu.warp.LdMatrix8x8x16bOp(False, 4), mB.element_type)
 
             # SMEM -> register copy path.
             tiled_s2r_A = cute.make_tiled_copy_A(atom_s2r_A, tiled_mma)
@@ -467,9 +427,7 @@ class LLBf16SplitK:
             num_k_blocks = cute.size(tCrA, mode=[2])
             k_blocks_per_warp: cutlass.Constexpr = num_k_blocks // num_mma_warps
 
-            consumer_state = pipeline.make_pipeline_state(
-                pipeline.PipelineUserType.Consumer, num_stages
-            )
+            consumer_state = pipeline.make_pipeline_state(pipeline.PipelineUserType.Consumer, num_stages)
 
             # Shape-dynamic split-K count, so this stays a runtime range.
             for _ in cutlass.range(num_k_tiles, unroll_full=True):
@@ -477,21 +435,15 @@ class LLBf16SplitK:
                 for ki in cutlass.range_constexpr(k_blocks_per_warp):
                     cute.copy(
                         tiled_s2r_A,
-                        tCsA_warp_v[
-                            None, None, (mma_warp_idx, ki), consumer_state.index
-                        ],
+                        tCsA_warp_v[None, None, (mma_warp_idx, ki), consumer_state.index],
                         tCrA_v[None, None, 0],
                     )  # ldmatrix
                     cute.copy(
                         tiled_s2r_B,
-                        tCsB_warp_v[
-                            None, None, (mma_warp_idx, ki), consumer_state.index
-                        ],
+                        tCsB_warp_v[None, None, (mma_warp_idx, ki), consumer_state.index],
                         tCrB_v[None, None, 0],
                     )
-                    cute.gemm(
-                        tiled_mma, tCrC, tCrA[None, None, 0], tCrB[None, None, 0], tCrC
-                    )  # mma.sync
+                    cute.gemm(tiled_mma, tCrC, tCrA[None, None, 0], tCrB[None, None, 0], tCrC)  # mma.sync
                 mainloop_pipeline.consumer_release(consumer_state)
                 consumer_state.advance()
 
@@ -508,9 +460,7 @@ class LLBf16SplitK:
             epilogue_slot_coords = cute.make_identity_tensor((bN, bM))
             # Layout: (mma_warp, linear MN element).
             smem_red = cute.make_tensor(
-                cute.arch.alloc_smem(
-                    cutlass.Float32, num_elems * num_mma_warps, alignment=16
-                ),
+                cute.arch.alloc_smem(cutlass.Float32, num_elems * num_mma_warps, alignment=16),
                 cute.make_layout((num_mma_warps, num_elems), stride=(num_elems, 1)),
             )
             smem_warp = cute.make_tensor(
@@ -523,9 +473,7 @@ class LLBf16SplitK:
 
             # Layout: (split-K rank, linear MN element).
             partials = cute.make_tensor(
-                cute.arch.alloc_smem(
-                    cutlass.Float32, num_elems * self.split_k, alignment=16
-                ),
+                cute.arch.alloc_smem(cutlass.Float32, num_elems * self.split_k, alignment=16),
                 cute.make_layout((self.split_k, num_elems), stride=(num_elems, 1)),
             )
             cta_rank = cute.arch.block_idx_in_cluster()

@@ -93,9 +93,7 @@ class LLBf16Gemm:
         if dotprod_max_m >= M or K < 2048:
             return self.CompileKey(backend="dotprod", M=M, K=K, bs=_DEFAULT_DOTPROD_BS)
 
-        split_k, num_stages = _TUNED_CONFIGS.get((K, N), {}).get(
-            M, _DEFAULT_SPLITK_CONFIG
-        )
+        split_k, num_stages = _TUNED_CONFIGS.get((K, N), {}).get(M, _DEFAULT_SPLITK_CONFIG)
         return self.CompileKey(backend="splitk", split_k=split_k, num_stages=num_stages)
 
     def get_warmup_keys(
@@ -104,11 +102,7 @@ class LLBf16Gemm:
         shapes: Iterable[tuple[int, int]],
         m_values: Iterable[int],
     ) -> list[CompileKey]:
-        return list(
-            dict.fromkeys(
-                self.dispatch(M=M, K=K, N=N) for K, N in shapes for M in m_values
-            )
-        )
+        return list(dict.fromkeys(self.dispatch(M=M, K=K, N=N) for K, N in shapes for M in m_values))
 
     @staticmethod
     def _fake_gemm_tensors(*, M, K, N, divisibility: int):
@@ -213,32 +207,21 @@ class LLBf16Gemm:
     ) -> None:
         if hidden_states.dim() != 2 or router_weight.dim() != 2:
             raise ValueError("hidden_states and router_weight must be 2D tensors")
-        if (
-            hidden_states.dtype != torch.bfloat16
-            or router_weight.dtype != torch.bfloat16
-        ):
+        if hidden_states.dtype != torch.bfloat16 or router_weight.dtype != torch.bfloat16:
             raise ValueError("hidden_states and router_weight must have dtype=bfloat16")
         if hidden_states.device.type != "cuda" or router_weight.device.type != "cuda":
-            raise ValueError(
-                "hidden_states and router_weight must have device_type=cuda"
-            )
+            raise ValueError("hidden_states and router_weight must have device_type=cuda")
         if hidden_states.device != router_weight.device:
-            raise ValueError(
-                "hidden_states and router_weight must be on the same CUDA device"
-            )
+            raise ValueError("hidden_states and router_weight must be on the same CUDA device")
         if output_dtype != torch.float32:
             raise ValueError("ll_bf16_gemm only supports output_dtype=torch.float32")
         if hidden_states.shape[1] != router_weight.shape[1]:
-            raise ValueError(
-                "hidden_states and router_weight must have matching K dimensions"
-            )
+            raise ValueError("hidden_states and router_weight must have matching K dimensions")
         # Kernels use vectorized bf16 loads and require 16-byte row alignment.
         if hidden_states.shape[1] % 8 != 0:
             raise ValueError("ll_bf16_gemm requires K to be divisible by 8")
         if not hidden_states.is_contiguous() or not router_weight.is_contiguous():
-            raise ValueError(
-                "hidden_states and router_weight must be contiguous row-major inputs"
-            )
+            raise ValueError("hidden_states and router_weight must be contiguous row-major inputs")
 
     def __call__(
         self,
