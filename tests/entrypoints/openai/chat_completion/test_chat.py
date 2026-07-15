@@ -13,6 +13,7 @@ import regex as re
 import requests
 import torch
 from openai import BadRequestError
+from pydantic import ValidationError
 
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
@@ -987,6 +988,45 @@ def test_chat_completion_request_accepts_model_specific_reasoning_effort():
 
     assert request.reasoning_effort == "max"
     assert chat_params.chat_template_kwargs["reasoning_effort"] == "max"
+
+
+def test_chat_completion_request_logprob_token_ids_to_sampling_params():
+    request = ChatCompletionRequest(
+        model="test-model",
+        messages=[{"role": "user", "content": "Hello"}],
+        logprobs=True,
+        top_logprobs=5,
+        logprob_token_ids=[5000],
+    )
+
+    sampling_params = request.to_sampling_params(
+        max_tokens=1,
+        default_sampling_params={},
+    )
+
+    assert sampling_params.logprobs is None
+    assert sampling_params.logprob_token_ids == [5000]
+    assert sampling_params.num_logprobs == 1
+
+
+def test_chat_completion_request_rejects_logprob_token_ids_without_logprobs():
+    with pytest.raises(ValidationError, match="logprobs"):
+        ChatCompletionRequest(
+            model="test-model",
+            messages=[{"role": "user", "content": "Hello"}],
+            logprob_token_ids=[5000],
+        )
+
+
+def test_chat_completion_request_rejects_logprob_token_ids_with_beam_search():
+    with pytest.raises(ValidationError, match="beam search"):
+        ChatCompletionRequest(
+            model="test-model",
+            messages=[{"role": "user", "content": "Hello"}],
+            logprobs=True,
+            logprob_token_ids=[5000],
+            use_beam_search=True,
+        )
 
 
 def test_chat_completion_request_rejects_unknown_reasoning_effort():
