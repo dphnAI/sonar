@@ -955,6 +955,11 @@ class Exl3LinearMethod(LinearMethodBase):
             return [0, 1]
         if prefix.endswith("in_proj_qkvz"):
             return [(0, 1, 2), 3]
+        if prefix.endswith("in_proj_qkv"):
+            # LoRA-enabled GDN path (Qwen3.5/3.6): in_proj_qkv is loaded as a
+            # single fused (0, 1, 2) shard, matching qwen3_5.py's
+            # stacked_params_mapping for the enable_lora branch.
+            return [(0, 1, 2)]
 
         return list(range(len(output_partition_sizes)))
 
