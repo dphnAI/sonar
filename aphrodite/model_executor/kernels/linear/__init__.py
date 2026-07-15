@@ -57,6 +57,9 @@ from aphrodite.model_executor.kernels.linear.mixed_precision.marlin import (
 from aphrodite.model_executor.kernels.linear.mixed_precision.rdna3_w4a16 import (
     RDNA3W4A16LinearKernel,
 )
+from aphrodite.model_executor.kernels.linear.mixed_precision.rdna_hybrid_w4a16 import (
+    RDNAHybridW4A16LinearKernel,
+)
 from aphrodite.model_executor.kernels.linear.mixed_precision.swordfish import (
     SwordfishLinearKernel,
 )
@@ -411,6 +414,7 @@ _POSSIBLE_KERNELS: dict[PlatformEnum, list[type[MPLinearKernel]]] = {
     ],
     PlatformEnum.ROCM: [
         RDNA3W4A16LinearKernel,
+        RDNAHybridW4A16LinearKernel,
         TritonW4A16LinearKernel,
         ConchLinearKernel,
         ExllamaLinearKernel,
@@ -1047,6 +1051,7 @@ __all__ = [
     "ExllamaLinearKernel",
     "MacheteLinearKernel",
     "MarlinLinearKernel",
+    "RDNAHybridW4A16LinearKernel",
     "SwordfishLinearKernel",
     "TritonW4A16LinearKernel",
     "XPUW4A8IntLinearKernel",
