@@ -270,6 +270,10 @@ class HpcAttentionBackend(AttentionBackend):
     def get_name() -> str:
         return "HPC_ATTN"
 
+    @classmethod
+    def supports_sliding_window(cls) -> bool:
+        return True
+
     @staticmethod
     def get_impl_cls() -> type["HpcAttentionImpl"]:
         return HpcAttentionImpl
