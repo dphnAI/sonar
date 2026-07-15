@@ -217,12 +217,18 @@ def dispatch_cpu_unquantized_gemm(
         # For now it should be a causal_conv1d op
         if torch.cpu._is_amx_tile_supported():
             # prepack conv weight
-            layer.weight.data = ops.causal_conv1d_weight_pack(
+            unpacked = (
                 layer.weight.view(
                     layer.weight.size(0),
                     layer.weight.size(2),
                 )
+                .contiguous()
+                .clone()
             )
+            # The speculative GDN path uses torch conv instead of the AMX
+            # kernel, so keep a plain (dim, width) copy before packing.
+            layer._cpu_unpacked_conv_weight = unpacked
+            layer.weight.data = ops.causal_conv1d_weight_pack(unpacked)
         return
 
     N, K = layer.weight.size()
