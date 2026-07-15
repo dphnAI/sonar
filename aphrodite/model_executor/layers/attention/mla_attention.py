@@ -259,7 +259,6 @@ from aphrodite.v1.attention.backend import (
     AttentionType,
     CommonAttentionMetadata,
     MLAAttentionImpl,
-    SparseMLAAttentionImpl,
 )
 from aphrodite.v1.attention.backends.mla.prefill import (
     MLAPrefillBackend,
@@ -484,16 +483,27 @@ class MLAAttention(nn.Module, AttentionLayerBase):
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
 
-        prefill_backend_cls = get_mla_prefill_backend(aphrodite_config)
-        self.prefill_backend = prefill_backend_cls(
-            num_heads=self.num_heads,
-            scale=self.scale,
-            kv_lora_rank=self.kv_lora_rank,
-            qk_nope_head_dim=self.qk_nope_head_dim,
-            qk_rope_head_dim=self.qk_rope_head_dim,
-            v_head_dim=self.v_head_dim,
-            aphrodite_config=aphrodite_config,
-        )
+        self.prefill_backend: MLAPrefillBackend | None
+        try:
+            prefill_backend_cls = get_mla_prefill_backend(aphrodite_config)
+        except ValueError:
+            if not self.impl.is_sparse or aphrodite_config.attention_config.mla_prefill_backend is not None:
+                raise
+            logger.warning_once(
+                "No MLA prefill backend supports this model; sparse MLA will use the "
+                "top-k MQA path only (no dense-MHA prefill)."
+            )
+            self.prefill_backend = None
+        else:
+            self.prefill_backend = prefill_backend_cls(
+                num_heads=self.num_heads,
+                scale=self.scale,
+                kv_lora_rank=self.kv_lora_rank,
+                qk_nope_head_dim=self.qk_nope_head_dim,
+                qk_rope_head_dim=self.qk_rope_head_dim,
+                v_head_dim=self.v_head_dim,
+                aphrodite_config=aphrodite_config,
+            )
 
         self.kv_cache = torch.tensor([])
 
@@ -681,9 +691,6 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         if fp8_attention and self.kv_cache_dtype != "fp8_ds_mla":
             kv_cache = kv_cache.view(current_platform.fp8_dtype())
 
-        # Sparse MLA impls only support forward_mqa (decode-style attention)
-        is_sparse_impl = isinstance(self.impl, SparseMLAAttentionImpl)
-
         # sm89 sparse local-prefill under DCP. When every prefill request is a
         # fresh prompt, its full KV is computable on-rank from the replicated
         # activations, so prefill tokens attend locally (no q all-gather, no
@@ -691,7 +698,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
         # builder sets prefill_local only for Sm89MLASparseImpl batches that
         # qualify; other impls/metadata lack the attribute.
         sparse_dcp_local_prefill = (
-            is_sparse_impl
+            self.impl.is_sparse
             and self.impl.dcp_world_size > 1
             and getattr(attn_metadata, "prefill_local", None) is not None
         )
@@ -702,20 +709,31 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                 k_c_normed, k_pe, attn_metadata, self._k_scale
             )
 
-        if is_sparse_impl:
-            num_mqa_tokens = q.size(0)
-            num_mha_tokens = 0
-        else:
-            assert (
-                attn_metadata.num_decodes is not None
-                and attn_metadata.num_prefills is not None
-                and attn_metadata.num_decode_tokens is not None
+        assert (
+            attn_metadata.num_decodes is not None
+            and attn_metadata.num_prefills is not None
+            and attn_metadata.num_decode_tokens is not None
+        )
+        num_mqa_tokens = attn_metadata.num_decode_tokens
+        num_mha_tokens = q.size(0) - num_mqa_tokens
+
+        if self.impl.is_sparse and num_mha_tokens > 0:
+            prefill_max_seq_len = getattr(attn_metadata, "prefill_max_seq_len", 0)
+            impl_forward_mha = getattr(type(self.impl), "forward_mha", None)
+            use_mha = (
+                self.prefill_backend is not None
+                and impl_forward_mha is not MLAAttentionImpl.forward_mha
+                and attn_metadata.prefill is not None
+                and prefill_max_seq_len <= getattr(attn_metadata, "topk_tokens", 0)
+                and not self._aphrodite_config.attention_config.sparse_mla_force_mqa
             )
-            num_mqa_tokens = attn_metadata.num_decode_tokens
-            num_mha_tokens = q.size(0) - num_mqa_tokens
+            if not use_mha:
+                num_mqa_tokens = q.size(0)
+                num_mha_tokens = 0
 
         mha_use_quant_output = (
             quant_key is not None
+            and self.prefill_backend is not None
             and self.prefill_backend.supports_quant_output(quant_key)
             and attn_metadata is not None
             and attn_metadata.prefill is not None
@@ -822,7 +840,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                     mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
 
             # call decode attn
-            if not is_sparse_impl:
+            if not self.impl.is_sparse:
                 assert attn_metadata.decode is not None
 
             if sparse_dcp_local_prefill:
@@ -1415,6 +1433,115 @@ def backend_supports_prefill_query_quantization() -> bool:
         "TRTLLM_RAGGED",
         "TOKENSPEED_MLA",
     )
+
+
+def build_mla_chunked_context_metadata(
+    *,
+    context_lens_cpu: torch.Tensor,
+    prefill_query_start_loc_cpu: torch.Tensor,
+    num_prefills: int,
+    chunked_prefill_workspace: torch.Tensor,
+    chunked_prefill_workspace_size: int,
+    block_size: int,
+    align_chunk_to_block: bool,
+    device: torch.device,
+    dcp_world_size: int,
+    dcp_local_block_size: int,
+    dcp_virtual_block_size: int,
+) -> "MLACommonPrefillMetadata.ChunkedContextMetadata | None":
+    max_context_len = context_lens_cpu.max().item()
+    if max_context_len <= 0:
+        return None
+    num_prefills_with_context = int((context_lens_cpu > 0).sum().item())
+
+    max_context_chunk = chunked_prefill_workspace_size // num_prefills_with_context
+    if align_chunk_to_block:
+        max_context_chunk = round_down(max_context_chunk, block_size)
+    assert max_context_chunk > 0
+
+    num_chunks = cdiv(max_context_len, max_context_chunk)
+    chunk_starts = torch.empty(num_chunks, num_prefills, dtype=torch.int32, pin_memory=True).copy_(
+        torch.arange(num_chunks, dtype=torch.int32).multiply_(max_context_chunk).unsqueeze(1)
+    )
+    chunk_ends = torch.min(context_lens_cpu.unsqueeze(0), chunk_starts + max_context_chunk)
+    chunk_seq_lens = (chunk_ends - chunk_starts).clamp(min=0)
+
+    cu_seq_lens_cpu = torch.zeros(num_chunks, num_prefills + 1, dtype=torch.int32, pin_memory=True)
+    torch.cumsum(chunk_seq_lens, dim=1, out=cu_seq_lens_cpu[:, 1:], dtype=torch.int32)
+    chunk_total_token = cu_seq_lens_cpu[:, -1]
+
+    max_tokens_over_chunk = chunk_total_token.max().item()
+    token_to_seq_cpu = torch.zeros((num_chunks, max_tokens_over_chunk), dtype=torch.int32, pin_memory=True)
+    req_indices = torch.arange(num_prefills, dtype=torch.int32)
+    for i in range(num_chunks):
+        token_to_seq = torch.repeat_interleave(req_indices, chunk_seq_lens[i])
+        token_to_seq_cpu[i, : token_to_seq.shape[0]] = token_to_seq
+
+    prefill_tokens_with_context = prefill_query_start_loc_cpu[num_prefills_with_context].item()
+    metadata_cls = MLACommonPrefillMetadata.ChunkedContextMetadata
+
+    if dcp_world_size > 1:
+        local_context_lens_allranks = get_dcp_local_seq_lens(
+            context_lens_cpu, dcp_world_size, None, dcp_local_block_size
+        )
+        padded_local_context_lens_cpu: torch.Tensor = (
+            cdiv(context_lens_cpu, dcp_virtual_block_size) * dcp_local_block_size
+        )
+        assert max_context_chunk % dcp_world_size == 0
+        padded_local_max_context_chunk = cdiv(max_context_chunk, dcp_virtual_block_size) * dcp_local_block_size
+        local_chunk_starts = torch.empty(num_chunks, num_prefills, dtype=torch.int32, pin_memory=True).copy_(
+            torch.arange(num_chunks, dtype=torch.int32).multiply_(padded_local_max_context_chunk).unsqueeze(1)
+        )
+        local_chunk_ends = torch.min(
+            padded_local_context_lens_cpu.unsqueeze(0),
+            local_chunk_starts + padded_local_max_context_chunk,
+        )
+        padded_local_chunk_seq_lens = (local_chunk_ends - local_chunk_starts).clamp(min=0)
+        padded_local_cu_seq_lens_cpu = torch.zeros(num_chunks, num_prefills + 1, dtype=torch.int32, pin_memory=True)
+        torch.cumsum(
+            padded_local_chunk_seq_lens,
+            dim=1,
+            out=padded_local_cu_seq_lens_cpu[:, 1:],
+            dtype=torch.int32,
+        )
+        max_padded_local_tokens = padded_local_cu_seq_lens_cpu[:, -1].max().item()
+        padded_local_token_to_seq_cpu = torch.zeros((num_chunks, max_padded_local_tokens), dtype=torch.int32)
+        for i in range(num_chunks):
+            token_to_seq = torch.repeat_interleave(req_indices, padded_local_chunk_seq_lens[i])
+            padded_local_token_to_seq_cpu[i, : token_to_seq.shape[0]] = token_to_seq
+
+        chunked_context_metadata = metadata_cls(
+            cu_seq_lens=cu_seq_lens_cpu.to(device, non_blocking=True),
+            starts=local_chunk_starts.to(device, non_blocking=True),
+            seq_tot=padded_local_chunk_seq_lens.sum(dim=1).tolist(),
+            max_seq_lens=chunk_seq_lens.max(dim=1).values.tolist(),
+            seq_lens=chunk_seq_lens,
+            token_to_seq=token_to_seq_cpu.to(device, non_blocking=True),
+            chunk_total_token=chunk_total_token.tolist(),
+            workspace=chunked_prefill_workspace,
+            prefill_tokens_with_context=prefill_tokens_with_context,
+            padded_local_chunk_seq_lens=padded_local_chunk_seq_lens.tolist(),
+            local_context_lens_allranks=local_context_lens_allranks.tolist(),
+            padded_local_cu_seq_lens=padded_local_cu_seq_lens_cpu.to(device, non_blocking=True),
+            padded_local_token_to_seq=padded_local_token_to_seq_cpu.to(device, non_blocking=True),
+            cu_seq_lens_lst=cu_seq_lens_cpu.tolist(),
+            chunk_size=padded_local_max_context_chunk,
+        )
+    else:
+        chunked_context_metadata = metadata_cls(
+            cu_seq_lens=cu_seq_lens_cpu.to(device, non_blocking=True),
+            starts=chunk_starts.to(device, non_blocking=True),
+            seq_tot=chunk_seq_lens.sum(dim=1).tolist(),
+            max_seq_lens=chunk_seq_lens.max(dim=1).values.tolist(),
+            seq_lens=chunk_seq_lens,
+            token_to_seq=token_to_seq_cpu.to(device, non_blocking=True),
+            chunk_total_token=chunk_total_token,
+            workspace=chunked_prefill_workspace,
+            prefill_tokens_with_context=prefill_tokens_with_context,
+        )
+
+    assert max(chunked_context_metadata.max_seq_lens) <= chunked_prefill_workspace_size
+    return chunked_context_metadata
 
 
 class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):

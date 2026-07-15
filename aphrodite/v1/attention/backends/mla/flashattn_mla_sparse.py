@@ -4,22 +4,23 @@
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-import numpy as np
 import torch
 
 from aphrodite.config import AphroditeConfig
 from aphrodite.config.cache import CacheDType
+from aphrodite.model_executor.layers.attention.mla_attention import MLACommonPrefillMetadata
+from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
+    SparseMLACommonImpl,
+    SparseMLACommonMetadataBuilder,
+)
 from aphrodite.platforms.interface import DeviceCapability
-from aphrodite.utils.torch_utils import np_to_pinned_tensor
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
     AttentionLayer,
     AttentionMetadata,
-    AttentionMetadataBuilder,
-    CommonAttentionMetadata,
+    MLAAttentionImpl,
     MultipleOf,
-    SparseMLAAttentionImpl,
 )
 from aphrodite.v1.attention.backends.fa_utils import flash_attn_supports_mla
 from aphrodite.v1.attention.backends.mla.sparse_utils import (
@@ -50,7 +51,7 @@ class FlashAttnMLASparseBackend(AttentionBackend):
         return FlashAttnMLASparseMetadataBuilder
 
     @staticmethod
-    def get_impl_cls() -> type[SparseMLAAttentionImpl[Any]]:
+    def get_impl_cls() -> type[MLAAttentionImpl[Any]]:
         return FlashAttnMLASparseImpl
 
     @classmethod
@@ -123,11 +124,19 @@ class FlashAttnMLASparseMetadata(AttentionMetadata):
 
     block_table: torch.Tensor
     req_id_per_token: torch.Tensor
+    seq_lens: torch.Tensor
     block_size: int = 64
     topk_tokens: int = 2048
+    num_decodes: int = 0
+    num_prefills: int = 0
+    num_decode_tokens: int = 0
+    prefill_max_seq_len: int = 0
+    prefill: MLACommonPrefillMetadata | None = None
+    cp_kv_cache_interleave_size: int = 1
 
 
-class FlashAttnMLASparseMetadataBuilder(AttentionMetadataBuilder[FlashAttnMLASparseMetadata]):
+class FlashAttnMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashAttnMLASparseMetadata]):
+    metadata_cls = FlashAttnMLASparseMetadata
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
 
     def __init__(
@@ -137,53 +146,14 @@ class FlashAttnMLASparseMetadataBuilder(AttentionMetadataBuilder[FlashAttnMLASpa
         aphrodite_config: AphroditeConfig,
         device: torch.device,
     ) -> None:
-        self.aphrodite_config = aphrodite_config
-        self.layer_names = layer_names
-        self.kv_cache_spec = kv_cache_spec
-        self.model_config = aphrodite_config.model_config
-        self.device = device
+        super().__init__(kv_cache_spec, layer_names, aphrodite_config, device)
 
-        self._init_reorder_batch_threshold(1, supports_spec_as_decode=True)
-
-        self.topk_tokens = aphrodite_config.model_config.hf_config.index_topk
-        self.req_id_per_token_buffer = torch.empty(
-            (aphrodite_config.scheduler_config.max_num_batched_tokens,),
-            dtype=torch.int32,
-            device=device,
-        )
-
-    def build(
-        self,
-        common_prefix_len: int,
-        common_attn_metadata: CommonAttentionMetadata,
-        fast_build: bool = False,
-    ) -> FlashAttnMLASparseMetadata:
-        cm = common_attn_metadata
-        num_tokens = cm.num_actual_tokens
-        starts = np.asarray(cm.query_start_loc_cpu, dtype=np.int32)
-        seg_lengths = np.diff(starts)
-        req_id_per_token = np.repeat(np.arange(seg_lengths.shape[0], dtype=np.int32), seg_lengths)
-
-        self.req_id_per_token_buffer.fill_(0)
-        self.req_id_per_token_buffer[: req_id_per_token.shape[0]].copy_(
-            np_to_pinned_tensor(req_id_per_token), non_blocking=True
-        )
-
-        return FlashAttnMLASparseMetadata(
-            num_reqs=cm.num_reqs,
-            max_query_len=cm.max_query_len,
-            max_seq_len=cm.max_seq_len,
-            num_actual_tokens=cm.num_actual_tokens,
-            query_start_loc=cm.query_start_loc,
-            slot_mapping=cm.slot_mapping,
-            block_table=cm.block_table_tensor,
-            req_id_per_token=self.req_id_per_token_buffer[:num_tokens],
-            block_size=self.kv_cache_spec.block_size,
-            topk_tokens=self.topk_tokens,
-        )
+        num_q_heads = self.model_config.get_num_attention_heads(aphrodite_config.parallel_config)
+        threshold = {16: 128, 32: 128, 64: 256, 128: 256}.get(num_q_heads, 256)
+        self._init_reorder_batch_threshold(threshold, supports_spec_as_decode=True)
 
 
-class FlashAttnMLASparseImpl(SparseMLAAttentionImpl[FlashAttnMLASparseMetadata]):
+class FlashAttnMLASparseImpl(SparseMLACommonImpl[FlashAttnMLASparseMetadata]):
     def __init__(
         self,
         num_heads: int,
@@ -208,19 +178,23 @@ class FlashAttnMLASparseImpl(SparseMLAAttentionImpl[FlashAttnMLASparseMetadata])
         if kv_cache_dtype not in ("auto", "float16", "bfloat16"):
             raise NotImplementedError("FlashAttnMLASparseImpl currently supports only FP16/BF16 KV cache.")
 
-        self.num_heads = num_heads
-        self.head_size = head_size
-        self.scale = float(scale)
-        self.num_kv_heads = num_kv_heads
-        self.kv_cache_dtype = kv_cache_dtype
-        self.kv_lora_rank: int = mla_args["kv_lora_rank"]
-        self.qk_rope_head_dim: int = mla_args["qk_rope_head_dim"]
-        self.topk_indices_buffer: torch.Tensor | None = (
-            indexer.topk_indices_buffer if indexer is not None else topk_indices_buffer
+        super().__init__(
+            num_heads,
+            head_size,
+            scale,
+            num_kv_heads,
+            alibi_slopes,
+            sliding_window,
+            kv_cache_dtype,
+            logits_soft_cap,
+            attn_type,
+            kv_sharing_target_layer_name,
+            indexer=indexer,
+            topk_indices_buffer=topk_indices_buffer,
+            **mla_args,
         )
         assert self.topk_indices_buffer is not None, "Indexer or topk_indices_buffer required for sparse MLA"
         self.supports_quant_query_input = False
-        self.dcp_world_size = -1
         self.q_pad_num_heads = None
 
     def forward_mqa(

@@ -24,8 +24,8 @@ from aphrodite.v1.attention.backend import (
     AttentionMetadata,
     AttentionMetadataBuilder,
     CommonAttentionMetadata,
+    MLAAttentionImpl,
     MultipleOf,
-    SparseMLAAttentionImpl,
 )
 from aphrodite.v1.attention.backends.mla.rocm_aiter_mla import (
     AiterMLAHelper,
@@ -583,7 +583,9 @@ def reference_mla_sparse_prefill(
     return (result, lse)
 
 
-class ROCMAiterMLASparseImpl(SparseMLAAttentionImpl[ROCMAiterMLASparseMetadata]):
+class ROCMAiterMLASparseImpl(MLAAttentionImpl[ROCMAiterMLASparseMetadata]):
+    is_sparse = True
+
     def __init__(
         self,
         num_heads: int,
