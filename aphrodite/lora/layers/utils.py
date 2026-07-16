@@ -72,7 +72,7 @@ def _get_lora_device(base_layer: nn.Module) -> torch.device:
     # EXL3 (exllamav3) — CUDA-only; tensors are placed on the current device
     # in Exl3LinearMethod.process_weights_after_loading.
     elif hasattr(base_layer, "trellis"):
-        return torch.device("cuda", torch.cuda.current_device())
+        return torch.device("cuda", torch.accelerator.current_device_index())
     else:
         raise ValueError(f"Unsupported base layer: {base_layer}")
 
