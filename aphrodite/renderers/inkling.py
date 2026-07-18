@@ -13,7 +13,7 @@ in :meth:`InklingRenderer._render` for adopting a standalone Inkling
 input-processing library (mistral-common style) later.
 """
 
-from aphrodite.config import VllmConfig
+from aphrodite.config import AphroditeConfig
 from aphrodite.entrypoints.chat_utils import (
     ChatCompletionMessageParam,
     ConversationMessage,
@@ -91,7 +91,7 @@ class _HfBackedTmlTokenizer:
 class InklingRenderer(BaseRenderer[HfTokenizer]):
     def __init__(
         self,
-        config: VllmConfig,
+        config: AphroditeConfig,
         tokenizer: HfTokenizer | None,
     ) -> None:
         super().__init__(config, tokenizer)

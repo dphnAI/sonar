@@ -251,8 +251,6 @@ def test_fused_sconv_negative_slots_skip_cache_writes():
     ("rel_extent", "last_latency_rows", "first_throughput_rows"),
     [(512, 8191, 8192), (1024, 2047, 2048)],
 )
-def test_rel_projection_schedule_crossover(
-    rel_extent, last_latency_rows, first_throughput_rows
-):
+def test_rel_projection_schedule_crossover(rel_extent, last_latency_rows, first_throughput_rows):
     assert not qkvr_prep.use_rel_proj_throughput(last_latency_rows, rel_extent)
     assert qkvr_prep.use_rel_proj_throughput(first_throughput_rows, rel_extent)

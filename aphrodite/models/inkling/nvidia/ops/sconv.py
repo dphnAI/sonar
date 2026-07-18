@@ -119,9 +119,7 @@ def _fused_sconv_kernel(
         # addressing terms; the load is masked off when out of window.
         safe_src = tl.maximum(src, 0)
         safe_lblk = tl.minimum(safe_src // N, MAX_BLOCKS - 1)
-        blk = tl.load(
-            block_table_ptr + req * stride_bt_r + safe_lblk, mask=cached, other=0
-        ).to(tl.int64)
+        blk = tl.load(block_table_ptr + req * stride_bt_r + safe_lblk, mask=cached, other=0).to(tl.int64)
         cbase = (
             cache_ptr
             + blk[:, None] * stride_c_blk
@@ -129,12 +127,8 @@ def _fused_sconv_kernel(
             + (safe_src % N)[:, None] * stride_c_n
             + cd[None, :] * stride_c_d
         )
-        cv = tl.load(cbase, mask=c_mask[None, :] & cached[:, None], other=0.0).to(
-            tl.float32
-        )
-        wv = tl.load(
-            weight_ptr + coff * stride_w_d + iw * stride_w_w, mask=c_mask, other=0.0
-        ).to(tl.float32)
+        cv = tl.load(cbase, mask=c_mask[None, :] & cached[:, None], other=0.0).to(tl.float32)
+        wv = tl.load(weight_ptr + coff * stride_w_d + iw * stride_w_w, mask=c_mask, other=0.0).to(tl.float32)
         acc += (xt + cv) * wv[None, :]
 
     if USE_SILU:

@@ -36,9 +36,7 @@ from .sconv_swa_attn import InklingConvState, InklingSconvMetadata
 
 
 class InklingShortConv(nn.Module):
-    def __init__(
-        self, dim: int, kernel_size: int, owner: InklingConvState, stream_idx: int
-    ) -> None:
+    def __init__(self, dim: int, kernel_size: int, owner: InklingConvState, stream_idx: int) -> None:
         super().__init__()
         self.dim = dim
         self.kernel_size = kernel_size

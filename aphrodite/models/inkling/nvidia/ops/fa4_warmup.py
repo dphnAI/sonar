@@ -141,9 +141,7 @@ class _WarmupProvider:
         self.configs: set[InklingFA4WarmupConfig] = set()
 
     def get_cutedsl_warmup_compile_units(self) -> tuple[CuTeDSLCompileUnit, ...]:
-        return tuple(
-            unit for config in self.configs for unit in _iter_compile_units(config)
-        )
+        return tuple(unit for config in self.configs for unit in _iter_compile_units(config))
 
 
 _PROVIDER = _WarmupProvider()

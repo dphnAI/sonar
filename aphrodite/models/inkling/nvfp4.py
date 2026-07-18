@@ -29,9 +29,7 @@ class InklingNvfp4Config:
     @staticmethod
     def _is_nvfp4(quant_cfg: dict) -> bool:
         wq = quant_cfg["modelopt_quant_config"]["quant_cfg"]["*weight_quantizer"]
-        return tuple(wq["num_bits"]) == (2, 1) and tuple(
-            wq["block_sizes"].get("scale_bits", [])
-        ) == (4, 3)
+        return tuple(wq["num_bits"]) == (2, 1) and tuple(wq["block_sizes"].get("scale_bits", [])) == (4, 3)
 
     @classmethod
     def from_hf_config(cls, hf_config) -> InklingNvfp4Config | None:
@@ -58,7 +56,4 @@ class InklingNvfp4Config:
 
     def shared_experts_quantized(self, layer_id: int) -> bool:
         """Whether the shared sink experts of ``layer_id`` are NVFP4."""
-        return (
-            f"model.llm.layers.{layer_id}.mlp.shared_experts"
-            not in self.exclude_modules
-        )
+        return f"model.llm.layers.{layer_id}.mlp.shared_experts" not in self.exclude_modules

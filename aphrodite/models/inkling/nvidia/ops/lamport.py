@@ -157,11 +157,7 @@ def _reduce_insert_kernel(
     source = tl.arange(0, WORLD)
     pair = tl.arange(0, CS_P2 // 2)
     pair_mask = pair < CSS // 2
-    offsets = (
-        (token * WORLD + source)[:, None] * (CS // 2)
-        + split * (CSS // 2)
-        + pair[None, :]
-    )
+    offsets = (token * WORLD + source)[:, None] * (CS // 2) + split * (CSS // 2) + pair[None, :]
     mask = tl.full([WORLD], True, tl.int1)[:, None] & pair_mask[None, :]
     input_ptrs = input_peer_ptrs.to(tl.pointer_type(tl.uint64))
     input_u32 = tl.load(input_ptrs + RANK).to(tl.pointer_type(tl.uint32))
@@ -324,9 +320,7 @@ def _sconv_publish_kernel(
 
     # Preserve both bf16 rounding points of the original sublayer.
     short_conv_with_skip = (conv + current.to(tl.float32)).to(tl.bfloat16)
-    output = (residual.to(tl.float32) + short_conv_with_skip.to(tl.float32)).to(
-        tl.bfloat16
-    )
+    output = (residual.to(tl.float32) + short_conv_with_skip.to(tl.float32)).to(tl.bfloat16)
 
     pair = tl.arange(0, CS_P2 // 2)
     pair_mask = pair < CSS // 2
@@ -374,9 +368,7 @@ def _gather_norm_kernel(
         tl.extra.cuda.gdc_wait()
     packed = _wait_pairs(output_u32, offsets, pair_mask)
     row = _unpack_bf16_pairs(packed)
-    tl.store(
-        residual_out_ptr + token * stride_output_t + channel, row, mask=channel_mask
-    )
+    tl.store(residual_out_ptr + token * stride_output_t + channel, row, mask=channel_mask)
     if HAS_NORM:
         row_f32 = tl.where(channel_mask, row.to(tl.float32), 0.0)
         inv_rms = tl.rsqrt(tl.sum(row_f32 * row_f32, axis=0) / C + eps)
@@ -412,9 +404,7 @@ def _validate_lamport_init_kernel(
     local_out = tl.load(ptrs_out + RANK).to(tl.pointer_type(tl.uint32))
     value_in = tl.load(local_in + offsets, mask=mask, other=_EMPTY_PAIR)
     value_out = tl.load(local_out + offsets, mask=mask, other=_EMPTY_PAIR)
-    bad = tl.max(
-        tl.where(mask & ((value_in != _EMPTY_PAIR) | (value_out != _EMPTY_PAIR)), 1, 0)
-    )
+    bad = tl.max(tl.where(mask & ((value_in != _EMPTY_PAIR) | (value_out != _EMPTY_PAIR)), 1, 0))
     if bad != 0:
         tl.atomic_max(bad_ptr, 1)
 
@@ -478,9 +468,7 @@ class LamportRSConv:
             raise RuntimeError("MNNVL Lamport sentinel initialization failed")
         self.tp.barrier()
 
-    def __init__(
-        self, hidden_size: int, window_size: int, max_tokens: int = _MAX_TOKENS
-    ) -> None:
+    def __init__(self, hidden_size: int, window_size: int, max_tokens: int = _MAX_TOKENS) -> None:
         import torch.distributed._symmetric_memory as symm_mem
 
         tp = get_tp_group()
@@ -517,16 +505,10 @@ class LamportRSConv:
                     is_mnnvl_fabric_supported,
                 )
             except ImportError as error:
-                raise RuntimeError(
-                    "cross-node TP requires FlashInfer MNNVL support"
-                ) from error
+                raise RuntimeError("cross-node TP requires FlashInfer MNNVL support") from error
 
-            local_supported = int(
-                is_mnnvl_fabric_supported(torch.accelerator.current_device_index())
-            )
-            unsupported = torch.tensor(
-                1 - local_supported, dtype=torch.float32, device=self.device
-            )
+            local_supported = int(is_mnnvl_fabric_supported(torch.accelerator.current_device_index()))
+            unsupported = torch.tensor(1 - local_supported, dtype=torch.float32, device=self.device)
             unsupported = tp.all_reduce(unsupported)
             if int(unsupported.item()) != 0:
                 raise RuntimeError("cross-node TP is supported only on MNNVL fabric")
@@ -602,25 +584,14 @@ class LamportRSConv:
             raise ValueError(f"num_tokens must be in [1, {self.max_tokens}]")
         if hidden_size != self.hidden_size or residual.dtype != torch.bfloat16:
             raise ValueError("residual must be bf16 [T, 6144]")
-        if (
-            input_tensor.shape != residual.shape
-            or input_tensor.dtype != torch.bfloat16
-            or input_tensor.stride(1) != 1
-        ):
+        if input_tensor.shape != residual.shape or input_tensor.dtype != torch.bfloat16 or input_tensor.stride(1) != 1:
             raise ValueError("input_tensor must be channel-contiguous bf16 [T, 6144]")
         shard_size = hidden_size // self.world_size
         if conv_weight.shape != (shard_size, self.window_size):
-            raise ValueError(
-                f"conv_weight must have shape [{shard_size}, {self.window_size}]"
-            )
-        if (
-            conv_weight.dtype != torch.bfloat16
-            or conv_weight.stride(0) != self.window_size
-        ):
+            raise ValueError(f"conv_weight must have shape [{shard_size}, {self.window_size}]")
+        if conv_weight.dtype != torch.bfloat16 or conv_weight.stride(0) != self.window_size:
             raise ValueError("conv_weight must be contiguous bf16")
-        if norm_weight is not None and (
-            norm_weight.shape != (hidden_size,) or norm_weight.dtype != torch.bfloat16
-        ):
+        if norm_weight is not None and (norm_weight.shape != (hidden_size,) or norm_weight.dtype != torch.bfloat16):
             raise ValueError("norm_weight must be bf16 [6144] or None")
         if cache.dtype != torch.bfloat16 or cache.ndim != 4:
             raise ValueError("cache must be a 4-D bf16 tensor")
@@ -738,9 +709,7 @@ _STATE: LamportRSConv | None = None
 _STATE_FAILED = False
 
 
-def initialize_lamport_rs_conv(
-    hidden_size: int, window_size: int, max_num_batched_tokens: int
-) -> None:
+def initialize_lamport_rs_conv(hidden_size: int, window_size: int, max_num_batched_tokens: int) -> None:
     """Collectively initialize the TP-group state during model construction."""
     global _STATE, _STATE_FAILED
     if _STATE is not None:
@@ -759,8 +728,6 @@ def initialize_lamport_rs_conv(
 
 def get_lamport_rs_conv(hidden_size: int, window_size: int) -> LamportRSConv | None:
     """Return the state initialized with the model, or ``None`` for fallback."""
-    if _STATE is not None and (
-        _STATE.hidden_size != hidden_size or _STATE.window_size != window_size
-    ):
+    if _STATE is not None and (_STATE.hidden_size != hidden_size or _STATE.window_size != window_size):
         raise RuntimeError("all Lamport users must share hidden and window sizes")
     return _STATE

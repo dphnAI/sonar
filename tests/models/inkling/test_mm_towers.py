@@ -25,9 +25,7 @@ DTYPE = torch.bfloat16
 
 
 def _bf16_spacing(x: torch.Tensor) -> torch.Tensor:
-    return torch.exp2(torch.floor(torch.log2(x.float().abs().clamp(min=1e-30)))) * (
-        2**-7
-    )
+    return torch.exp2(torch.floor(torch.log2(x.float().abs().clamp(min=1e-30)))) * (2**-7)
 
 
 def _assert_close_ulps(
@@ -49,8 +47,7 @@ def _assert_close_ulps(
         tol = tol + 2.5 * _bf16_spacing(pre_act)
     bad = (g - r).abs() > tol
     assert not bad.any(), (
-        f"{int(bad.sum())}/{ref.numel()} elements beyond tolerance; "
-        f"max abs diff {(g - r).abs().max().item():.3e}"
+        f"{int(bad.sum())}/{ref.numel()} elements beyond tolerance; max abs diff {(g - r).abs().max().item():.3e}"
     )
 
 
@@ -86,9 +83,7 @@ def test_rmsnorm_gelu(rows: int, dim: int, gelu: bool) -> None:
         ((2, 8, 8, 128), (2, 2)),  # temporal + spatial fold
     ],
 )
-def test_rmsnorm_gelu_folded_store(
-    n: int, shape: tuple[int, ...], fold: tuple[int, int]
-) -> None:
+def test_rmsnorm_gelu_folded_store(n: int, shape: tuple[int, ...], fold: tuple[int, int]) -> None:
     torch.manual_seed(n)
     x = torch.randn(n, *shape, device="cuda", dtype=DTYPE)
     w = torch.randn(shape[-1], device="cuda", dtype=DTYPE)
@@ -107,20 +102,12 @@ def test_rmsnorm_gelu_folded_store(
 def test_dmel_embed_sum_norm(num_frames: int, with_norm: bool) -> None:
     torch.manual_seed(num_frames)
     n_bins, vocab, dim = 80, 16, 6144
-    idx = torch.randint(
-        0, vocab, (num_frames, n_bins), device="cuda", dtype=torch.int32
-    )
+    idx = torch.randint(0, vocab, (num_frames, n_bins), device="cuda", dtype=torch.int32)
     table = torch.randn(n_bins * vocab, dim, device="cuda", dtype=DTYPE)
     norm_w = torch.randn(dim, device="cuda", dtype=DTYPE)
 
-    flat = (torch.arange(n_bins, device="cuda", dtype=torch.int32) * vocab).unsqueeze(
-        0
-    ) + idx
-    ref = (
-        F.embedding(flat.reshape(-1).long(), table)
-        .reshape(num_frames, n_bins, dim)
-        .sum(dim=1)
-    )
+    flat = (torch.arange(n_bins, device="cuda", dtype=torch.int32) * vocab).unsqueeze(0) + idx
+    ref = F.embedding(flat.reshape(-1).long(), table).reshape(num_frames, n_bins, dim).sum(dim=1)
     if with_norm:
         ref = _ref_rms_norm(ref, norm_w, 1e-6)
 
