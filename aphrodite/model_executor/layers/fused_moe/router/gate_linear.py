@@ -4,10 +4,14 @@ import torch
 from torch.nn.parameter import Parameter
 
 import aphrodite._custom_ops as ops
+from aphrodite.config import get_current_aphrodite_config_or_none
+from aphrodite.logger import init_logger
 from aphrodite.model_executor.custom_op import PluggableLayer
 from aphrodite.model_executor.layers.linear import ReplicatedLinear
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import direct_register_custom_op
+
+logger = init_logger(__name__)
 
 
 @PluggableLayer.register("gate_linear")
@@ -19,8 +23,9 @@ class GateLinear(ReplicatedLinear):
     2. DSV3 specialized kernel (SM90+, M<=16, H=7168 E=256/384, H=6144 E=256)
     3. fp32 specialized kernel  (SM90+, bf16/fp32 in, fp32 out, M<=32,
        (H, E) in {(3072, 256), (6144, 128), (6144, 256)})
-    4. cuBLAS bf16×bf16→fp32 (SM90+ + bf16 weight + fp32 out_dtype)
-    5. F.linear via ReplicatedLinear (ultimate fallback)
+    4. experimental bf16x3 CuteDSL kernel (opt-in, SM100, bf16 in, fp32 weight)
+    5. cuBLAS bf16×bf16→fp32 (SM90+ + bf16 weight + fp32 out_dtype)
+    6. F.linear via ReplicatedLinear (ultimate fallback)
 
     The ``out_dtype`` attribute is mutable and can be set after init
     (e.g. when the required dtype depends on the expert quantization
@@ -85,6 +90,10 @@ class GateLinear(ReplicatedLinear):
         self._dsv3_max_batch = 16 if is_hopper else 8
 
         # fp32 specialized kernel eligibility (SM90+, exact dims, fp32 weight).
+        aphrodite_config = get_current_aphrodite_config_or_none()
+        enable_bf16x3_router_gemm = (
+            aphrodite_config is not None and aphrodite_config.kernel_config.enable_bf16x3_router_gemm
+        )
         # NOTE(reconcile): this fork does not build the ``fp32_router_gemm``
         # C++ kernel (it ships a reduced ``csrc/libtorch_stable``), so only
         # enable this tier when the op is actually registered. Otherwise we
@@ -99,6 +108,16 @@ class GateLinear(ReplicatedLinear):
             and (input_size, output_size) in self.FP32_SUPPORTED_SHAPES
             and fp32_router_gemm_available
         )
+        self.allow_bf16x3_router_gemm = (
+            not bias
+            and self.weight.dtype == torch.float32
+            and current_platform.is_cuda()
+            and is_blackwell
+            and input_size % 8 == 0
+            and enable_bf16x3_router_gemm
+        )
+        if self.allow_bf16x3_router_gemm:
+            logger.info_once("Enabled experimental SM100 BF16x3 router GEMM.")
 
         # cuBLAS bf16→fp32 eligibility
         self.allow_cublas_router_gemm = (
@@ -169,15 +188,24 @@ class GateLinear(ReplicatedLinear):
             torch.float32,
             torch.bfloat16,
         ):
-            output = torch.ops.aphrodite.fp32_router_gemm_dispatch(x, self.weight)
+            output = torch.ops.aphrodite.fp32_router_gemm_dispatch(x, self.weight, self.allow_bf16x3_router_gemm)
             return output, None
 
-        # Tier 4: cuBLAS bf16→fp32
+        # Tier 4: experimental bf16x3 CuteDSL kernel for fp32 router weights
+        if self.allow_bf16x3_router_gemm and x.dtype == torch.bfloat16:
+            from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_cutedsl import (
+                bf16x3_router_gemm,
+            )
+
+            output = bf16x3_router_gemm(x, self.weight)
+            return output, None
+
+        # Tier 5: cuBLAS bf16→fp32
         if self.allow_cublas_router_gemm and x.dtype == torch.bfloat16:
             output = torch.mm(x, self.weight.T, out_dtype=torch.float32)
             return output, None
 
-        # Tier 5: F.linear (ReplicatedLinear)
+        # Tier 6: F.linear (ReplicatedLinear)
         if self.out_dtype is not None and x.dtype != self.weight.dtype:
             x = x.to(self.weight.dtype)
         output, output_bias = super().forward(x)
@@ -189,20 +217,36 @@ class GateLinear(ReplicatedLinear):
 _FP32_ROUTER_GEMM_MAX_TOKENS = GateLinear.FP32_MAX_TOKENS
 
 
-def fp32_router_gemm_dispatch_impl(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+def fp32_router_gemm_dispatch_impl(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    allow_bf16x3_router_gemm: bool,
+) -> torch.Tensor:
     """
     Dynamically run fp32 specialized gemm if num_tokens <= FP32_MAX_TOKENS,
-    otherwise fall back to F.linear.
+    otherwise optionally run the experimental BF16x3 kernel for medium/large
+    SM100 router batches, then fall back to F.linear.
     This must be wrapped in a custom op because our torch.compile integration
     does not support runtime dispatching on num_tokens.
     """
     if x.shape[0] <= _FP32_ROUTER_GEMM_MAX_TOKENS:
         return ops.fp32_router_gemm(x, weight)
-    else:
-        return torch.nn.functional.linear(x.float(), weight)
+
+    if allow_bf16x3_router_gemm and x.dtype == torch.bfloat16:
+        from aphrodite.model_executor.layers.fused_moe.router.bf16x3_router_gemm_cutedsl import (
+            bf16x3_router_gemm,
+        )
+
+        return bf16x3_router_gemm(x, weight)
+
+    return torch.nn.functional.linear(x.float(), weight)
 
 
-def fp32_router_gemm_dispatch_fake(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+def fp32_router_gemm_dispatch_fake(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    allow_bf16x3_router_gemm: bool,
+) -> torch.Tensor:
     return x.new_empty((x.shape[0], weight.shape[0]), dtype=torch.float32)
 
 
