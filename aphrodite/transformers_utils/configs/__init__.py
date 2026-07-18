@@ -92,6 +92,10 @@ _CLASS_TO_MODULE: dict[str, str] = {
     "Qwen3_5TextConfig": "aphrodite.transformers_utils.configs.qwen3_5",
     "Qwen3_5MoeConfig": "aphrodite.transformers_utils.configs.qwen3_5_moe",
     "Qwen3_5MoeTextConfig": "aphrodite.transformers_utils.configs.qwen3_5_moe",
+    "InklingModelConfig": "aphrodite.models.inkling.configs",
+    "InklingAudioConfig": "aphrodite.models.inkling.configs",
+    "InklingVisionConfig": "aphrodite.models.inkling.configs",
+    "InklingMMConfig": "aphrodite.models.inkling.configs",
     # Special case: DeepseekV3Config is from HuggingFace Transformers
     "DeepseekV3Config": "transformers",
 }
@@ -172,6 +176,10 @@ __all__ = [
     "Qwen3_5TextConfig",
     "Qwen3_5MoeConfig",
     "Qwen3_5MoeTextConfig",
+    "InklingModelConfig",
+    "InklingAudioConfig",
+    "InklingVisionConfig",
+    "InklingMMConfig",
 ]
 
 

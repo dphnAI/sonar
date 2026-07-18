@@ -421,6 +421,17 @@ class cmake_build_ext(build_ext):
                     dirs_exist_ok=True,
                 )
 
+            # copy vendored tml-fa4 package from build_lib to source tree
+            # for editable installs
+            tml_fa4_build = os.path.join(self.build_lib, "aphrodite", "third_party", "tml_fa4")
+            if os.path.exists(tml_fa4_build):
+                print(f"Copying {tml_fa4_build} to aphrodite/third_party/tml_fa4")
+                shutil.copytree(
+                    tml_fa4_build,
+                    "aphrodite/third_party/tml_fa4",
+                    dirs_exist_ok=True,
+                )
+
 
 def _no_device() -> bool:
     return APHRODITE_TARGET_DEVICE == "empty"
@@ -629,6 +640,8 @@ if _is_cuda():
         ext_modules.append(CMakeExtension(name="aphrodite._qutlass_C", optional=True))
     # fmha_sm100 is a Python/CuTe-DSL package installed into aphrodite.third_party.
     ext_modules.append(CMakeExtension(name="aphrodite.fmha_sm100", optional=True))
+    # tml-fa4 is copied into an isolated aphrodite.third_party package.
+    ext_modules.append(CMakeExtension(name="aphrodite.tml_fa4", optional=True))
 
 if _is_cpu():
     import platform
@@ -676,6 +689,8 @@ package_data = {
         "third_party/fmha_sm100/cutlass/include/**/*.hpp",
         "third_party/fmha_sm100/cutlass/tools/util/include/**/*.h",
         "third_party/fmha_sm100/cutlass/tools/util/include/**/*.hpp",
+        # tml-fa4 CuTe-DSL helper kernels (vendored via cmake)
+        "third_party/tml_fa4/**/*.py",
     ]
 }
 

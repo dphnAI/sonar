@@ -5,13 +5,14 @@
 
 mod combined;
 mod gemma4;
-
-use thiserror::Error;
-use thiserror_ext::Macro;
-use aphrodite_tokenizer::DynTokenizer;
+mod inkling;
 
 pub use combined::CombinedParser;
 pub use gemma4::Gemma4UnifiedParser;
+pub use inkling::InklingUnifiedParser;
+use aphrodite_tokenizer::DynTokenizer;
+use thiserror::Error;
+use thiserror_ext::Macro;
 
 use crate::reasoning::ReasoningError;
 use crate::tool::{
@@ -208,4 +209,13 @@ pub enum UnifiedParserError {
     Reasoning(#[from] ReasoningError),
     #[error(transparent)]
     Tool(#[from] ToolParserError),
+}
+
+/// Returns the ID for the given token, or an error if it's not found.
+fn token_id(tokenizer: &dyn aphrodite_tokenizer::Tokenizer, token: &str) -> Result<u32> {
+    tokenizer
+        .token_to_id(token)
+        .ok_or_else(|| UnifiedParserError::MissingToken {
+            token: token.to_string(),
+        })
 }

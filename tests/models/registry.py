@@ -293,6 +293,12 @@ _TEXT_GENERATION_EXAMPLE_MODELS = {
         "naver-hyperclovax/HyperCLOVAX-SEED-Think-14B",
         min_transformers_version="5.9.0",
     ),
+    "InklingForCausalLM": _HfExamplesInfo(
+        "thinkingmachines/Inkling-NVFP4",
+        tokenizer_mode="inkling",
+        trust_remote_code=True,
+        max_model_len=4096,
+    ),
     "InternLM2ForCausalLM": _HfExamplesInfo("internlm/internlm2-chat-7b", trust_remote_code=True),
     "InternLM3ForCausalLM": _HfExamplesInfo("internlm/internlm3-8b-instruct", trust_remote_code=True),
     "IQuestCoderForCausalLM": _HfExamplesInfo("IQuestLab/IQuest-Coder-V1-40B-Instruct", trust_remote_code=True),
@@ -828,6 +834,12 @@ _MULTIMODAL_EXAMPLE_MODELS = {
     "Idefics3ForConditionalGeneration": _HfExamplesInfo(
         "HuggingFaceM4/Idefics3-8B-Llama3",
         extras={"tiny": "HuggingFaceTB/SmolVLM-256M-Instruct"},
+    ),
+    "InklingForConditionalGeneration": _HfExamplesInfo(
+        "thinkingmachines/Inkling-NVFP4",
+        tokenizer_mode="inkling",
+        trust_remote_code=True,
+        max_model_len=4096,
     ),
     "IsaacForConditionalGeneration": _HfExamplesInfo(
         "PerceptronAI/Isaac-0.1",
