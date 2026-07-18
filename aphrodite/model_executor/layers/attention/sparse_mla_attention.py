@@ -3,7 +3,7 @@
 """Shared forward_mha implementation and metadata builder for sparse MLA backends."""
 
 from shutil import which
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 import numpy as np
 import torch
@@ -37,6 +37,7 @@ T = TypeVar("T", bound=AttentionMetadata)
 
 class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
     metadata_cls: type[T]
+    require_uniform_decodes: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -152,6 +153,7 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
         num_decodes, num_prefills, num_decode_tokens, _ = split_decodes_and_prefills(
             common_attn_metadata,
             decode_threshold=self.reorder_batch_threshold or 1,
+            require_uniform=self.require_uniform_decodes,
         )
         prefill_query_start_loc, prefill_max_query_len, prefill_query_lens_cpu = self._build_prefill_fields(
             common_attn_metadata, num_decodes, num_prefills
