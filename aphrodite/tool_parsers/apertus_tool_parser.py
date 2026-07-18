@@ -61,7 +61,7 @@ class ApertusToolParser(ToolParser):
         >>> output = 'I will check. <|tools_prefix|>[{"get_weather": '\
             '{"city": "Paris"}}]<|tools_suffix|>'
         >>> request = ChatCompletionRequest(...)
-        >>> info = parser.extract_tool_calls(output, request)
+        >>> info = parser.extract_tool_calls(output, None, request)
         >>> info.content
         "I will check."
         >>> info.tool_calls[0].function.name
@@ -173,6 +173,7 @@ class ApertusToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         """
@@ -190,7 +191,7 @@ class ApertusToolParser(ToolParser):
         Examples:
             >>> output = 'Let me see. <|tools_prefix|>[{"get_weather":' \
                 '{"loc": "Paris"}}]<|tools_suffix|>'
-            >>> info = parser.extract_tool_calls(output, request)
+            >>> info = parser.extract_tool_calls(output, None, request)
             >>> info.tools_called
             True
             >>> info.content

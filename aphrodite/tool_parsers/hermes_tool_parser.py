@@ -65,6 +65,7 @@ class Hermes2ProToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         # sanity check; avoid unnecessary processing

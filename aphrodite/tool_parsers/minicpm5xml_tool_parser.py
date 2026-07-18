@@ -472,6 +472,7 @@ class MiniCPM5XMLToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         model_output = _normalize_model_output(model_output)

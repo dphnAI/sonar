@@ -67,6 +67,7 @@ class Ernie45ToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         # sanity check; avoid unnecessary processing
@@ -156,7 +157,11 @@ class Ernie45ToolParser(ToolParser):
             while len(self.streamed_args_for_tool) <= self.current_tool_id:
                 self.streamed_args_for_tool.append("")
 
-            extracted_tool_calls = self.extract_tool_calls(cur_text[: end_idx + len(self.tool_call_end_token)], request)
+            extracted_tool_calls = self.extract_tool_calls(
+                cur_text[: end_idx + len(self.tool_call_end_token)],
+                token_ids=None,
+                request=request,
+            )
 
             if len(extracted_tool_calls.tool_calls) == 0:
                 logger.warning("Failed to extract any tool calls.")

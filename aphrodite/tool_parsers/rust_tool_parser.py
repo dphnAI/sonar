@@ -212,6 +212,7 @@ class RustToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         """Extract tool calls from complete model output (non-streaming)."""

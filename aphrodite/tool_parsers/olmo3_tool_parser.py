@@ -68,7 +68,12 @@ class Olmo3PythonicToolParser(ToolParser):
     def current_tool_index(self, value: int) -> None:
         self.current_tool_id = value
 
-    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self,
+        model_output: str,
+        token_ids: Sequence[int] | None,
+        request: ChatCompletionRequest,
+    ) -> ExtractedToolCallInformation:
         """
         Extract the tool calls from a complete model response.
         """

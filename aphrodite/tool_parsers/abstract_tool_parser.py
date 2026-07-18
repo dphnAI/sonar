@@ -170,7 +170,12 @@ class ToolParser:
             reasoning=reasoning,
         )
 
-    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self,
+        model_output: str,
+        token_ids: Sequence[int] | None,
+        request: ChatCompletionRequest,
+    ) -> ExtractedToolCallInformation:
         """
         Static method that should be implemented for extracting tool calls from
         a complete model-generated string.

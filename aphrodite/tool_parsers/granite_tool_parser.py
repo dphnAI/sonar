@@ -52,7 +52,12 @@ class GraniteToolParser(ToolParser):
         # for granite 3.1, the string `<tool_call>`
         self.bot_string = "<tool_call>"
 
-    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self,
+        model_output: str,
+        token_ids: Sequence[int] | None,
+        request: ChatCompletionRequest,
+    ) -> ExtractedToolCallInformation:
         stripped = model_output.strip().removeprefix(self.bot_token).removeprefix(self.bot_string).lstrip()
         if not stripped or stripped[0] != "[":
             return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)

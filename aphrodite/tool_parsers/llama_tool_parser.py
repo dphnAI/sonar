@@ -71,7 +71,12 @@ class Llama3JsonToolParser(ToolParser):
                 f"Llama3JsonToolParser could not locate the bot token '{self.bot_token}' in the tokenizer."
             )
 
-    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self,
+        model_output: str,
+        token_ids: Sequence[int] | None,
+        request: ChatCompletionRequest,
+    ) -> ExtractedToolCallInformation:
         """
         Extract the tool calls from a complete model response.
         Only extracts JSON content and ignores any surrounding plain text.

@@ -90,6 +90,7 @@ class Granite4ToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         msg = ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)

@@ -92,7 +92,7 @@ def run_tool_extraction_nonstreaming(
     request: ChatCompletionRequest | None = None,
 ) -> ExtractedToolCallInformation:
     request = request or ChatCompletionRequest(messages=[], model="test-model")
-    return tool_parser.extract_tool_calls(model_output, request)
+    return tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
 
 def split_string_into_token_deltas(tokenizer: TokenizerLike, text: str) -> list[str]:

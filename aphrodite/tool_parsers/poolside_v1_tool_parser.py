@@ -179,6 +179,7 @@ class PoolsideV1ToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         matched_tool_calls = self.func_call_regex.findall(model_output)

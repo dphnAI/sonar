@@ -135,7 +135,12 @@ class Lfm2ToolParser(ToolParser):
 
         return tool_text, content
 
-    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self,
+        model_output: str,
+        token_ids: Sequence[int] | None,
+        request: ChatCompletionRequest,
+    ) -> ExtractedToolCallInformation:
         tool_text, content = self._extract_tool_call_text(model_output)
 
         if tool_text is None:

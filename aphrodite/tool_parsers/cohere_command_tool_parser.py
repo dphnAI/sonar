@@ -102,6 +102,7 @@ class BaseCohereCommandToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         result = self.melody_unary.process_full_text(model_output)

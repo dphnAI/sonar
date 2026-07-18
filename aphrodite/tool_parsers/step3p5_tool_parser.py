@@ -1286,6 +1286,7 @@ class Step3p5ToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         self.parser.reset_streaming_state()

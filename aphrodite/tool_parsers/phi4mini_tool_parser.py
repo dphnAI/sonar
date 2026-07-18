@@ -50,7 +50,12 @@ class Phi4MiniJsonToolParser(ToolParser):
         self.streamed_args_for_tool: list[str] = []  # map what has been streamed for each tool so far to a list
         self.bot_token: str = "functools"
 
-    def extract_tool_calls(self, model_output: str, request: ChatCompletionRequest) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self,
+        model_output: str,
+        token_ids: Sequence[int] | None,
+        request: ChatCompletionRequest,
+    ) -> ExtractedToolCallInformation:
         """
         Extract the tool calls from a complete model response.
         """

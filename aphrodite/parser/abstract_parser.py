@@ -282,6 +282,7 @@ class Parser:
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest | ResponsesRequest,
     ) -> ExtractedToolCallInformation:
         """
@@ -291,6 +292,8 @@ class Parser:
 
         Args:
             model_output: The complete model-generated string.
+            token_ids: The raw output token IDs corresponding to
+                `model_output`, when available.
             request: The request object used to generate the output.
 
         Returns:
@@ -406,6 +409,7 @@ class DelegatingParser(Parser):
         content: str | None,
         request: ChatCompletionRequest | ResponsesRequest,
         enable_auto_tools: bool = False,
+        token_ids: Sequence[int] | None = None,
     ) -> tuple[list[FunctionCall] | None, str | None]:
         tool_parser = self._tool_parser
         if tool_parser is None:
@@ -413,7 +417,7 @@ class DelegatingParser(Parser):
 
         if request.tool_choice == "none":
             if self._engine_based:
-                result = self.extract_tool_calls(content or "", request=request)
+                result = self.extract_tool_calls(content or "", token_ids=token_ids, request=request)
                 return [], result.content
             return [], content
 
@@ -462,6 +466,7 @@ class DelegatingParser(Parser):
             # required/named when supports_required_and_named=False)
             tool_call_info = self.extract_tool_calls(
                 content if content is not None else "",
+                token_ids=token_ids,
                 request=request,
             )
             if tool_call_info is not None and tool_call_info.tools_called:
@@ -557,6 +562,7 @@ class DelegatingParser(Parser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest | ResponsesRequest,
     ) -> ExtractedToolCallInformation:
         if self._tool_parser is None:
@@ -566,6 +572,7 @@ class DelegatingParser(Parser):
         try:
             result = self._tool_parser.extract_tool_calls(
                 model_output,
+                token_ids=token_ids,
                 request=request,  # type: ignore[arg-type]
             )
             is_tool_called = bool(result.tools_called)
@@ -764,6 +771,7 @@ class DelegatingParser(Parser):
             content=content,
             request=request,
             enable_auto_tools=enable_auto_tools,
+            token_ids=model_output_token_ids or None,
         )
         return reasoning, content, tool_calls
 

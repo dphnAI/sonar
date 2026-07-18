@@ -86,6 +86,7 @@ class FunctionGemmaToolParser(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         if self.tool_call_start_token not in model_output:

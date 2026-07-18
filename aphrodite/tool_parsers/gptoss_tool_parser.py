@@ -25,7 +25,12 @@ class GptOssToolParser(ToolParser):
     def __init__(self, tokenizer: "TokenizerLike", tools: list[Tool] | None = None):
         super().__init__(tokenizer, tools)
 
-    def extract_tool_calls(self, model_output, request, **kwargs) -> ExtractedToolCallInformation:
+    def extract_tool_calls(
+        self,
+        model_output: str,
+        token_ids: Sequence[int] | None,
+        request,
+    ) -> ExtractedToolCallInformation:
         raise NotImplementedError("GptOssToolParser is a stub. Use HarmonyParser for tool parsing.")
 
     def extract_tool_calls_streaming(
