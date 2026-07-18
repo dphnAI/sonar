@@ -270,19 +270,27 @@ def test_bert_for_masked_lm(
     if current_platform.is_rocm():
         hf_model_kwargs["attn_implementation"] = "eager"
 
-    with hf_runner(
-        model,
-        dtype=dtype,
-        auto_cls=AutoModelForMaskedLM,
-        model_kwargs=hf_model_kwargs,
-    ) as hf_model:
-        tokenizer = hf_model.tokenizer
-        hf_outputs = []
-        for prompt in example_prompts:
-            inputs = tokenizer([prompt], return_tensors="pt")
-            inputs = hf_model.wrap_device(inputs)
-            output = hf_model.model(**inputs)
-            hf_outputs.append(softmax(output.logits[0]))
+    # Run hf_runner reference with "highest" fp32 precision to match
+    # default behavior of Aphrodite. This is needed on ROCm since the
+    # pooling tests set matmul precision to "high" in conftest.py.
+    prev_matmul_precision = torch.get_float32_matmul_precision()
+    torch.set_float32_matmul_precision("highest")
+    try:
+        with hf_runner(
+            model,
+            dtype=dtype,
+            auto_cls=AutoModelForMaskedLM,
+            model_kwargs=hf_model_kwargs,
+        ) as hf_model:
+            tokenizer = hf_model.tokenizer
+            hf_outputs = []
+            for prompt in example_prompts:
+                inputs = tokenizer([prompt], return_tensors="pt")
+                inputs = hf_model.wrap_device(inputs)
+                output = hf_model.model(**inputs)
+                hf_outputs.append(softmax(output.logits[0]))
+    finally:
+        torch.set_float32_matmul_precision(prev_matmul_precision)
 
     # Compare the per-token vocabulary distributions position by position.
     for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
