@@ -35,7 +35,7 @@ def server():
         "--reasoning-parser",
         "qwen3",
         "--max_model_len",
-        "5000",
+        "6000",
         "--structured-outputs-config.backend",
         "xgrammar",
         "--enable-auto-tool-choice",
