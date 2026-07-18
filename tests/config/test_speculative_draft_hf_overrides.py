@@ -78,3 +78,19 @@ def test_composed_override_is_picklable():
 
     out = composed(_make_hf_config())
     assert out.num_hidden_layers == 1
+
+
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("pkg.MyProposer", True),
+        ("pkg.submodule.MyProposer", True),
+        ("draft.model-v1", False),
+        ("org/draft.model", False),
+        ("https://example.com/draft.model", False),
+        (None, False),
+    ],
+)
+def test_custom_proposer_path_requires_dotted_import_path(model: str | None, expected: bool):
+    assert SpeculativeConfig._is_custom_proposer_path(model) is expected
