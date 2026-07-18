@@ -12,7 +12,11 @@ from aphrodite.model_executor.layers.quantization.online.fp8 import (
     Fp8PerTensorOnlineLinearMethod,
     Fp8PerTensorOnlineMoEMethod,
 )
+from aphrodite.model_executor.layers.quantization.online.nvfp4 import (
+    Nvfp4OnlineMoEMethod,
+)
 from aphrodite.platforms import current_platform
+from aphrodite.utils.flashinfer import has_flashinfer_trtllm_fused_moe
 from tests.quantization.utils import (
     _test_online_quant_peak_mem_impl,
     is_quant_method_supported,
@@ -139,6 +143,40 @@ def test_online_quantization(
 
         llm.apply_model(check_model)
 
+        outputs = llm.generate_greedy(["Hello my name is"], max_tokens=4)
+        print(outputs[0][1])
+
+
+@pytest.mark.skipif(
+    not (
+        current_platform.is_cuda()
+        and current_platform.is_device_capability_family(100)
+        and has_flashinfer_trtllm_fused_moe()
+    ),
+    reason=("nvfp4_per_token needs a Blackwell (SM100) GPU + FlashInfer TRTLLM MoE."),
+)
+def test_online_nvfp4_per_token_moe(aphrodite_runner, monkeypatch) -> None:
+    """Online NVFP4 quantizes the MoE and leaves dense layers unquantized."""
+    monkeypatch.setenv("APHRODITE_ALLOW_INSECURE_SERIALIZATION", "1")
+
+    with aphrodite_runner(
+        "ibm-granite/granite-3.0-1b-a400m-base",
+        quantization="nvfp4_per_token",
+        enforce_eager=True,
+    ) as llm:
+
+        def check_model(model):
+            layer = model.model.layers[0]
+            assert isinstance(
+                layer.block_sparse_moe.experts._quant_method,
+                Nvfp4OnlineMoEMethod,
+            )
+            assert isinstance(
+                layer.self_attn.o_proj.quant_method,
+                UnquantizedLinearMethod,
+            )
+
+        llm.apply_model(check_model)
         outputs = llm.generate_greedy(["Hello my name is"], max_tokens=4)
         print(outputs[0][1])
 
