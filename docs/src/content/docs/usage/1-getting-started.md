@@ -18,7 +18,11 @@ The server currently runs one model at a time, and implements the following endp
 
 - `/v1/models`: To show a list of the models available. This can include the primary LLM, and adapters (e.g. LoRA).
 - `/v1/completions`: Provides a POST endpoint to send text completions requests to. The model field in the body is mandatory.
+- `/v1/completions/render`: Renders text completion requests into token IDs for token-in/token-out serving.
+- `/v1/completions/derender`: Derenders generated token IDs into text completion responses.
 - `/v1/chat/completions`: Provides a POST endpoint to send chat completions requests to. The model field in the body is mandatory.
+- `/v1/chat/completions/render`: Renders chat completion requests into token IDs for token-in/token-out serving.
+- `/v1/chat/completions/derender`: Derenders generated token IDs into chat completion responses.
 
 There are two ways to start the server; using a YAML config file, or the CLI. In this guide, we assume you want to run the [Meta-Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct) model on 2 GPUs.
 
@@ -42,6 +46,7 @@ aphrodite run meta-llama/Meta-Llama-3.1-8B-Instruct -tp 2 --chat-template ./exam
 You may also provide direct download URLs to the argument.
 
 You can launch the server with authentication enabled via API keys by either exporting `APHRODITE_API_KEY` environment variable, or passing your key to the `--api-keys` argument.
+When API keys are configured, the render and derender endpoints require the same bearer token authentication as the `/v1/completions` and `/v1/chat/completions` endpoints.
 
 ### YAML Config
 

@@ -35,6 +35,8 @@ Otherwise, we support everything, plus many other parameters.
 
 Aphrodite also provides experimental support for the OpenAI Vision API.
 
+For the postprocessing endpoints that turn generated token IDs back into OpenAI-compatible responses, see the [Derenderer APIs](./derenderer).
+
 ## Extra Parameters
 
 If using the `openai` python library, you cannot pass extra parameters such as `min_p`, `guided_choice`, etc. Thankfully, the library allows you to extend the body as needed:
