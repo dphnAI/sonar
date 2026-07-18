@@ -11,7 +11,7 @@ use winnow::token::{literal, take_till, take_until};
 
 use aphrodite_tokenizer::DynTokenizer;
 
-use super::{Result, UnifiedParser, UnifiedParserError, UnifiedParserOutput};
+use super::{Result, UnifiedParser, UnifiedParserOutput, token_id};
 use crate::reasoning::last_reasoning_boundary;
 use crate::tool::{Tool, ToolCallDelta};
 use crate::unified::parsing_failed;
@@ -80,17 +80,8 @@ pub struct Gemma4UnifiedParser {
 impl Gemma4UnifiedParser {
     /// Create a Gemma4 parser.
     pub fn new(_tools: &[Tool], tokenizer: DynTokenizer) -> Result<Self> {
-        let channel_start_token_id = tokenizer.token_to_id(CHANNEL_START).ok_or_else(|| {
-            UnifiedParserError::MissingToken {
-                token: CHANNEL_START.to_string(),
-            }
-        })?;
-        let channel_end_token_id =
-            tokenizer
-                .token_to_id(CHANNEL_END)
-                .ok_or_else(|| UnifiedParserError::MissingToken {
-                    token: CHANNEL_END.to_string(),
-                })?;
+        let channel_start_token_id = token_id(tokenizer.as_ref(), CHANNEL_START)?;
+        let channel_end_token_id = token_id(tokenizer.as_ref(), CHANNEL_END)?;
 
         Ok(Self {
             buffer: String::new(),
@@ -525,10 +516,10 @@ mod tests {
 
     use super::{
         CHANNEL_END, CHANNEL_START, Gemma4UnifiedParser, ToolCallDelta, UnifiedParser,
-        UnifiedParserError, UnifiedParserOutput, gemma4_array_content, parse_gemma4_args,
+        UnifiedParserOutput, gemma4_array_content, parse_gemma4_args,
     };
     use crate::tool::Tool;
-    use crate::unified::{UnifiedParserEvent, parsing_failed};
+    use crate::unified::{UnifiedParserError, UnifiedParserEvent, parsing_failed};
 
     const CHANNEL_START_ID: u32 = 256;
     const CHANNEL_END_ID: u32 = 257;

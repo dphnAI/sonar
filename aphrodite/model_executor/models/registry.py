@@ -160,6 +160,11 @@ _TEXT_GENERATION_MODELS = {
         "aphrodite.models.minimax_m3",
         "MiniMaxM3SparseForCausalLM",
     ),
+    "InklingForCausalLM": ("aphrodite.models.inkling", "InklingForCausalLM"),
+    "InklingForConditionalGeneration": (
+        "aphrodite.models.inkling",
+        "InklingForConditionalGeneration",
+    ),
     "Ministral3ForCausalLM": ("mistral", "MistralForCausalLM"),
     "MistralForCausalLM": ("mistral", "MistralForCausalLM"),
     "MistralLarge3ForCausalLM": ("mistral_large_3", "MistralLarge3ForCausalLM"),

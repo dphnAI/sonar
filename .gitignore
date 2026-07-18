@@ -12,6 +12,9 @@ umamba.exe
 bin/
 *.whl
 aphrodite/commit_id.py
+
+# tml-fa4 vendored package built from source
+aphrodite/third_party/tml_fa4/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

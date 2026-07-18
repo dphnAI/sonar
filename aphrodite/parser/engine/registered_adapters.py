@@ -12,6 +12,7 @@ from aphrodite.parser.deepseek_v32 import DeepSeekV32Parser
 from aphrodite.parser.engine.adapters import make_adapters
 from aphrodite.parser.gemma4 import Gemma4Parser
 from aphrodite.parser.glm47_moe import Glm47MoeParser
+from aphrodite.parser.inkling import InklingParser
 from aphrodite.parser.kimi_k2 import KimiK2Parser
 from aphrodite.parser.minimax_m2 import MinimaxM2Parser
 from aphrodite.parser.nemotron_v3 import NemotronV3Parser
@@ -62,3 +63,8 @@ from aphrodite.parser.seed_oss import SeedOssParser
     KimiK2ParserReasoningAdapter,
     KimiK2ParserToolAdapter,
 ) = make_adapters(KimiK2Parser)
+
+(
+    InklingParserReasoningAdapter,
+    InklingParserToolAdapter,
+) = make_adapters(InklingParser)
