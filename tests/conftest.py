@@ -628,10 +628,12 @@ class HfRunner:
 
         outputs: list[tuple[list[list[int]], list[str]]] = []
         for inputs in all_inputs:
+            generate_kwargs = dict(kwargs)
+            generate_kwargs.setdefault("tokenizer", self.tokenizer)
             output_ids: torch.Tensor = self.model.generate(
                 **self.wrap_device(inputs),
                 use_cache=True,
-                **kwargs,
+                **generate_kwargs,
             )
             if self.processor is None:
                 raise RuntimeError("HfRunner.processor is not initialized; cannot decode output.")
@@ -704,6 +706,8 @@ class HfRunner:
 
         all_logprobs: list[list[torch.Tensor]] = []
         for inputs in all_inputs:
+            generate_kwargs = dict(kwargs)
+            generate_kwargs.setdefault("tokenizer", self.tokenizer)
             output: "GenerateOutput" = self.model.generate(
                 **self.wrap_device(inputs),
                 use_cache=True,
@@ -711,7 +715,7 @@ class HfRunner:
                 max_new_tokens=max_tokens,
                 output_hidden_states=True,
                 return_dict_in_generate=True,
-                **kwargs,
+                **generate_kwargs,
             )
             seq_logprobs = self._hidden_states_to_seq_logprobs(output.hidden_states)
             all_logprobs.append(seq_logprobs)
@@ -792,6 +796,8 @@ class HfRunner:
         all_output_strs: list[str] = []
 
         for inputs in all_inputs:
+            generate_kwargs = dict(kwargs)
+            generate_kwargs.setdefault("tokenizer", self.tokenizer)
             output: "GenerateOutput" = self.model.generate(
                 **self.wrap_device(inputs),
                 use_cache=use_cache,
@@ -799,7 +805,7 @@ class HfRunner:
                 max_new_tokens=max_tokens,
                 output_hidden_states=True,
                 return_dict_in_generate=True,
-                **kwargs,
+                **generate_kwargs,
             )
 
             # Encoder-decoder models return decoder_hidden_states instead of
