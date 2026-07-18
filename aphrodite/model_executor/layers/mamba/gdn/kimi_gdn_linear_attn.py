@@ -15,16 +15,16 @@ from aphrodite.model_executor.custom_op import PluggableLayer
 from aphrodite.model_executor.layers.mamba.gdn.base import GatedDeltaNetAttention
 from aphrodite.model_executor.model_loader.weight_utils import sharded_weight_loader
 from aphrodite.model_executor.utils import set_weight_attrs
-from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
-from aphrodite.utils.torch_utils import direct_register_custom_op
-from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
-
-from ...fla.ops.kda import (
+from aphrodite.third_party.flash_linear_attention.ops.kda import (
     FusedRMSNormGated,
     chunk_kda_with_fused_gate,
     fused_kda_gate,
     fused_recurrent_kda,
 )
+from aphrodite.transformers_utils.configs.kimi_linear import KimiLinearConfig
+from aphrodite.utils.torch_utils import direct_register_custom_op
+from aphrodite.v1.attention.backends.gdn_attn import GDNAttentionMetadata
+
 from ...linear import (
     ColumnParallelLinear,
     ReplicatedLinear,

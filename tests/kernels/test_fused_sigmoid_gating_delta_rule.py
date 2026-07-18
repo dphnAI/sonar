@@ -5,11 +5,11 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.fla.ops import (
+from aphrodite.platforms import current_platform
+from aphrodite.third_party.flash_linear_attention.ops import (
     fused_recurrent_gated_delta_rule,
     fused_sigmoid_gating_delta_rule_update,
 )
-from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
 
 DEVICE = current_platform.device_type

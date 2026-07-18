@@ -264,7 +264,7 @@ def _warm_causal_conv1d_fwd_kernel(device: torch.device, config: _QwenGDNWarmupC
 
 
 def _warm_fused_post_conv_kernel(device: torch.device, config: _QwenGDNWarmupConfig) -> None:
-    from aphrodite.model_executor.layers.fla.ops.fused_gdn_prefill_post_conv import (
+    from aphrodite.third_party.flash_linear_attention.ops.fused_gdn_prefill_post_conv import (
         fused_post_conv_prep,
     )
 
@@ -292,7 +292,7 @@ def _warm_fused_sigmoid_gating_delta_rule_update_kernel(
     device: torch.device,
     config: _QwenGDNWarmupConfig,
 ) -> None:
-    from aphrodite.model_executor.layers.fla.ops.fused_sigmoid_gating import (
+    from aphrodite.third_party.flash_linear_attention.ops.fused_sigmoid_gating import (
         fused_sigmoid_gating_delta_rule_update,
     )
 

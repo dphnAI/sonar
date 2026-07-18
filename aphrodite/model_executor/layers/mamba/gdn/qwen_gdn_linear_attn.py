@@ -20,16 +20,6 @@ from aphrodite.distributed import (
 from aphrodite.forward_context import ForwardContext, get_forward_context
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.custom_op import CustomOp, PluggableLayer
-from aphrodite.model_executor.layers.fla.ops import (
-    chunk_gated_delta_rule as fla_chunk_gated_delta_rule,
-)
-from aphrodite.model_executor.layers.fla.ops import (
-    fused_post_conv_prep,
-    fused_recurrent_gated_delta_rule_packed_decode,
-    fused_sigmoid_gating_delta_rule_update,
-)
-from aphrodite.model_executor.layers.fla.ops.chunk import l2norm_fwd
-from aphrodite.model_executor.layers.fla.ops.utils import FLA_CHUNK_SIZE
 from aphrodite.model_executor.layers.layernorm import RMSNormGated
 from aphrodite.model_executor.layers.linear import (
     ColumnParallelLinear,
@@ -55,6 +45,16 @@ from aphrodite.model_executor.model_loader.weight_utils import (
 )
 from aphrodite.model_executor.utils import set_weight_attrs
 from aphrodite.platforms import current_platform
+from aphrodite.third_party.flash_linear_attention.ops import (
+    chunk_gated_delta_rule as fla_chunk_gated_delta_rule,
+)
+from aphrodite.third_party.flash_linear_attention.ops import (
+    fused_post_conv_prep,
+    fused_recurrent_gated_delta_rule_packed_decode,
+    fused_sigmoid_gating_delta_rule_update,
+)
+from aphrodite.third_party.flash_linear_attention.ops.chunk import l2norm_fwd
+from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
 from aphrodite.transformers_utils.configs.qwen3_next import Qwen3NextConfig
 from aphrodite.triton_utils import tl, triton
 from aphrodite.utils.torch_utils import (

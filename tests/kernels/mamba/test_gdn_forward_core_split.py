@@ -45,11 +45,6 @@ if not (current_platform.is_cuda() and current_platform.is_device_capability_fam
     )
 
 from aphrodite.config import set_current_aphrodite_config  # noqa: E402
-from aphrodite.model_executor.layers.fla.ops.index import (  # noqa: E402
-    prepare_chunk_indices,
-    prepare_chunk_offsets,
-)
-from aphrodite.model_executor.layers.fla.ops.utils import FLA_CHUNK_SIZE  # noqa: E402
 from aphrodite.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn  # noqa: E402
 from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (  # noqa: E402
     ChunkGatedDeltaRule,
@@ -58,6 +53,11 @@ from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (  # 
 from aphrodite.model_executor.layers.mamba.mamba_utils import (  # noqa: E402
     MambaStateShapeCalculator,
 )
+from aphrodite.third_party.flash_linear_attention.ops.index import (  # noqa: E402
+    prepare_chunk_indices,
+    prepare_chunk_offsets,
+)
+from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE  # noqa: E402
 from aphrodite.v1.attention.backends.gdn_attn import (  # noqa: E402
     GDNAttentionMetadataBuilder,
 )

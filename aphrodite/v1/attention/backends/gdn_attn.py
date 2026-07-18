@@ -306,7 +306,7 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
         prefill_state_indices: torch.Tensor | None = None
         prefill_has_initial_state: torch.Tensor | None = None
         if num_prefills > 0:
-            from aphrodite.model_executor.layers.fla.ops.utils import FLA_CHUNK_SIZE
+            from aphrodite.third_party.flash_linear_attention.ops.utils import FLA_CHUNK_SIZE
 
             # In a mixed non-spec batch, decodes are peeled off to the recurrent
             # kernel (decode-first front slice), so build chunk metadata from the
@@ -342,7 +342,7 @@ class GDNAttentionMetadataBuilder(AttentionMetadataBuilder[GDNAttentionMetadata]
                 # Only prefill batches use FLA chunk ops.
                 # Pre-compute on CPU and async-copy to GPU to avoid
                 # GPU→CPU sync (.tolist()) in prepare_chunk_indices.
-                from aphrodite.model_executor.layers.fla.ops.index import (
+                from aphrodite.third_party.flash_linear_attention.ops.index import (
                     prepare_chunk_indices,
                     prepare_chunk_offsets,
                 )

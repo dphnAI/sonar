@@ -15,16 +15,16 @@ if not (current_platform.is_cuda() and current_platform.is_device_capability_fam
         allow_module_level=True,
     )
 
-from aphrodite.model_executor.layers.fla.ops import (  # noqa: E402
-    chunk_gated_delta_rule,
-)
-from aphrodite.model_executor.layers.fla.ops.index import (  # noqa: E402
-    prepare_chunk_indices,
-    prepare_chunk_offsets,
-)
 from aphrodite.model_executor.layers.mamba.ops.gdn_chunk_cutedsl import (  # noqa: E402
     chunk_gated_delta_rule_cutedsl,
     prepare_metadata_cutedsl,
+)
+from aphrodite.third_party.flash_linear_attention.ops import (  # noqa: E402
+    chunk_gated_delta_rule,
+)
+from aphrodite.third_party.flash_linear_attention.ops.index import (  # noqa: E402
+    prepare_chunk_indices,
+    prepare_chunk_offsets,
 )
 
 

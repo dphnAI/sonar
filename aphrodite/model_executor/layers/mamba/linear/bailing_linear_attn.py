@@ -16,10 +16,6 @@ from aphrodite.distributed import (
 )
 from aphrodite.forward_context import get_forward_context
 from aphrodite.model_executor.custom_op import PluggableLayer
-from aphrodite.model_executor.layers.fla.ops.layernorm_guard import (
-    RMSNormGated,
-    layernorm_fn,
-)
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.linear import (
     ColumnParallelLinear,
@@ -33,6 +29,10 @@ from aphrodite.model_executor.layers.mamba.linear.minimax_linear_attn import (
     linear_attention_decode,
 )
 from aphrodite.model_executor.layers.rotary_embedding import get_rope
+from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
+    RMSNormGated,
+    layernorm_fn,
+)
 from aphrodite.triton_utils import tl, triton
 from aphrodite.v1.attention.backends.linear_attn import LinearAttentionMetadata
 
