@@ -5,10 +5,32 @@ Weight transfer engines for syncing model weights from trainers
 to inference workers.
 """
 
-from aphrodite.distributed.weight_transfer.base import WeightTransferEngine
-from aphrodite.distributed.weight_transfer.factory import WeightTransferEngineFactory
+from aphrodite.distributed.weight_transfer.base import (
+    ModuleSource,
+    ParamMeta,
+    TrainerWeightTransferEngine,
+    VLLMWeightSyncClient,
+    WeightSource,
+    WeightTransferEngine,
+)
+from aphrodite.distributed.weight_transfer.clients import (
+    HTTPVLLMWeightSyncClient,
+    RayVLLMWeightSyncClient,
+)
+from aphrodite.distributed.weight_transfer.factory import (
+    WeightTransferEngineFactory,
+    WeightTransferTrainerFactory,
+)
 
 __all__ = [
     "WeightTransferEngine",
     "WeightTransferEngineFactory",
+    "TrainerWeightTransferEngine",
+    "WeightTransferTrainerFactory",
+    "VLLMWeightSyncClient",
+    "HTTPVLLMWeightSyncClient",
+    "RayVLLMWeightSyncClient",
+    "ParamMeta",
+    "WeightSource",
+    "ModuleSource",
 ]
