@@ -1040,19 +1040,28 @@ def test_draft_model_engine_args_tensor_parallelism():
     assert draft_config.quant_config is None
 
 
-def _apply_draft_moe_backend(aphrodite_config: AphroditeConfig) -> AphroditeConfig:
+def _apply_draft_overrides(aphrodite_config: AphroditeConfig) -> AphroditeConfig:
     """Replicate SpecDecodeBaseProposer._create_draft_aphrodite_config logic
     so we can test it without instantiating a full proposer."""
     spec_cfg = aphrodite_config.speculative_config
+    base = aphrodite_config
     if spec_cfg.moe_backend is not None:
-        return replace(
-            aphrodite_config,
+        base = replace(
+            base,
             kernel_config=replace(
-                aphrodite_config.kernel_config,
+                base.kernel_config,
                 moe_backend=spec_cfg.moe_backend,
             ),
         )
-    return aphrodite_config
+    if spec_cfg.kv_cache_dtype is not None:
+        base = replace(
+            base,
+            cache_config=replace(
+                base.cache_config,
+                cache_dtype=spec_cfg.kv_cache_dtype,
+            ),
+        )
+    return base
 
 
 def test_draft_model_moe_backend_override():
@@ -1073,7 +1082,7 @@ def test_draft_model_moe_backend_override():
     assert tgt_config.kernel_config.moe_backend == "flashinfer_trtllm"
     assert tgt_config.speculative_config.moe_backend == "triton"
 
-    draft_config = _apply_draft_moe_backend(tgt_config)
+    draft_config = _apply_draft_overrides(tgt_config)
     assert draft_config.kernel_config.moe_backend == "triton"
     # Target config must be unaffected.
     assert tgt_config.kernel_config.moe_backend == "flashinfer_trtllm"
@@ -1096,7 +1105,7 @@ def test_draft_model_moe_backend_inherits_target():
     assert tgt_config.kernel_config.moe_backend == "flashinfer_cutlass"
     assert tgt_config.speculative_config.moe_backend is None
 
-    draft_config = _apply_draft_moe_backend(tgt_config)
+    draft_config = _apply_draft_overrides(tgt_config)
     assert draft_config.kernel_config.moe_backend == "flashinfer_cutlass"
     assert draft_config is tgt_config
 
@@ -1117,9 +1126,33 @@ def test_draft_model_moe_backend_default_auto():
     assert tgt_config.kernel_config.moe_backend == "auto"
     assert tgt_config.speculative_config.moe_backend is None
 
-    draft_config = _apply_draft_moe_backend(tgt_config)
+    draft_config = _apply_draft_overrides(tgt_config)
     assert draft_config.kernel_config.moe_backend == "auto"
     assert draft_config is tgt_config
+
+
+def test_draft_model_kv_cache_dtype_override():
+    """When kv_cache_dtype is set in speculative_config, the draft
+    AphroditeConfig should use it while the target keeps its own setting."""
+    engine_args = EngineArgs(
+        model="Qwen/Qwen3-1.7B",
+        tensor_parallel_size=1,
+        kv_cache_dtype="bfloat16",
+        speculative_config={
+            "model": "Qwen/Qwen3-0.6B",
+            "method": "draft_model",
+            "num_speculative_tokens": 3,
+            "kv-cache-dtype": "fp8",
+        },
+    )
+    tgt_config: AphroditeConfig = engine_args.create_engine_config()
+    assert tgt_config.cache_config.cache_dtype == "bfloat16"
+    assert tgt_config.speculative_config.kv_cache_dtype == "fp8"
+
+    draft_config = _apply_draft_overrides(tgt_config)
+    assert draft_config.cache_config.cache_dtype == "fp8"
+    # Target config must be unaffected.
+    assert tgt_config.cache_config.cache_dtype == "bfloat16"
 
 
 def test_draft_model_engine_args_rejects_invalid_tp_argname():

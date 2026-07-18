@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 
-from aphrodite.config import AphroditeConfig
+from aphrodite.config import AphroditeConfig, replace
 from aphrodite.distributed.parallel_state import get_pp_group
 from aphrodite.lora.layers.base import BaseLayerWithLoRA
 from aphrodite.model_executor.model_loader import get_model
@@ -37,6 +37,14 @@ def load_eagle_model(target_model: nn.Module, aphrodite_config: AphroditeConfig)
     speculative_config = aphrodite_config.speculative_config
     assert speculative_config is not None
     draft_model_config = speculative_config.draft_model_config
+    if speculative_config.kv_cache_dtype is not None:
+        aphrodite_config = replace(
+            aphrodite_config,
+            cache_config=replace(
+                aphrodite_config.cache_config,
+                cache_dtype=speculative_config.kv_cache_dtype,
+            ),
+        )
     with set_model_tag("eagle_head"):
         eagle_model = get_model(aphrodite_config=aphrodite_config, model_config=draft_model_config)
 

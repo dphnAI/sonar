@@ -27,6 +27,14 @@ def load_dflash_model(target_model: nn.Module, aphrodite_config: AphroditeConfig
             use_non_causal=dflash_has_any_non_causal(draft_model_config.hf_config),
             backend=speculative_config.attention_backend,
         ),
+        cache_config=(
+            replace(
+                aphrodite_config.cache_config,
+                cache_dtype=speculative_config.kv_cache_dtype,
+            )
+            if speculative_config.kv_cache_dtype is not None
+            else aphrodite_config.cache_config
+        ),
     )
     with set_model_tag("dflash_head"):
         dflash_model = get_model(aphrodite_config=draft_aphrodite_config, model_config=draft_model_config)
