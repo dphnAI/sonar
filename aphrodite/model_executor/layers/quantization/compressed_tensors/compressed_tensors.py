@@ -1061,6 +1061,9 @@ class CompressedTensorsKVCacheMethod(BaseKVCacheMethod):
         layer._v_scale_float = _to_scalar(layer.v_scale)
         layer._q_scale_float = _to_scalar(layer.q_scale)
 
+        layer._k_scale_cpu.fill_(layer._k_scale_float)
+        layer._v_scale_cpu.fill_(layer._v_scale_float)
+
         # Discard all placeholders.
         del layer.k_scale
         del layer.v_scale
