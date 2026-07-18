@@ -1481,7 +1481,8 @@ def build_mla_chunked_context_metadata(
         torch.arange(num_chunks, dtype=torch.int32).multiply_(max_context_chunk).unsqueeze(1)
     )
     chunk_ends = torch.min(context_lens_cpu.unsqueeze(0), chunk_starts + max_context_chunk)
-    chunk_seq_lens = (chunk_ends - chunk_starts).clamp(min=0)
+    chunk_seq_lens = chunk_ends - chunk_starts
+    chunk_seq_lens.clamp_(min=0)
 
     cu_seq_lens_cpu = torch.zeros(num_chunks, num_prefills + 1, dtype=torch.int32, pin_memory=True)
     torch.cumsum(chunk_seq_lens, dim=1, out=cu_seq_lens_cpu[:, 1:], dtype=torch.int32)
@@ -1513,7 +1514,8 @@ def build_mla_chunked_context_metadata(
             padded_local_context_lens_cpu.unsqueeze(0),
             local_chunk_starts + padded_local_max_context_chunk,
         )
-        padded_local_chunk_seq_lens = (local_chunk_ends - local_chunk_starts).clamp(min=0)
+        padded_local_chunk_seq_lens = local_chunk_ends - local_chunk_starts
+        padded_local_chunk_seq_lens.clamp_(min=0)
         padded_local_cu_seq_lens_cpu = torch.zeros(num_chunks, num_prefills + 1, dtype=torch.int32, pin_memory=True)
         torch.cumsum(
             padded_local_chunk_seq_lens,
@@ -1843,7 +1845,8 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
                     torch.arange(num_chunks, dtype=torch.int32).multiply_(max_context_chunk).unsqueeze(1)
                 )
                 chunk_ends = torch.min(context_lens_cpu.unsqueeze(0), chunk_starts + max_context_chunk)
-                chunk_seq_lens = (chunk_ends - chunk_starts).clamp(min=0)
+                chunk_seq_lens = chunk_ends - chunk_starts
+                chunk_seq_lens.clamp_(min=0)
 
                 cu_seq_lens_cpu = torch.zeros(num_chunks, num_prefills + 1, dtype=torch.int32, pin_memory=True)
                 torch.cumsum(chunk_seq_lens, dim=1, out=cu_seq_lens_cpu[:, 1:], dtype=torch.int32)
@@ -1901,7 +1904,8 @@ class MLACommonMetadataBuilder(AttentionMetadataBuilder[M]):
                         padded_local_context_lens_cpu.unsqueeze(0),
                         local_chunk_starts + padded_local_max_context_chunk_across_ranks,
                     )
-                    padded_local_chunk_seq_lens = (local_chunk_ends - local_chunk_starts).clamp(min=0)
+                    padded_local_chunk_seq_lens = local_chunk_ends - local_chunk_starts
+                    padded_local_chunk_seq_lens.clamp_(min=0)
 
                     padded_local_cu_chunk_seq_lens_cpu = torch.zeros(
                         num_chunks, num_prefills + 1, dtype=torch.int32, pin_memory=True

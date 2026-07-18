@@ -541,7 +541,8 @@ class AiterFlashAttentionMetadataBuilder(AttentionMetadataBuilder[AiterFlashAtte
                 torch.arange(num_chunks, dtype=torch.int32).unsqueeze(1).expand(-1, num_extends) * max_context_chunk
             )
             chunk_ends = torch.min(computed_kv_lens.unsqueeze(0), chunk_starts + max_context_chunk)
-            chunk_seq_lens = (chunk_ends - chunk_starts).clamp(min=0)  # [num_chunks, num_extends]
+            chunk_seq_lens = chunk_ends - chunk_starts
+            chunk_seq_lens.clamp_(min=0)  # [num_chunks, num_extends]
             cu_seq_lens_cpu = torch.zeros([num_chunks, num_extends + 1], dtype=torch.int32, pin_memory=True)
             torch.cumsum(chunk_seq_lens, dim=1, out=cu_seq_lens_cpu[:, 1:], dtype=torch.int32)
             # Avoid .max() on an empty tensor when there is no context
