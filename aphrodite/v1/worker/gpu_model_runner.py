@@ -6523,11 +6523,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         ):
             assert isinstance(
                 self.drafter,
-                EagleProposer
-                | DFlashProposer
-                | DraftModelProposer
-                | ExtractHiddenStatesProposer
-                | Gemma4Proposer,
+                EagleProposer | DFlashProposer | DraftModelProposer | ExtractHiddenStatesProposer | Gemma4Proposer,
             )
             self.drafter.initialize_cudagraph_keys(cudagraph_mode)
 
