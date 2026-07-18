@@ -205,12 +205,7 @@ class QKNormRoPEFusionPass(AphroditePatternMatcherPass):
             return
 
         self._attention_geometries = tuple(
-            sorted(
-                {
-                    (layer.head_size, layer.num_heads, layer.num_kv_heads)
-                    for layer in attn_layers.values()
-                }
-            )
+            sorted({(layer.head_size, layer.num_heads, layer.num_kv_heads) for layer in attn_layers.values()})
         )
 
         rope_flashinfer_options = [False, True] if RotaryEmbedding.enabled() else [False]
@@ -235,6 +230,4 @@ class QKNormRoPEFusionPass(AphroditePatternMatcherPass):
         logger.debug("Fused QK Norm+RoPE on %s sites", self.matched_count)
 
     def uuid(self) -> str:
-        return AphroditeInductorPass.hash_source(
-            self, QkNormRopePattern, repr(self._attention_geometries)
-        )
+        return AphroditeInductorPass.hash_source(self, QkNormRopePattern, repr(self._attention_geometries))
