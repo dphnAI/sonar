@@ -7,6 +7,7 @@ from typing import cast
 import torch
 from torch import nn
 
+from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
 from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.forward_context import get_forward_context
@@ -268,6 +269,7 @@ class InklingAttention(nn.Module, AttentionLayerBase):
         output, _ = self.wo_ud(flat)
         return output
 
+    @eager_break_during_capture
     def _attention(
         self,
         q: torch.Tensor,
