@@ -383,8 +383,17 @@ def humming_is_layer_skipped(config: dict[str, Any], prefix: str):
             ignored_layers = candidate
             break
 
-    if any(module_name in prefix for module_name in ignored_layers):
-        return True
+    for module_name in ignored_layers:
+        # compressed-tensors style entries may be regex patterns prefixed
+        # with "re:" (e.g. "re:vision_tower.*"). These must be regex-matched;
+        # plain substring matching never matches the literal "re:..." string,
+        # so ignored layers get silently quantized. Non-"re:" entries keep the
+        # existing substring behavior (e.g. bitsandbytes modules_to_not_convert).
+        if module_name.startswith("re:"):
+            if re.match(module_name[3:], prefix):
+                return True
+        elif module_name in prefix:
+            return True
     if "lm_head" in prefix:
         return True
 
