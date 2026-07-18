@@ -876,6 +876,9 @@ def int4_w4a16_moe_quant_config(
     block_shape: list[int] | None = None,
     a1_gscale: torch.Tensor | None = None,
     a2_gscale: torch.Tensor | None = None,
+    gemm1_clamp_limit: float | None = None,
+    gemm1_alpha: float | None = None,
+    gemm1_beta: float | None = None,
 ) -> FusedMoEQuantConfig:
     """
     Construct a quant config for 16-bit float activations and int4 weights.
@@ -886,6 +889,9 @@ def int4_w4a16_moe_quant_config(
         _a2=FusedMoEQuantDesc(shape=group_shape, alpha_or_gscale=a2_gscale),
         _w1=FusedMoEQuantDesc("int4", group_shape, w1_scale, None, w1_zp, w1_bias),
         _w2=FusedMoEQuantDesc("int4", group_shape, w2_scale, None, w2_zp, w2_bias),
+        gemm1_clamp_limit=gemm1_clamp_limit,
+        gemm1_alpha=gemm1_alpha,
+        gemm1_beta=gemm1_beta,
     )
 
 
@@ -939,6 +945,9 @@ def int8_w8a16_moe_quant_config(
     block_shape: list[int] | None = None,
     a1_gscale: torch.Tensor | None = None,
     a2_gscale: torch.Tensor | None = None,
+    gemm1_clamp_limit: float | None = None,
+    gemm1_alpha: float | None = None,
+    gemm1_beta: float | None = None,
 ) -> FusedMoEQuantConfig:
     """
     Construct a quant config for 16-bit float activations and int8 weights.
@@ -949,6 +958,9 @@ def int8_w8a16_moe_quant_config(
         _a2=FusedMoEQuantDesc(shape=group_shape, alpha_or_gscale=a2_gscale),
         _w1=FusedMoEQuantDesc(torch.int8, group_shape, w1_scale, None, w1_zp, w1_bias),
         _w2=FusedMoEQuantDesc(torch.int8, group_shape, w2_scale, None, w2_zp, w2_bias),
+        gemm1_clamp_limit=gemm1_clamp_limit,
+        gemm1_alpha=gemm1_alpha,
+        gemm1_beta=gemm1_beta,
     )
 
 

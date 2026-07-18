@@ -123,6 +123,20 @@ class CompressedTensorsMoEMethod(FusedMoEMethodBase):
 
                         logger.info_once("Using CompressedTensorsW4A16FlydslMoEMethod")
                         return CompressedTensorsW4A16FlydslMoEMethod(weight_quant, input_quant, layer.moe_config)
+                    elif moe_backend == "emulation":
+                        # This class also routes explicit emulation requests
+                        # through select_wna16_moe_backend.
+                        from .compressed_tensors_moe_wna16_marlin import (
+                            CompressedTensorsWNA16MarlinMoEMethod,
+                        )
+
+                        logger.info_once("Using CompressedTensorsWNA16MarlinMoEMethod (emulation backend requested)")
+                        return CompressedTensorsWNA16MarlinMoEMethod(
+                            weight_quant,
+                            input_quant,
+                            layer.moe_config,
+                            layer_name,
+                        )
                 from .compressed_tensors_moe_wna16 import (
                     CompressedTensorsWNA16MoEMethod,
                 )

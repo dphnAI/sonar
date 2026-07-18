@@ -55,6 +55,7 @@ class WNA16MoEBackend(Enum):
     CPU = "CPU"
     FLASHINFER_TRTLLM = "FLASHINFER_TRTLLM"
     XPU = "XPU"
+    EMULATION = "EMULATION"
 
 
 def backend_to_kernel_cls(
@@ -93,6 +94,12 @@ def backend_to_kernel_cls(
         )
 
         return [CPUExpertsInt4]
+    elif backend == WNA16MoEBackend.EMULATION:
+        from aphrodite.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
+            Int4EmulationTritonExperts,
+        )
+
+        return [Int4EmulationTritonExperts]
     else:
         raise ValueError(f"Unknown WNA16 MoE backend: {backend.value}")
 
@@ -112,6 +119,7 @@ def _get_priority_backends() -> list[WNA16MoEBackend]:
         WNA16MoEBackend.MARLIN,
         WNA16MoEBackend.BATCHED_MARLIN,
         WNA16MoEBackend.HUMMING,
+        WNA16MoEBackend.EMULATION,
     ]
     return _AVAILABLE_BACKENDS
 
@@ -123,6 +131,7 @@ def map_wna16_backend(runner_backend: MoEBackend) -> WNA16MoEBackend:
         "marlin": WNA16MoEBackend.MARLIN,
         "humming": WNA16MoEBackend.HUMMING,
         "flashinfer_trtllm": WNA16MoEBackend.FLASHINFER_TRTLLM,
+        "emulation": WNA16MoEBackend.EMULATION,
     }
     if backend := mapping.get(runner_backend):
         return backend
@@ -208,6 +217,9 @@ def make_wna16_moe_quant_config(
     w2_bias: torch.Tensor | None = None,
     a1_gscale: torch.Tensor | None = None,
     a2_gscale: torch.Tensor | None = None,
+    gemm1_clamp_limit: float | None = None,
+    gemm1_alpha: float | None = None,
+    gemm1_beta: float | None = None,
 ) -> FusedMoEQuantConfig:
     """Create the FusedMoEQuantConfig for 4 or 8-bit WNA16 MoE."""
     if num_bits == 4:
@@ -221,6 +233,9 @@ def make_wna16_moe_quant_config(
             block_shape=[0, group_size],
             a1_gscale=a1_gscale,
             a2_gscale=a2_gscale,
+            gemm1_clamp_limit=gemm1_clamp_limit,
+            gemm1_alpha=gemm1_alpha,
+            gemm1_beta=gemm1_beta,
         )
     else:
         assert num_bits == 8
@@ -234,6 +249,9 @@ def make_wna16_moe_quant_config(
             block_shape=[0, group_size],
             a1_gscale=a1_gscale,
             a2_gscale=a2_gscale,
+            gemm1_clamp_limit=gemm1_clamp_limit,
+            gemm1_alpha=gemm1_alpha,
+            gemm1_beta=gemm1_beta,
         )
 
 
@@ -256,13 +274,16 @@ def make_wna16_moe_kernel(
     from aphrodite.model_executor.layers.fused_moe.experts.cpu_moe import (
         CPUExpertsInt4,
     )
+    from aphrodite.model_executor.layers.fused_moe.experts.int4_emulation_moe import (
+        Int4EmulationTritonExperts,
+    )
     from aphrodite.model_executor.layers.fused_moe.experts.xpu_moe import (
         XPUExpertsWNA16,
     )
 
     # Currently, we only support TrtLlmMxint4ExpertsMonolithic, MarlinExperts,
     # BatchedMarlinExperts, SwordfishExperts, XPUExpertsWNA16, CPUExpertsInt4,
-    # and the Humming grouped/indexed experts.
+    # the Humming grouped/indexed experts, and Int4EmulationTritonExperts.
     allowed_experts: tuple[type[mk.FusedMoEExperts], ...] = (
         MarlinExperts,
         BatchedMarlinExperts,
@@ -270,6 +291,7 @@ def make_wna16_moe_kernel(
         TrtLlmMxint4ExpertsMonolithic,
         XPUExpertsWNA16,
         CPUExpertsInt4,
+        Int4EmulationTritonExperts,
     )
     if backend == WNA16MoEBackend.HUMMING:
         allowed_experts += tuple(backend_to_kernel_cls(WNA16MoEBackend.HUMMING))
@@ -1070,6 +1092,138 @@ def _humming_wna16_weight_schema(
     raise TypeError(f"Humming WNA16 MoE requires AutoAWQConfig or AutoGPTQConfig, got {type(quant_config).__name__}.")
 
 
+def _unpack_and_dequant_int4_gptq(
+    w_int32: torch.Tensor,
+    scale: torch.Tensor,
+    qzeros: torch.Tensor | None,
+    transpose_output: bool,
+    output_dtype: torch.dtype = torch.bfloat16,
+) -> torch.Tensor:
+    """Unpack GPTQ-packed int4 weights and dequantize to output_dtype."""
+    E, K_packed, N = w_int32.shape
+    K = K_packed * 8
+    shifts = torch.arange(8, device=w_int32.device, dtype=torch.int32) * 4
+    nibbles = (w_int32.unsqueeze(-1) >> shifts) & 0xF
+    w = nibbles.permute(0, 1, 3, 2).reshape(E, K, N).to(torch.int16)
+
+    if qzeros is None:
+        w = w - 8
+    else:
+        group_size = K // scale.shape[1]
+        num_groups = scale.shape[1]
+        zp_nibbles = (qzeros.unsqueeze(-1) >> shifts) & 0xF
+        zp = zp_nibbles.reshape(E, num_groups, N).to(torch.int16)
+        w = w - zp.repeat_interleave(group_size, dim=1)
+
+    group_size = K // scale.shape[1]
+    scale_broadcast = scale.repeat_interleave(group_size, dim=1).to(output_dtype)
+    w_dequant = w.to(output_dtype) * scale_broadcast
+    if transpose_output:
+        return w_dequant.permute(0, 2, 1).contiguous()
+    return w_dequant.contiguous()
+
+
+def _unpack_and_dequant_int4_awq(
+    w_int32: torch.Tensor,
+    scale: torch.Tensor,
+    qzeros: torch.Tensor | None,
+    transpose_output: bool,
+    output_dtype: torch.dtype = torch.bfloat16,
+) -> torch.Tensor:
+    """Unpack AWQ-packed int4 weights and dequantize to output_dtype."""
+    E, K, N_packed = w_int32.shape
+    N = N_packed * 8
+    shifts = torch.arange(8, device=w_int32.device, dtype=torch.int32) * 4
+    interleave = torch.tensor([0, 2, 4, 6, 1, 3, 5, 7], device=w_int32.device)
+    inv_interleave = torch.empty_like(interleave)
+    inv_interleave[interleave] = torch.arange(8, device=w_int32.device)
+
+    nibbles = (w_int32.unsqueeze(-1) >> shifts) & 0xF
+    w_interleaved = nibbles.reshape(E, K, N)
+    w = w_interleaved.reshape(E, K, N // 8, 8)[:, :, :, inv_interleave]
+    w = w.reshape(E, K, N).to(torch.int16)
+
+    if qzeros is None:
+        w = w - 8
+    else:
+        group_size = K // scale.shape[1]
+        num_groups = scale.shape[1]
+        zp_nibbles = (qzeros.unsqueeze(-1) >> shifts) & 0xF
+        zp_interleaved = zp_nibbles.reshape(E, num_groups, N)
+        zp = zp_interleaved.reshape(E, num_groups, N // 8, 8)[:, :, :, inv_interleave]
+        zp = zp.reshape(E, num_groups, N).to(torch.int16)
+        w = w - zp.repeat_interleave(group_size, dim=1)
+
+    group_size = K // scale.shape[1]
+    scale_broadcast = scale.repeat_interleave(group_size, dim=1).to(output_dtype)
+    w_dequant = w.to(output_dtype) * scale_broadcast
+    if transpose_output:
+        return w_dequant.permute(0, 2, 1).contiguous()
+    return w_dequant.contiguous()
+
+
+def _process_weights_emulation_gptq(
+    w13: torch.Tensor,
+    w2: torch.Tensor,
+    w13_scale: torch.Tensor,
+    w2_scale: torch.Tensor,
+    w13_qzeros: torch.Tensor | None,
+    w2_qzeros: torch.Tensor | None,
+) -> tuple:
+    """Dequantize GPTQ int4 weights to BF16 for the emulation backend."""
+    w13_bf16 = _unpack_and_dequant_int4_gptq(w13, w13_scale, w13_qzeros, transpose_output=True)
+    w2_unpacked = _unpack_and_dequant_int4_gptq(w2, w2_scale, w2_qzeros, transpose_output=False)
+    w2_bf16 = w2_unpacked.permute(0, 2, 1).contiguous()
+    dummy = torch.ones(1, dtype=torch.float16, device=w13.device)
+    return (
+        w13_bf16,
+        w2_bf16,
+        dummy,
+        dummy,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+def _process_weights_emulation_awq(
+    w13: torch.Tensor,
+    w2: torch.Tensor,
+    w13_scale: torch.Tensor,
+    w2_scale: torch.Tensor,
+    w13_qzeros: torch.Tensor | None,
+    w2_qzeros: torch.Tensor | None,
+) -> tuple:
+    """Dequantize AWQ int4 weights to BF16 for the emulation backend."""
+    w13_bf16 = _unpack_and_dequant_int4_awq(w13, w13_scale, w13_qzeros, transpose_output=True)
+    w2_unpacked = _unpack_and_dequant_int4_awq(w2, w2_scale, w2_qzeros, transpose_output=False)
+    w2_bf16 = w2_unpacked.permute(0, 2, 1).contiguous()
+    dummy = torch.ones(1, dtype=torch.float16, device=w13.device)
+    return (
+        w13_bf16,
+        w2_bf16,
+        dummy,
+        dummy,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+
+
 def convert_to_wna16_moe_kernel_format(
     backend: WNA16MoEBackend,
     layer: torch.nn.Module,
@@ -1292,6 +1446,26 @@ def convert_to_wna16_moe_kernel_format(
             None,  # w2_input_global_scale
             w13_bias_out,
             w2_bias_out,
+        )
+    elif backend == WNA16MoEBackend.EMULATION:
+        from aphrodite.model_executor.layers.quantization.auto_awq import AutoAWQConfig
+
+        if isinstance(quant_config, AutoAWQConfig):
+            return _process_weights_emulation_awq(
+                w13,
+                w2,
+                w13_scale,
+                w2_scale,
+                w13_qzeros,
+                w2_qzeros,
+            )
+        return _process_weights_emulation_gptq(
+            w13,
+            w2,
+            w13_scale,
+            w2_scale,
+            w13_qzeros,
+            w2_qzeros,
         )
     else:
         raise ValueError(f"Unsupported wna16 MoE backend: {backend.value}")
