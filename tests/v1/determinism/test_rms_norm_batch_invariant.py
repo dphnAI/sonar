@@ -9,7 +9,7 @@ with the standard CUDA-based implementation to ensure numerical accuracy.
 
 import pytest
 import torch
-from utils import skip_unsupported
+from utils import skip_if_not_cuda, skip_unsupported
 
 from aphrodite.model_executor.layers.batch_invariant import (
     rms_norm_batch_invariant,
@@ -20,7 +20,7 @@ from aphrodite.platforms import current_platform
 DEVICE_TYPE = current_platform.device_type
 
 
-@skip_unsupported
+@skip_if_not_cuda
 @pytest.mark.parametrize("batch_size", [1, 4, 16, 64])
 @pytest.mark.parametrize("hidden_size", [512, 2048, 4096, 8192])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
@@ -71,7 +71,7 @@ def test_rms_norm_batch_invariant_vs_standard(
     )
 
 
-@skip_unsupported
+@skip_if_not_cuda
 @pytest.mark.parametrize("hidden_size", [512, 4096])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("eps", [1e-6])
@@ -163,7 +163,7 @@ def test_fused_add_rms_norm_batch_invariant_residual_path(
     )
 
 
-@skip_unsupported
+@skip_if_not_cuda
 @pytest.mark.parametrize("batch_size", [1, 16, 128])
 @pytest.mark.parametrize("seq_len", [1, 32, 512])
 @pytest.mark.parametrize("hidden_size", [2048, 4096])
@@ -203,7 +203,7 @@ def test_rms_norm_3d_input(default_aphrodite_config, batch_size: int, seq_len: i
     )
 
 
-@skip_unsupported
+@skip_if_not_cuda
 def test_rms_norm_numerical_stability(default_aphrodite_config):
     """
     Test RMS norm numerical stability with extreme values.
@@ -288,7 +288,7 @@ def test_rms_norm_formula(default_aphrodite_config):
     )
 
 
-@skip_unsupported
+@skip_if_not_cuda
 @pytest.mark.parametrize("hidden_size", [128, 1024, 4096, 16384])
 def test_rms_norm_different_hidden_sizes(default_aphrodite_config, hidden_size: int):
     """
@@ -360,6 +360,33 @@ def test_rms_norm_determinism(default_aphrodite_config):
             atol=0.0,
             msg=f"RMS norm not deterministic: run {idx} differs from reference",
         )
+
+
+@skip_unsupported
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_rms_norm_batch_invariance(dtype):
+    """Same row gives identical rms_norm result regardless of batch neighbors.
+
+    This verifies that the output for a given row is independent of what other
+    rows are present in the batch - the core batch-invariance property.
+    """
+    device = torch.device(DEVICE_TYPE)
+    torch.manual_seed(42)
+    hidden_size = 2048
+    eps = 1e-6
+
+    weight = torch.randn(hidden_size, dtype=dtype, device=device)
+    row = torch.randn(1, hidden_size, dtype=dtype, device=device)
+
+    # Compute rms_norm on the single row alone
+    out_single = rms_norm_batch_invariant(row, weight, eps=eps)
+
+    # Embed the same row in a larger batch with random neighbors
+    batch = torch.randn(8, hidden_size, dtype=dtype, device=device)
+    batch[4] = row[0]
+    out_batch = rms_norm_batch_invariant(batch, weight, eps=eps)
+
+    assert torch.equal(out_single[0], out_batch[4]), "rms_norm output for a row differs when batch context changes"
 
 
 if __name__ == "__main__":
