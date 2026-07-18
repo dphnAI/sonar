@@ -108,6 +108,7 @@ def _get_backend_priorities(
     device_capability: DeviceCapability,
     num_heads: int | None = None,
     kv_cache_dtype: CacheDType | None = None,
+    use_non_causal: bool = False,
 ) -> list[AttentionBackendEnum]:
     """Get backend priorities with lazy import to avoid circular dependency."""
     from aphrodite.utils.torch_utils import is_quantized_kv_cache
@@ -168,7 +169,10 @@ def _get_backend_priorities(
                 AttentionBackendEnum.SM89_MLA_SPARSE,
             ]
     else:
-        if device_capability.major == 10:
+        # SM100f defaults to FlashInfer for TRTLLM causal attention, but its
+        # non-causal cutlass path (used for dflash attention) is known to have
+        # problems. So prefer FlashAttention when non-causal on SM100f.
+        if device_capability.major == 10 and not use_non_causal:
             return [
                 AttentionBackendEnum.FLASHINFER,
                 AttentionBackendEnum.FLASH_ATTN,
@@ -422,6 +426,7 @@ class CudaPlatformBase(Platform):
             device_capability,
             num_heads,
             attn_selector_config.kv_cache_dtype,
+            attn_selector_config.use_non_causal,
         )
         for priority, backend in enumerate(backend_priorities):
             try:
