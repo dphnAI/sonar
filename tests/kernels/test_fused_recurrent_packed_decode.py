@@ -4,7 +4,7 @@
 import pytest
 import torch
 
-from aphrodite.model_executor.layers.fla.ops import (
+from aphrodite.third_party.flash_linear_attention.ops import (
     fused_recurrent_gated_delta_rule,
     fused_recurrent_gated_delta_rule_packed_decode,
 )

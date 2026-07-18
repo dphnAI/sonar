@@ -190,7 +190,7 @@ class MatcherRMSNormGated(MatcherCustomOp):
         z: torch.Tensor,
         weight: torch.Tensor,
     ) -> torch.Tensor:
-        from aphrodite.model_executor.layers.fla.ops.layernorm_guard import (
+        from aphrodite.third_party.flash_linear_attention.ops.layernorm_guard import (
             rmsnorm_fn,
         )
 

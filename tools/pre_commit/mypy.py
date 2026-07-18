@@ -59,7 +59,6 @@ EXCLUDE = [
     r"aphrodite/model_executor/models/[vV]",
     r"aphrodite/model_executor/models/[wW]",
     r"aphrodite/model_executor/models/[zZ]",
-    "aphrodite/model_executor/layers/fla/ops",
 ]
 
 
