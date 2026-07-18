@@ -36,6 +36,28 @@ def test_nixl_side_channel_host_is_not_compile_factor(
     assert "APHRODITE_NIXL_SIDE_CHANNEL_HOST" not in envs.compile_factors()
 
 
+def test_p2p_side_channel_defaults_and_override(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", raising=False)
+    monkeypatch.delenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", raising=False)
+    assert envs.APHRODITE_P2P_SIDE_CHANNEL_HOST == "localhost"
+    assert envs.APHRODITE_P2P_SIDE_CHANNEL_PORT == 5710
+
+    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", "10.0.0.20")
+    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5799")
+    assert envs.APHRODITE_P2P_SIDE_CHANNEL_HOST == "10.0.0.20"
+    assert envs.APHRODITE_P2P_SIDE_CHANNEL_PORT == 5799
+
+
+def test_p2p_side_channel_envs_are_not_compile_factors(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", "10.0.0.20")
+    monkeypatch.setenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5799")
+
+    assert "APHRODITE_P2P_SIDE_CHANNEL_HOST" not in envs.compile_factors()
+    assert "APHRODITE_P2P_SIDE_CHANNEL_PORT" not in envs.compile_factors()
+
+
 def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("APHRODITE_HOST_IP", "1.1.1.1")
     monkeypatch.setenv("APHRODITE_PORT", "1234")
