@@ -209,6 +209,8 @@ if TYPE_CHECKING:
     APHRODITE_DISABLE_REQUEST_ID_RANDOMIZATION: bool = False
     APHRODITE_NIXL_SIDE_CHANNEL_HOST: str = "localhost"
     APHRODITE_NIXL_SIDE_CHANNEL_PORT: int = 5600
+    APHRODITE_P2P_SIDE_CHANNEL_HOST: str = "localhost"
+    APHRODITE_P2P_SIDE_CHANNEL_PORT: int = 5710
     APHRODITE_EC_SIDE_CHANNEL_HOST: str = "localhost"
     APHRODITE_EC_SIDE_CHANNEL_PORT: int = 5601
     APHRODITE_MOONCAKE_BOOTSTRAP_PORT: int = 8998
@@ -1402,6 +1404,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "APHRODITE_NIXL_SIDE_CHANNEL_HOST": lambda: os.getenv("APHRODITE_NIXL_SIDE_CHANNEL_HOST", "localhost"),
     # Port used for NIXL handshake between remote agents.
     "APHRODITE_NIXL_SIDE_CHANNEL_PORT": lambda: int(os.getenv("APHRODITE_NIXL_SIDE_CHANNEL_PORT", "5600")),
+    # Address the P2P KV-offload control socket binds to. Defaults to
+    # ``localhost`` (loopback only); must be set to the node IP for
+    # cross-host P2P so remote peers can reach the socket.
+    "APHRODITE_P2P_SIDE_CHANNEL_HOST": lambda: os.getenv("APHRODITE_P2P_SIDE_CHANNEL_HOST", "localhost"),
+    # Port the P2P KV-offload control socket binds to.
+    "APHRODITE_P2P_SIDE_CHANNEL_PORT": lambda: int(os.getenv("APHRODITE_P2P_SIDE_CHANNEL_PORT", "5710")),
     # IP address used for the EC connector's ZMQ side channel
     # (producer ROUTER bind, consumer DEALER dial).
     "APHRODITE_EC_SIDE_CHANNEL_HOST": lambda: os.getenv("APHRODITE_EC_SIDE_CHANNEL_HOST", "localhost"),
@@ -1880,6 +1888,8 @@ def compile_factors() -> dict[str, object]:
         "APHRODITE_DP_MASTER_IP",
         "APHRODITE_DP_MASTER_PORT",
         "APHRODITE_NIXL_SIDE_CHANNEL_HOST",
+        "APHRODITE_P2P_SIDE_CHANNEL_HOST",
+        "APHRODITE_P2P_SIDE_CHANNEL_PORT",
         "APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS",
         "APHRODITE_CI_USE_S3",
         "APHRODITE_MODEL_REDIRECT_PATH",

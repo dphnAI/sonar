@@ -166,6 +166,26 @@ class TestNixlTransportWithMockedAgent:
         assert result.done == ()
         assert tid in result.failed
 
+    def test_poll_peer_id_scopes_to_peer(self):
+        """poll(peer_id) drains only that peer's transfers."""
+        transport = self._make_transport()
+        transport.add_remote_peer("peer:1", b"meta", 0x1000, 8, 1024)
+        transport.add_remote_peer("peer:2", b"meta", 0x2000, 8, 1024)
+
+        tid1 = transport.write_blocks("peer:1", [0], [1])
+        tid2 = transport.write_blocks("peer:2", [2], [3])
+        transport._agent.check_xfer_state.return_value = "DONE"
+
+        result = transport.poll(peer_id="peer:1")
+        assert tid1 in result.done
+        assert tid2 not in result.done
+        assert tid1 not in transport._inflight
+        assert tid2 in transport._inflight
+
+        result2 = transport.poll(peer_id="peer:2")
+        assert tid2 in result2.done
+        assert tid2 not in transport._inflight
+
     def test_poll_ignores_in_progress(self):
         """Transfers in PROC/PEND state stay inflight."""
         transport = self._make_transport()
