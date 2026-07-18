@@ -12,6 +12,7 @@ import mmap
 import os
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -55,17 +56,27 @@ _MOCK_KV_CACHE_CONFIG = MagicMock()
 _MOCK_KV_CACHE_CONFIG.kv_cache_groups = []
 
 _MOCK_OFFLOADING_SPEC = MagicMock()
-_MOCK_OFFLOADING_SPEC.aphrodite_config = _MOCK_APHRODITE_CONFIG
-_MOCK_OFFLOADING_SPEC.kv_cache_config = _MOCK_KV_CACHE_CONFIG
-_MOCK_OFFLOADING_SPEC.block_size_factor = 1
+_MOCK_OFFLOADING_SPEC.config = SimpleNamespace(
+    model=SimpleNamespace(name="test-model", dtype="float32"),
+    cache=SimpleNamespace(tokens_per_hash=16),
+    parallel=SimpleNamespace(
+        tp_size=1,
+        pp_size=1,
+        pcp_size=1,
+        dcp_size=1,
+        rank=0,
+        is_parallelism_agnostic=True,
+    ),
+    groups=(),
+)
+_MOCK_OFFLOADING_SPEC.blocks_per_chunk = 1
 
 
 def _make_offloading_spec(enable_kv_cache_events: bool) -> MagicMock:
     """Mock spec with an explicit global KV events flag."""
     spec = MagicMock()
-    spec.aphrodite_config = _MOCK_APHRODITE_CONFIG
-    spec.kv_cache_config = _MOCK_KV_CACHE_CONFIG
-    spec.block_size_factor = 1
+    spec.config = _MOCK_OFFLOADING_SPEC.config
+    spec.blocks_per_chunk = 1
     spec.kv_events_config.enable_kv_cache_events = enable_kv_cache_events
     return spec
 

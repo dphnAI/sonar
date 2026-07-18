@@ -94,11 +94,9 @@ def _make_worker(kv_cache_config: KVCacheConfig):
     )
 
     spec = MagicMock(spec=OffloadingSpec)
-    spec.kv_cache_config = kv_cache_config
-    spec.aphrodite_config = MagicMock()
     spec.get_worker.return_value = MagicMock()
 
-    worker = OffloadingConnectorWorker(spec=spec)
+    worker = OffloadingConnectorWorker(spec=spec, kv_cache_config=kv_cache_config)
     worker.worker = MagicMock()
 
     return worker, spec

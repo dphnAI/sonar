@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for FileMapper."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import torch
@@ -36,9 +37,20 @@ _MOCK_KV_CACHE_CONFIG = MagicMock()
 _MOCK_KV_CACHE_CONFIG.kv_cache_groups = []
 
 _MOCK_OFFLOADING_SPEC = MagicMock(spec=OffloadingSpec)
-_MOCK_OFFLOADING_SPEC.aphrodite_config = _MOCK_APHRODITE_CONFIG
-_MOCK_OFFLOADING_SPEC.kv_cache_config = _MOCK_KV_CACHE_CONFIG
-_MOCK_OFFLOADING_SPEC.block_size_factor = 1
+_MOCK_OFFLOADING_SPEC.config = SimpleNamespace(
+    model=SimpleNamespace(name="test-model", dtype="float32"),
+    cache=SimpleNamespace(tokens_per_hash=16),
+    parallel=SimpleNamespace(
+        tp_size=1,
+        pp_size=1,
+        pcp_size=1,
+        dcp_size=1,
+        rank=0,
+        is_parallelism_agnostic=True,
+    ),
+    groups=(),
+)
+_MOCK_OFFLOADING_SPEC.blocks_per_chunk = 1
 
 
 # ---------------------------------------------------------------------------
@@ -48,30 +60,35 @@ _MOCK_OFFLOADING_SPEC.block_size_factor = 1
 
 def make_mapper_from_offloading_spec(**kwargs) -> FileMapper:
     """Helper to create FileMapper with customizable mock config."""
-    # Create a copy of the mock config to avoid modifying the global one
-    mock_aphrodite_config = MagicMock()
-    mock_aphrodite_config.model_config.model = kwargs.get("model_name", "test-model")
-    mock_aphrodite_config.cache_config.block_size = kwargs.get("hash_block_size", 16)
-    mock_aphrodite_config.cache_config.cache_dtype = f"torch.{kwargs.get('dtype', 'float16')}"
-    mock_aphrodite_config.parallel_config.tensor_parallel_size = kwargs.get("tp_size", 1)
-    mock_aphrodite_config.parallel_config.pipeline_parallel_size = kwargs.get("pp_size", 1)
-    mock_aphrodite_config.parallel_config.prefill_context_parallel_size = kwargs.get("pcp_size", 1)
-    mock_aphrodite_config.parallel_config.decode_context_parallel_size = kwargs.get("dcp_size", 1)
-    mock_aphrodite_config.parallel_config.rank = kwargs.get("rank", 0)
-    mock_aphrodite_config.use_v2_model_runner = kwargs.get("use_v2_model_runner", False)
-
-    mock_kv_cache_config = MagicMock()
-    mock_kv_cache_config.kv_cache_groups = kwargs.get("kv_cache_groups", [])
-
     mock_offloading_spec = MagicMock(spec=OffloadingSpec)
-    mock_offloading_spec.aphrodite_config = mock_aphrodite_config
-    mock_offloading_spec.kv_cache_config = mock_kv_cache_config
-    mock_offloading_spec.block_size_factor = kwargs.get("block_size_factor", 1)
+    mock_offloading_spec.config = SimpleNamespace(
+        model=SimpleNamespace(
+            name=kwargs.get("model_name", "test-model"),
+            dtype=kwargs.get("dtype", "float16"),
+        ),
+        cache=SimpleNamespace(tokens_per_hash=kwargs.get("tokens_per_hash", 16)),
+        parallel=SimpleNamespace(
+            tp_size=kwargs.get("tp_size", 1),
+            pp_size=kwargs.get("pp_size", 1),
+            pcp_size=kwargs.get("pcp_size", 1),
+            dcp_size=kwargs.get("dcp_size", 1),
+            rank=kwargs.get("rank", 0),
+            is_parallelism_agnostic=kwargs.get("is_parallelism_agnostic", True),
+        ),
+        groups=tuple(
+            SimpleNamespace(
+                tokens_per_block=group.kv_cache_spec.block_size,
+                layer_names=tuple(group.layer_names),
+            )
+            for group in kwargs.get("kv_cache_groups", [])
+        ),
+    )
+    mock_offloading_spec.blocks_per_chunk = kwargs.get("blocks_per_chunk", 1)
 
     return FileMapper.from_offloading_spec(
         root_dir=kwargs.get("root_dir", "/tmp/cache"),
         offloading_spec=mock_offloading_spec,
-        gpu_blocks_per_file=mock_offloading_spec.block_size_factor,
+        blocks_per_file=mock_offloading_spec.blocks_per_chunk,
         parallel_agnostic=kwargs.get("parallel_agnostic", False),
     )
 
@@ -111,8 +128,8 @@ def test_get_run_config_fields():
     cfg = fm.get_run_config()
     assert cfg == {
         "model_name": "my-model",
-        "hash_block_size": 16,
-        "gpu_blocks_per_file": 1,
+        "tokens_per_hash": 16,
+        "blocks_per_file": 1,
         "tp_size": 2,
         "pp_size": 1,
         "pcp_size": 1,

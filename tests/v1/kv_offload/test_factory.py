@@ -15,6 +15,9 @@ import pytest
 import torch
 
 from aphrodite.config import KVTransferConfig
+from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+    build_offloading_config,
+)
 from aphrodite.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
@@ -152,7 +155,7 @@ def test_tiering_spec_registered():
 def test_get_spec_cls_returns_registered_class():
     """Registered spec_name returns correct class."""
     config = _make_aphrodite_config(spec_name="CPUOffloadingSpec")
-    spec_cls = OffloadingSpecFactory.get_spec_cls(config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
     assert spec_cls is CPUOffloadingSpec
 
 
@@ -160,7 +163,7 @@ def test_get_spec_cls_default_to_cpu():
     """Default spec_name (absent from config) resolves to CPUOffloadingSpec."""
     config = _make_aphrodite_config(spec_name=None)
     config.kv_transfer_config.kv_connector_extra_config.pop("spec_name", None)
-    spec_cls = OffloadingSpecFactory.get_spec_cls(config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
     assert spec_cls is CPUOffloadingSpec
 
 
@@ -174,12 +177,12 @@ def test_create_cpu_offloading_spec_end_to_end():
 
     Verifies:
     - cpu_bytes_to_use validation and num_blocks calculation
-    - block_size % hash_block_size assertion
+    - block_size % tokens_per_hash assertion
     - spec instance is CPUOffloadingSpec
     """
     config = _make_aphrodite_config(cpu_bytes_to_use=65536)
     kv_cache_config = _make_kv_cache_config()
-    spec = OffloadingSpecFactory.create_spec(config, kv_cache_config)
+    spec = OffloadingSpecFactory.create_spec(build_offloading_config(config, kv_cache_config))
     assert isinstance(spec, CPUOffloadingSpec)
     assert spec.num_blocks > 0
 
@@ -201,7 +204,7 @@ def test_dynamic_load_via_spec_module_path():
     del OffloadingSpecFactory._registry["CPUOffloadingSpec"]
     # spec_name not in registry → falls through to spec_module_path
     config.kv_transfer_config.kv_connector_extra_config["spec_module_path"] = "aphrodite.v1.kv_offload.cpu.spec"
-    spec_cls = OffloadingSpecFactory.get_spec_cls(config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
     assert spec_cls is CPUOffloadingSpec
 
 
@@ -214,12 +217,12 @@ def test_unregistered_spec_without_module_path_raises():
     """spec_name not in registry + no spec_module_path → ValueError."""
     config = _make_aphrodite_config(spec_name="NonexistentSpec")
     with pytest.raises(ValueError, match="Unsupported spec type"):
-        OffloadingSpecFactory.get_spec_cls(config)
+        OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
 
     # create_spec should also fail (calls get_spec_cls internally)
     kv_cache_config = _make_kv_cache_config()
     with pytest.raises(ValueError, match="Unsupported spec type"):
-        OffloadingSpecFactory.create_spec(config, kv_cache_config)
+        OffloadingSpecFactory.create_spec(build_offloading_config(config, kv_cache_config))
 
 
 def test_cpu_spec_missing_cpu_bytes_to_use_raises():
@@ -228,7 +231,7 @@ def test_cpu_spec_missing_cpu_bytes_to_use_raises():
     config.kv_transfer_config.kv_connector_extra_config.pop("cpu_bytes_to_use", None)
     kv_cache_config = _make_kv_cache_config()
     with pytest.raises(Exception, match="cpu_bytes_to_use must be specified"):
-        OffloadingSpecFactory.create_spec(config, kv_cache_config)
+        OffloadingSpecFactory.create_spec(build_offloading_config(config, kv_cache_config))
 
 
 def test_duplicate_registration_raises():
@@ -247,7 +250,7 @@ def test_build_metric_definitions_below_threshold():
     from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
     config = _make_aphrodite_config(store_threshold=1)
-    spec_cls = OffloadingSpecFactory.get_spec_cls(config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
     metrics = spec_cls.build_metric_definitions(config.kv_transfer_config.kv_connector_extra_config)
     assert CPUOffloadingMetrics.STORES_SKIPPED not in metrics
     assert CPUOffloadingMetrics.CPU_ALLOCATION_SIZE in metrics
@@ -258,7 +261,7 @@ def test_build_metric_definitions_allocation_size_histogram():
     from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
     config = _make_aphrodite_config(store_threshold=0)
-    spec_cls = OffloadingSpecFactory.get_spec_cls(config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
     metrics = spec_cls.build_metric_definitions(config.kv_transfer_config.kv_connector_extra_config)
     metadata = metrics[CPUOffloadingMetrics.CPU_ALLOCATION_SIZE]
     assert isinstance(metadata, OffloadingHistogramMetadata)
@@ -281,6 +284,6 @@ def test_build_metric_definitions_returns_counter_at_threshold():
     from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingMetrics
 
     config = _make_aphrodite_config(store_threshold=2)
-    spec_cls = OffloadingSpecFactory.get_spec_cls(config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
     metrics = spec_cls.build_metric_definitions(config.kv_transfer_config.kv_connector_extra_config)
     assert CPUOffloadingMetrics.STORES_SKIPPED in metrics

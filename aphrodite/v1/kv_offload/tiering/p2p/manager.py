@@ -158,7 +158,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
             host = envs.APHRODITE_P2P_SIDE_CHANNEL_HOST
         if port is None:
             port = envs.APHRODITE_P2P_SIDE_CHANNEL_PORT
-        dp_index = offloading_spec.aphrodite_config.parallel_config.data_parallel_index
+        dp_index = offloading_spec.config.parallel.data_parallel_index
         port = int(port) + dp_index
         self._local_id = f"{host}:{port}"
         self._nixl_agent_name = str(uuid.uuid4())
@@ -166,7 +166,7 @@ class P2PSecondaryTierManager(SecondaryTierManager):
         config_fields = FileMapper.from_offloading_spec(
             root_dir="",
             offloading_spec=offloading_spec,
-            gpu_blocks_per_file=offloading_spec.block_size_factor,
+            blocks_per_file=offloading_spec.blocks_per_chunk,
             parallel_agnostic=True,
         ).get_run_config()
         self._data: DataTransport = NixlTransport(

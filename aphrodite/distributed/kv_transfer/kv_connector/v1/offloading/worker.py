@@ -10,10 +10,14 @@ from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.common import 
     OffloadingWorkerMetadata,
     ReqId,
 )
+from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import (
+    is_kv_cache_tensor_packed,
+)
 from aphrodite.logger import init_logger
 from aphrodite.v1.attention.backend import AttentionBackend
 from aphrodite.v1.kv_cache_interface import (
     AttentionSpec,
+    KVCacheConfig,
     MambaSpec,
     UniformTypeKVCacheSpecs,
 )
@@ -33,8 +37,13 @@ logger = init_logger(__name__)
 class OffloadingConnectorWorker:
     """Implementation of Worker side methods"""
 
-    def __init__(self, spec: OffloadingSpec):
+    def __init__(
+        self,
+        spec: OffloadingSpec,
+        kv_cache_config: KVCacheConfig,
+    ):
         self.spec = spec
+        self.kv_cache_config = kv_cache_config
         self.worker: OffloadingWorker | None = None
 
         # job_id -> req_id for in-flight loads.
@@ -46,7 +55,7 @@ class OffloadingConnectorWorker:
         self.worker = self.spec.get_worker(kv_caches)
 
     def register_kv_caches(self, kv_caches: dict[str, torch.Tensor | list[torch.Tensor]]):
-        kv_cache_config = self.spec.kv_cache_config
+        kv_cache_config = self.kv_cache_config
         num_blocks = kv_cache_config.num_blocks
 
         # Packed layouts (e.g. DSv4) set block_stride > 0; their tensors use
@@ -54,7 +63,7 @@ class OffloadingConnectorWorker:
         # General (non-packed) layouts size the tensor at page_size_bytes per
         # manager block, so page_size_bytes is the correct offloading stride.
         layer_is_packed: dict[str, bool] = {
-            ln: bool(kv_tensor.block_stride)
+            ln: is_kv_cache_tensor_packed(kv_tensor)
             for kv_tensor in kv_cache_config.kv_cache_tensors
             for ln in kv_tensor.shared_by
         }
@@ -127,7 +136,7 @@ class OffloadingConnectorWorker:
                     raise NotImplementedError
 
         packed_kv_cache_tensor = next(
-            (t for t in kv_cache_config.kv_cache_tensors if t.block_stride and t.shared_by),
+            (t for t in kv_cache_config.kv_cache_tensors if is_kv_cache_tensor_packed(t) and t.shared_by),
             None,
         )
         if packed_kv_cache_tensor is not None:
@@ -205,7 +214,7 @@ class OffloadingConnectorWorker:
         num_blocks_physical_dim = physical_to_logical.index(num_blocks_logical_dim)
         assert num_blocks_physical_dim == 0
 
-        kv_cache_groups = self.spec.kv_cache_config.kv_cache_groups
+        kv_cache_groups = self.kv_cache_config.kv_cache_groups
         assert len(kv_cache_groups) == 1
         kv_cache_spec = kv_cache_groups[0].kv_cache_spec
         num_layers = len(kv_cache_groups[0].layer_names)
