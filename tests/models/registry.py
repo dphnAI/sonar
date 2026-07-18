@@ -1483,6 +1483,12 @@ _SPECULATIVE_DECODING_EXAMPLE_MODELS = {
         is_available_online=False,
         min_transformers_version="5.1.0",
     ),
+    "Gemma4DSparkModel": _HfExamplesInfo(
+        "google/gemma-4-12B-it",
+        speculative_model="deepseek-ai/dspark_gemma4_12b_block7",
+        is_available_online=False,
+        use_original_num_layers=True,
+    ),
     "HYV3MTPModel": _HfExamplesInfo(
         "tencent/Hy3-preview",
         speculative_model="tencent/Hy3-preview",
