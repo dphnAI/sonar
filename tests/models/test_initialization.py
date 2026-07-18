@@ -15,7 +15,7 @@ from aphrodite.v1.core.kv_cache_utils import (
 )
 from aphrodite.v1.engine.core import EngineCore as V1EngineCore
 
-from ..utils import create_new_process_for_each_test
+from ..utils import create_new_process_for_each_test, requires_spawn_multiprocessing
 from .registry import (
     _TRANSFORMERS_BACKEND_MODELS,
     AUTO_EXAMPLE_MODELS,
@@ -127,6 +127,12 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
         patch.object(V1EngineCore, "_initialize_kv_caches", _initialize_kv_caches_v1),
         monkeypatch.context() as m,
     ):
+        if requires_spawn_multiprocessing():
+            # The EngineCore subprocess re-imports the class and does not
+            # inherit the KV-cache patch above, so it OOMs. Run in-process
+            # so the patch applies.
+            m.setenv("APHRODITE_ENABLE_V1_MULTIPROCESSING", "0")
+
         # FIXME: A hack to bypass FA3 assertion because our CI's L4 GPU
         # has cc==8.9 which hasn't supported FA3 yet. Remove this hack when
         # L4 supports FA3.
