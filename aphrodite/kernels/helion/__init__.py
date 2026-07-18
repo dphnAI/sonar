@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Helion integration for Aphrodite."""
 
-import aphrodite.kernels.helion.ops  # noqa: F401  Auto-register all Helion ops
 from aphrodite.kernels.helion.case_key import CaseKey
 from aphrodite.kernels.helion.config_manager import (
     ConfigManager,
