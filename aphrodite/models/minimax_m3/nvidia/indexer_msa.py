@@ -13,10 +13,9 @@ Prefill scores with ``fmha_sm100``'s score-only (``OnlyScore``) path (much faste
 than Triton for the wide prefill score, benchmarked ~3-5x), writing its
 ``max_score`` straight into the buffer's prefill region (stride-aware, no copy).
 
-Decode scores with the Triton split-K ``minimax_m3_index_decode_score`` (a
-purpose-built vector x matrix score, no wasted tensor-core tiles, 256-way
-split-K, cudagraph-safe by shape-constant grids), writing into the decode
-region. Its tuning heuristics are kept; only the top-k is shared with prefill.
+Decode scores with CuteDSL when the flattened query tile is supported and fall
+back to Triton otherwise, writing into the decode region. Only the top-k is
+shared with prefill.
 
 ``fmha_sm100`` imports are function-local so this module is import-safe on
 AMD / non-SM100.
@@ -39,6 +38,7 @@ from aphrodite.models.minimax_m3.common.indexer import (
 from aphrodite.models.minimax_m3.common.ops.index_topk import (
     minimax_m3_index_decode_score,
 )
+from aphrodite.models.minimax_m3.nvidia.ops import minimax_m3_index_decode_score_cutedsl
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
     AttentionCGSupport,
@@ -249,7 +249,7 @@ class MiniMaxM3IndexerMSAMetadataBuilder(MiniMaxM3IndexerMetadataBuilder):
 
 
 class MiniMaxM3IndexerMSAImpl(MiniMaxM3IndexerImpl):
-    """MSA indexer: write decode/prefill scores, then run one unified top-k."""
+    """Decode: CuteDSL/Triton score. Prefill: fmha_sm100 OnlyScore + top-k."""
 
     indexer_backend_cls: ClassVar[type[AttentionBackend]] = MiniMaxM3IndexerMSABackend
 
@@ -286,7 +286,14 @@ class MiniMaxM3IndexerMSAImpl(MiniMaxM3IndexerImpl):
         # writes by strides). Top-k is deferred to the single unified call below.
         if md.decode is not None:
             d = md.decode
-            minimax_m3_index_decode_score(
+            # max_decode_query_len avoids recompiles across runtime decode sizes.
+            # Fall back when the flattened Q tile gets too wide for this kernel.
+            decode_score = (
+                minimax_m3_index_decode_score_cutedsl
+                if self.num_index_heads * d.max_decode_query_len <= 32
+                else minimax_m3_index_decode_score
+            )
+            decode_score(
                 index_q[:nd],
                 kv,
                 d.block_table,
