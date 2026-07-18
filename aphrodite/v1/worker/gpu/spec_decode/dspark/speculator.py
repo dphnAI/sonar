@@ -59,8 +59,6 @@ class DSparkSpeculator(DFlashSpeculator):
         draft_hidden = self.draft_model_config.get_hidden_size()
         self.hidden_states = torch.zeros(self.max_num_tokens, draft_hidden, dtype=self.dtype, device=device)
 
-        self.dflash_causal = False
-
         self._step_cols = torch.arange(self.num_speculative_steps, dtype=torch.int32, device=device)
 
         self._anchor_idx = torch.arange(self.max_num_reqs, dtype=torch.int64, device=device) * self.num_query_per_req
