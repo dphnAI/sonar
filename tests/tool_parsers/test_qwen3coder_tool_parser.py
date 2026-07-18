@@ -213,7 +213,7 @@ def stream_delta_message_generator(
 
 def test_extract_tool_calls_no_tools(qwen3_tool_parser):
     model_output = "This is a test response without any tool calls"
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, token_ids=None, request=None)  # type: ignore[arg-type]
     assert not extracted_tool_calls.tools_called
     assert extracted_tool_calls.tool_calls == []
     assert extracted_tool_calls.content == model_output
@@ -390,7 +390,7 @@ def test_extract_tool_calls(
     expected_content,
 ):
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -412,7 +412,7 @@ TX
 </function>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert extracted_tool_calls.tools_called
     assert len(extracted_tool_calls.tool_calls) == 1
@@ -462,7 +462,7 @@ hello world
 
     parser = Qwen3EngineToolParser(qwen3_tokenizer, tools=tools)
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
-    extracted_tool_calls = parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     args = json.loads(extracted_tool_calls.tool_calls[0].function.arguments)
     assert args["int_param"] == 42
@@ -554,7 +554,7 @@ some text
 
     parser = Qwen3EngineToolParser(qwen3_tokenizer, tools=tools)
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
-    extracted = parser.extract_tool_calls(model_output, request=request)
+    extracted = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     args = json.loads(extracted.tool_calls[0].function.arguments)
     assert args["anyof_int"] == 5
@@ -913,7 +913,7 @@ fahrenheit
 </tool_call>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = qwen3_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     # The parser should handle the malformed XML gracefully
     assert extracted_tool_calls.tools_called
@@ -1137,7 +1137,7 @@ def test_malformed_xml_no_gt_delimiter(qwen3_tool_parser):
     )
 
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    result = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
+    result = qwen3_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
     assert result is not None
     assert isinstance(result.tool_calls, list)
     assert all(tc is not None for tc in result.tool_calls)
@@ -1159,7 +1159,7 @@ def test_none_tool_calls_filtered(qwen3_tool_parser):
     )
 
     request = ChatCompletionRequest(model=MODEL, messages=[])
-    result = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
+    result = qwen3_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
     assert all(tc is not None for tc in result.tool_calls)
     assert result.tools_called
     valid = [tc for tc in result.tool_calls if tc.function.name == "get_current_weather"]
@@ -1199,7 +1199,7 @@ def test_anyof_parameter_not_double_encoded(qwen3_tokenizer):
     )
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
-    result = parser.extract_tool_calls(model_output, request=request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     assert len(result.tool_calls) == 1
@@ -1331,7 +1331,7 @@ def test_no_double_serialization_string_args(qwen3_tool_parser):
     )
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
-    result = qwen3_tool_parser.extract_tool_calls(model_output, request=request)
+    result = qwen3_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     assert len(result.tool_calls) == 1

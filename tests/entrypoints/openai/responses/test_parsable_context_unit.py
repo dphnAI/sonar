@@ -45,7 +45,7 @@ class _NoOpParser(DelegatingParser):
     def extract_reasoning_streaming(self, *args, **kwargs):
         return None
 
-    def extract_tool_calls(self, model_output, request):
+    def extract_tool_calls(self, model_output, token_ids, request):
         return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(self, *args, **kwargs):
@@ -76,7 +76,7 @@ class _ReasoningOnlyParser(DelegatingParser):
     def extract_reasoning_streaming(self, *args, **kwargs):
         return None
 
-    def extract_tool_calls(self, model_output, request):
+    def extract_tool_calls(self, model_output, token_ids, request):
         return ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
     def extract_tool_calls_streaming(self, *args, **kwargs):
@@ -94,7 +94,7 @@ class _StubToolParser:
     def __init__(self, tokenizer=None, tools=None):
         pass
 
-    def extract_tool_calls(self, model_output, request):
+    def extract_tool_calls(self, model_output, token_ids, request):
         return ExtractedToolCallInformation(
             tools_called=True,
             tool_calls=[

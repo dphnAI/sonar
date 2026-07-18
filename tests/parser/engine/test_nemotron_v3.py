@@ -116,7 +116,7 @@ class TestNonStreamingToolCalls:
     def test_single_tool_call(self, parser):
         text = "<tool_call>\n<function=get_weather>\n<parameter=city>Tokyo</parameter>\n</function>\n</tool_call>"
         request = _make_request()
-        result = parser.extract_tool_calls(text, request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=request)
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].function.name == "get_weather"
@@ -137,7 +137,7 @@ class TestNonStreamingToolCalls:
             "</tool_call>"
         )
         request = _make_request()
-        result = parser.extract_tool_calls(text, request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=request)
         assert result.tools_called is True
         assert len(result.tool_calls) == 2
         assert result.tool_calls[0].function.name == "get_weather"
@@ -145,7 +145,7 @@ class TestNonStreamingToolCalls:
 
     def test_no_tool_calls(self, parser):
         request = _make_request()
-        result = parser.extract_tool_calls("Hello, how can I help?", request)
+        result = parser.extract_tool_calls("Hello, how can I help?", token_ids=None, request=request)
         assert result.tools_called is False
         # Parser starts in REASONING state, so plain text is classified
         # as reasoning (not content) when there are no tool calls.

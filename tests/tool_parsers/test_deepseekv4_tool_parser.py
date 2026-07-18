@@ -125,7 +125,7 @@ def test_extract_tool_calls():
     parser = make_parser()
     model_output = "Let me check. " + build_tool_call("get_weather", {"location": "Beijing", "unit": "celsius"})
 
-    result = parser.extract_tool_calls(model_output, make_request())
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=make_request())
 
     assert result.tools_called
     assert result.content == "Let me check. "
@@ -142,7 +142,7 @@ def test_function_calls_block_is_not_accepted():
     parser = make_parser()
     model_output = build_tool_call("search", {"query": "aphrodite"}).replace("tool_calls", "function_calls")
 
-    result = parser.extract_tool_calls(model_output, make_request())
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=make_request())
 
     assert not result.tools_called
     assert result.content == model_output
@@ -291,7 +291,7 @@ def test_extract_tool_calls_arguments_wrapper():
         f"{TC_END}"
     )
 
-    result = parser.extract_tool_calls(model_output, request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
     assert result.tools_called
     args = json.loads(result.tool_calls[0].function.arguments)
     assert args == {"location": "Beijing"}
@@ -334,7 +334,7 @@ def test_non_streaming_extract_with_angle_brackets():
     """Non-streaming extraction must correctly handle '>' in values."""
     parser = make_parser()
     full_text = build_tool_call("run_command", {"command": "git --version 2>&1"})
-    result = parser.extract_tool_calls(full_text, make_request())
+    result = parser.extract_tool_calls(full_text, token_ids=None, request=make_request())
 
     assert result.tools_called
     assert len(result.tool_calls) == 1
@@ -381,7 +381,7 @@ def test_composed_schema_converts_object_and_array_params():
         f"{TC_END}"
     )
 
-    result = parser.extract_tool_calls(model_output, request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     args = json.loads(result.tool_calls[0].function.arguments)

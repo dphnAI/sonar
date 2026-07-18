@@ -78,14 +78,14 @@ class TestExtractToolCalls:
         return make_parser()
 
     def test_no_tool_call(self, parser):
-        result = parser.extract_tool_calls("just some text", None)
+        result = parser.extract_tool_calls("just some text", token_ids=None, request=None)
         assert not result.tools_called
         assert result.tool_calls == []
         assert result.content == "just some text"
 
     def test_single_tool_no_params(self, parser):
         model_output = f'{FC_START}\n{INV_START}get_time">\n{INV_END}\n{FC_END}'
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].function.name == "get_time"
@@ -93,7 +93,7 @@ class TestExtractToolCalls:
 
     def test_single_tool_with_params(self, parser):
         model_output = build_tool_call("get_weather", {"location": "SF", "date": "2024-01-16"})
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         assert len(result.tool_calls) == 1
         tc = result.tool_calls[0]
@@ -105,13 +105,13 @@ class TestExtractToolCalls:
 
     def test_content_before_tool_call(self, parser):
         model_output = "Sure, let me check! " + build_tool_call("get_weather", {"location": "NYC"})
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         assert result.content == "Sure, let me check! "
 
     def test_no_content_prefix_returns_none(self, parser):
         model_output = build_tool_call("get_weather", {"location": "NYC"})
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         assert result.content is None
 
@@ -126,7 +126,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         assert len(result.tool_calls) == 2
         assert json.loads(result.tool_calls[0].function.arguments) == {"location": "SF"}
@@ -155,7 +155,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         assert len(result.tool_calls) == 1
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -181,7 +181,7 @@ class TestExtractToolCalls:
         model_output = (
             f'{FC_START}\n{INV_START}score">\n{PARAM_START}value" string="true">42{PARAM_END}\n{INV_END}\n{FC_END}'
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args == {"value": 42}
@@ -204,7 +204,7 @@ class TestExtractToolCalls:
         model_output = (
             f'{FC_START}\n{INV_START}score">\n{PARAM_START}value" string="false">42{PARAM_END}\n{INV_END}\n{FC_END}'
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args == {"value": 42}
@@ -259,7 +259,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args == {
@@ -298,7 +298,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args == {"wait": {"type": "for", "minutes": 2880}}
@@ -327,7 +327,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args == {"location": "Beijing"}
@@ -355,7 +355,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args == {"location": "Beijing"}
@@ -383,7 +383,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["tags"] == ["a", "b"]
@@ -414,7 +414,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["ratio"] == pytest.approx(3.14)
         assert args["whole"] == 5
@@ -443,7 +443,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["count"] == 42
         assert isinstance(args["count"], int)
@@ -466,7 +466,7 @@ class TestExtractToolCalls:
         model_output = (
             f'{FC_START}\n{INV_START}clear">\n{PARAM_START}value" string="false">null{PARAM_END}\n{INV_END}\n{FC_END}'
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["value"] is None
 
@@ -487,7 +487,7 @@ class TestExtractToolCalls:
         model_output = (
             f'{FC_START}\n{INV_START}echo">\n{PARAM_START}text" string="false">null{PARAM_END}\n{INV_END}\n{FC_END}'
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["text"] == "null"
         assert isinstance(args["text"], str)
@@ -503,7 +503,7 @@ class TestExtractToolCalls:
             f"{INV_END}\n"
             f"{FC_END}"
         )
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["count"] == 42
@@ -751,7 +751,7 @@ class TestExtractToolCallsStreaming:
             f"{FC_END}"
         )
 
-        non_stream = parser.extract_tool_calls(full_text, None)
+        non_stream = parser.extract_tool_calls(full_text, token_ids=None, request=None)
         non_stream_args = json.loads(non_stream.tool_calls[0].function.arguments)
 
         deltas = self._stream(parser, full_text)
@@ -830,7 +830,7 @@ class TestExtractToolCallsStreaming:
         """Streaming and non-streaming must produce the same result."""
         full_text = build_tool_call("get_weather", {"location": "SF", "date": "2024-01-16"})
         # Non-streaming
-        non_stream = parser.extract_tool_calls(full_text, None)
+        non_stream = parser.extract_tool_calls(full_text, token_ids=None, request=None)
         assert non_stream.tools_called
         ns_name = non_stream.tool_calls[0].function.name
         ns_args = json.loads(non_stream.tool_calls[0].function.arguments)
@@ -1080,7 +1080,7 @@ class TestDelimiterPreservation:
         )
 
         # Non-streaming: parser must detect the tool call
-        result = parser.extract_tool_calls(model_output, None)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
         assert result.tools_called
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].function.name == "get_weather"
@@ -1090,7 +1090,7 @@ class TestDelimiterPreservation:
 
         # With content prefix
         prefixed_output = "Here is the weather: " + model_output
-        result2 = parser.extract_tool_calls(prefixed_output, None)
+        result2 = parser.extract_tool_calls(prefixed_output, token_ids=None, request=None)
         assert result2.tools_called
         assert result2.content == "Here is the weather: "
 
@@ -1114,7 +1114,7 @@ class TestDelimiterPreservation:
         full_text = build_tool_call("search", {"query": "aphrodite documentation"})
 
         # Non-streaming extraction
-        non_stream_result = parser.extract_tool_calls(full_text, request)
+        non_stream_result = parser.extract_tool_calls(full_text, token_ids=None, request=request)
         assert non_stream_result.tools_called
         assert len(non_stream_result.tool_calls) == 1
         assert non_stream_result.tool_calls[0].function.name == "search"

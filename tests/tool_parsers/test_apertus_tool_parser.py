@@ -49,7 +49,7 @@ def mock_request():
 class TestExtractToolCalls:
     def test_no_tool_calls(self, parser, mock_request):
         model_output = "Hello, how can I help you today?"
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is False
         assert result.tool_calls == []
@@ -57,7 +57,7 @@ class TestExtractToolCalls:
 
     def test_single_tool_call(self, parser, mock_request):
         model_output = '<|tools_prefix|>[{"get_weather": {"location": "London"}}]<|tools_suffix|>'
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -69,7 +69,7 @@ class TestExtractToolCalls:
         model_output = (
             '<|tools_prefix|>[{"get_weather": {"location": "San Francisco", "unit": "celsius"}}]<|tools_suffix|>'
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -81,7 +81,7 @@ class TestExtractToolCalls:
         model_output = (
             'Let me check the weather for you. <|tools_prefix|>[{"get_weather": {"location": "Paris"}}]<|tools_suffix|>'
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.content == "Let me check the weather for you."
@@ -94,7 +94,7 @@ class TestExtractToolCalls:
             '{"location": "London"}}, '
             '{"get_time": {"location": "London"}}]<|tools_suffix|>'
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 2
@@ -105,7 +105,7 @@ class TestExtractToolCalls:
         model_output = (
             '<|tools_prefix|>[{"complex_function": {"nested": {"inner": "value"}, "list": ["a", "b"]}}]<|tools_suffix|>'
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -115,7 +115,7 @@ class TestExtractToolCalls:
 
     def test_incomplete_tool_call(self, parser, mock_request):
         model_output = '<|tools_prefix|>[{"get_weather": {"location": "London"}'
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -125,7 +125,7 @@ class TestExtractToolCalls:
 
     def test_missing_tool_suffix(self, parser, mock_request):
         model_output = '<|tools_prefix|>[{"get_weather": {"location": "San Francisco", "unit": "celsius"}}]'
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1

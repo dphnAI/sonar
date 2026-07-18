@@ -157,7 +157,7 @@ def stream_delta_message_generator_from_chunks(
 
 def test_extract_tool_calls_no_tools(step3p5_tool_parser):
     model_output = "This is a test response without any tool calls"
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=None)  # type: ignore[arg-type]
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, token_ids=None, request=None)  # type: ignore[arg-type]
     assert not extracted_tool_calls.tools_called
     assert extracted_tool_calls.tool_calls == []
     assert extracted_tool_calls.content == model_output
@@ -335,7 +335,7 @@ def test_extract_tool_calls(
     expected_content,
 ):
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -355,7 +355,7 @@ TX
 </function>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert extracted_tool_calls.tools_called
     assert len(extracted_tool_calls.tool_calls) == 1
@@ -405,7 +405,7 @@ hello world
 
     parser = Step3p5ToolParser(step3p5_tokenizer, tools=tools)
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
-    extracted_tool_calls = parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     args = json.loads(extracted_tool_calls.tool_calls[0].function.arguments)
     assert args["int_param"] == 42
@@ -673,7 +673,7 @@ fahrenheit
 </tool_call>"""
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     # The parser should handle the malformed XML gracefully
     assert extracted_tool_calls.tools_called
@@ -848,7 +848,7 @@ def test_extract_tool_calls_complex_type_with_single_quote(step3p5_tokenizer):
 
     parser = Step3p5ToolParser(step3p5_tokenizer, tools=tools)
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
-    extracted_tool_calls = parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     args = json.loads(extracted_tool_calls.tool_calls[0].function.arguments)
     assert args["obj_param"] == {"key": "value"}
@@ -984,7 +984,7 @@ rectangle
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
 
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     # Should have exactly two complete tool calls
     assert extracted_tool_calls.tools_called
@@ -1320,7 +1320,7 @@ rectangle
 
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=sample_tools)
 
-    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, request=request)
+    extracted_tool_calls = step3p5_tool_parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     # Should have exactly two complete tool calls
     assert extracted_tool_calls.tools_called

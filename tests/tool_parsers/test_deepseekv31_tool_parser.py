@@ -28,7 +28,7 @@ def test_extract_tool_calls_with_tool(parser):
         '<｜tool▁call▁begin｜>foo<｜tool▁sep｜>{"x":1}<｜tool▁call▁end｜>'
         "<｜tool▁calls▁end｜>"
     )
-    result = parser.extract_tool_calls(model_output, None)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
     assert result.tools_called
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].function.name == "foo"
@@ -46,7 +46,7 @@ def test_extract_tool_calls_with_multiple_tools(parser):
         " some suffix text"
     )
 
-    result = parser.extract_tool_calls(model_output, None)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=None)
 
     assert result.tools_called
     assert len(result.tool_calls) == 2

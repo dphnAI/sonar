@@ -697,17 +697,14 @@ class TestNonStreamingToolCalls:
     """Non-streaming tool call extraction via extract_tool_calls()."""
 
     def test_no_tool_calls(self, tool_call_parser, mock_request):
-        result = tool_call_parser.extract_tool_calls(
-            "Hello, how can I help you today?",
-            mock_request,
-        )
+        result = tool_call_parser.extract_tool_calls("Hello, how can I help you today?", token_ids=None, request=mock_request)
         assert result.tools_called is False
         assert result.tool_calls == []
         assert result.content == "Hello, how can I help you today?"
 
     def test_single_tool_call(self, tool_call_parser, mock_request):
         text = '<|tool_call>call:get_weather{location:<|"|>London<|"|>}<tool_call|>'
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -717,7 +714,7 @@ class TestNonStreamingToolCalls:
 
     def test_multiple_arguments(self, tool_call_parser, mock_request):
         text = '<|tool_call>call:get_weather{location:<|"|>San Francisco<|"|>,unit:<|"|>celsius<|"|>}<tool_call|>'
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "get_weather"
@@ -726,7 +723,7 @@ class TestNonStreamingToolCalls:
 
     def test_text_before_tool_call(self, tool_call_parser, mock_request):
         text = 'Let me check the weather for you. <|tool_call>call:get_weather{location:<|"|>Paris<|"|>}<tool_call|>'
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.content is not None
@@ -740,7 +737,7 @@ class TestNonStreamingToolCalls:
             '<|tool_call>call:get_time{location:<|"|>London<|"|>}'
             "<tool_call|>"
         )
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 2
@@ -754,7 +751,7 @@ class TestNonStreamingToolCalls:
             'list:[<|"|>a<|"|>,<|"|>b<|"|>]}'
             "<tool_call|>"
         )
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "complex_function"
@@ -763,7 +760,7 @@ class TestNonStreamingToolCalls:
 
     def test_number_and_boolean(self, tool_call_parser, mock_request):
         text = "<|tool_call>call:set_status{is_active:true,count:42,score:3.14}<tool_call|>"
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -771,7 +768,7 @@ class TestNonStreamingToolCalls:
 
     def test_no_arguments(self, tool_call_parser, mock_request):
         text = "<|tool_call>call:get_status{}<tool_call|>"
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "get_status"
@@ -780,14 +777,14 @@ class TestNonStreamingToolCalls:
 
     def test_hyphenated_function_name(self, tool_call_parser, mock_request):
         text = '<|tool_call>call:get-weather{location:<|"|>London<|"|>}<tool_call|>'
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "get-weather"
 
     def test_dotted_function_name(self, tool_call_parser, mock_request):
         text = '<|tool_call>call:weather.get{location:<|"|>London<|"|>}<tool_call|>'
-        result = tool_call_parser.extract_tool_calls(text, mock_request)
+        result = tool_call_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "weather.get"
@@ -975,7 +972,7 @@ class TestNonStreamingReasoningPlusToolCalls:
     def test_extract_tool_calls_from_full_text(self, parser, request_obj):
         """extract_tool_calls on full model output must find tools."""
         model_output = FULL_MODEL_OUTPUT
-        result = parser.extract_tool_calls(model_output, request_obj)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=request_obj)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -1005,7 +1002,7 @@ class TestNonStreamingReasoningPlusToolCalls:
             '<|tool_call>call:get_weather{city:<|"|>Raleigh<|"|>}'
             "<tool_call|>"
         )
-        result = tool_call_parser.extract_tool_calls(model_output, mock_request)
+        result = tool_call_parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True, f"No tool calls found. content={result.content!r}"
         assert result.tool_calls[0].function.name == "get_weather"
@@ -1018,7 +1015,7 @@ class TestNonStreamingReasoningPlusToolCalls:
         model_output = FULL_MODEL_OUTPUT
 
         reasoning, _ = parser.extract_reasoning(model_output, request_obj)
-        result = parser.extract_tool_calls(model_output, request_obj)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=request_obj)
 
         assert reasoning is not None
         assert "weather" in reasoning.lower()
@@ -1133,7 +1130,7 @@ class TestGemma4SchemaAwareTypeCoercion:
         as non-streaming extraction."""
         text = "<|tool_call>call:update_record{zipcode:12345}<tool_call|>"
 
-        non_streaming = parser_with_tools.extract_tool_calls(text, mock_request)
+        non_streaming = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         ns_args = json.loads(non_streaming.tool_calls[0].function.arguments)
 
         chunks = [
@@ -1183,27 +1180,27 @@ class TestGemma4SchemaCoercionBoolNumberNull:
 
     def test_bool_param_coerced(self, parser_with_tools, mock_request):
         text = "<|tool_call>call:configure{enabled:true}<tool_call|>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["enabled"] is True
         assert isinstance(args["enabled"], bool)
 
     def test_number_whole_normalized(self, parser_with_tools, mock_request):
         text = "<|tool_call>call:configure{ratio:5.0}<tool_call|>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["ratio"] == 5
         assert isinstance(args["ratio"], int)
 
     def test_null_coerced_when_nullable(self, parser_with_tools, mock_request):
         text = "<|tool_call>call:configure{value:null}<tool_call|>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["value"] is None
 
     def test_null_stays_string_without_null_schema(self, parser_with_tools, mock_request):
         text = "<|tool_call>call:configure{label:null}<tool_call|>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["label"] == "null"
         assert isinstance(args["label"], str)
@@ -1212,7 +1209,7 @@ class TestGemma4SchemaCoercionBoolNumberNull:
         """Values streamed incrementally must not cause prefix
         incompatibility when types are coerced."""
         text = "<|tool_call>call:configure{enabled:true,ratio:3.14,label:hello}<tool_call|>"
-        non_stream = parser_with_tools.extract_tool_calls(text, mock_request)
+        non_stream = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         ns_args = json.loads(non_stream.tool_calls[0].function.arguments)
 
         chunks = [
@@ -1271,7 +1268,7 @@ class TestGemma4NestedSchemaCoercion:
 
     def test_nested_object_coerced(self, parser_with_tools, mock_request):
         text = '<|tool_call>call:search{query:<|"|>aphrodite<|"|>,filters:{language:python,min_stars:100}}<tool_call|>'
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["query"] == "aphrodite"
         assert args["filters"]["language"] == "python"
@@ -1490,7 +1487,7 @@ class TestCommaInStringValueRegression:
 
     def test_non_streaming_comma_in_value(self, comma_parser, request_obj):
         text = "".join(text for _, text in COMMA_TOKEN_SEQUENCE)
-        result = comma_parser.extract_tool_calls(text, request_obj)
+        result = comma_parser.extract_tool_calls(text, token_ids=None, request=request_obj)
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["location"] == "San Francisco, CA"
@@ -1498,7 +1495,7 @@ class TestCommaInStringValueRegression:
 
     def test_non_streaming_multiple_commas(self, multi_comma_parser, request_obj):
         text = "".join(text for _, text in MULTI_COMMA_TOKEN_SEQUENCE)
-        result = multi_comma_parser.extract_tool_calls(text, request_obj)
+        result = multi_comma_parser.extract_tool_calls(text, token_ids=None, request=request_obj)
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["destination"] == "456 Oakwood Avenue, Rivermist, 83214"

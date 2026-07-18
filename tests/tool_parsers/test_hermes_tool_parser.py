@@ -302,10 +302,7 @@ def test_hermes_parser_non_streaming_no_tool_call(
     any_chat_request: ChatCompletionRequest,
 ) -> None:
     text = """This is not a tool call."""
-    tool_call = hermes_parser.extract_tool_calls(
-        model_output=text,
-        request=any_chat_request,
-    )
+    tool_call = hermes_parser.extract_tool_calls(model_output=text, token_ids=None, request=any_chat_request)
 
     assert tool_call is not None
     assert not tool_call.tools_called
@@ -318,10 +315,7 @@ def test_hermes_parser_non_streaming_tool_call_between_tags(
     text = """<tool_call>
 {"name": "final_answer", "arguments": {"trigger": true}}
 </tool_call>"""
-    tool_call = hermes_parser.extract_tool_calls(
-        model_output=text,
-        request=any_chat_request,
-    )
+    tool_call = hermes_parser.extract_tool_calls(model_output=text, token_ids=None, request=any_chat_request)
 
     assert tool_call is not None
     assert tool_call.tools_called
@@ -338,10 +332,7 @@ def test_hermes_parser_non_streaming_tool_call_until_eos(
 
     text = """<tool_call>
 {"name": "final_answer", "arguments": {"trigger": true}}"""
-    tool_call = hermes_parser.extract_tool_calls(
-        model_output=text,
-        request=any_chat_request,
-    )
+    tool_call = hermes_parser.extract_tool_calls(model_output=text, token_ids=None, request=any_chat_request)
 
     assert tool_call is not None
     assert tool_call.tools_called
@@ -356,10 +347,7 @@ def test_hermes_parser_non_streaming_tool_call_invalid_json(
     # Missing closing brace to trigger exception
     text = """<tool_call>
 {"name": "final_answer", "arguments": {"trigger": true}"""
-    tool_call = hermes_parser.extract_tool_calls(
-        model_output=text,
-        request=any_chat_request,
-    )
+    tool_call = hermes_parser.extract_tool_calls(model_output=text, token_ids=None, request=any_chat_request)
 
     assert tool_call is not None
     assert not tool_call.tools_called

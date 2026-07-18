@@ -169,10 +169,7 @@ def test_minimax_m3_parser_registered():
 
 
 def test_non_streaming_nested_tool_call(parser):
-    result = parser.extract_tool_calls(
-        "I will create it.\n" + build_order_call(),
-        request=None,
-    )
+    result = parser.extract_tool_calls("I will create it.\n" + build_order_call(), token_ids=None, request=None)
 
     assert result.tools_called
     assert result.content == "I will create it.\n"
@@ -197,7 +194,7 @@ def test_non_streaming_nested_tool_call(parser):
 
 
 def test_non_streaming_without_tool_call_keeps_content(parser):
-    result = parser.extract_tool_calls("plain response", request=None)
+    result = parser.extract_tool_calls("plain response", token_ids=None, request=None)
 
     assert not result.tools_called
     assert result.tool_calls == []
@@ -205,7 +202,7 @@ def test_non_streaming_without_tool_call_keeps_content(parser):
 
 
 def test_non_streaming_multiple_tool_calls(parser):
-    result = parser.extract_tool_calls(build_multiple_order_call(), request=None)
+    result = parser.extract_tool_calls(build_multiple_order_call(), token_ids=None, request=None)
 
     assert result.tools_called
     assert result.content is None

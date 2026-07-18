@@ -229,7 +229,7 @@ def stream_delta_message_generator(
 def test_extract_tool_calls_no_tools(parser_fixture, request):
     parser = request.getfixturevalue(parser_fixture)
     model_output = "This is a test"
-    result = parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
     assert result == ExtractedToolCallInformation(tools_called=False, tool_calls=[], content=model_output)
 
 
@@ -331,7 +331,7 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
 def test_extract_tool_calls_pre_v11_tokenizer(
     mistral_pre_v11_tool_parser, model_output, expected_tool_calls, expected_content
 ):
-    extracted_tool_calls = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    extracted_tool_calls = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -346,7 +346,7 @@ def test_extract_tool_calls_pre_v11_multiple_bot_tokens_raises(
         '[TOOL_CALLS] [{"name": "add", "arguments":{"a": 1}}][TOOL_CALLS] [{"name": "sub", "arguments":{"b": 2}}]'
     )
     with pytest.raises(ValueError, match="Only one BOT token"):
-        mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+        mistral_pre_v11_tool_parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
 
 
 def test_extract_tool_calls_pre_v11_regex_fallback(
@@ -356,7 +356,7 @@ def test_extract_tool_calls_pre_v11_regex_fallback(
     raw_decode fails on leading junk. It should re-serialize arguments
     and return a valid tool call."""
     model_output = '[TOOL_CALLS]  junk [{"name": "add", "arguments":{"a": 1, "b": 2}}] trail'
-    result = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    result = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
     assert result.tools_called
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].function.name == "add"
@@ -367,7 +367,7 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
     mistral_pre_v11_tool_parser,
 ):
     model_output = "[TOOL_CALLS] not json at all"
-    result = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    result = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
     assert result == ExtractedToolCallInformation(tools_called=False, tool_calls=[], content="not json at all")
 
 
@@ -442,7 +442,7 @@ def test_extract_tool_calls_pre_v11_regex_fallback_fails(
     ],
 )
 def test_extract_tool_calls(mistral_tool_parser, model_output, expected_tool_calls, expected_content):
-    extracted_tool_calls = mistral_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    extracted_tool_calls = mistral_tool_parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
@@ -452,7 +452,7 @@ def test_extract_tool_calls(mistral_tool_parser, model_output, expected_tool_cal
 
 def test_extract_tool_calls_v11_without_args_skipped(mistral_tool_parser):
     model_output = "[TOOL_CALLS]toolname_no_args"
-    result = mistral_tool_parser.extract_tool_calls(model_output, request=_DUMMY_REQUEST)
+    result = mistral_tool_parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
     assert result == ExtractedToolCallInformation(tools_called=True, tool_calls=[], content=None)
 
 

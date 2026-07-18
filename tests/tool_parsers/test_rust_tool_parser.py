@@ -185,10 +185,7 @@ def test_rust_tool_parser_adapter_extracts_complete_output() -> None:
     tools = sample_tools()
     parser = DeepSeekV4RustToolParser(MOCK_TOKENIZER, tools=tools)
 
-    result = parser.extract_tool_calls(
-        "Let me create it. " + build_tool_call(),
-        ChatCompletionRequest(messages=[], model="m", tools=tools),
-    )
+    result = parser.extract_tool_calls("Let me create it. " + build_tool_call(), token_ids=None, request=ChatCompletionRequest(messages=[], model="m", tools=tools))
 
     assert result.tools_called
     assert result.content == "Let me create it. "
@@ -265,10 +262,7 @@ def test_rust_tool_parser_adapter_complete_prefers_model_tool_call_ids() -> None
     tools = sample_tools()
     parser = KimiK2RustToolParser(MOCK_TOKENIZER, tools=tools)
 
-    result = parser.extract_tool_calls(
-        "Let me check. " + build_kimi_tool_call(),
-        ChatCompletionRequest(messages=[], model="m", tools=tools),
-    )
+    result = parser.extract_tool_calls("Let me check. " + build_kimi_tool_call(), token_ids=None, request=ChatCompletionRequest(messages=[], model="m", tools=tools))
 
     assert result.tools_called
     assert [tool_call.id for tool_call in result.tool_calls] == KIMI_EXPECTED_IDS

@@ -160,7 +160,7 @@ def test_string_arg_preserves_whitespace() -> None:
     content = "    def f():\n        return 1\n"
     model_output = f"<tool_call>write_file\n<arg_key>content</arg_key>\n<arg_value>{content}</arg_value>\n</tool_call>"
 
-    result = parser.extract_tool_calls(model_output, request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     args = json.loads(result.tool_calls[0].function.arguments)
@@ -181,7 +181,7 @@ def test_non_string_arg_still_deserialized() -> None:
         "</tool_call>"
     )
 
-    result = parser.extract_tool_calls(model_output, request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     args = json.loads(result.tool_calls[0].function.arguments)
@@ -199,7 +199,7 @@ def test_responses_extract_tool_calls_with_flat_tools() -> None:
     content = "  x = 1\n"
     model_output = f"<tool_call>write_file\n<arg_key>content</arg_key>\n<arg_value>{content}</arg_value>\n</tool_call>"
 
-    result = parser.extract_tool_calls(model_output, request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     args = json.loads(result.tool_calls[0].function.arguments)
@@ -238,7 +238,7 @@ def test_no_newline_after_name_non_streaming() -> None:
 
     model_output = "<tool_call>get_weather<arg_key>city</arg_key><arg_value>Paris</arg_value></tool_call>"
 
-    result = parser.extract_tool_calls(model_output, request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     assert len(result.tool_calls) == 1
@@ -253,7 +253,7 @@ def test_newline_after_name_still_parses_non_streaming() -> None:
 
     model_output = "<tool_call>get_weather\n<arg_key>city</arg_key>\n<arg_value>Paris</arg_value>\n</tool_call>"
 
-    result = parser.extract_tool_calls(model_output, request)
+    result = parser.extract_tool_calls(model_output, token_ids=None, request=request)
 
     assert result.tools_called
     assert result.tool_calls[0].function.name == "get_weather"

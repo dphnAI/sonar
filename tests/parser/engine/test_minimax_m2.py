@@ -56,21 +56,15 @@ def make_tools(*names: str):
 
 class TestNonStreaming:
     def test_no_tool_calls(self, parser, mock_request):
-        result = parser.extract_tool_calls(
-            "</think>This is a regular response without tool calls.",
-            mock_request,
-        )
+        result = parser.extract_tool_calls("</think>This is a regular response without tool calls.", token_ids=None, request=mock_request)
         assert result.tools_called is False
         assert result.tool_calls == []
         assert result.content == "This is a regular response without tool calls."
 
     def test_single_tool_call(self, parser, mock_request):
-        result = parser.extract_tool_calls(
-            '<minimax:tool_call><invoke name="get_weather">'
+        result = parser.extract_tool_calls('<minimax:tool_call><invoke name="get_weather">'
             '<parameter name="city">Seattle</parameter>'
-            "</invoke></minimax:tool_call>",
-            mock_request,
-        )
+            "</invoke></minimax:tool_call>", token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -80,13 +74,10 @@ class TestNonStreaming:
         }
 
     def test_multiple_invokes(self, parser, mock_request):
-        result = parser.extract_tool_calls(
-            "<minimax:tool_call>"
+        result = parser.extract_tool_calls("<minimax:tool_call>"
             '<invoke name="search"><parameter name="q">OpenAI</parameter></invoke>'
             '<invoke name="search"><parameter name="q">Aphrodite</parameter></invoke>'
-            "</minimax:tool_call>",
-            mock_request,
-        )
+            "</minimax:tool_call>", token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert [tc.function.name for tc in result.tool_calls] == ["search", "search"]
@@ -111,13 +102,10 @@ class TestNonStreaming:
         parser = MinimaxM2Parser(mock_tokenizer, tools=tools)
         mock_request.tools = tools
 
-        result = parser.extract_tool_calls(
-            '<minimax:tool_call><invoke name="forecast">'
+        result = parser.extract_tool_calls('<minimax:tool_call><invoke name="forecast">'
             '<parameter name="days">5</parameter>'
             '<parameter name="include_hourly">true</parameter>'
-            "</invoke></minimax:tool_call>",
-            mock_request,
-        )
+            "</invoke></minimax:tool_call>", token_ids=None, request=mock_request)
 
         assert json.loads(result.tool_calls[0].function.arguments) == {
             "days": 5,
@@ -129,12 +117,9 @@ class TestNonStreaming:
         parser = MinimaxM2Parser(mock_tokenizer)
         mock_request.tools = tools
 
-        result = parser.extract_tool_calls(
-            '<minimax:tool_call><invoke name="img_gen">'
+        result = parser.extract_tool_calls('<minimax:tool_call><invoke name="img_gen">'
             '<parameter name="prompt">a cat</parameter>'
-            "</invoke></minimax:tool_call>",
-            mock_request,
-        )
+            "</invoke></minimax:tool_call>", token_ids=None, request=mock_request)
 
         assert result.tools_called is False
         assert result.tool_calls == []
@@ -144,13 +129,10 @@ class TestNonStreaming:
         parser = MinimaxM2Parser(mock_tokenizer)
         mock_request.tools = tools
 
-        result = parser.extract_tool_calls(
-            "<minimax:tool_call>"
+        result = parser.extract_tool_calls("<minimax:tool_call>"
             '<invoke name="img_gen"><parameter name="prompt">cat</parameter></invoke>'
             '<invoke name="search"><parameter name="query">news</parameter></invoke>'
-            "</minimax:tool_call>",
-            mock_request,
-        )
+            "</minimax:tool_call>", token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert [tc.function.name for tc in result.tool_calls] == ["search"]

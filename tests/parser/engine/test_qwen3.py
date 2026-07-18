@@ -46,17 +46,14 @@ def parser(mock_tokenizer):
 
 class TestNonStreaming:
     def test_no_tool_calls(self, parser, mock_request):
-        result = parser.extract_tool_calls(
-            "This is a regular response without any tool calls.",
-            mock_request,
-        )
+        result = parser.extract_tool_calls("This is a regular response without any tool calls.", token_ids=None, request=mock_request)
         assert result.tools_called is False
         assert result.tool_calls == []
         assert result.content == ("This is a regular response without any tool calls.")
 
     def test_single_tool_call(self, parser, mock_request):
         text = "<tool_call>\n<function=get_weather>\n<parameter=city>Tokyo</parameter>\n</function>\n</tool_call>"
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -77,7 +74,7 @@ class TestNonStreaming:
             "</function>\n"
             "</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 2
@@ -101,7 +98,7 @@ class TestNonStreaming:
             '<parameter=object_field>{"nested": "value"}</parameter>\n'
             "</function>\n</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -115,7 +112,7 @@ class TestNonStreaming:
 
     def test_empty_arguments(self, parser, mock_request):
         text = "<tool_call>\n<function=refresh>\n</function>\n</tool_call>"
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "refresh"
@@ -130,7 +127,7 @@ class TestNonStreaming:
             "</function>\n</tool_call>\n\n"
             "I will get that information."
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.content is not None
@@ -145,7 +142,7 @@ class TestNonStreaming:
             "<parameter=newline>line1\nline2</parameter>\n"
             "</function>\n</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -161,7 +158,7 @@ class TestNonStreaming:
             "<parameter=exact_match>false</parameter>\n"
             "</function>\n</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -185,7 +182,7 @@ class TestNonStreaming:
             "</function>\n"
             "</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -215,7 +212,7 @@ class TestNonStreaming:
             "</function>\n"
             "</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 2
@@ -239,7 +236,7 @@ class TestNonStreaming:
             "</function>\n"
             "</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 2
@@ -259,7 +256,7 @@ class TestNonStreaming:
             "</function>\n"
             "</tool_call>"
         )
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         args = json.loads(result.tool_calls[0].function.arguments)
@@ -705,7 +702,7 @@ class TestSchemaAwareTypeCoercion:
 
     def test_string_param_not_coerced_to_int(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=TaskUpdate>\n<parameter=taskId>1</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["taskId"] == "1"
@@ -713,21 +710,21 @@ class TestSchemaAwareTypeCoercion:
 
     def test_string_param_not_coerced_to_bool(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=TaskUpdate>\n<parameter=flag>true</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["flag"] == "true"
         assert isinstance(args["flag"], str)
 
     def test_int_param_still_coerced(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=TaskUpdate>\n<parameter=count>42</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["count"] == 42
         assert isinstance(args["count"], int)
 
     def test_no_tools_keeps_strings(self, parser, mock_request):
         text = "<tool_call>\n<function=TaskUpdate>\n<parameter=taskId>1</parameter>\n</function>\n</tool_call>"
-        result = parser.extract_tool_calls(text, mock_request)
+        result = parser.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["taskId"] == "1"
         assert isinstance(args["taskId"], str)
@@ -789,7 +786,7 @@ class TestAnyOfTypeCoercion:
         """A param with anyOf including 'string' must not be coerced
         to integer."""
         text = "<tool_call>\n<function=set_config>\n<parameter=port>8080</parameter>\n</function>\n</tool_call>"
-        result = parser_with_anyof.extract_tool_calls(text, mock_request)
+        result = parser_with_anyof.extract_tool_calls(text, token_ids=None, request=mock_request)
         assert result.tools_called
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["port"] == "8080"
@@ -834,34 +831,34 @@ class TestSchemaCoercionBoolNumberNull:
 
     def test_bool_param_coerced(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=configure>\n<parameter=enabled>true</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["enabled"] is True
         assert isinstance(args["enabled"], bool)
 
     def test_number_param_whole_normalized(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=configure>\n<parameter=ratio>5.0</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["ratio"] == 5
         assert isinstance(args["ratio"], int)
 
     def test_number_param_fractional(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=configure>\n<parameter=ratio>3.14</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["ratio"] == pytest.approx(3.14)
         assert isinstance(args["ratio"], float)
 
     def test_null_coerced_when_in_schema(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=configure>\n<parameter=value>null</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["value"] is None
 
     def test_null_stays_string_without_null_schema(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=configure>\n<parameter=label>null</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["label"] == "null"
         assert isinstance(args["label"], str)
@@ -906,7 +903,7 @@ class TestSchemaCoercionBoolNumberNull:
             "</function>\n"
             "</tool_call>"
         )
-        non_stream = parser_with_tools.extract_tool_calls(text, mock_request)
+        non_stream = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         ns_args = json.loads(non_stream.tool_calls[0].function.arguments)
 
         chunks = [line + "\n" for line in text.split("\n") if line]
@@ -1006,21 +1003,21 @@ class TestNestedSchemaCoercion:
             "</function>\n"
             "</tool_call>"
         )
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["filters"] == {"language": "python", "min_stars": 100}
         assert isinstance(args["filters"]["min_stars"], int)
 
     def test_nested_array_items_coerced(self, parser_with_tools, mock_request):
         text = "<tool_call>\n<function=search>\n<parameter=limits>[10, 20, 30]</parameter>\n</function>\n</tool_call>"
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["limits"] == [10, 20, 30]
         assert all(isinstance(v, int) for v in args["limits"])
 
     def test_nested_string_array_not_coerced(self, parser_with_tools, mock_request):
         text = '<tool_call>\n<function=search>\n<parameter=tags>["ml", "42"]</parameter>\n</function>\n</tool_call>'
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         assert args["tags"] == ["ml", "42"]
         assert all(isinstance(v, str) for v in args["tags"])
@@ -1036,7 +1033,7 @@ class TestNestedSchemaCoercion:
             "</function>\n"
             "</tool_call>"
         )
-        result = parser_with_tools.extract_tool_calls(text, mock_request)
+        result = parser_with_tools.extract_tool_calls(text, token_ids=None, request=mock_request)
         args = json.loads(result.tool_calls[0].function.arguments)
         questions = args["questions"]
         assert isinstance(questions, list)

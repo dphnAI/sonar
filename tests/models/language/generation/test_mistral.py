@@ -247,7 +247,7 @@ def test_mistral_function_calling(aphrodite_runner, model: str, dtype: str) -> N
 
         model_output = outputs[0].outputs[0].text.strip()
         assert model_output.startswith(tool_parser.bot_token), model_output
-        parsed_message = tool_parser.extract_tool_calls(model_output, None)
+        parsed_message = tool_parser.extract_tool_calls(model_output, token_ids=None, request=None)
 
         assert parsed_message.tools_called
 
@@ -289,7 +289,7 @@ def test_mistral_function_call_nested_json():
 
     model_output = f"{parser.bot_token}get_current_weather{json.dumps(args_dict)}"
 
-    parsed = parser.extract_tool_calls(model_output, None)
+    parsed = parser.extract_tool_calls(model_output, token_ids=None, request=None)
 
     # Assertions: the tool call is detected and the full nested JSON is parsed
     # without truncation.
@@ -319,7 +319,7 @@ def test_mistral_function_call_nested_json():
         [f"{parser.bot_token}{name}{json.dumps(args)}" for name, args in zip(names, multiple_args_dict)]
     )
 
-    parsed = parser.extract_tool_calls(model_output, None)
+    parsed = parser.extract_tool_calls(model_output, token_ids=None, request=None)
 
     # Assertions: the tool call is detected and the full nested JSON is parsed
     # without truncation.

@@ -58,13 +58,13 @@ def mock_request() -> ChatCompletionRequest:
 class TestHYV3ExtractToolCalls:
     def test_no_tool_call(self, hy_v3_tool_parser, mock_request):
         out = "This is a plain response."
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert not r.tools_called
         assert r.content == out
 
     def test_zero_arg_inline(self, hy_v3_tool_parser, mock_request):
         out = "<tool_calls><tool_call>get_current_date<tool_sep></tool_call></tool_calls>"
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert r.tool_calls[0].function.name == "get_current_date"
         assert json.loads(r.tool_calls[0].function.arguments) == {}
@@ -72,7 +72,7 @@ class TestHYV3ExtractToolCalls:
 
     def test_zero_arg_newline(self, hy_v3_tool_parser, mock_request):
         out = "<tool_calls>\n<tool_call>get_current_date<tool_sep>\n</tool_call>\n</tool_calls>"
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert r.tool_calls[0].function.name == "get_current_date"
 
@@ -81,7 +81,7 @@ class TestHYV3ExtractToolCalls:
             "<tool_calls><tool_call>get_weather<tool_sep><arg_key>city</arg_key><arg_value>Beijing"
             "</arg_value><arg_key>date</arg_key><arg_value>2026-03-30</arg_value></tool_call></tool_calls>"
         )
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert json.loads(r.tool_calls[0].function.arguments) == {
             "city": "Beijing",
@@ -93,7 +93,7 @@ class TestHYV3ExtractToolCalls:
             "<tool_calls>\n<tool_call>get_weather<tool_sep>\n<arg_key>city</arg_key>\n<arg_value>Beijing"
             "</arg_value>\n<arg_key>date</arg_key>\n<arg_value>2026-03-30</arg_value>\n</tool_call>\n</tool_calls>"
         )
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert json.loads(r.tool_calls[0].function.arguments) == {
             "city": "Beijing",
@@ -102,7 +102,7 @@ class TestHYV3ExtractToolCalls:
 
     def test_content_before(self, hy_v3_tool_parser, mock_request):
         out = "Checking.<tool_calls>\n<tool_call>get_current_date<tool_sep>\n</tool_call>\n</tool_calls>"
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert r.content == "Checking."
 
@@ -113,12 +113,12 @@ class TestHYV3ExtractToolCalls:
             "<tool_call>get_weather<tool_sep>\n<arg_key>city</arg_key>\n<arg_value>Hangzhou</arg_value>\n"
             "<arg_key>date</arg_key>\n<arg_value>2026-03-30</arg_value>\n</tool_call>\n</tool_calls>"
         )
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert len(r.tool_calls) == 2
 
     def test_empty_content_none(self, hy_v3_tool_parser, mock_request):
         out = "<tool_calls>\n<tool_call>get_current_date<tool_sep>\n</tool_call>\n</tool_calls>"
-        r = hy_v3_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = hy_v3_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.content is None
 
 

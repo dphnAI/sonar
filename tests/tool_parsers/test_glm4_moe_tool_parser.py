@@ -123,7 +123,7 @@ def test_extract_tool_calls_with_glm45_newline_format():
 <arg_value>fahrenheit</arg_value>
 </tool_call>"""
 
-    extracted = parser.extract_tool_calls(model_output, request=_request(tools))
+    extracted = parser.extract_tool_calls(model_output, token_ids=None, request=_request(tools))
 
     assert extracted.tools_called
     assert extracted.content == "I'll check it."
@@ -147,7 +147,7 @@ def test_extract_multiple_tool_calls_with_glm45_newline_format():
 <arg_key>city</arg_key><arg_value>Orlando</arg_value>
 </tool_call>"""
 
-    extracted = parser.extract_tool_calls(model_output, request=_request(tools))
+    extracted = parser.extract_tool_calls(model_output, token_ids=None, request=_request(tools))
 
     assert extracted.tools_called
     assert [tc.function.name for tc in extracted.tool_calls] == [
@@ -167,7 +167,7 @@ def test_extract_tool_calls_coerces_schema_types():
 <arg_key>enabled</arg_key><arg_value>true</arg_value>
 </tool_call>"""
 
-    extracted = parser.extract_tool_calls(model_output, request=_request(tools))
+    extracted = parser.extract_tool_calls(model_output, token_ids=None, request=_request(tools))
 
     assert extracted.tools_called
     assert json.loads(extracted.tool_calls[0].function.arguments) == {
@@ -182,10 +182,7 @@ def test_extract_zero_argument_tool_call_with_glm45_newline_format():
     tools = _tools()
     parser = _parser(tools)
 
-    extracted = parser.extract_tool_calls(
-        "<tool_call>get_time\n</tool_call>",
-        request=_request(tools),
-    )
+    extracted = parser.extract_tool_calls("<tool_call>get_time\n</tool_call>", token_ids=None, request=_request(tools))
 
     assert extracted.tools_called
     assert extracted.tool_calls[0].function.name == "get_time"

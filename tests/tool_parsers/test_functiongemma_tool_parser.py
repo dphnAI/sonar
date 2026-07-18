@@ -33,7 +33,7 @@ def mock_request():
 class TestExtractToolCalls:
     def test_no_tool_calls(self, parser, mock_request):
         model_output = "Hello, how can I help you today?"
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is False
         assert result.tool_calls == []
@@ -41,7 +41,7 @@ class TestExtractToolCalls:
 
     def test_single_tool_call(self, parser, mock_request):
         model_output = "<start_function_call>call:get_weather{location:<escape>London<escape>}<end_function_call>"
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -55,7 +55,7 @@ class TestExtractToolCalls:
             "unit:<escape>celsius<escape>}"
             "<end_function_call>"
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -70,7 +70,7 @@ class TestExtractToolCalls:
             "<start_function_call>call:get_weather{location:<escape>Paris<escape>}"
             "<end_function_call>"
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.content == "Let me check the weather for you."
@@ -82,7 +82,7 @@ class TestExtractToolCalls:
             "<start_function_call>call:get_time{timezone:<escape>UTC<escape>}"
             "<end_function_call>"
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 2

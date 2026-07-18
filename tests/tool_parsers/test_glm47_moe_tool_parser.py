@@ -101,7 +101,7 @@ class TestGlm47ExtractToolCalls:
             "</tool_call>"
         )
 
-        result = parser.extract_tool_calls(out, request=namespace_tool_request)
+        result = parser.extract_tool_calls(out, token_ids=None, request=namespace_tool_request)
 
         assert result.tools_called
         tool_call = result.tool_calls[0].function
@@ -123,13 +123,13 @@ class TestGlm47ExtractToolCalls:
 
     def test_no_tool_call(self, glm47_tool_parser, mock_request):
         out = "This is a plain response."
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert not r.tools_called
         assert r.content == out
 
     def test_zero_arg_inline(self, glm47_tool_parser, mock_request):
         out = "<tool_call>get_current_date</tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert r.tool_calls[0].function.name == "get_current_date"
         assert json.loads(r.tool_calls[0].function.arguments) == {}
@@ -137,31 +137,31 @@ class TestGlm47ExtractToolCalls:
 
     def test_zero_arg_newline(self, glm47_tool_parser, mock_request):
         out = "<tool_call>get_current_date\n</tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert r.tool_calls[0].function.name == "get_current_date"
 
     def test_args_same_line(self, glm47_tool_parser, mock_request):
         out = "<tool_call>get_weather<arg_key>city</arg_key><arg_value>Beijing</arg_value></tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert json.loads(r.tool_calls[0].function.arguments) == {"city": "Beijing"}
 
     def test_args_with_newlines(self, glm47_tool_parser, mock_request):
         out = "<tool_call>get_weather\n<arg_key>city</arg_key>\n<arg_value>Beijing</arg_value>\n</tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert json.loads(r.tool_calls[0].function.arguments) == {"city": "Beijing"}
 
     def test_whitespace_preserved_in_arg_values(self, glm47_tool_parser, mock_request):
         out = "<tool_call>get_weather<arg_key>city</arg_key><arg_value>  Beijing  </arg_value></tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert json.loads(r.tool_calls[0].function.arguments) == {"city": "  Beijing  "}
 
     def test_content_before(self, glm47_tool_parser, mock_request):
         out = "Checking.<tool_call>get_current_date</tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.tools_called
         assert r.content == "Checking."
 
@@ -170,17 +170,17 @@ class TestGlm47ExtractToolCalls:
             "<tool_call>get_weather<arg_key>city</arg_key><arg_value>Beijing</arg_value></tool_call>"
             "<tool_call>get_weather<arg_key>city</arg_key><arg_value>Shanghai</arg_value></tool_call>"
         )
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert len(r.tool_calls) == 2
 
     def test_empty_content_none(self, glm47_tool_parser, mock_request):
         out = "<tool_call>get_current_date</tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.content is None
 
     def test_whitespace_content_none(self, glm47_tool_parser, mock_request):
         out = "  \n  <tool_call>get_current_date</tool_call>"
-        r = glm47_tool_parser.extract_tool_calls(out, request=mock_request)
+        r = glm47_tool_parser.extract_tool_calls(out, token_ids=None, request=mock_request)
         assert r.content is None
 
 

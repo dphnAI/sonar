@@ -280,7 +280,7 @@ class TestParseGemma4Array:
 class TestExtractToolCalls:
     def test_no_tool_calls(self, parser, mock_request):
         model_output = "Hello, how can I help you today?"
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is False
         assert result.tool_calls == []
@@ -288,7 +288,7 @@ class TestExtractToolCalls:
 
     def test_single_tool_call(self, parser, mock_request):
         model_output = '<|tool_call>call:get_weather{location:<|"|>London<|"|>}<tool_call|>'
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -300,7 +300,7 @@ class TestExtractToolCalls:
         model_output = (
             '<|tool_call>call:get_weather{location:<|"|>San Francisco<|"|>,unit:<|"|>celsius<|"|>}<tool_call|>'
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -312,7 +312,7 @@ class TestExtractToolCalls:
         model_output = (
             'Let me check the weather for you. <|tool_call>call:get_weather{location:<|"|>Paris<|"|>}<tool_call|>'
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.content == "Let me check the weather for you."
@@ -326,7 +326,7 @@ class TestExtractToolCalls:
             '<|tool_call>call:get_time{location:<|"|>London<|"|>}'
             "<tool_call|>"
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 2
@@ -340,7 +340,7 @@ class TestExtractToolCalls:
             'list:[<|"|>a<|"|>,<|"|>b<|"|>]}'
             "<tool_call|>"
         )
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -350,7 +350,7 @@ class TestExtractToolCalls:
 
     def test_tool_call_with_number_and_boolean(self, parser, mock_request):
         model_output = "<|tool_call>call:set_status{is_active:true,count:42,score:3.14}<tool_call|>"
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -360,7 +360,7 @@ class TestExtractToolCalls:
 
     def test_incomplete_tool_call(self, parser, mock_request):
         model_output = '<|tool_call>call:get_weather{location:<|"|>London'
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert len(result.tool_calls) == 1
@@ -371,7 +371,7 @@ class TestExtractToolCalls:
     def test_hyphenated_function_name(self, parser, mock_request):
         """Ensure function names with hyphens are parsed correctly."""
         model_output = '<|tool_call>call:get-weather{location:<|"|>London<|"|>}<tool_call|>'
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "get-weather"
@@ -379,7 +379,7 @@ class TestExtractToolCalls:
     def test_dotted_function_name(self, parser, mock_request):
         """Ensure function names with dots are parsed correctly."""
         model_output = '<|tool_call>call:weather.get{location:<|"|>London<|"|>}<tool_call|>'
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "weather.get"
@@ -387,7 +387,7 @@ class TestExtractToolCalls:
     def test_no_arguments(self, parser, mock_request):
         """Tool calls with empty arguments."""
         model_output = "<|tool_call>call:get_status{}<tool_call|>"
-        result = parser.extract_tool_calls(model_output, mock_request)
+        result = parser.extract_tool_calls(model_output, token_ids=None, request=mock_request)
 
         assert result.tools_called is True
         assert result.tool_calls[0].function.name == "get_status"

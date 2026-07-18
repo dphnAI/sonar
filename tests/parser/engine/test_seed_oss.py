@@ -68,7 +68,7 @@ def test_token_overrides_wired(parser):
 
 def test_single_tool_call(tool_parser, mock_request):
     text = f"{TOOL_CALL_START}\n<function=get_weather>\n<parameter=city>Tokyo</parameter>\n</function>\n{TOOL_CALL_END}"
-    result = tool_parser.extract_tool_calls(text, mock_request)
+    result = tool_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
     assert result.tools_called is True
     assert result.tool_calls[0].function.name == "get_weather"
@@ -84,7 +84,7 @@ def test_malformed_function_end_does_not_drop_siblings(tool_parser, mock_request
         "<parameter=city>Tokyo</parameter>\n"
         f"</function>\n{TOOL_CALL_END}"
     )
-    result = tool_parser.extract_tool_calls(text, mock_request)
+    result = tool_parser.extract_tool_calls(text, token_ids=None, request=mock_request)
 
     weather = next(tc for tc in result.tool_calls if tc.function.name == "get_weather")
     assert json.loads(weather.function.arguments) == {"city": "Tokyo"}
@@ -147,7 +147,7 @@ def test_end_to_end_through_registered_adapters(mock_tokenizer, mock_request):
     reasoning, remaining = reasoning_parser.extract_reasoning(text, mock_request)
     assert reasoning == "Plan the call."
 
-    tool_result = tool_parser.extract_tool_calls(remaining, mock_request)
+    tool_result = tool_parser.extract_tool_calls(remaining, token_ids=None, request=mock_request)
     assert tool_result.tool_calls[0].function.name == "get_weather"
     assert json.loads(tool_result.tool_calls[0].function.arguments) == {"city": "Tokyo"}
 
@@ -176,6 +176,6 @@ def test_budget_reflect_tags_do_not_break_adapter_pipeline(
     assert "<seed:cot_budget_reflect>" in reasoning
     assert "</seed:cot_budget_reflect>" in reasoning
 
-    tool_result = tool_parser.extract_tool_calls(remaining, mock_request)
+    tool_result = tool_parser.extract_tool_calls(remaining, token_ids=None, request=mock_request)
     assert tool_result.tool_calls[0].function.name == "get_weather"
     assert json.loads(tool_result.tool_calls[0].function.arguments) == {"city": "Barcelona"}
