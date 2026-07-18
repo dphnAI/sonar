@@ -123,6 +123,44 @@ def _make_kv_cache_config():
     )
 
 
+def _make_hybrid_kv_cache_config():
+    """Build a minimal KVCacheConfig with heterogeneous KV cache groups."""
+    num_blocks = 16
+    num_kv_heads = 1
+    head_size = 1
+    dtype = torch.float32
+    page_size = 2 * num_kv_heads * head_size * torch.finfo(dtype).bits // 8
+    kv_tensor = KVCacheTensor(
+        size=num_blocks * page_size * 2,
+        shared_by=["attention_layer", "sliding_layer"],
+        block_stride=0,
+    )
+    return KVCacheConfig(
+        num_blocks=num_blocks,
+        kv_cache_tensors=[kv_tensor],
+        kv_cache_groups=[
+            KVCacheGroupSpec(
+                ["attention_layer"],
+                FullAttentionSpec(
+                    block_size=12,
+                    num_kv_heads=num_kv_heads,
+                    head_size=head_size,
+                    dtype=dtype,
+                ),
+            ),
+            KVCacheGroupSpec(
+                ["sliding_layer"],
+                FullAttentionSpec(
+                    block_size=16,
+                    num_kv_heads=num_kv_heads,
+                    head_size=head_size,
+                    dtype=dtype,
+                ),
+            ),
+        ],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Pre-registration integrity (CI sentinel)
 # ---------------------------------------------------------------------------
@@ -287,3 +325,40 @@ def test_build_metric_definitions_returns_counter_at_threshold():
     spec_cls = OffloadingSpecFactory.get_spec_cls(config.kv_transfer_config.kv_connector_extra_config)
     metrics = spec_cls.build_metric_definitions(config.kv_transfer_config.kv_connector_extra_config)
     assert CPUOffloadingMetrics.STORES_SKIPPED in metrics
+
+
+def test_offloading_spec_accepts_blocks_per_chunk_for_heterogeneous_groups():
+    config = _make_aphrodite_config(
+        cpu_bytes_to_use=65536,
+        extra_config={"blocks_per_chunk": 2},
+    )
+
+    spec = OffloadingSpecFactory.create_spec(build_offloading_config(config, _make_hybrid_kv_cache_config()))
+
+    assert spec.tokens_per_block == (12, 16)
+    assert spec.blocks_per_chunk == 2
+
+
+def test_block_size_and_blocks_per_chunk_are_mutually_exclusive():
+    config = _make_aphrodite_config(
+        cpu_bytes_to_use=65536,
+        extra_config={
+            "block_size": 64,
+            "blocks_per_chunk": 2,
+        },
+    )
+
+    with pytest.raises(ValueError, match="Specify only one"):
+        OffloadingSpecFactory.create_spec(build_offloading_config(config, _make_kv_cache_config()))
+
+
+def test_blocks_per_chunk_must_be_positive():
+    config = _make_aphrodite_config(
+        cpu_bytes_to_use=65536,
+        extra_config={
+            "blocks_per_chunk": 0,
+        },
+    )
+
+    with pytest.raises(ValueError, match="greater than 0"):
+        OffloadingSpecFactory.create_spec(build_offloading_config(config, _make_kv_cache_config()))
