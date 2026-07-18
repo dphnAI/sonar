@@ -9,7 +9,7 @@ import torch
 from utils import (
     _extract_step_logprobs,
     _random_prompt,
-    skip_unsupported,
+    skip_if_not_cuda,
 )
 
 from aphrodite import LLM, SamplingParams
@@ -36,7 +36,7 @@ def _make_llm(max_num_seqs: int, backend: str) -> LLM:
     )
 
 
-@skip_unsupported
+@skip_if_not_cuda
 @pytest.mark.parametrize("backend", ["FLASH_ATTN"])
 def test_dense_nvfp4_generation_is_deterministic_across_batch_sizes_e2e(backend):
     seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))

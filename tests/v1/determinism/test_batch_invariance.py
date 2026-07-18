@@ -11,11 +11,13 @@ from utils import (
     TEST_MODEL,
     _extract_step_logprobs,
     _random_prompt,
+    skip_if_not_cuda,
     skip_unsupported,
 )
 
 import aphrodite.envs as envs
 from aphrodite import LLM, SamplingParams
+from aphrodite.platforms import current_platform
 
 
 @skip_unsupported
@@ -49,6 +51,11 @@ def test_v1_generation_is_deterministic_across_batch_sizes_with_needle(
       seed.
     - Keep max_tokens and max_model_len bounded for speed and memory use.
     """
+    # Not all batch-invariant kernels are registered on XPU yet
+    # (e.g. attention, custom ops), so e2e determinism is not guaranteed.
+    if current_platform.is_xpu():
+        pytest.xfail("Not all batch-invariant kernels registered on XPU yet")
+
     seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))
     random.seed(seed)
 
@@ -156,6 +163,11 @@ def test_logprobs_bitwise_batch_invariance_bs1_vs_bsN(
     block_m,
     block_n,
 ):
+    # Not all batch-invariant kernels are registered on XPU yet
+    # (e.g. attention, custom ops), so e2e determinism is not guaranteed.
+    if current_platform.is_xpu():
+        pytest.xfail("Not all batch-invariant kernels registered on XPU yet")
+
     seed = int(os.getenv("APHRODITE_TEST_SEED", "12345"))
     random.seed(seed)
     tp_size = int(os.getenv("APHRODITE_TEST_TP_SIZE", "1"))
@@ -605,7 +617,7 @@ def test_logprobs_without_batch_invariance_should_fail(backend, monkeypatch: pyt
         pytest.fail(fail_msg)
 
 
-@skip_unsupported
+@skip_if_not_cuda
 @pytest.mark.parametrize("backend", ["FLASH_ATTN"])
 def test_decode_logprobs_match_prefill_logprobs(
     backend,
