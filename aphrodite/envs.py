@@ -127,7 +127,6 @@ if TYPE_CHECKING:
     APHRODITE_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
     APHRODITE_ROCM_USE_AITER: bool = False
     APHRODITE_ROCM_USE_AITER_CUSTOM_AR: bool = True
-    APHRODITE_ROCM_USE_AITER_PAGED_ATTN: bool = False
     APHRODITE_ROCM_USE_AITER_LINEAR: bool = True
     APHRODITE_ROCM_USE_AITER_LINEAR_HIPBMM: bool = False
     APHRODITE_ROCM_USE_AITER_MOE: bool = True
@@ -182,8 +181,6 @@ if TYPE_CHECKING:
     APHRODITE_HUMMING_MOE_GEMM_TYPE: Literal["indexed", "grouped", "auto"] | None = None
     APHRODITE_DEEPEPLL_NVFP4_DISPATCH: bool = False
     APHRODITE_V1_USE_OUTLINES_CACHE: bool = False
-    APHRODITE_TPU_BUCKET_PADDING_GAP: int = 0
-    APHRODITE_TPU_MOST_MODEL_LEN: int | None = None
     APHRODITE_TPU_USING_PATHWAYS: bool = False
     APHRODITE_USE_DEEP_GEMM: bool = True
     APHRODITE_MOE_USE_DEEP_GEMM: bool = True
@@ -1067,11 +1064,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "APHRODITE_ROCM_USE_AITER_CUSTOM_AR": lambda: (
         os.getenv("APHRODITE_ROCM_USE_AITER_CUSTOM_AR", "True").lower() in ("true", "1")
     ),
-    # Whether to use aiter paged attention.
-    # By default is disabled.
-    "APHRODITE_ROCM_USE_AITER_PAGED_ATTN": lambda: (
-        os.getenv("APHRODITE_ROCM_USE_AITER_PAGED_ATTN", "False").lower() in ("true", "1")
-    ),
     # use aiter linear op if aiter ops are enabled
     # The following list of related ops
     # - scaled_mm (per-tensor / rowwise)
@@ -1282,8 +1274,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # defined in ``aphrodite.ray.ray_env`` (PYTHONHASHSEED).
     # Example: "MY_SECRET,MY_FLAG"
     "APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY": lambda: os.getenv("APHRODITE_RAY_EXTRA_ENV_VARS_TO_COPY", ""),
-    # Whether to use S3 path for model loading in CI via RunAI Streamer
-    "APHRODITE_CI_USE_S3": lambda: os.environ.get("APHRODITE_CI_USE_S3", "0") == "1",
     # Use model_redirect to redirect the model name to a local folder.
     # `model_redirect` can be a json file mapping the model between
     # repo_id and local folder:
@@ -1320,12 +1310,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # This cache is unbounded and on disk, so it's not safe to use in
     # an environment with potentially malicious users.
     "APHRODITE_V1_USE_OUTLINES_CACHE": lambda: (os.environ.get("APHRODITE_V1_USE_OUTLINES_CACHE", "0") == "1"),
-    # Gap between padding buckets for the forward pass. So we have
-    # 8, we will run forward pass with [16, 24, 32, ...].
-    "APHRODITE_TPU_BUCKET_PADDING_GAP": lambda: (
-        int(os.environ["APHRODITE_TPU_BUCKET_PADDING_GAP"]) if "APHRODITE_TPU_BUCKET_PADDING_GAP" in os.environ else 0
-    ),
-    "APHRODITE_TPU_MOST_MODEL_LEN": lambda: maybe_convert_int(os.environ.get("APHRODITE_TPU_MOST_MODEL_LEN", None)),
     # Whether using Pathways
     "APHRODITE_TPU_USING_PATHWAYS": lambda: bool("proxy" in os.getenv("JAX_PLATFORMS", "").lower()),
     # Allow use of DeepGemm kernels for fused moe ops.
@@ -1462,15 +1446,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # This is used to prevent the kernel from running out of memory.
     "APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE": lambda: int(
         os.getenv("APHRODITE_MAX_TOKENS_PER_EXPERT_FP4_MOE", "163840")
-    ),
-    # Specifies the thresholds of the communicated tensor sizes under which
-    # aphrodite should use flashinfer fused allreduce. The variable should be a
-    # JSON with the following format:
-    #     { <world size>: <max size in mb> }
-    # Unspecified world sizes will fall back to
-    #     { 2: 64, 4: 1, <everything else>: 0.5 }
-    "APHRODITE_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB": lambda: json.loads(
-        os.getenv("APHRODITE_FLASHINFER_ALLREDUCE_FUSION_THRESHOLDS_MB", "{}")
     ),
     # MoE routing strategy selector.
     # See `RoutingSimulator.get_available_strategies()` # for available
@@ -1891,7 +1866,6 @@ def compile_factors() -> dict[str, object]:
         "APHRODITE_P2P_SIDE_CHANNEL_HOST",
         "APHRODITE_P2P_SIDE_CHANNEL_PORT",
         "APHRODITE_RANDOMIZE_DP_DUMMY_INPUTS",
-        "APHRODITE_CI_USE_S3",
         "APHRODITE_MODEL_REDIRECT_PATH",
         "APHRODITE_HOST_IP",
         "APHRODITE_FORCE_AOT_LOAD",
