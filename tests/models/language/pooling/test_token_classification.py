@@ -117,6 +117,46 @@ def test_modernbert_models(
         torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
 
 
+@pytest.mark.parametrize("model", ["Davlan/xlm-roberta-base-ner-hrl"])
+@pytest.mark.parametrize("dtype", ["float"])
+@torch.inference_mode
+def test_xlm_roberta_models(
+    hf_runner,
+    aphrodite_runner,
+    example_prompts,
+    model: str,
+    dtype: str,
+) -> None:
+    with aphrodite_runner(model, max_model_len=None, dtype=dtype) as aphrodite_model:
+        aphrodite_outputs = aphrodite_model.token_classify(example_prompts)
+
+    # Use eager attention on ROCm to avoid HF Transformers flash attention
+    # accuracy issues: https://github.com/vllm-project/vllm/issues/30167
+    hf_model_kwargs = {}
+    if current_platform.is_rocm():
+        hf_model_kwargs["attn_implementation"] = "eager"
+
+    with hf_runner(
+        model,
+        dtype=dtype,
+        auto_cls=AutoModelForTokenClassification,
+        model_kwargs=hf_model_kwargs,
+    ) as hf_model:
+        tokenizer = hf_model.tokenizer
+        hf_outputs = []
+        for prompt in example_prompts:
+            inputs = tokenizer([prompt], return_tensors="pt")
+            inputs = hf_model.wrap_device(inputs)
+            output = hf_model.model(**inputs)
+            hf_outputs.append(softmax(output.logits[0]))
+
+    # check logits difference
+    for hf_output, aphrodite_output in zip(hf_outputs, aphrodite_outputs):
+        hf_output = hf_output.detach().clone().cpu().float()
+        aphrodite_output = aphrodite_output.detach().clone().cpu().float()
+        torch.testing.assert_close(hf_output, aphrodite_output, atol=3.2e-2, rtol=1e-3)
+
+
 PRIVACY_FILTER_PROMPTS = [
     "My name is Harry Potter.",
     "Email me at harry.potter@hogwarts.edu.",
