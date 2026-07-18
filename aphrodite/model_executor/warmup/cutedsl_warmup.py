@@ -10,7 +10,9 @@ from collections.abc import Callable, Hashable, Iterable
 from dataclasses import dataclass
 
 import torch
+from tqdm import tqdm
 
+from aphrodite.distributed.parallel_state import is_global_first_rank
 from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.tracing import instrument
@@ -73,6 +75,8 @@ def _compile_cutedsl_warmup_units(
     compile_units: Iterable[CuTeDSLCompileUnit],
 ) -> int:
     compiled = 0
+    if is_global_first_rank():
+        compile_units = tqdm(compile_units, desc="Compiling CuTeDSL kernels")
     with torch.inference_mode():
         for unit in compile_units:
             unit.compile()
