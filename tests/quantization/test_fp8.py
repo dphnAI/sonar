@@ -16,6 +16,10 @@ from aphrodite.config.model import ModelConfig
 from aphrodite.model_executor.kernels.linear.scaled_mm import (
     MarlinFP8ScaledMMLinearKernel,
 )
+from aphrodite.model_executor.layers.attention.attention import (
+    Attention,
+    set_default_quant_scales,
+)
 from aphrodite.model_executor.layers.fused_moe import FusedMoE
 from aphrodite.model_executor.layers.quantization.fp8 import (
     Fp8Config,
@@ -23,6 +27,7 @@ from aphrodite.model_executor.layers.quantization.fp8 import (
     Fp8LinearMethod,
     Fp8MoEMethod,
 )
+from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
 from aphrodite.model_executor.layers.quantization.online.fp8 import (
     Fp8PerTensorOnlineLinearMethod,
 )
@@ -414,3 +419,33 @@ def test_kv_cache_dtype_skip_layers(aphrodite_runner, monkeypatch):
                 assert layer.self_attn.attn.kv_cache_dtype == expected
 
         llm.apply_model(check_layers)
+
+
+@pytest.mark.parametrize("source", ["checkpoint", "runtime_calc"])
+def test_kv_cache_scale_sync_to_host_copies(source):
+    """Test device-to-host sync of the k/v quantization scales."""
+    layer = torch.nn.Module()
+    set_default_quant_scales(layer, register_buffer=True)
+    layer.kv_cache_dtype = "fp8"
+
+    if source == "checkpoint":
+        layer.calculate_kv_scales = False
+        method = BaseKVCacheMethod(quant_config=None)
+        method.create_weights(layer)
+        checkpoint_scale = torch.tensor(0.3, dtype=torch.float32)
+        layer.k_scale.weight_loader(layer.k_scale, checkpoint_scale)
+        layer.v_scale.weight_loader(layer.v_scale, checkpoint_scale)
+        method.process_weights_after_loading(layer)
+    else:
+        layer.calculate_kv_scales = True
+        query = torch.full((4, 8), 10.0)
+        key = torch.full((4, 8), 60.0)
+        value = torch.full((4, 8), 50.0)
+        Attention.calc_kv_scales(layer, query, key, value)
+
+    assert layer._k_scale_float != 1.0
+    assert layer._v_scale_float != 1.0
+    assert layer._k_scale_cpu.item() == pytest.approx(layer._k_scale_float)
+    assert layer._v_scale_cpu.item() == pytest.approx(layer._v_scale_float)
+    assert layer._k_scale_cpu.item() == pytest.approx(layer._k_scale.item())
+    assert layer._v_scale_cpu.item() == pytest.approx(layer._v_scale.item())
