@@ -12,6 +12,7 @@ from aphrodite.distributed.nixl_utils import NixlWrapper as nixl_agent
 from aphrodite.distributed.nixl_utils import nixl_agent_config
 from aphrodite.logger import init_logger
 from aphrodite.v1.kv_offload.base import (
+    Locality,
     LookupResult,
     OffloadingEvent,
     OffloadKey,
@@ -106,6 +107,7 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
         prefix: str = "",
         io_threads: int = 4,
         enable_kv_events: bool = False,
+        locality: str | None = None,
     ):
         """
         Args:
@@ -118,8 +120,11 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
             enable_kv_events: Emit BlockStored KV events for blocks
                 successfully stored to this tier. Effective only when KV
                 cache events are enabled globally (kv_events_config).
+            locality: Whether this tier's storage is LOCAL or REMOTE relative
+                to the publishing Aphrodite instance.
         """
         super().__init__(offloading_spec, primary_kv_view, tier_type)
+        self.locality = Locality(locality) if locality is not None else None
 
         self.events: list[OffloadingEvent] | None = None
         if enable_kv_events:
@@ -304,7 +309,14 @@ class ObjectStoreSecondaryTierManager(SecondaryTierManager):
             for result in results:
                 keys = self._store_job_keys.pop(result.job_id, None)
                 if result.success and keys:
-                    self.events.append(OffloadingEvent(keys=keys, medium=self.medium, removed=False))
+                    self.events.append(
+                        OffloadingEvent(
+                            keys=keys,
+                            medium=self.medium,
+                            removed=False,
+                            locality=self.locality,
+                        )
+                    )
         return results
 
     def take_events(self) -> Iterable[OffloadingEvent]:
