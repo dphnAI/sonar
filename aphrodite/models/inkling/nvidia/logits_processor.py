@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Inkling logits processor with muP output scaling."""
+"""Inkling logits processor (muP + LoRA aware)."""
 
 from __future__ import annotations
 
@@ -43,6 +43,34 @@ class InklingLogitsProcessor(LogitsProcessor):
         self._logits_zero: torch.Tensor | None = None
 
     def forward(
+        self,
+        lm_head: VocabParallelEmbedding,
+        hidden_states: torch.Tensor,
+        embedding_bias: torch.Tensor | None = None,
+    ) -> torch.Tensor | None:
+        if hasattr(self, "base_layer"):
+            return type(self.base_layer)._lora_forward(self, lm_head, hidden_states, embedding_bias)
+        return self._base_forward(lm_head, hidden_states, embedding_bias)
+
+    def _lora_forward(
+        self,
+        lm_head: VocabParallelEmbedding,
+        hidden_states: torch.Tensor,
+        embedding_bias: torch.Tensor | None = None,
+    ) -> torch.Tensor | None:
+        mup_multiplier = self.base_layer.logits_mup_width_multiplier
+        mup = 1.0 / mup_multiplier if mup_multiplier else None
+        if self.logits_as_input:
+            logits = hidden_states
+        else:
+            logits = self._get_logits(hidden_states, lm_head, embedding_bias)
+        if logits is not None and mup:
+            assert self.base_layer.soft_cap is None
+            assert self.base_layer.scale == 1.0
+            logits = logits * mup
+        return logits
+
+    def _base_forward(
         self,
         lm_head: VocabParallelEmbedding,
         hidden_states: torch.Tensor,

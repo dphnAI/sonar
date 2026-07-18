@@ -167,9 +167,7 @@ class IndexDecodeScoreKernel:
             swizzle=K_tma.smem_layout.inner,
         )[0, None, None, None]
         # alias sQ with the 1st stage of sK
-        sQ_tma = cute.make_tensor(
-            sK[None, None, 0].iterator, layout=Q_tma.smem_layout.outer
-        )
+        sQ_tma = cute.make_tensor(sK[None, None, 0].iterator, layout=Q_tma.smem_layout.outer)
         # TMA sees Q as (query, head, dim), while ldmatrix consumes a
         # flattened Q column mode. The target profile keeps the rank-2 view even
         # for degenerate shapes like DQL1.
@@ -250,9 +248,7 @@ class IndexDecodeScoreKernel:
             else:
                 # MMA warps
                 # each warp handles K[32, head_dim] @ Q[BLOCK_Q, head_dim].T
-                sK_warp = cute.local_tile(
-                    sK, (32, head_dim, num_stages), (warp_id, 0, 0)
-                )
+                sK_warp = cute.local_tile(sK, (32, head_dim, num_stages), (warp_id, 0, 0))
                 q_start = seqlen - decode_query_len
 
                 elems = 128 // dtype.width  # 16B
@@ -263,9 +259,7 @@ class IndexDecodeScoreKernel:
                 #   ((16, (16B, 2), 1), (32 / 16, head_dim / 32B, num_stages))
                 # sQ loads an [8 x 32B] tile:
                 #   ((8, (16B, 4)), (BLOCK_Q / MMA_N, head_dim / 64B))
-                sK_ldsm = cute.zipped_divide(
-                    sK_warp, (16, cute.make_layout((elems, 2)), 1)
-                )
+                sK_ldsm = cute.zipped_divide(sK_warp, (16, cute.make_layout((elems, 2)), 1))
                 sQ_ldsm = cute.zipped_divide(sQ, (MMA_N, cute.make_layout((elems, 4))))
 
                 # sK: (16B, (32 / 16, head_dim / 32B, num_stages))
@@ -276,9 +270,7 @@ class IndexDecodeScoreKernel:
                 ldsm_op = warp.LdMatrix8x8x16bOp(num_matrices=4)
                 ldsm_atom = cute.make_copy_atom(ldsm_op, dtype)
 
-                rQ = cute.make_rmem_tensor(
-                    ((elems // 2, 2), head_dim // (MMA_K * 2), Q_TILES), dtype
-                )
+                rQ = cute.make_rmem_tensor(((elems // 2, 2), head_dim // (MMA_K * 2), Q_TILES), dtype)
                 rK = cute.make_rmem_tensor((elems, 2, head_dim // MMA_K), dtype)
                 rC = cute.make_rmem_tensor((4, 2, Q_TILES), Float32)
 
@@ -298,9 +290,7 @@ class IndexDecodeScoreKernel:
                 # to F2FP.F16.E4M3 + HMMA; doing the conversion explicitly gives
                 # better codegen while keeping the two FP16 k-fragments visible.
                 if cutlass.const_expr(dtype is Float8E4M3FN):
-                    rQ_f16 = cute.make_rmem_tensor(
-                        (4, head_dim // MMA_K, Q_TILES, 2), Float16
-                    )
+                    rQ_f16 = cute.make_rmem_tensor((4, head_dim // MMA_K, Q_TILES, 2), Float16)
                     q_lower, q_upper = _fp8_to_f16_mma_fragments(rQ)
                     rQ_f16[None, None, None, 0].store(q_lower.load())
                     rQ_f16[None, None, None, 1].store(q_upper.load())
@@ -320,9 +310,7 @@ class IndexDecodeScoreKernel:
                         )
                         for m in cutlass.range_constexpr(2):
                             if cutlass.const_expr(dtype is Float8E4M3FN):
-                                rK_lower, rK_upper = _fp8_to_f16_mma_fragments(
-                                    rK[None, m, k]
-                                )
+                                rK_lower, rK_upper = _fp8_to_f16_mma_fragments(rK[None, m, k])
                                 for n in cutlass.range_constexpr(Q_TILES):
                                     rC[None, m, n] = mma_sync(
                                         rK_lower,
@@ -354,11 +342,7 @@ class IndexDecodeScoreKernel:
                                 q_local_pos = col % MAX_DQL
                                 q_pos = q_start + q_local_pos
                                 k_pos = k_start + i * 8 + lane_id // 4
-                                rC[q * 8 + i * 2 + j] = (
-                                    rC[q * 8 + i * 2 + j]
-                                    if q_pos >= k_pos
-                                    else float("-inf")
-                                )
+                                rC[q * 8 + i * 2 + j] = rC[q * 8 + i * 2 + j] if q_pos >= k_pos else float("-inf")
 
                     for q in cutlass.range_constexpr(Q_TILES):
                         # thread-reduction along BLOCK_K dim
@@ -371,12 +355,8 @@ class IndexDecodeScoreKernel:
                         # warp-reduction among lanes 0,4,8,12,...
                         for i in cutlass.range_constexpr(3):
                             offset = 4 << i
-                            other0 = cute.arch.shuffle_sync_bfly(
-                                rScore[0], offset=offset, mask=-1, mask_and_clamp=31
-                            )
-                            other1 = cute.arch.shuffle_sync_bfly(
-                                rScore[1], offset=offset, mask=-1, mask_and_clamp=31
-                            )
+                            other0 = cute.arch.shuffle_sync_bfly(rScore[0], offset=offset, mask=-1, mask_and_clamp=31)
+                            other1 = cute.arch.shuffle_sync_bfly(rScore[1], offset=offset, mask=-1, mask_and_clamp=31)
                             rScore[0] = cute.arch.fmax(rScore[0], other0)
                             rScore[1] = cute.arch.fmax(rScore[1], other1)
 
@@ -392,9 +372,7 @@ class IndexDecodeScoreKernel:
                     if lane_id < BLOCK_Q and valid_q:
                         final_score = epi_buffer[lane_id, 0]
                         for i in cutlass.range_constexpr(1, 4):
-                            final_score = cute.arch.fmax(
-                                final_score, epi_buffer[lane_id, i]
-                            )
+                            final_score = cute.arch.fmax(final_score, epi_buffer[lane_id, i])
 
                         t = batch_id * decode_query_len + q_local_pos
                         score[head_id, t, block_id] = final_score
@@ -416,16 +394,10 @@ class IndexDecodeScoreKernel:
         total_tokens = cute.sym_int()
         BLOCK_K = IndexDecodeScoreKernel.BLOCK_K
 
-        q = make_fake_tensor(
-            dtype, (total_tokens, num_heads, head_dim), divisibility=16
-        )
-        k_cache = make_fake_tensor(
-            dtype, (cute.sym_int(), BLOCK_K, head_dim), divisibility=16
-        )
+        q = make_fake_tensor(dtype, (total_tokens, num_heads, head_dim), divisibility=16)
+        k_cache = make_fake_tensor(dtype, (cute.sym_int(), BLOCK_K, head_dim), divisibility=16)
         block_table = make_fake_tensor(Int32, (bs, cute.sym_int()), divisibility=1)
-        score = make_fake_tensor(
-            Float32, (num_heads, total_tokens, cute.sym_int()), divisibility=4
-        )
+        score = make_fake_tensor(Float32, (num_heads, total_tokens, cute.sym_int()), divisibility=4)
         seq_lens = make_fake_tensor(Int32, (bs,), divisibility=1)
         kernel = IndexDecodeScoreKernel(
             dtype,
