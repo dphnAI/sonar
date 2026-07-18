@@ -932,6 +932,10 @@ class MoRIIOConnectorWorker:
             use_mla=self.use_mla,
         )
         self.transfer_id_to_request_id: dict[TransferId, ReqId] = {}
+        # READ-mode producer ACKs can arrive before start_load_kv populates
+        # transfer_id_to_request_id. Retry unmapped ACKs on later ticks instead
+        # of dropping the completion and leaking producer KV blocks.
+        self._pending_unmapped_acks: list = []
 
         # TODO: consider the integration of flashinfer or other backends.
         self.backend_name = backend.get_name()
@@ -1397,16 +1401,13 @@ class MoRIIOConnectorWorker:
             # pop_finished_req_ids returns release ACKs sent by decode. Keep
             # duplicate ACKs because heterogeneous TP can fan multiple decode
             # ranks into one prefill rank for the same transfer_id.
-            finished_acks = self.moriio_wrapper.pop_finished_req_ids()
+            finished_acks = self._pending_unmapped_acks + list(self.moriio_wrapper.pop_finished_req_ids())
+            self._pending_unmapped_acks = []
             resolved_transfer_ids: set[TransferId] = set()
             for ack in finished_acks:
                 transfer_id = ack if isinstance(ack, str) else ack.transfer_id
                 if transfer_id not in self.transfer_id_to_request_id:
-                    logger.warning(
-                        "Could not find %s in transfer_id_to_request_id "
-                        "lookup table. This could lead to a possible hang.",
-                        transfer_id,
-                    )
+                    self._pending_unmapped_acks.append(ack)
                     continue
                 resolved_transfer_id = resolve_moriio_transfer_ack(
                     ack,
@@ -1755,6 +1756,14 @@ class MoRIIOConnectorWorker:
             ),
         )
 
+    @staticmethod
+    def _is_sq_full_status(status) -> bool:
+        """Return whether status is retryable RDMA send-queue backpressure."""
+        try:
+            return bool(status.Failed()) and "SQ full" in (status.Message() or "")
+        except Exception:
+            return False
+
     def _read_blocks(
         self,
         local_block_ids: list[int],
@@ -1772,6 +1781,7 @@ class MoRIIOConnectorWorker:
         dp0_engine_id = self.get_engine_name_with_dp(dst_engine_id, 0)
         sessions, remote_moriio_meta = self._get_built_session(dp0_engine_id)
 
+        sq_deadline = time.monotonic() + self.moriio_config.transfer_timeout
         for layer_name in self.layer_name_to_local_kv_cache_metadata:
             sess_idx = list(self.layer_name_to_local_kv_cache_metadata.keys()).index(layer_name)
             offs = self._compute_block_transfer_offsets(
@@ -1782,7 +1792,22 @@ class MoRIIOConnectorWorker:
                 remote_tp_size=remote_tp_size,
             )
             # TODO : apply multi-session batch-read when moriio support it
-            transfer_status = self.moriio_wrapper.read_remote_data(offs[2], offs[0], offs[1], sessions[sess_idx])
+            backoff = 0.001
+            while True:
+                transfer_status = self.moriio_wrapper.read_remote_data(offs[2], offs[0], offs[1], sessions[sess_idx])
+                if not self._is_sq_full_status(transfer_status):
+                    break
+                if time.monotonic() > sq_deadline:
+                    logger.warning(
+                        "MoRIIO READ send queue stayed full past "
+                        "transfer_timeout for req %s layer %s; storing failed "
+                        "status. Raise qp_per_transfer if frequent.",
+                        request_id,
+                        layer_name,
+                    )
+                    break
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 0.05)
             with self.moriio_wrapper.lock:
                 self._recving_transfers[request_id].append(transfer_status)
                 self._recving_transfers_callback_addr[request_id] = (
