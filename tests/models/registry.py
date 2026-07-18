@@ -1203,7 +1203,17 @@ _MULTIMODAL_EXAMPLE_MODELS = {
         },
     ),
     "SmolVLMForConditionalGeneration": _HfExamplesInfo("HuggingFaceTB/SmolVLM2-2.2B-Instruct"),
-    "Step3VLForConditionalGeneration": _HfExamplesInfo("stepfun-ai/step3", trust_remote_code=True),
+    "Step3VLForConditionalGeneration": _HfExamplesInfo(
+        "stepfun-ai/step3",
+        trust_remote_code=True,
+        max_transformers_version="5.3",
+        transformers_version_reason={
+            "hf": (
+                "Transformers v5.4 removed the ignore_keys param from "
+                "validate_rope(); Aphrodite has vendored the config and is unaffected"
+            )
+        },
+    ),
     "StepVLForConditionalGeneration": _HfExamplesInfo("stepfun-ai/Step3-VL-10B", trust_remote_code=True),
     "Step3p7ForConditionalGeneration": _HfExamplesInfo(
         "stepfun-ai/Step-3.7-Flash",
