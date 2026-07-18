@@ -32,7 +32,6 @@ from aphrodite.v1.attention.backends.mla.sparse_utils import (
 from aphrodite.v1.attention.backends.utils import (
     reshape_attn_output_for_spec_decode,
     reshape_query_for_spec_decode,
-    split_decodes_and_prefills,
     split_prefill_chunks,
 )
 from aphrodite.v1.attention.ops.flashmla import (
@@ -57,8 +56,8 @@ logger = init_logger(__name__)
 #    the FP8 decode kernel for decode.
 # Currently we use #1 when the number of heads per rank is low (i.e. TP) since the BF16
 # prefill kernel requires padding the number of heads to 128 while the decode does not
-# so when the per ranke head count is below MIN_HEADS_FOR_BF16_PREFILL we use the mixed
-# batch mode (#2).
+# so when the per-rank head count is below MIN_HEADS_FOR_BF16_PREFILL we use the mixed
+# batch mode (#1).
 MIN_HEADS_FOR_BF16_PREFILL = 32
 
 """
@@ -181,10 +180,6 @@ class FlashMLASparseMetadata(AttentionMetadata):
 
         @dataclass
         class Prefill:
-            # Sequence lengths (context + query) for prefill requests
-            # Shape: [num_prefill_reqs]
-            seq_lens: torch.Tensor
-
             # Request ID for each token: -1 for decode tokens, request index
             # (0, 1, 2, ...) for prefill tokens.
             # Shape: [num_actual_tokens]
@@ -203,7 +198,6 @@ class FlashMLASparseMetadata(AttentionMetadata):
                 Prefill requests may be chunked to fit within the fixed workspace size.
                 """
 
-                seq_lens: torch.Tensor
                 tokens_slice: slice
                 block_table: torch.Tensor
                 req_start_idx: int
@@ -236,6 +230,7 @@ def get_prefill_workspace_size(max_model_len: int):
 
 class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASparseMetadata]):
     _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_BATCH
+    require_uniform_decodes: ClassVar[bool] = True
     metadata_cls = FlashMLASparseMetadata
 
     def __init__(
@@ -308,10 +303,11 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
         self,
         common_attn_metadata: CommonAttentionMetadata,
     ) -> "FlashMLASparseMetadata.FP8KernelMetadata":
-        """Build FP8 metadata treating all tokens as one mixed batch.
+        """Build FP8 metadata treating MQA tokens as one batch.
 
-        This matches main branch's approach and avoids the BF16 prefill kernel
-        which has head padding overhead when num_heads is small (high TP case).
+        The scheduler initializes lazily from the runtime query shape, which may
+        be the full batch or only decodes when prefills use dense MHA. This avoids
+        the BF16 prefill kernel's head-padding overhead at high TP.
         """
         num_tokens = common_attn_metadata.num_actual_tokens
 
@@ -339,18 +335,29 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
     def _build_fp8_separate_prefill_decode(
         self,
         common_attn_metadata: CommonAttentionMetadata,
+        metadata: FlashMLASparseMetadata,
     ) -> "FlashMLASparseMetadata.FP8SeparatePrefillDecode":
         num_tokens = common_attn_metadata.num_actual_tokens
 
-        (num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens) = split_decodes_and_prefills(
-            common_attn_metadata,
-            decode_threshold=self.reorder_batch_threshold or 1,
-            require_uniform=True,
+        (num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens) = (
+            metadata.num_decodes,
+            metadata.num_prefills,
+            metadata.num_decode_tokens,
+            num_tokens - metadata.num_decode_tokens,
         )
+
+        decode_query_len = 0
+        active_num_decodes = num_decodes
+        if num_decodes > 0:
+            query_start_loc_cpu = common_attn_metadata.query_start_loc_cpu
+            decode_query_len = (query_start_loc_cpu[1] - query_start_loc_cpu[0]).item()
+            assert decode_query_len > 0
+            active_num_decodes = num_decode_tokens // decode_query_len
+            assert active_num_decodes * decode_query_len == num_decode_tokens
 
         FP8Meta = FlashMLASparseMetadata.FP8SeparatePrefillDecode
         fp8_metadata = FP8Meta(
-            num_decodes=num_decodes,
+            num_decodes=active_num_decodes,
             num_prefills=num_prefills,
             num_decode_tokens=num_decode_tokens,
             num_prefill_tokens=num_prefill_tokens,
@@ -358,7 +365,6 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
 
         # Extract prefill sequence lengths (context + query, not just query)
         # Decode requests come first in the batch, prefill requests follow
-        prefill_seq_lens = None
         prefill_request_id = None
         prefill_workspace_starts = None
         prefill_chunks = None
@@ -370,11 +376,9 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
             # slice below), so no D2H sync is needed.
             seq_lens_cpu = common_attn_metadata.seq_lens_cpu_upper_bound
             assert seq_lens_cpu is not None
-            seq_lens = common_attn_metadata.seq_lens
             query_start_loc_cpu = common_attn_metadata.query_start_loc_cpu
 
             prefill_seq_lens_cpu = seq_lens_cpu[num_decodes:]
-            prefill_seq_lens = seq_lens[num_decodes:]
 
             # Build prefill_request_id: -1 for decode, request index for
             # prefill. This enables a single
@@ -410,7 +414,6 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
                 offset = prefill_workspace_starts_cpu[chunk_start].item()
                 prefill_workspace_starts_cpu[chunk_start:chunk_end] -= offset
 
-                chunk_seq_lens = prefill_seq_lens[chunk_start:chunk_end]
                 chunk_tot_seqlen = prefill_seq_lens_cpu[chunk_start:chunk_end].sum()
                 token_start = query_start_loc_cpu[num_decodes + chunk_start].item()
                 token_end = query_start_loc_cpu[num_decodes + chunk_end].item()
@@ -424,7 +427,6 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
 
                 prefill_chunks.append(
                     FP8Meta.Prefill.Chunk(
-                        seq_lens=chunk_seq_lens,
                         tokens_slice=tokens_slice,
                         block_table=chunk_block_table,
                         req_start_idx=chunk_start,
@@ -436,27 +438,22 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
             prefill_workspace_starts.copy_(prefill_workspace_starts_cpu, non_blocking=True)
 
             fp8_metadata.prefill = FP8Meta.Prefill(
-                seq_lens=prefill_seq_lens,
                 request_ids=prefill_request_id,
                 workspace_starts=prefill_workspace_starts,
                 chunks=prefill_chunks,
             )
 
         if num_decodes > 0:
-            # Compute decode_query_len for spec decode (uniform due to require_uniform)
-            query_start_loc_cpu = common_attn_metadata.query_start_loc_cpu
-            decode_query_len = (query_start_loc_cpu[1] - query_start_loc_cpu[0]).item()
-
             # Use padded head count since that's what the kernel will see
             scheduler_metadata, _ = get_mla_metadata()
 
             kernel_meta = FlashMLASparseMetadata.FP8KernelMetadata(
                 scheduler_metadata=scheduler_metadata,
-                dummy_block_table=self.dummy_block_table[:num_decodes],
-                cache_lens=self.max_model_len_tensor[:num_decodes],
+                dummy_block_table=self.dummy_block_table[:active_num_decodes],
+                cache_lens=self.max_model_len_tensor[:active_num_decodes],
             )
             fp8_metadata.decode = FP8Meta.Decode(
-                seq_lens=common_attn_metadata.seq_lens[:num_decodes],
+                seq_lens=common_attn_metadata.seq_lens[:active_num_decodes],
                 kernel_metadata=kernel_meta,
                 decode_query_len=decode_query_len,
             )
@@ -476,7 +473,7 @@ class FlashMLASparseMetadataBuilder(SparseMLACommonMetadataBuilder[FlashMLASpars
             if fp8_use_mixed_batch:
                 metadata.fp8_extra_metadata = self._build_fp8_mixed_decode_prefill(common_attn_metadata)
             else:
-                metadata.fp8_extra_metadata = self._build_fp8_separate_prefill_decode(common_attn_metadata)
+                metadata.fp8_extra_metadata = self._build_fp8_separate_prefill_decode(common_attn_metadata, metadata)
 
         return metadata
 
@@ -555,9 +552,10 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
         attn_metadata: FlashMLASparseMetadata,
     ) -> torch.Tensor:
         # Convert per-request indices to global slots (decode) or workspace
-        # offsets (prefill).
+        # offsets (prefill). req_id_per_token covers the whole batch; slice it
+        # to the MQA tokens (q may exclude prefill tokens routed to dense MHA).
         topk_indices, topk_length = triton_convert_req_index_to_global_index(
-            attn_metadata.req_id_per_token,
+            attn_metadata.req_id_per_token[: topk_indices.shape[0]],
             attn_metadata.block_table,
             topk_indices,
             BLOCK_SIZE=attn_metadata.block_size,
@@ -582,11 +580,18 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
         fp8_metadata = attn_metadata.fp8_extra_metadata
         assert isinstance(fp8_metadata, FlashMLASparseMetadata.FP8SeparatePrefillDecode)
         num_decodes = fp8_metadata.num_decodes
+        num_mqa_tokens = q.shape[0]
+        num_decode_tokens = fp8_metadata.num_decode_tokens
+        num_prefill_tokens = num_mqa_tokens - num_decode_tokens
+        assert num_prefill_tokens in (0, fp8_metadata.num_prefill_tokens), (
+            "FP8 sparse MLA expects either the decode subset or the full batch"
+        )
 
         prefill_request_ids = None
         prefill_workspace_starts = None
         has_prefill_workspace = False
-        if fp8_metadata.prefill is not None:
+        if num_prefill_tokens > 0:
+            assert fp8_metadata.prefill is not None
             prefill_request_ids = fp8_metadata.prefill.request_ids
             prefill_workspace_starts = fp8_metadata.prefill.workspace_starts
             has_prefill_workspace = True
@@ -598,7 +603,7 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
         # prefill_workspace_starts has been adjusted in-place per chunk so
         # prefill indices automatically come out chunk-local
         topk_indices, topk_length = triton_convert_req_index_to_global_index(
-            attn_metadata.req_id_per_token,
+            attn_metadata.req_id_per_token[: topk_indices.shape[0]],
             attn_metadata.block_table,
             topk_indices,
             BLOCK_SIZE=attn_metadata.block_size,
@@ -634,9 +639,6 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
             #              -> (num_decode_tokens, num_heads, head_dim_v)
             return reshape_attn_output_for_spec_decode(attn_out)
 
-        num_decode_tokens = fp8_metadata.num_decode_tokens
-        num_prefill_tokens = fp8_metadata.num_prefill_tokens
-
         # Pure decode: direct call without allocation
         if num_decode_tokens > 0 and num_prefill_tokens == 0:
             assert fp8_metadata.decode is not None
@@ -644,7 +646,7 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
         else:
             # Mixed or pure prefill: allocate output tensor
             attn_out = q.new_empty(
-                (attn_metadata.num_actual_tokens, self.num_heads, self.kv_lora_rank),
+                (num_mqa_tokens, self.num_heads, self.kv_lora_rank),
                 dtype=q.dtype,
                 device=q.device,
             )
@@ -662,7 +664,6 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
                     kv_c_and_k_pe_cache,
                     chunk_workspace,
                     chunk.block_table,
-                    chunk.seq_lens,
                     chunk.workspace_starts,
                     len(chunk.block_table),
                 )
@@ -696,7 +697,7 @@ class FlashMLASparseImpl(SparseMLACommonImpl[FlashMLASparseMetadata]):
         # Convert per-request indices to global slots (decode) or workspace
         # offsets (prefill).
         topk_indices = triton_convert_req_index_to_global_index(
-            attn_metadata.req_id_per_token,
+            attn_metadata.req_id_per_token[: topk_indices.shape[0]],
             attn_metadata.block_table,
             topk_indices,
             BLOCK_SIZE=attn_metadata.block_size,
