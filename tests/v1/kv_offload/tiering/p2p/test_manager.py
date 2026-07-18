@@ -1386,7 +1386,7 @@ class TestBindHostPortDefaults:
             or SimpleNamespace(),
         )
         spec = SimpleNamespace(
-            block_size_factor=1,
+            blocks_per_chunk=1,
             aphrodite_config=SimpleNamespace(parallel_config=SimpleNamespace(data_parallel_index=dp_index)),
         )
         mgr = P2PSecondaryTierManager(spec, memoryview(b""), **kwargs)
