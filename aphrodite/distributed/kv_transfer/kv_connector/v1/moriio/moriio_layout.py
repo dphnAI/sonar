@@ -285,10 +285,12 @@ def compute_block_transfer_offsets(
         [list[int], list[int], list[int]], tuple[list[int], list[int], list[int]]
     ] = merge_contiguous_offsets,
 ) -> tuple[list[int], list[int], list[int]]:
-    if len(local_block_ids) != len(remote_block_ids):
+    # A shorter or empty local list is the READ-mode "drop the transfer, just
+    # free the prefill blocks" case. A longer local list is still a bug because
+    # the zip loop below cannot map every local block to a remote block.
+    if len(local_block_ids) > len(remote_block_ids):
         raise ValueError(
-            "local_block_ids and remote_block_ids must have the same length: "
-            f"{len(local_block_ids)} != {len(remote_block_ids)}"
+            f"local_block_ids longer than remote_block_ids: {len(local_block_ids)} > {len(remote_block_ids)}"
         )
     geometry = get_layer_transfer_geometry(layer_name, kv_cache, layer_to_spec, remote_num_blocks)
     element_size = kv_cache.element_size()
