@@ -113,9 +113,7 @@ def _rmsnorm_gelu_kernel(
     rmask = rows < R
     offs = tl.arange(0, D_P2)
     mask = rmask[:, None] & (offs < D)[None, :]
-    x32 = tl.load(x_ptr + rows[:, None] * D + offs[None, :], mask=mask, other=0.0).to(
-        tl.float32
-    )
+    x32 = tl.load(x_ptr + rows[:, None] * D + offs[None, :], mask=mask, other=0.0).to(tl.float32)
     var = tl.sum(x32 * x32, axis=1) / D
     xn = (x32 * tl.math.rsqrt(var + eps)[:, None]).to(tl.bfloat16)
     w = tl.load(w_ptr + offs, mask=offs < D, other=0.0)
@@ -133,9 +131,7 @@ def _rmsnorm_gelu_kernel(
         ww = rows % FW
         n = rows // (FT * FH * FW)
         slot = ((t % TF) * HF + hh % HF) * HF + ww % HF
-        out_row = ((n * (FT // TF) + t // TF) * (FH // HF) + hh // HF) * (
-            FW // HF
-        ) + ww // HF
+        out_row = ((n * (FT // TF) + t // TF) * (FH // HF) + hh // HF) * (FW // HF) + ww // HF
         base = (out_row * (TF * HF * HF) + slot) * D
         tl.store(out_ptr + base[:, None] + offs[None, :], h, mask=mask)
     else:

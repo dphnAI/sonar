@@ -42,11 +42,7 @@ def _rel_proj_low_latency_kernel(
     token = row // NUM_Q_HEADS
     head = row % NUM_Q_HEADS
     relative = tl.load(
-        qkvr_ptr
-        + token[:, None] * stride_x_t
-        + R_OFFSET
-        + head[:, None] * 16
-        + inner[None, :],
+        qkvr_ptr + token[:, None] * stride_x_t + R_OFFSET + head[:, None] * 16 + inner[None, :],
         mask=row[:, None] < rows,
         other=0.0,
     )
@@ -55,9 +51,7 @@ def _rel_proj_low_latency_kernel(
         mask=col[None, :] < REL_EXTENT,
         other=0.0,
     )
-    values = tl.dot(relative, projection, out_dtype=tl.float32).to(
-        rel_out_ptr.dtype.element_ty
-    )
+    values = tl.dot(relative, projection, out_dtype=tl.float32).to(rel_out_ptr.dtype.element_ty)
     values = values.to(tl.float32)
     if APPLY_LOG_SCALING:
         values *= tl.load(log_scaling_ptr + token, mask=row < rows, other=1.0)[:, None]
@@ -98,22 +92,14 @@ def _rel_proj_throughput_kernel(
         token = row // NUM_Q_HEADS
         head = row % NUM_Q_HEADS
         relative = tl.load(
-            qkvr_ptr
-            + token[:, None] * stride_x_t
-            + R_OFFSET
-            + head[:, None] * 16
-            + inner[None, :],
+            qkvr_ptr + token[:, None] * stride_x_t + R_OFFSET + head[:, None] * 16 + inner[None, :],
             mask=row[:, None] < rows,
             other=0.0,
         )
-        values = tl.dot(relative, projection, out_dtype=tl.float32).to(
-            rel_out_ptr.dtype.element_ty
-        )
+        values = tl.dot(relative, projection, out_dtype=tl.float32).to(rel_out_ptr.dtype.element_ty)
         values = values.to(tl.float32)
         if APPLY_LOG_SCALING:
-            values *= tl.load(log_scaling_ptr + token, mask=row < rows, other=1.0)[
-                :, None
-            ]
+            values *= tl.load(log_scaling_ptr + token, mask=row < rows, other=1.0)[:, None]
         tl.store(
             rel_out_ptr + row[:, None] * REL_EXTENT + col[None, :],
             values.to(rel_out_ptr.dtype.element_ty),
@@ -263,9 +249,7 @@ def _qkvr_qkv_kernel(
         projected = tl.zeros([REL_EXTENT_PADDED], dtype=tl.float32)
         rel_offset = Q_WIDTH + 2 * KV_WIDTH + head * D_REL
         for rel_dim in tl.static_range(D_REL):
-            rel_value = tl.load(
-                qkvr_ptr + token * stride_x_t + rel_offset + rel_dim
-            ).to(tl.float32)
+            rel_value = tl.load(qkvr_ptr + token * stride_x_t + rel_offset + rel_dim).to(tl.float32)
             proj = tl.load(
                 rel_proj_ptr + rel_dim * REL_EXTENT + rel_cols,
                 mask=rel_mask,
@@ -335,13 +319,9 @@ def _qkvr_qkv_kernel(
                     other=0.0,
                 ).to(tl.float32)
                 safe_position = tl.maximum(source_position, 0)
-                logical_block = tl.minimum(
-                    safe_position // conv_block_size, max_blocks - 1
-                )
+                logical_block = tl.minimum(safe_position // conv_block_size, max_blocks - 1)
                 physical_block = tl.load(
-                    conv_block_table_ptr
-                    + request * stride_block_table_req
-                    + logical_block,
+                    conv_block_table_ptr + request * stride_block_table_req + logical_block,
                     mask=cached,
                     other=0,
                 ).to(tl.int64)
@@ -361,12 +341,8 @@ def _qkvr_qkv_kernel(
                     mask=cached,
                     other=0.0,
                 ).to(tl.float32)
-                k_weight = tl.load(
-                    k_weight_ptr + (head * HEAD_DIM + dims) * WINDOW_SIZE + tap
-                ).to(tl.float32)
-                v_weight = tl.load(
-                    v_weight_ptr + (head * HEAD_DIM + dims) * WINDOW_SIZE + tap
-                ).to(tl.float32)
+                k_weight = tl.load(k_weight_ptr + (head * HEAD_DIM + dims) * WINDOW_SIZE + tap).to(tl.float32)
+                v_weight = tl.load(v_weight_ptr + (head * HEAD_DIM + dims) * WINDOW_SIZE + tap).to(tl.float32)
                 acc_k += source_k * k_weight
                 acc_v += source_v * v_weight
 
@@ -375,9 +351,7 @@ def _qkvr_qkv_kernel(
             k_float = k_rounded.to(tl.float32)
             k_norm_weight = tl.load(k_norm_weight_ptr + dims).to(tl.float32)
             rstd = tl.rsqrt(tl.sum(k_float * k_float, axis=0) / HEAD_DIM + eps)
-            k_normalized = (k_float * rstd * k_norm_weight).to(
-                qkvr_ptr.dtype.element_ty
-            )
+            k_normalized = (k_float * rstd * k_norm_weight).to(qkvr_ptr.dtype.element_ty)
 
             safe_attention_slot = tl.maximum(attention_slot, 0)
             attention_block = safe_attention_slot // attention_page_size
@@ -422,10 +396,7 @@ def _q_kernel(
     tokens = rows // NUM_Q_HEADS
     heads = rows % NUM_Q_HEADS
     values = tl.load(
-        qkvr_ptr
-        + tokens[:, None] * stride_x_t
-        + heads[:, None] * HEAD_DIM
-        + dims[None, :],
+        qkvr_ptr + tokens[:, None] * stride_x_t + heads[:, None] * HEAD_DIM + dims[None, :],
         mask=row_mask[:, None],
         other=0.0,
     ).to(tl.float32)
@@ -493,9 +464,7 @@ def _kv_kernel(
     request = tl.load(seq_idx_ptr + token, mask=row_mask, other=0)
     conv_slot = tl.load(conv_slot_mapping_ptr + token, mask=row_mask, other=-1)
     query_start = tl.load(query_start_ptr + token, mask=row_mask, other=0)
-    attention_slot = tl.load(
-        attention_slot_mapping_ptr + token, mask=row_mask, other=-1
-    )
+    attention_slot = tl.load(attention_slot_mapping_ptr + token, mask=row_mask, other=-1)
     valid = row_mask & (conv_slot >= 0)
 
     k_col = Q_WIDTH + head * HEAD_DIM
@@ -570,12 +539,8 @@ def _kv_kernel(
             mask=cached[:, None],
             other=0.0,
         ).to(tl.float32)
-        k_weight = tl.load(
-            k_weight_ptr + (head_id * HEAD_DIM + dims) * WINDOW_SIZE + tap
-        ).to(tl.float32)
-        v_weight = tl.load(
-            v_weight_ptr + (head_id * HEAD_DIM + dims) * WINDOW_SIZE + tap
-        ).to(tl.float32)
+        k_weight = tl.load(k_weight_ptr + (head_id * HEAD_DIM + dims) * WINDOW_SIZE + tap).to(tl.float32)
+        v_weight = tl.load(v_weight_ptr + (head_id * HEAD_DIM + dims) * WINDOW_SIZE + tap).to(tl.float32)
         acc_k += source_k * k_weight[None, :]
         acc_v += source_v * v_weight[None, :]
 
@@ -584,9 +549,7 @@ def _kv_kernel(
     k_float = k_rounded.to(tl.float32)
     k_norm_weight = tl.load(k_norm_weight_ptr + dims).to(tl.float32)
     rstd = tl.rsqrt(tl.sum(k_float * k_float, axis=1) / HEAD_DIM + eps)
-    k_normalized = (k_float * rstd[:, None] * k_norm_weight[None, :]).to(
-        qkvr_ptr.dtype.element_ty
-    )
+    k_normalized = (k_float * rstd[:, None] * k_norm_weight[None, :]).to(qkvr_ptr.dtype.element_ty)
 
     safe_attention_slot = tl.maximum(attention_slot, 0)
     attention_block = safe_attention_slot // attention_page_size
@@ -826,9 +789,7 @@ def fused_qkvr_prep(
     assert conv_cache.stride(3) == 1
     assert key_cache.stride(3) == 1 and value_cache.stride(3) == 1
     tokens = qkvr.shape[0]
-    q_out = torch.empty(
-        (tokens, num_q_heads * head_dim), dtype=qkvr.dtype, device=qkvr.device
-    )
+    q_out = torch.empty((tokens, num_q_heads * head_dim), dtype=qkvr.dtype, device=qkvr.device)
     rel_out = torch.empty(
         (tokens, num_q_heads, rel_proj.shape[1]),
         dtype=qkvr.dtype,

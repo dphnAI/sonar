@@ -49,9 +49,7 @@ def _rmsnorm_fwd_kernel(
     mask_n = offs_n < n_cols
 
     weight = tl.load(weight_ptr + offs_n, mask=mask_n, other=0.0).to(tl.float32)
-    x = tl.load(x_ptr + pid_m * x_stride_0 + offs_n, mask=mask_n, other=0.0).to(
-        tl.float32
-    )
+    x = tl.load(x_ptr + pid_m * x_stride_0 + offs_n, mask=mask_n, other=0.0).to(tl.float32)
     row_var = tl.sum(x * x, axis=0) / n_cols
     rstd = tl.math.rsqrt(row_var + eps)
     tl.store(rstd_ptr + pid_m, rstd)
@@ -126,12 +124,8 @@ def _add_rmsnorm_fwd_kernel(
     mask_n = offs_n < n_cols
 
     weight = tl.load(weight_ptr + offs_n, mask=mask_n, other=0.0).to(tl.float32)
-    r = tl.load(res_ptr + pid_m * res_stride_0 + offs_n, mask=mask_n, other=0.0).to(
-        tl.float32
-    )
-    d = tl.load(delta_ptr + pid_m * delta_stride_0 + offs_n, mask=mask_n, other=0.0).to(
-        tl.float32
-    )
+    r = tl.load(res_ptr + pid_m * res_stride_0 + offs_n, mask=mask_n, other=0.0).to(tl.float32)
+    d = tl.load(delta_ptr + pid_m * delta_stride_0 + offs_n, mask=mask_n, other=0.0).to(tl.float32)
     # Round the sum to the residual dtype first (matches the eager
     # `residual + delta` then rmsnorm-on-bf16 sequence bit-for-bit).
     s = (r + d).to(res_out_ptr.dtype.element_ty)
@@ -242,9 +236,7 @@ def embed_rmsnorm(
     ids = input_ids.view(-1)
     (T,) = ids.shape
     n = embed_table.shape[1]
-    out = torch.empty(
-        (*input_ids.shape, n), dtype=embed_table.dtype, device=embed_table.device
-    )
+    out = torch.empty((*input_ids.shape, n), dtype=embed_table.dtype, device=embed_table.device)
     chain_out = torch.empty_like(out) if chain_weight is not None else None
     if T > 0:
         block_size_n = triton.next_power_of_2(n)

@@ -27,7 +27,7 @@ from torch import nn
 from torch.nn.parameter import Parameter
 
 import aphrodite.envs as envs
-from aphrodite.config import get_current_vllm_config
+from aphrodite.config import get_current_aphrodite_config
 from aphrodite.distributed import (
     get_dp_group,
     get_pcp_group,
@@ -166,9 +166,7 @@ def inkling_gate_select(
     tokens = logits.shape[0]
     active = topk + n_shared_experts
     topk_ids = torch.empty((tokens, active), dtype=torch.int32, device=logits.device)
-    topk_weights = torch.empty(
-        (tokens, active), dtype=torch.float32, device=logits.device
-    )
+    topk_weights = torch.empty((tokens, active), dtype=torch.float32, device=logits.device)
     if tokens == 0:
         return topk_weights, topk_ids
     _inkling_gate_select_kernel[(tokens,)](
@@ -214,14 +212,10 @@ class InklingGate(nn.Module):
         self.route_scale = route_scale
 
         padded_experts = self.n_total_experts + (-self.n_total_experts) % 8
-        self.weight = Parameter(
-            torch.empty(padded_experts, d_model), requires_grad=False
-        )
+        self.weight = Parameter(torch.empty(padded_experts, d_model), requires_grad=False)
         set_weight_attrs(self.weight, {"weight_loader": self._load_weight})
         if use_global_scale:
-            self.global_scale = Parameter(
-                torch.empty(1, dtype=torch.float32), requires_grad=False
-            )
+            self.global_scale = Parameter(torch.empty(1, dtype=torch.float32), requires_grad=False)
         else:
             self.global_scale = None
         if use_gate_bias:
@@ -241,9 +235,7 @@ class InklingGate(nn.Module):
         """fp32 gate logits [T, n_total_experts + pad] (pad columns are junk)."""
         return _linear_with_fp32_out(x, self.weight)
 
-    def select_experts(
-        self, gating_output: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def select_experts(self, gating_output: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Full selection: (weights, ids) of [T, K + S]. The first K entries
         are the routed top-k; the S trailing entries are the sink gammas."""
         return inkling_gate_select(
@@ -267,14 +259,10 @@ def _inkling_moe_ep_size() -> int:
     """EP size the FusedMoE layer will run with (mirrors
     FusedMoEParallelConfig.make: experts shard over tp * dp * pcp when
     expert parallelism is enabled)."""
-    parallel_config = get_current_vllm_config().parallel_config
+    parallel_config = get_current_aphrodite_config().parallel_config
     if not parallel_config.enable_expert_parallel:
         return 1
-    world = (
-        get_tensor_model_parallel_world_size()
-        * get_dp_group().world_size
-        * get_pcp_group().world_size
-    )
+    world = get_tensor_model_parallel_world_size() * get_dp_group().world_size * get_pcp_group().world_size
     return world if world > 1 else 1
 
 
@@ -289,9 +277,7 @@ class InklingSinkExperts(nn.Module):
     plain dense GEMMs with the fused sink epilogue between them.
     """
 
-    def __init__(
-        self, n_experts: int, d_model: int, d_mlp: int, *, prefix: str = ""
-    ) -> None:
+    def __init__(self, n_experts: int, d_model: int, d_mlp: int, *, prefix: str = "") -> None:
         super().__init__()
         self.n_experts = n_experts
         tp_size = get_tensor_model_parallel_world_size()
@@ -333,13 +319,9 @@ class InklingSinkExperts(nn.Module):
         # then one GEMM whose K-reduction over the K-concatenated w2 performs
         # the expert sum.
         if self._unit is None or self._unit.device != x.device:
-            self._unit = torch.ones(
-                self.n_experts, dtype=torch.float32, device=x.device
-            )
+            self._unit = torch.ones(self.n_experts, dtype=torch.float32, device=x.device)
         raw = x @ self.w13_weight.view(-1, x.shape[-1]).T  # (T, S*2F)
-        h = sink_silu_mul_epilogue(
-            raw, self._unit, gammas, self._unit, self.n_experts, x.dtype
-        )
+        h = sink_silu_mul_epilogue(raw, self._unit, gammas, self._unit, self.n_experts, x.dtype)
         return h @ self.w2_weight.T  # (T, D)
 
 
@@ -413,9 +395,9 @@ class InklingMoE(nn.Module):
         self._routed_sel: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
         # The sinks are always bf16; fail loudly on a checkpoint that
         # quantizes them instead of silently misloading.
-        assert nvfp4_config is None or not nvfp4_config.shared_experts_quantized(
-            layer_id
-        ), f"layer {layer_id}: NVFP4 shared experts are not supported"
+        assert nvfp4_config is None or not nvfp4_config.shared_experts_quantized(layer_id), (
+            f"layer {layer_id}: NVFP4 shared experts are not supported"
+        )
 
         self.sink_experts = InklingSinkExperts(
             n_experts=n_shared,
@@ -475,9 +457,7 @@ class InklingMoE(nn.Module):
             lambda: self.sink_experts(x, gammas),
             self._sink_events[0],
             self._sink_events[1],
-            self._sink_stream
-            if num_tokens <= envs.VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD
-            else None,
+            self._sink_stream if num_tokens <= envs.VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD else None,
         )
         self._routed_sel = None
 
@@ -502,9 +482,7 @@ class InklingMoE(nn.Module):
         """
         if name.startswith("shared_experts."):
             key = name.split(".", 1)[1].replace("shared_", "", 1)
-            return [
-                f"sink_experts.{p}" for p in self.sink_experts.load_weight(key, weight)
-            ]
+            return [f"sink_experts.{p}" for p in self.sink_experts.load_weight(key, weight)]
 
         experts: RoutedExperts = self.experts.routed_experts
         key = name.split(".", 1)[1]
@@ -515,9 +493,7 @@ class InklingMoE(nn.Module):
         if key.endswith(".input_amax"):
             projection = "w13" if key.startswith("w13") else "w2"
             amax = float(weight.max())
-            assert math.isfinite(amax) and amax > 0, (
-                f"bad {projection} input_amax: {amax}"
-            )
+            assert math.isfinite(amax) and amax > 0, f"bad {projection} input_amax: {amax}"
             input_scale = getattr(experts, f"{projection}_input_scale")
             input_scale.data.fill_(amax / (FLOAT8_E4M3_MAX * FLOAT4_E2M1_MAX))
             return [f"experts.routed_experts.{projection}_input_scale"]

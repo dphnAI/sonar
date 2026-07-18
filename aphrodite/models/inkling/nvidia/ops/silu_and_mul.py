@@ -52,16 +52,12 @@ def _silu_and_mul_triton_kernel(
         offs_m2n = offs_m[:, None] * N * 2 + offs_2n[None, :]
 
         if EVEN_N or pid_n * BLOCK_SIZE_N + BLOCK_SIZE_N <= N:
-            gateup_out = tl.load(
-                gateup_out_ptr + offs_m2n, mask=mask_m[:, None], other=0.0
-            )
+            gateup_out = tl.load(gateup_out_ptr + offs_m2n, mask=mask_m[:, None], other=0.0)
         else:
             mask_m2n = mask_m[:, None] & mask_2n[None, :]
             gateup_out = tl.load(gateup_out_ptr + offs_m2n, mask=mask_m2n, other=0.0)
 
-        gate_out, up_out = tl.split(
-            tl.reshape(gateup_out, (BLOCK_SIZE_M, BLOCK_SIZE_N, 2))
-        )
+        gate_out, up_out = tl.split(tl.reshape(gateup_out, (BLOCK_SIZE_M, BLOCK_SIZE_N, 2)))
         gate_out = gate_out.to(tl.float32)
         up_out = up_out.to(tl.float32)
 
@@ -77,9 +73,7 @@ def silu_and_mul_triton(gateup_output: torch.Tensor) -> torch.Tensor:
 
     Adapted from ``inkling_kernels.activation.silu_and_mul_fwd`` (without MXFP).
     """
-    assert gateup_output.is_contiguous(), (
-        f"{gateup_output.shape=} {gateup_output.stride()=}"
-    )
+    assert gateup_output.is_contiguous(), f"{gateup_output.shape=} {gateup_output.stride()=}"
     assert gateup_output.ndim == 2, f"{gateup_output.shape=}"
 
     M = gateup_output.shape[0]
@@ -87,9 +81,7 @@ def silu_and_mul_triton(gateup_output: torch.Tensor) -> torch.Tensor:
     assert hidden_size % 2 == 0, f"{hidden_size=}"
     N = hidden_size // 2
 
-    down_input = torch.empty(
-        (M, N), device=gateup_output.device, dtype=gateup_output.dtype
-    )
+    down_input = torch.empty((M, N), device=gateup_output.device, dtype=gateup_output.dtype)
     if M == 0:
         return down_input
 
@@ -104,9 +96,7 @@ def silu_and_mul_triton(gateup_output: torch.Tensor) -> torch.Tensor:
         BLOCK_SIZE_M = 16
         BLOCK_SIZE_N = max(8, min(128, triton.next_power_of_2(N)))
     max_grid_size = triton.cdiv(M, BLOCK_SIZE_M) * triton.cdiv(N, BLOCK_SIZE_N)
-    num_sms = torch.cuda.get_device_properties(
-        gateup_output.device
-    ).multi_processor_count
+    num_sms = torch.cuda.get_device_properties(gateup_output.device).multi_processor_count
     grid_size = min(num_sms * 4, max_grid_size)
 
     _silu_and_mul_triton_kernel[(grid_size,)](

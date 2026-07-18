@@ -29,9 +29,7 @@ def test_gate_loads_directly_into_padded_runtime_weight() -> None:
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="requires CUDA")
 @pytest.mark.parametrize(("num_tokens", "expected_calls"), [(1, 1), (64, 1), (65, 0)])
-def test_gate_uses_ll_bf16_gemm_through_token_limit(
-    monkeypatch, num_tokens, expected_calls
-) -> None:
+def test_gate_uses_ll_bf16_gemm_through_token_limit(monkeypatch, num_tokens, expected_calls) -> None:
     gate = moe.InklingGate(
         d_model=8,
         n_routed_experts=5,
@@ -46,9 +44,7 @@ def test_gate_uses_ll_bf16_gemm_through_token_limit(
         calls.append((x, weight))
         return torch.ones(num_tokens, 8, device="cuda", dtype=torch.float32)
 
-    monkeypatch.setattr(
-        moe.current_platform, "has_device_capability", lambda capability: True
-    )
+    monkeypatch.setattr(moe.current_platform, "has_device_capability", lambda capability: True)
     monkeypatch.setattr(moe.ll_bf16, "is_available", lambda: True)
     monkeypatch.setattr(moe.ll_bf16, "ll_bf16_gemm", fake_ll_bf16_gemm)
 
@@ -98,9 +94,7 @@ def test_sink_down_projection_is_packed_during_load(monkeypatch) -> None:
 def test_sink_packed_weight_forward_matches_expert_sum(monkeypatch) -> None:
     monkeypatch.setattr(moe, "get_tensor_model_parallel_world_size", lambda: 2)
     monkeypatch.setattr(moe, "get_tensor_model_parallel_rank", lambda: 1)
-    sink = moe.InklingSinkExperts(n_experts=2, d_model=3, d_mlp=8).to(
-        device="cuda", dtype=torch.bfloat16
-    )
+    sink = moe.InklingSinkExperts(n_experts=2, d_model=3, d_mlp=8).to(device="cuda", dtype=torch.bfloat16)
     torch.manual_seed(1)
     w13 = torch.randn(2, 16, 3, dtype=torch.bfloat16)
     w2 = torch.randn(2, 3, 8, dtype=torch.bfloat16)

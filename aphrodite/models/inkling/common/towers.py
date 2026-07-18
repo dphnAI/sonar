@@ -54,9 +54,7 @@ def plan_out_scales(
     multiples of 64.
     """
     if patch_size <= 1:
-        raise ValueError(
-            "patch_size must be greater than 1, otherwise this doesn't make sense"
-        )
+        raise ValueError("patch_size must be greater than 1, otherwise this doesn't make sense")
 
     def _round_up(x: int) -> int:
         return int(np.ceil(x / 64)) * 64
@@ -108,9 +106,7 @@ def plan_out_scales(
     return [scales[i] for i in idxs]
 
 
-def fold_timespace_to_depth(
-    vision_patches_bthwc: torch.Tensor, t_fold: int, hw_fold: int
-) -> torch.Tensor:
+def fold_timespace_to_depth(vision_patches_bthwc: torch.Tensor, t_fold: int, hw_fold: int) -> torch.Tensor:
     """(B, T, H, W, C) -> (B, T//t, H//hw, W//hw, C*(t*hw**2))."""
     B, T, H, W, C = vision_patches_bthwc.shape
 
@@ -122,9 +118,7 @@ def fold_timespace_to_depth(
     h_new = H // hw_fold
     w_new = W // hw_fold
 
-    x = vision_patches_bthwc.reshape(
-        B, t_new, t_fold, h_new, hw_fold, w_new, hw_fold, C
-    )
+    x = vision_patches_bthwc.reshape(B, t_new, t_fold, h_new, hw_fold, w_new, hw_fold, C)
     x = x.permute(0, 1, 3, 5, 2, 4, 6, 7)
     x = x.reshape(B, t_new, h_new, w_new, t_fold * hw_fold * hw_fold * C)
     return x
@@ -144,22 +138,14 @@ class HMLPPatchEncoder(nn.Module):
             self.temporal_patch_size, self.patch_size, self.n_layers, self.n_channels
         )
         self.layers: nn.ModuleDict = nn.ModuleDict()
-        for i, (start_scale, end_scale) in enumerate(
-            zip(self.scales[:-1], self.scales[1:])
-        ):
+        for i, (start_scale, end_scale) in enumerate(zip(self.scales[:-1], self.scales[1:])):
             shuffle_mult = (
-                (end_scale[0] // start_scale[0])
-                * (end_scale[1] // start_scale[1])
-                * (end_scale[2] // start_scale[2])
+                (end_scale[0] // start_scale[0]) * (end_scale[1] // start_scale[1]) * (end_scale[2] // start_scale[2])
             )
             if i == self.n_layers - 1:
-                self.layers[f"linear_{i}"] = nn.Linear(
-                    start_scale[3] * shuffle_mult, self.decoder_dmodel, bias=False
-                )
+                self.layers[f"linear_{i}"] = nn.Linear(start_scale[3] * shuffle_mult, self.decoder_dmodel, bias=False)
             else:
-                self.layers[f"linear_{i}"] = nn.Linear(
-                    start_scale[3] * shuffle_mult, end_scale[3], bias=False
-                )
+                self.layers[f"linear_{i}"] = nn.Linear(start_scale[3] * shuffle_mult, end_scale[3], bias=False)
                 self.layers[f"norm_{i}"] = RMSNorm(end_scale[3])
 
         self.final_norm: RMSNorm | None = None
@@ -178,9 +164,7 @@ class HMLPPatchEncoder(nn.Module):
 
         num_patches, T, H, W, C = x.shape
         prefolded = False
-        for i, (start_scale, end_scale) in enumerate(
-            zip(self.scales[:-1], self.scales[1:])
-        ):
+        for i, (start_scale, end_scale) in enumerate(zip(self.scales[:-1], self.scales[1:])):
             t_fold = end_scale[0] // start_scale[0]
             hw_fold = end_scale[1] // start_scale[1]
             if (hw_fold > 1 or t_fold > 1) and not prefolded:
@@ -201,9 +185,7 @@ class HMLPPatchEncoder(nn.Module):
                     nxt = self.scales[i + 2]
                     ntf = nxt[0] // end_scale[0]
                     nhf = nxt[1] // end_scale[1]
-                    copy_fold = (ntf > 1 or nhf > 1) and (
-                        x.shape[2] // nhf > 1 or x.shape[3] // nhf > 1
-                    )
+                    copy_fold = (ntf > 1 or nhf > 1) and (x.shape[2] // nhf > 1 or x.shape[3] // nhf > 1)
                     x = fused(
                         x,
                         norm.weight,
@@ -266,9 +248,7 @@ class InklingAudio(nn.Module):
         self.n_mel_bins = config.n_mel_bins
         self.mel_vocab_size = config.mel_vocab_size
         self.use_audio_norm = config.use_audio_norm
-        self.encoder = nn.Embedding(
-            config.n_mel_bins * config.mel_vocab_size, config.decoder_dmodel
-        )
+        self.encoder = nn.Embedding(config.n_mel_bins * config.mel_vocab_size, config.decoder_dmodel)
         self.final_norm: RMSNorm | None = None
         if self.use_audio_norm:
             assert config.decoder_dmodel is not None
@@ -287,9 +267,7 @@ class InklingAudio(nn.Module):
 
         # dMel bins are integer indices; cast once to int32 on the right device
         # (no float round-trip).
-        audio_features = audio_features.to(
-            device=self.encoder.weight.device, dtype=torch.int32
-        )
+        audio_features = audio_features.to(device=self.encoder.weight.device, dtype=torch.int32)
 
         weight = self.encoder.weight
         if audio_features.is_cuda and weight.dtype == torch.bfloat16:
@@ -305,8 +283,7 @@ class InklingAudio(nn.Module):
             )
 
         embedding_indices = (
-            torch.arange(self.n_mel_bins, device=audio_features.device)
-            * self.mel_vocab_size
+            torch.arange(self.n_mel_bins, device=audio_features.device) * self.mel_vocab_size
         ).unsqueeze(0) + audio_features
 
         hidden_states = (

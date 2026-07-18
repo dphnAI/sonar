@@ -22,7 +22,7 @@ from typing import ClassVar
 import torch
 from torch import nn
 
-from aphrodite.config import VllmConfig, get_current_vllm_config
+from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
 from aphrodite.distributed import get_tensor_model_parallel_world_size
 from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
 from aphrodite.v1.attention.backend import (
@@ -49,27 +49,21 @@ class InklingSconvMetadata(AttentionMetadata):
 
 
 class InklingSconvMetadataBuilder(AttentionMetadataBuilder[InklingSconvMetadata]):
-    _cudagraph_support: ClassVar[AttentionCGSupport] = (
-        AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
-    )
+    _cudagraph_support: ClassVar[AttentionCGSupport] = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE
 
     def __init__(
         self,
         kv_cache_spec: AttentionSpec,
         layer_names: list[str],
-        vllm_config: VllmConfig,
+        vllm_config: AphroditeConfig,
         device: torch.device,
     ) -> None:
         super().__init__(kv_cache_spec, layer_names, vllm_config, device)
         assert isinstance(kv_cache_spec, SlidingWindowSpec)
         # Persistent per-token buffers for CUDA graph capture.
         max_num_tokens = vllm_config.scheduler_config.max_num_batched_tokens
-        self.seq_idx_buffer = torch.empty(
-            max_num_tokens, dtype=torch.int32, device=device
-        )
-        self.query_start_buffer = torch.empty(
-            max_num_tokens, dtype=torch.int32, device=device
-        )
+        self.seq_idx_buffer = torch.empty(max_num_tokens, dtype=torch.int32, device=device)
+        self.query_start_buffer = torch.empty(max_num_tokens, dtype=torch.int32, device=device)
 
     def build(
         self,
@@ -137,9 +131,7 @@ class InklingSconvBackend(AttentionBackend):
 
     @staticmethod
     def get_impl_cls():
-        raise NotImplementedError(
-            "InklingSconvBackend has no attention impl; the conv runs out-of-band."
-        )
+        raise NotImplementedError("InklingSconvBackend has no attention impl; the conv runs out-of-band.")
 
     @staticmethod
     def get_builder_cls() -> type[InklingSconvMetadataBuilder]:
@@ -168,8 +160,7 @@ class InklingConvState(nn.Module, AttentionLayerBase):
         # tp_size <= num_kv_heads keeps >=1 whole KV head per rank (no
         # replication/clamping), so the per-head width stays TP-invariant.
         assert tp_size <= num_kv_heads, (
-            f"sconv SWA cache supports tp_size <= num_kv_heads ({num_kv_heads}), "
-            f"got {tp_size}"
+            f"sconv SWA cache supports tp_size <= num_kv_heads ({num_kv_heads}), got {tp_size}"
         )
         # Per-rank head count; D is TP-invariant (K/V heads and the hidden
         # chunk both scale 1/TP together). The attn-/mlp-output sconv streams
@@ -193,11 +184,9 @@ class InklingConvState(nn.Module, AttentionLayerBase):
             (2 * head_dim, hidden_per_head),  # _ATTN
             (2 * head_dim + hidden_per_head, hidden_per_head),  # _MLP
         )
-        vllm_config = get_current_vllm_config()
+        vllm_config = get_current_aphrodite_config()
         self._dtype = vllm_config.model_config.dtype
-        assert self._dtype == torch.bfloat16, (
-            f"sconv SWA cache supports bfloat16 only, got {self._dtype}"
-        )
+        assert self._dtype == torch.bfloat16, f"sconv SWA cache supports bfloat16 only, got {self._dtype}"
         # Register in the forward context so the runner enumerates this owner as
         # an attention-like layer (get_kv_cache_spec / get_attn_backend).
         compilation_config = vllm_config.compilation_config
@@ -210,7 +199,7 @@ class InklingConvState(nn.Module, AttentionLayerBase):
     def get_attn_backend(self) -> type[AttentionBackend]:
         return InklingSconvBackend
 
-    def get_kv_cache_spec(self, vllm_config: VllmConfig) -> KVCacheSpec:
+    def get_kv_cache_spec(self, vllm_config: AphroditeConfig) -> KVCacheSpec:
         return SlidingWindowSpec(
             block_size=self.block_size,
             num_kv_heads=self.num_kv_heads,

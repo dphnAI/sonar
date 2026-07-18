@@ -34,9 +34,7 @@ def inkling_fa4_num_splits(
     # Shearing makes split/combine overhead more visible. Multi-tile causal
     # prefill saturates around 64 CTAs. Batch-1 decode at very long context is
     # memory-bound and uses a TP-specific cap measured through 1M KV tokens.
-    target_ctas = (
-        256 if q_tiles == 1 and batch_size == 1 else (128 if q_tiles == 1 else 64)
-    )
+    target_ctas = 256 if q_tiles == 1 and batch_size == 1 else (128 if q_tiles == 1 else 64)
     max_splits = 128
     if q_tiles == 1 and batch_size == 1:
         if num_kv_heads == 8:

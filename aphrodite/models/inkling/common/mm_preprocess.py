@@ -137,9 +137,7 @@ class InklingDummyInputsBuilder(BaseDummyInputsBuilder[InklingProcessingInfo]):
         # Use spellings the renderer would emit; tokenization is bypassed in
         # _call_hf_processor (we build input_ids directly), so the exact text
         # only needs to be a stable per-item marker.
-        return ("<|content_image|>" * num_images) + (
-            "<|content_audio_input|>" * num_audios
-        )
+        return ("<|content_image|>" * num_images) + ("<|content_audio_input|>" * num_audios)
 
     def get_dummy_mm_data(
         self,
@@ -209,18 +207,14 @@ class InklingMultiModalProcessor(BaseMultiModalProcessor[InklingProcessingInfo])
         if not isinstance(audios, list):
             audios = list(cast(Iterable[Any], audios))
 
-        prompt_ids = self._tokenize_with_placeholders(
-            prompt, tokenizer, len(images), len(audios)
-        )
+        prompt_ids = self._tokenize_with_placeholders(prompt, tokenizer, len(images), len(audios))
 
         data: dict[str, Any] = {"input_ids": [prompt_ids]}
 
         if images:
             img_feat = processor.process_images(images)
             data["pixel_values"] = img_feat["vision_patches_bthwc"]
-            data["num_patches"] = torch.tensor(
-                img_feat["num_patches"], dtype=torch.int64
-            )
+            data["num_patches"] = torch.tensor(img_feat["num_patches"], dtype=torch.int64)
 
         if audios:
             aud_feat = processor.process_audios(audios)
@@ -234,9 +228,7 @@ class InklingMultiModalProcessor(BaseMultiModalProcessor[InklingProcessingInfo])
                         "Provide a shorter clip."
                     )
             if per_clip:
-                input_audio_features = torch.cat(
-                    [torch.as_tensor(c) for c in per_clip], dim=0
-                )
+                input_audio_features = torch.cat([torch.as_tensor(c) for c in per_clip], dim=0)
             else:
                 input_audio_features = torch.empty(0)
             data["input_audio_features"] = input_audio_features
@@ -285,8 +277,7 @@ class InklingMultiModalProcessor(BaseMultiModalProcessor[InklingProcessingInfo])
             # crashing with an IndexError deep in the per-item replacement logic.
             if num_images and seen_img != num_images:
                 raise ValueError(
-                    f"Prompt contains {seen_img} image placeholder(s), but only "
-                    f"{num_images} image(s) were provided."
+                    f"Prompt contains {seen_img} image placeholder(s), but only {num_images} image(s) were provided."
                 )
             if num_audios and seen_aud != num_audios:
                 raise ValueError(
@@ -301,17 +292,13 @@ class InklingMultiModalProcessor(BaseMultiModalProcessor[InklingProcessingInfo])
         hf_processor_mm_kwargs: Mapping[str, object],
     ) -> Mapping[str, MultiModalFieldConfig]:
         num_patches = hf_inputs.get("num_patches", torch.empty(0, dtype=torch.int64))
-        num_audio_tokens = hf_inputs.get(
-            "num_audio_tokens", torch.empty(0, dtype=torch.int64)
-        )
+        num_audio_tokens = hf_inputs.get("num_audio_tokens", torch.empty(0, dtype=torch.int64))
         return dict(
             # Ragged per-image patches, grouped by num_patches.
             pixel_values=MultiModalFieldConfig.flat_from_sizes("image", num_patches),
             num_patches=MultiModalFieldConfig.batched("image"),
             # Ragged per-audio frames, grouped by num_audio_tokens.
-            input_audio_features=MultiModalFieldConfig.flat_from_sizes(
-                "audio", num_audio_tokens
-            ),
+            input_audio_features=MultiModalFieldConfig.flat_from_sizes("audio", num_audio_tokens),
             num_audio_tokens=MultiModalFieldConfig.batched("audio"),
         )
 
@@ -331,15 +318,11 @@ class InklingMultiModalProcessor(BaseMultiModalProcessor[InklingProcessingInfo])
         # into the placeholders.
         def image_replacement(item_idx: int) -> PromptUpdateDetails:
             n = int(num_patches[item_idx])
-            return PromptUpdateDetails.select_token_id(
-                [IMAGE_MARKER_ID] + [IMAGE_TOKEN_ID] * n, IMAGE_TOKEN_ID
-            )
+            return PromptUpdateDetails.select_token_id([IMAGE_MARKER_ID] + [IMAGE_TOKEN_ID] * n, IMAGE_TOKEN_ID)
 
         def audio_replacement(item_idx: int) -> PromptUpdateDetails:
             n = int(num_audio_tokens[item_idx])
-            return PromptUpdateDetails.select_token_id(
-                [AUDIO_MARKER_ID] + [AUDIO_TOKEN_ID] * n, AUDIO_TOKEN_ID
-            )
+            return PromptUpdateDetails.select_token_id([AUDIO_MARKER_ID] + [AUDIO_TOKEN_ID] * n, AUDIO_TOKEN_ID)
 
         updates: list[PromptUpdate] = []
         if num_patches is not None and len(num_patches) > 0:

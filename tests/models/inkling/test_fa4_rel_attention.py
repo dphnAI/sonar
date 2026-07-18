@@ -40,9 +40,7 @@ DTYPE = torch.bfloat16
 def test_log_scaling_tau_matches_reference():
     positions = torch.tensor([0, 127999, 128000, 999999], dtype=torch.int64)
     actual = compute_log_scaling_tau(positions, 128000, 0.1)
-    expected = 1.0 + 0.1 * torch.log(
-        torch.clamp((positions + 1).float() / 128000.0, min=1.0)
-    )
+    expected = 1.0 + 0.1 * torch.log(torch.clamp((positions + 1).float() / 128000.0, min=1.0))
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
@@ -224,20 +222,14 @@ def _run_case(seq_lens, num_heads, num_kv_heads, rel_extent, window_left, seed=0
     # Paged KV cache.
     max_blocks = (max(kv_lens) + BLOCK_SIZE - 1) // BLOCK_SIZE
     num_blocks = num_seqs * max_blocks + 1
-    key_cache = torch.randn(
-        num_blocks, BLOCK_SIZE, num_kv_heads, HEAD_DIM, device=device, dtype=DTYPE
-    )
+    key_cache = torch.randn(num_blocks, BLOCK_SIZE, num_kv_heads, HEAD_DIM, device=device, dtype=DTYPE)
     key_cache = torch.nn.functional.normalize(key_cache.float(), dim=-1).to(DTYPE)
-    value_cache = torch.randn(
-        num_blocks, BLOCK_SIZE, num_kv_heads, HEAD_DIM, device=device, dtype=DTYPE
-    )
+    value_cache = torch.randn(num_blocks, BLOCK_SIZE, num_kv_heads, HEAD_DIM, device=device, dtype=DTYPE)
 
     # Distinct blocks per sequence (block 0 left as a never-referenced pad).
     block_table = torch.zeros(num_seqs, max_blocks, dtype=torch.int32, device=device)
     for i in range(num_seqs):
-        block_table[i] = torch.arange(
-            1 + i * max_blocks, 1 + (i + 1) * max_blocks, dtype=torch.int32
-        )
+        block_table[i] = torch.arange(1 + i * max_blocks, 1 + (i + 1) * max_blocks, dtype=torch.int32)
 
     cu_seqlens_q = torch.tensor(
         [0, *torch.cumsum(torch.tensor(q_lens), 0).tolist()],

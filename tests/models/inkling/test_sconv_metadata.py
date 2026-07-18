@@ -30,9 +30,7 @@ CASES = [
 def _ref(query_start_loc: torch.Tensor, num_reqs: int, num_tokens: int):
     cu_seqlens = query_start_loc[: num_reqs + 1].to(torch.int64)
     token_idx = torch.arange(num_tokens, device=cu_seqlens.device, dtype=torch.int64)
-    seq_idx = (torch.searchsorted(cu_seqlens, token_idx, right=True) - 1).clamp(
-        max=num_reqs - 1
-    )
+    seq_idx = (torch.searchsorted(cu_seqlens, token_idx, right=True) - 1).clamp(max=num_reqs - 1)
     return seq_idx.to(torch.int32), cu_seqlens[seq_idx].to(torch.int32)
 
 
@@ -41,9 +39,7 @@ def _ref(query_start_loc: torch.Tensor, num_reqs: int, num_tokens: int):
 def test_sconv_seq_metadata_matches_searchsorted(query_lens, extra_pad):
     device = "cuda"
     num_reqs = len(query_lens)
-    query_start_loc = torch.tensor(
-        [0] + list(torch.tensor(query_lens).cumsum(0)), dtype=torch.int32
-    ).to(device)
+    query_start_loc = torch.tensor([0] + list(torch.tensor(query_lens).cumsum(0)), dtype=torch.int32).to(device)
     num_actual_tokens = int(query_start_loc[-1])
     num_padded_tokens = num_actual_tokens + extra_pad
 

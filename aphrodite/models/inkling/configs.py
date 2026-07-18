@@ -84,10 +84,7 @@ class InklingModelConfig(PretrainedConfig):
             padded_vocab_size = vocab_size
             vocab_size = (
                 unpadded_vocab_size
-                if (
-                    unpadded_vocab_size is not None
-                    and unpadded_vocab_size < padded_vocab_size
-                )
+                if (unpadded_vocab_size is not None and unpadded_vocab_size < padded_vocab_size)
                 else vocab_size
             )
 
@@ -171,9 +168,7 @@ class InklingModelConfig(PretrainedConfig):
             return max(1, num_kv_heads // tp_size) * head_dim
 
         full_kv_conv_dim = tp_local_kv_conv_dim(self.num_key_value_heads, self.head_dim)
-        local_kv_conv_dim = tp_local_kv_conv_dim(
-            self.swa_num_key_value_heads, self.swa_head_dim
-        )
+        local_kv_conv_dim = tp_local_kv_conv_dim(self.swa_num_key_value_heads, self.swa_head_dim)
         stream_dim = self.hidden_size
         conv_len = self.sconv_kernel_size - 1
         shape = TMLConvStateShape(
@@ -214,13 +209,8 @@ class InklingAudioConfig(PretrainedConfig):
             "use_audio_norm": use_audio_norm,
             "audio_mode": audio_mode,
         }
-        if decoder_dmodel is not None and (
-            missing := [name for name, value in values.items() if value is None]
-        ):
-            raise ValueError(
-                "Enabled Inkling audio tower is missing config fields: "
-                + ", ".join(missing)
-            )
+        if decoder_dmodel is not None and (missing := [name for name, value in values.items() if value is None]):
+            raise ValueError("Enabled Inkling audio tower is missing config fields: " + ", ".join(missing))
         self.decoder_dmodel = decoder_dmodel
         self.n_mel_bins = cast(int, n_mel_bins)
         self.mel_vocab_size = cast(int, mel_vocab_size)
@@ -254,13 +244,8 @@ class InklingVisionConfig(PretrainedConfig):
             "n_layers": n_layers,
             "use_vision_norm": use_vision_norm,
         }
-        if decoder_dmodel is not None and (
-            missing := [name for name, value in values.items() if value is None]
-        ):
-            raise ValueError(
-                "Enabled Inkling vision tower is missing config fields: "
-                + ", ".join(missing)
-            )
+        if decoder_dmodel is not None and (missing := [name for name, value in values.items() if value is None]):
+            raise ValueError("Enabled Inkling vision tower is missing config fields: " + ", ".join(missing))
         self.vision_encoder_type = cast(Literal["linear", "hmlp"], vision_encoder_type)
         self.decoder_dmodel = decoder_dmodel
         self.patch_size = cast(int, patch_size)
@@ -290,14 +275,10 @@ class InklingMMConfig(PretrainedConfig):
         **kwargs: Any,
     ) -> None:
         self.text_config = (
-            text_config
-            if isinstance(text_config, InklingModelConfig)
-            else InklingModelConfig(**(text_config or {}))
+            text_config if isinstance(text_config, InklingModelConfig) else InklingModelConfig(**(text_config or {}))
         )
         self.audio_config = (
-            audio_config
-            if isinstance(audio_config, InklingAudioConfig)
-            else InklingAudioConfig(**(audio_config or {}))
+            audio_config if isinstance(audio_config, InklingAudioConfig) else InklingAudioConfig(**(audio_config or {}))
         )
         self.vision_config = (
             vision_config
