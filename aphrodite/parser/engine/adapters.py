@@ -158,6 +158,7 @@ class ParserEngineToolAdapter(ToolParser):
     def extract_tool_calls(
         self,
         model_output: str,
+        token_ids: Sequence[int] | None,
         request: ChatCompletionRequest,
     ) -> ExtractedToolCallInformation:
         return self._parser_engine.extract_tool_calls_from_content(model_output, request)
