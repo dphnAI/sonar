@@ -52,10 +52,13 @@ class LoRAExpertsMixin:
         torch.Tensor | None,
         torch.Tensor | None,
     ]:
+        w13_lora_a_stacked = lora_context.w13_lora_a_stacked
+        if lora_context.enable_moe_shared_loras:
+            w13_lora_a_stacked = tuple(a.expand(-1, lora_context.local_num_experts, -1, -1) for a in w13_lora_a_stacked)
         return lora_context.punica_wrapper.add_lora_w13(
             y,
             x,
-            lora_context.w13_lora_a_stacked,
+            w13_lora_a_stacked,
             lora_context.w13_lora_b_stacked,
             topk_ids,
             topk_weights,
@@ -92,11 +95,14 @@ class LoRAExpertsMixin:
         top_k_num: int,
         add_inputs: bool = True,
     ) -> None:
+        w2_lora_b_stacked = lora_context.w2_lora_b_stacked
+        if lora_context.enable_moe_shared_loras:
+            w2_lora_b_stacked = tuple(b.expand(-1, lora_context.local_num_experts, -1, -1) for b in w2_lora_b_stacked)
         lora_context.punica_wrapper.add_lora_w2(
             y,
             x,
             lora_context.w2_lora_a_stacked,
-            lora_context.w2_lora_b_stacked,
+            w2_lora_b_stacked,
             topk_weights,
             sorted_token_ids_lora,
             expert_ids_lora,

@@ -24,6 +24,7 @@ from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 from aphrodite.model_executor.models.interfaces import (
     MultiModalEmbeddings,
+    SupportsLoRA,
     SupportsMultiModal,
     SupportsPP,
 )
@@ -320,7 +321,7 @@ class InklingModel(nn.Module):
         return self.norm(hidden_states)
 
 
-class _TmlForCausalLMBase(nn.Module, SupportsPP):
+class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
     """Shared text-backbone causal-LM scaffolding for both entry classes."""
 
     hf_to_vllm_mapper = WeightsMapper(
@@ -340,6 +341,8 @@ class _TmlForCausalLMBase(nn.Module, SupportsPP):
             "model.llm.embed": "model.embed_tokens",
             "model.llm.norm": "model.norm",
             "model.llm.unembed": "lm_head",
+            "language_model.layers.": "model.layers.",
+            "language_model.lm_head.": "lm_head.",
         },
         orig_to_new_suffix={
             # NVFP4 scale
@@ -349,6 +352,13 @@ class _TmlForCausalLMBase(nn.Module, SupportsPP):
             ".w2_weight.scale2": ".w2_weight_scale_2",
         },
     )
+    packed_modules_mapping = {
+        "qkvr": ["wq_du", "wk_dv", "wv_dv", "wr_du"],
+        "w13": ["w1", "w3"],
+    }
+    embedding_modules = {
+        "lm_head": "output_embeddings",
+    }
 
     def _build(
         self,

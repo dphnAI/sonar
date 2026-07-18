@@ -358,7 +358,11 @@ def get_adapter_absolute_path(lora_path: str) -> str:
     return local_snapshot_path
 
 
-def process_packed_modules_mapping(model: nn.Module, force_2d_moe: bool = False) -> dict[str, list[str]]:
+def process_packed_modules_mapping(
+    model: nn.Module,
+    force_2d_moe: bool = False,
+    enable_moe_shared_loras: bool = False,
+) -> dict[str, list[str]]:
     if is_moe_model(model):
         # This method generates and returns a dictionary mapping packed module
         # names to lists of their corresponding submodule names. It includes
@@ -370,7 +374,13 @@ def process_packed_modules_mapping(model: nn.Module, force_2d_moe: bool = False)
         # the engine forces the universal 2D wrapper via
         # enable_mixed_moe_lora_format (so 3D models can also load 2D
         # adapters through FusedMoEWithLoRA).
-        if (not model.is_3d_moe_weight) or force_2d_moe:
+        if enable_moe_shared_loras:
+            packed_modules_mapping["experts"] = [
+                "experts.w1",
+                "experts.w2",
+                "experts.w3",
+            ]
+        elif (not model.is_3d_moe_weight) or force_2d_moe:
             # Filter out malformed entries: non-gated MoE has empty
             # ckpt_up_proj_name which results in weight_name containing ".."
             # (e.g., "experts.0.." instead of "experts.0.layer_name.")
