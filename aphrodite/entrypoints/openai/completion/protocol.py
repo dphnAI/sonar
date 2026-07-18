@@ -247,10 +247,12 @@ class CompletionRequest(OpenAIBaseModel):
         description="ECTransfer parameters used for encoder-cache disaggregated serving.",
     )
 
-    aphrodite_xargs: dict[str, str | int | float] | None = Field(
+    aphrodite_xargs: dict[str, str | int | float | list[str | int | float]] | None = Field(
         default=None,
         validation_alias=AliasChoices("aphrodite_xargs", "aphrodite_xargs"),
-        description=("Additional request parameters with string or numeric values, used by custom extensions."),
+        description=(
+            "Additional request parameters with (list of) string or numeric values, used by custom extensions."
+        ),
     )
 
     repetition_detection: RepetitionDetectionParams | None = Field(
