@@ -8,7 +8,10 @@ import torch
 
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import RoutedExperts
+from aphrodite.model_executor.layers.fused_moe import (
+    RoutedExperts,
+    UnquantizedFusedMoEMethod,
+)
 from aphrodite.model_executor.layers.linear import (
     LinearBase,
     LinearMethodBase,
@@ -111,7 +114,14 @@ class QuarkConfig(QuantizationConfig):
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> "QuantizeMethodBase | None":
         # Check if the layer is skipped for quantization.
         exclude_layers = cast(list[str], self.quant_config.get("exclude"))
-        if should_ignore_layer(prefix, ignore=exclude_layers, fused_mapping=self.packed_modules_mapping):
+        if should_ignore_layer(
+            prefix,
+            ignore=exclude_layers,
+            fused_mapping=self.packed_modules_mapping,
+            check_children=isinstance(layer, RoutedExperts),
+        ):
+            if isinstance(layer, RoutedExperts):
+                return UnquantizedFusedMoEMethod(layer.moe_config)
             if (
                 "self_attn" not in prefix  # only quantize attention projections
                 or not getattr(self, "dynamic_mxfp4_quant", False)
