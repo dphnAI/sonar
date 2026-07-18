@@ -22,6 +22,8 @@ ERROR_CASES = [
         {"modules_to_save": ["lm_head"]},
         "only supports modules_to_save being None",
     ),
+    ("test_rank_zero", {"r": 0}, "must be a positive integer"),
+    ("test_rank_negative", {"r": -8}, "must be a positive integer"),
 ]
 
 
@@ -93,3 +95,10 @@ def test_peft_helper_error(
     # Test loading the adapter
     with pytest.raises(ValueError, match=expected_error):
         PEFTHelper.from_local_dir(test_dir, max_position_embeddings=4096).validate_legal(lora_config)
+
+
+@pytest.mark.parametrize("bad_rank", [0, -1, -8])
+def test_peft_helper_invalid_rank_direct(bad_rank: int):
+    """Regression test for direct construction with a non-positive rank."""
+    with pytest.raises(ValueError, match="must be a positive integer"):
+        PEFTHelper(r=bad_rank, lora_alpha=16, target_modules=["q_proj"])
