@@ -67,9 +67,7 @@ def _dflash_layer_causal(config: Qwen3Config, layer_idx: int) -> bool:
 def dflash_has_any_non_causal(config: Qwen3Config) -> bool:
     """Whether the draft needs a non-causal-capable backend, resolved from config
     (config mirror of the model's ``get_draft_attn_causal``, usable pre-build)."""
-    return not all(
-        _dflash_layer_causal(config, i) for i in range(config.num_hidden_layers)
-    )
+    return not all(_dflash_layer_causal(config, i) for i in range(config.num_hidden_layers))
 
 
 def _resolve_layer_attention(config: Qwen3Config, layer_idx: int) -> tuple[int | None, bool]:
