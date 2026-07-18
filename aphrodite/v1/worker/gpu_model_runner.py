@@ -6517,11 +6517,17 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
 
         # Initialize drafter's cudagraph dispatcher if using spec decode.
         if self.speculative_config and (
-            self.speculative_config.use_eagle() or self.speculative_config.uses_extract_hidden_states()
+            self.speculative_config.use_eagle()
+            or self.speculative_config.uses_draft_model()
+            or self.speculative_config.uses_extract_hidden_states()
         ):
             assert isinstance(
                 self.drafter,
-                EagleProposer | DFlashProposer | ExtractHiddenStatesProposer | Gemma4Proposer,
+                EagleProposer
+                | DFlashProposer
+                | DraftModelProposer
+                | ExtractHiddenStatesProposer
+                | Gemma4Proposer,
             )
             self.drafter.initialize_cudagraph_keys(cudagraph_mode)
 
