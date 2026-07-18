@@ -113,9 +113,9 @@ class TrtLlmFp8ExpertsBase:
     @staticmethod
     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
         """Monolithic kernel so only use with naive DP/EP and TP."""
-        return (
-            not moe_parallel_config.use_all2all_kernels or moe_parallel_config.use_ag_rs_all2all_kernels
-        ) and not moe_parallel_config.enable_eplb
+        return (not moe_parallel_config.use_all2all_kernels or moe_parallel_config.use_ag_rs_all2all_kernels) and not (
+            moe_parallel_config.enable_eplb or moe_parallel_config.is_sequence_parallel
+        )
 
 
 class TrtLlmFp8ExpertsModular(TrtLlmFp8ExpertsBase, mk.FusedMoEExpertsModular):
