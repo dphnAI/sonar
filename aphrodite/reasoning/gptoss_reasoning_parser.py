@@ -69,6 +69,11 @@ class GptOssReasoningParser(ReasoningParser):
     is only used for detecting the end of the reasoning content.
     """
 
+    # The end-of-reasoning marker is a prefix/suffix pair with a variable-length
+    # gap between them (see is_reasoning_end), not a single fixed string, so it
+    # can't be expressed via reasoning_start_str/reasoning_end_str.
+    uses_reasoning_delimiter_strings: bool = False
+
     def __init__(self, tokenizer: PreTrainedTokenizerBase, *args, **kwargs):
         super().__init__(tokenizer, *args, **kwargs)
         # The model can output some special tokens between "final" and "<|message|>"

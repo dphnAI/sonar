@@ -33,6 +33,11 @@ class ReasoningParser:
 
     engine_based_streaming: bool = False
 
+    # Whether this parser's reasoning boundaries can be expressed as a single
+    # fixed `reasoning_start_str`/`reasoning_end_str` pair. Used to avoid
+    # spurious and confusing warning on startup.
+    uses_reasoning_delimiter_strings: bool = True
+
     def __init__(self, tokenizer: "TokenizerLike", *args, **kwargs):
         self.model_tokenizer = tokenizer
         # Optional Aphrodite ModelConfig from the server. Use get (not pop) so composite

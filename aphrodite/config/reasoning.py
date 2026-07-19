@@ -37,11 +37,22 @@ class ReasoningConfig:
     """Private field indicating whether reasoning token IDs have been initialized.
     Set to True by `initialize_token_ids` once token IDs are initialized."""
 
+    _uses_delimiter_strings: bool = field(default=True, init=False, repr=False)
+    """Private field mirroring the resolved reasoning parser's
+    `uses_reasoning_delimiter_strings`. Set by `initialize_token_ids`."""
+
     @property
     def enabled(self) -> bool:
         """Returns True if reasoning is enabled (i.e. if token IDs have been
         initialized), False otherwise."""
         return self._enabled
+
+    @property
+    def uses_reasoning_delimiter_strings(self) -> bool:
+        """Whether the configured reasoning parser expresses its boundaries
+        via a fixed `reasoning_start_str`/`reasoning_end_str` pair, and thus
+        will malfunction if they are not defined."""
+        return self._uses_delimiter_strings
 
     @property
     def reasoning_start_token_ids(self) -> list[int] | None:
@@ -67,6 +78,7 @@ class ReasoningConfig:
         if self.reasoning_parser is not None and (not reasoning_start_str or not reasoning_end_str):
             parser_cls = ReasoningParserManager.get_reasoning_parser(self.reasoning_parser)
             reasoning_parser = parser_cls(tokenizer)
+            self._uses_delimiter_strings = reasoning_parser.uses_reasoning_delimiter_strings
             start_token = reasoning_parser.reasoning_start_str
             if start_token and not reasoning_start_str:
                 reasoning_start_str = start_token

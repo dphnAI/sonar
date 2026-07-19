@@ -1424,7 +1424,7 @@ class AphroditeConfig:
 
         if self.reasoning_config is not None and self.model_config is not None:
             self.reasoning_config.initialize_token_ids(self.model_config)
-            if not self.reasoning_config.enabled:
+            if not self.reasoning_config.enabled and self.reasoning_config.uses_reasoning_delimiter_strings:
                 logger.warning_once(
                     "Auto-initialization of reasoning token IDs failed. "
                     "Please check whether your reasoning parser has implemented "
