@@ -46,7 +46,9 @@ def parser(mock_tokenizer):
 
 class TestNonStreaming:
     def test_no_tool_calls(self, parser, mock_request):
-        result = parser.extract_tool_calls("This is a regular response without any tool calls.", token_ids=None, request=mock_request)
+        result = parser.extract_tool_calls(
+            "This is a regular response without any tool calls.", token_ids=None, request=mock_request
+        )
         assert result.tools_called is False
         assert result.tool_calls == []
         assert result.content == ("This is a regular response without any tool calls.")

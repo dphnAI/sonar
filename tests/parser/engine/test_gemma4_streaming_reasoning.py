@@ -697,7 +697,9 @@ class TestNonStreamingToolCalls:
     """Non-streaming tool call extraction via extract_tool_calls()."""
 
     def test_no_tool_calls(self, tool_call_parser, mock_request):
-        result = tool_call_parser.extract_tool_calls("Hello, how can I help you today?", token_ids=None, request=mock_request)
+        result = tool_call_parser.extract_tool_calls(
+            "Hello, how can I help you today?", token_ids=None, request=mock_request
+        )
         assert result.tools_called is False
         assert result.tool_calls == []
         assert result.content == "Hello, how can I help you today?"

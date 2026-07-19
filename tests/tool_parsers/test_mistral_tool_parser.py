@@ -331,7 +331,9 @@ def test_extract_tool_calls_no_tools(parser_fixture, request):
 def test_extract_tool_calls_pre_v11_tokenizer(
     mistral_pre_v11_tool_parser, model_output, expected_tool_calls, expected_content
 ):
-    extracted_tool_calls = mistral_pre_v11_tool_parser.extract_tool_calls(model_output, token_ids=None, request=_DUMMY_REQUEST)
+    extracted_tool_calls = mistral_pre_v11_tool_parser.extract_tool_calls(
+        model_output, token_ids=None, request=_DUMMY_REQUEST
+    )
     assert extracted_tool_calls.tools_called
 
     assert_tool_calls(extracted_tool_calls.tool_calls, expected_tool_calls)
