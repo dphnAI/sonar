@@ -30,8 +30,8 @@ const SEED_OSS_CONFIG: QwenCoderConfig = QwenCoderConfig {
 /// Python `SeedOssParser(Qwen3Parser)` in `vllm/parser/seed_oss.py`.
 ///
 /// Structured-output tags are intentionally unsupported: the trait default
-/// `structural_tag_model() -> None` matches Python `SeedOssEngineToolParser`,
-/// which sets `structural_tag_model = None` (xgrammar has no Seed-OSS model).
+/// `structural_tag_builder() -> None` matches Python `SeedOssEngineToolParser`,
+/// which sets no structural tag model (xgrammar has no Seed-OSS model).
 ///
 /// The `<seed:tool_call>` wrapper tokens are added-vocabulary tokens
 /// (`special = false`), not tokenizer special tokens, so they survive decoding
