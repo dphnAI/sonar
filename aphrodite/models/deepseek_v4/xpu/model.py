@@ -8,7 +8,6 @@ import regex as re
 import torch
 import torch.nn as nn
 
-from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import (
     get_ep_group,
@@ -946,7 +945,6 @@ class DeepseekV4DecoderLayer(nn.Module):
         return x, residual, post_mix, res_mix
 
 
-@support_torch_compile
 class DeepseekV4Model(nn.Module, EagleModelMixin):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
