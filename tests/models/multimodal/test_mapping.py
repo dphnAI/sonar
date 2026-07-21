@@ -74,6 +74,39 @@ def test_cosmos3_new_checkpoint_weights_mapper():
     )
 
 
+def test_cosmos3_modelopt_quantizer_weights_mapper():
+    """Drop ModelOpt-native fake-quant buffers but keep FP8 scale sidecars."""
+    from aphrodite.model_executor.models.cosmos3 import Cosmos3ForConditionalGeneration
+
+    mapper = Cosmos3ForConditionalGeneration.hf_to_aphrodite_mapper
+
+    assert (
+        mapper.apply_list(
+            [
+                "layers.0.self_attn.to_q.input_quantizer._amax",
+                "layers.0.self_attn.to_q.weight_quantizer._amax",
+                "layers.0.self_attn.to_q.weight_quantizer._scale",
+                "layers.0.mlp.down_proj.output_quantizer._amax",
+            ]
+        )
+        == []
+    )
+
+    assert mapper.apply_list(
+        [
+            "layers.0.self_attn.to_q.weight",
+            "layers.0.self_attn.to_q.weight_scale",
+            "layers.0.self_attn.to_q.input_scale",
+            "layers.0.mlp.down_proj.input_scale",
+        ]
+    ) == [
+        "language_model.model.layers.0.self_attn.q_proj.weight",
+        "language_model.model.layers.0.self_attn.q_proj.weight_scale",
+        "language_model.model.layers.0.self_attn.q_proj.input_scale",
+        "language_model.model.layers.0.mlp.down_proj.input_scale",
+    ]
+
+
 def test_cosmos3_edge_checkpoint_weights_mapper():
     from aphrodite.model_executor.models.cosmos3_edge import (
         Cosmos3EdgeForConditionalGeneration,
