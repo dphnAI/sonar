@@ -286,12 +286,3 @@ class Glm4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP):
         skip_prefixes += [f"model.layers.{self.config.num_hidden_layers + i}." for i in range(num_nextn_layers)]
         loader = AutoWeightsLoader(self, skip_prefixes=skip_prefixes)
         return loader.load_weights(weights)
-
-
-def get_spec_layer_idx_from_weight_name(config: Glm4Config, weight_name: str) -> int | None:
-    if hasattr(config, "num_nextn_predict_layers") and (config.num_nextn_predict_layers > 0):
-        layer_idx = config.num_hidden_layers
-        for i in range(config.num_nextn_predict_layers):
-            if f"layers.{layer_idx + i}." in weight_name:
-                return layer_idx + i
-    return None

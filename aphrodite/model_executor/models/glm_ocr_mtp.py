@@ -41,13 +41,14 @@ from aphrodite.model_executor.model_loader.weight_utils import (
 from aphrodite.platforms import current_platform
 from aphrodite.sequence import IntermediateTensors
 
-from .glm4 import Glm4DecoderLayer, get_spec_layer_idx_from_weight_name
+from .glm4 import Glm4DecoderLayer
 from .glm4_moe_lite_mtp import (
     Glm4MoeLiteMultiTokenPredictor,
     SharedHead,
 )
 from .interfaces import SupportsPP
 from .utils import (
+    get_spec_layer_idx_from_weight_name,
     is_pp_missing_parameter,
     maybe_prefix,
 )

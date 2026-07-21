@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from transformers import PretrainedConfig
     from transformers.conversion_mapping import WeightRenaming
 
+    from aphrodite.config.model import ModelConfig
     from aphrodite.model_executor.layers.quantization import QuantizationConfig
 
 logger = init_logger(__name__)
@@ -418,6 +419,68 @@ class AutoWeightsLoader:
 
         autoloaded_weights = set(self._load_module("", self.module, weights))
         return autoloaded_weights
+
+
+def maybe_fuse_shared_experts(
+    weights: Iterable[tuple[str, torch.Tensor]],
+    *,
+    n_routed_experts: int,
+    n_shared_experts: int,
+    ckpt_prefix: str = "mlp.shared_experts",
+    enabled: bool | None = None,
+) -> Iterable[tuple[str, torch.Tensor]]:
+    """Route AITER fused-shared-expert checkpoint weights into fused slots."""
+    if enabled is None:
+        from aphrodite._aiter_ops import rocm_aiter_ops
+
+        enabled = rocm_aiter_ops.is_fusion_moe_shared_experts_enabled()
+    if not enabled:
+        yield from weights
+        return
+
+    prefix = f"{ckpt_prefix}."
+    for name, loaded_weight in weights:
+        if prefix not in name:
+            yield name, loaded_weight
+            continue
+        split_dim = 1 if ("down_proj.weight" in name and loaded_weight.ndim > 1) else 0
+        total = loaded_weight.shape[split_dim]
+        if total % n_shared_experts != 0:
+            raise ValueError(
+                f"FSE shared-expert weight {name!r} has size {total} along axis "
+                f"{split_dim}, not divisible by n_shared_experts={n_shared_experts}."
+            )
+        chunk = total // n_shared_experts
+        for j in range(n_shared_experts):
+            sl = slice(j * chunk, (j + 1) * chunk)
+            if loaded_weight.ndim == 1:
+                chunk_weight = loaded_weight[sl]
+            elif split_dim == 0:
+                chunk_weight = loaded_weight[sl, :]
+            else:
+                chunk_weight = loaded_weight[:, sl]
+            yield (
+                name.replace(prefix, f"mlp.experts.{n_routed_experts + j}."),
+                chunk_weight,
+            )
+
+
+def get_spec_layer_idx_from_weight_name(config: "ModelConfig", weight_name: str) -> int | None:
+    """Return the MTP layer index a weight belongs to, or None."""
+    if not (n := getattr(config, "num_nextn_predict_layers", 0)):
+        return None
+    base = config.num_hidden_layers
+    for i in range(n):
+        if weight_name.startswith((f"model.layers.{base + i}.", f"layers.{base + i}.")):
+            return base + i
+    return None
+
+
+def skip_spec_layers(
+    weights: Iterable[tuple[str, torch.Tensor]], config: "ModelConfig"
+) -> Iterable[tuple[str, torch.Tensor]]:
+    """Drop MTP spec-layer weights loaded by the MTP head, not the base model."""
+    return ((name, weight) for name, weight in weights if get_spec_layer_idx_from_weight_name(config, name) is None)
 
 
 def init_aphrodite_registered_model(
