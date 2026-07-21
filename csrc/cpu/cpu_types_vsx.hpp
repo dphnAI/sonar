@@ -337,13 +337,11 @@ struct FP32Vec8 : public Vec<FP32Vec8> {
     reg.val[1] = fp16_to_fp32_bits(raw_lo);
   }
   float reduce_sum() const {
-    AliasReg ar;
-    ar.reg = reg;
-    float result = 0;
-    unroll_loop<int, VEC_ELEM_NUM>(
-        [&result, &ar](int i) { result += ar.values[i]; });
-
-    return result;
+    // VSX horizontal reduction: 3 vector ops instead of 8 scalar adds.
+    __vector float s = vec_add(reg.val[0], reg.val[1]);
+    s = vec_add(s, vec_sld(s, s, 8));
+    s = vec_add(s, vec_sld(s, s, 4));
+    return vec_extract(s, 0);
   }
 
   FP32Vec8 exp() const {

@@ -4,8 +4,8 @@
 Dispatch module for Mamba selective state update (SSU) backends.
 
 Provides a unified `selective_state_update` function that dispatches to
-either the Triton or FlashInfer backend based on the configured
-`MambaBackendEnum`. Follows SGLang's dispatch pattern adapted for Aphrodite.
+the Triton, FlashInfer, or CPU backend based on the configured
+`MambaBackendEnum`. On CPU-only platforms the backend defaults to 'cpu'.
 """
 
 from abc import ABC, abstractmethod
@@ -182,9 +182,64 @@ class FlashInferSSUBackend(MambaSSUBackend):
         )
 
 
+class CPUSSUBackend(MambaSSUBackend):
+    """CPU SSU backend using the compiled C++ kernel."""
+
+    def __init__(self, mamba_config: MambaConfig):
+        super().__init__(mamba_config)
+        from aphrodite import _custom_ops as ops
+
+        self._cpp_kernel = ops.selective_state_update_cpu
+        logger.info("CPUSSUBackend: using compiled C++ selective_state_update kernel.")
+
+    @property
+    def name(self) -> str:
+        return "cpu"
+
+    def __call__(
+        self,
+        state: torch.Tensor,
+        x: torch.Tensor,
+        dt: torch.Tensor,
+        A: torch.Tensor,
+        B: torch.Tensor,
+        C: torch.Tensor,
+        D: torch.Tensor,
+        dt_bias: torch.Tensor,
+        z: torch.Tensor | None = None,
+        dt_softplus: bool = False,
+        state_batch_indices: torch.Tensor | None = None,
+        dst_state_batch_indices: torch.Tensor | None = None,
+        null_block_id: int = NULL_BLOCK_ID,
+        out: torch.Tensor | None = None,
+        num_accepted_tokens: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        is_blackwell: bool = False,
+    ) -> None:
+        self._cpp_kernel(
+            state,
+            x,
+            dt,
+            A,
+            B,
+            C,
+            D,
+            z,
+            dt_bias,
+            dt_softplus,
+            state_batch_indices,
+            dst_state_batch_indices,
+            null_block_id,
+            out,
+            num_accepted_tokens,
+            cu_seqlens,
+        )
+
+
 _BACKEND_REGISTRY: dict[MambaBackendEnum, type[MambaSSUBackend]] = {
     MambaBackendEnum.TRITON: TritonSSUBackend,
     MambaBackendEnum.FLASHINFER: FlashInferSSUBackend,
+    MambaBackendEnum.CPU: CPUSSUBackend,
 }
 
 _mamba_ssu_backend: MambaSSUBackend | None = None
@@ -209,6 +264,13 @@ def initialize_mamba_ssu_backend(
     global _mamba_ssu_backend
 
     backend = mamba_config.backend
+    if backend == MambaBackendEnum.TRITON:
+        from aphrodite.platforms import current_platform
+
+        if current_platform.is_cpu():
+            logger.info("CPU platform detected: overriding Mamba SSU backend from 'triton' to 'cpu'.")
+            backend = MambaBackendEnum.CPU
+
     if backend not in _BACKEND_REGISTRY:
         raise ValueError(f"Unknown Mamba SSU backend: {backend}. Valid options: {list(_BACKEND_REGISTRY.keys())}")
 
