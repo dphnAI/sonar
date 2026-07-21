@@ -12,7 +12,6 @@ from transformers import DeepseekV2Config, DeepseekV3Config
 
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
-from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.linear import ReplicatedLinear
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
@@ -35,8 +34,6 @@ from .utils import (
     maybe_prefix,
     process_eagle_weight,
 )
-
-logger = init_logger(__name__)
 
 
 class DeepseekV2Eagle3DecoderLayer(nn.Module):
