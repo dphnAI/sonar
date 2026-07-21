@@ -79,13 +79,23 @@ impl Cli {
 }
 
 /// Supported top-level CLI commands.
-#[derive(Debug, Subcommand, PartialEq, Eq)]
+#[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Run Aphrodite benchmarks.
+    #[command(subcommand)]
+    Bench(BenchCommand),
     /// Run the Rust OpenAI frontend as a Python-supervised worker.
     Frontend(FrontendArgs),
     /// Launch a managed Python headless engine, then run the Rust OpenAI
     /// frontend.
     Serve(ServeArgs),
+}
+
+/// Supported benchmark commands.
+#[derive(Debug, Subcommand)]
+pub enum BenchCommand {
+    /// Benchmark online serving throughput.
+    Serve(aphrodite_bench::BenchServeArgs),
 }
 
 /// A JSON-encoded list of strings, matching Python's `json.loads` CLI type for
