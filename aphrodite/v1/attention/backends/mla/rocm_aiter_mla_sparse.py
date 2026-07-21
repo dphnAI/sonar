@@ -357,6 +357,8 @@ class ROCMAiterMLASparseMetadataBuilder(AttentionMetadataBuilder[ROCMAiterMLASpa
         self.num_heads = self.model_config.get_num_attention_heads(parallel_config)
         self.mla_dims = get_mla_dims(self.model_config)
         self.topk_tokens = aphrodite_config.model_config.hf_config.index_topk
+        # Bounds the KV-split heuristic (see `_sparse_decode_max_split`).
+        self._num_compute_units = current_platform.num_compute_units()
         self.max_model_len_tensor = torch.tensor([self.model_config.max_model_len], device=device, dtype=torch.int32)
         # this is ignored by `flash_mla_with_kvcache` if indices not None
         self.dummy_block_table = torch.empty((1, 1), dtype=torch.int32, device=self.device)
@@ -432,6 +434,19 @@ class ROCMAiterMLASparseMetadataBuilder(AttentionMetadataBuilder[ROCMAiterMLASpa
         self._prev_indices_extent: int = 0
         self._prev_metadata_key: tuple | None = None
 
+    def _sparse_decode_max_split(self, max_seq_len: int) -> int:
+        """Cap ``max_split_per_batch`` for the aiter sparse-MLA decode reduce.
+
+        The reduce only covers the selected tokens per row (``<= topk_tokens``),
+        so aiter's default (``-1`` => split across every CU) over-fragments it.
+        Mirror ``triton_mla.py``: aim for a minimum work per split, round to a
+        power of two, and cap by the CU count. Numerics are unchanged.
+        """
+        effective_len = min(max_seq_len, self.topk_tokens)
+        min_work_per_split = 128
+        ideal_splits = triton.next_power_of_2(max(1, effective_len // min_work_per_split))
+        return min(ideal_splits, self._num_compute_units)
+
     def build(
         self,
         common_prefix_len: int,
@@ -504,6 +519,7 @@ class ROCMAiterMLASparseMetadataBuilder(AttentionMetadataBuilder[ROCMAiterMLASpa
         if metadata_key != self._prev_metadata_key:
             from aiter import get_mla_metadata_v1
 
+            max_split_per_batch = self._sparse_decode_max_split(int(common_attn_metadata.max_seq_len))
             get_mla_metadata_v1(
                 qo_indptr,
                 paged_kv_indptr,
@@ -522,6 +538,7 @@ class ROCMAiterMLASparseMetadataBuilder(AttentionMetadataBuilder[ROCMAiterMLASpa
                 max_seqlen_qo=1,
                 uni_seqlen_qo=1,
                 fast_mode=True,
+                max_split_per_batch=max_split_per_batch,
             )
             # The persistent metadata buffers are read by graph replay. Order
             # the async metadata write before the graph-captured decode kernel.
