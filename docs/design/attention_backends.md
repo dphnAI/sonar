@@ -192,7 +192,7 @@ configuration.
 
 | Backend | Description | Compute Cap. | Enable | Disable | Notes |
 | ------- | ----------- | ------------ | ------ | ------- | ----- |
-| FLASH_ATTN | FlashAttention varlen (FA2/FA3/FA4) | Any | Default fallback | Use other backends | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) (FA2/FA3/FA4) or (qk_nope_head_dim=192, qk_rope_head_dim=64, v_head_dim=256) (FA2/FA3 only) |
+| FLASH_ATTN | FlashAttention varlen (FA2/FA3/FA4) | Any | Default fallback | Use other backends | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) (FA2/FA3/FA4) or (qk_nope_head_dim=64, qk_rope_head_dim=64, v_head_dim=128) (FA2/FA3/FA4) or (qk_nope_head_dim=192, qk_rope_head_dim=64, v_head_dim=256) (FA2/FA3 only) |
 | FLASHINFER | FlashInfer CUTLASS backend | 10.x | Auto-selected when valid | Select another backend | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) only |
 | TRTLLM_RAGGED | TensorRT-LLM ragged attention | 10.x | Default on SM100 when valid | Select another backend | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) or (qk_nope_head_dim=192, qk_rope_head_dim=64, v_head_dim=256) only |
 | TOKENSPEED_MLA | TokenSpeed CuTe DSL backend | 10.x | Auto-selected when valid | Select another backend | (qk_nope_head_dim=128, qk_rope_head_dim=64, v_head_dim=128) only |
