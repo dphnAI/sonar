@@ -9,7 +9,7 @@ import msgspec
 from aphrodite.config import ModelConfig, PoolerConfig
 from aphrodite.logger import init_logger
 from aphrodite.sampling_params import RequestOutputKind
-from aphrodite.tasks import PoolingTask
+from aphrodite.tasks import PoolingTask, check_removed_pooling_task
 
 logger = init_logger(__name__)
 
@@ -227,5 +227,6 @@ class PoolingParams(
         )
 
     def __post_init__(self) -> None:
+        check_removed_pooling_task(self.task)
         if self.output_kind != RequestOutputKind.FINAL_ONLY:
             raise ValueError(f"For pooling output_kind has to be FINAL_ONLY, got {self.output_kind!r}")
