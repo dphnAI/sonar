@@ -47,7 +47,6 @@ from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.sequence import IntermediateTensors
 
 from ..configs import InklingMMConfig, InklingModelConfig
-from ..nvfp4 import InklingNvfp4Config
 from .attention import InklingAttention, compute_log_scaling_tau
 from .layernorm import InklingRMSNorm
 from .logits_processor import InklingLogitsProcessor
@@ -119,7 +118,6 @@ class InklingDecoderLayer(nn.Module):
         is_local: bool,
         quant_config: QuantizationConfig | None,
         prefix: str,
-        nvfp4_config: InklingNvfp4Config | None = None,
         force_dense_mlp: bool = False,
     ) -> None:
         super().__init__()
@@ -156,14 +154,10 @@ class InklingDecoderLayer(nn.Module):
                 prefix=f"{prefix}.mlp",
             )
         else:
-            # InklingMoE decides per layer (from the checkpoint exclude list)
-            # whether the routed experts are NVFP4 or bf16; the shared sink
-            # experts are always bf16.
             self.mlp = InklingMoE(
                 config,
-                layer_id,
                 prefix=f"{prefix}.mlp",
-                nvfp4_config=nvfp4_config,
+                quant_config=quant_config,
             )
 
         # Short convolution on the attention-output and MLP-output residual
@@ -233,7 +227,6 @@ class InklingModel(nn.Module):
         config: InklingModelConfig,
         quant_config: QuantizationConfig | None,
         prefix: str,
-        nvfp4_config: InklingNvfp4Config | None = None,
     ) -> None:
         super().__init__()
         self.config = config
@@ -243,7 +236,7 @@ class InklingModel(nn.Module):
 
         def get_layer(prefix: str) -> InklingDecoderLayer:
             idx = _layer_id(prefix + ".") or int(prefix.split(".")[-1])
-            return InklingDecoderLayer(config, idx, idx in local_ids, quant_config, prefix, nvfp4_config)
+            return InklingDecoderLayer(config, idx, idx in local_ids, quant_config, prefix)
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers, get_layer, prefix=f"{prefix}.layers"
@@ -324,7 +317,7 @@ class InklingModel(nn.Module):
 class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
     """Shared text-backbone causal-LM scaffolding for both entry classes."""
 
-    hf_to_vllm_mapper = WeightsMapper(
+    hf_to_aphrodite_mapper = WeightsMapper(
         orig_to_new_substr={
             ".w13_dn": ".gate_up_proj",
             ".w2_md": ".down_proj",
@@ -352,6 +345,7 @@ class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
             ".w2_weight.scale2": ".w2_weight_scale_2",
         },
     )
+    hf_to_vllm_mapper = hf_to_aphrodite_mapper
     packed_modules_mapping = {
         "qkvr": ["wq_du", "wk_dv", "wv_dv", "wr_du"],
         "w13": ["w1", "w3"],
@@ -368,9 +362,6 @@ class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
     ) -> None:
         quant_config = vllm_config.quant_config
         self.config = text_config
-        # NVFP4 experts are detected directly from the checkpoint quant config;
-        # only the MoE experts are quantized (attention/dense MLP stay bf16).
-        self.nvfp4_config = InklingNvfp4Config.from_hf_config(vllm_config.model_config.hf_config)
         # Read by the MRV2 runner to publish per-request short-conv metadata.
         # Short convolution is intrinsic to Inkling, so this is always set.
         self.uses_sconv = True
@@ -378,7 +369,6 @@ class _TmlForCausalLMBase(nn.Module, SupportsPP, SupportsLoRA):
             config=text_config,
             quant_config=quant_config,
             prefix=maybe_prefix(prefix, "model"),
-            nvfp4_config=self.nvfp4_config,
         )
         initialize_lamport_rs_conv(
             text_config.hidden_size,
@@ -450,12 +440,13 @@ class InklingForConditionalGeneration(_TmlForCausalLMBase, SupportsMultiModal):
     class only adds multimodal embedding + merge.
     """
 
-    hf_to_vllm_mapper = _TmlForCausalLMBase.hf_to_vllm_mapper | WeightsMapper(
+    hf_to_aphrodite_mapper = _TmlForCausalLMBase.hf_to_aphrodite_mapper | WeightsMapper(
         orig_to_new_prefix={
             "model.audio.": "audio.",
             "model.visual.": "visual.vision_encoder.",
         },
     )
+    hf_to_vllm_mapper = hf_to_aphrodite_mapper
 
     @classmethod
     def get_placeholder_str(cls, modality: str, i: int) -> str | None:
@@ -597,7 +588,7 @@ def _load_inkling_weights(
     local_ids = set(config.local_layer_ids)
 
     def _iter_loadable_weights() -> Iterable[tuple[str, torch.Tensor]]:
-        for name, weight in module.hf_to_vllm_mapper.apply(weights):
+        for name, weight in module.hf_to_aphrodite_mapper.apply(weights):
             shard_id = getattr(weight, "shard_id", None)
             # Replicate K/V conv-free GQA heads when tp_size > num_kv_heads.
             if shard_id in (1, 2) and name.endswith(".attn.qkvr.weight") and weight.shape[0] > 0:

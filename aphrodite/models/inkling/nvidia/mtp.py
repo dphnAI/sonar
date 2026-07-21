@@ -25,7 +25,7 @@ from .model import InklingDecoderLayer, InklingReplicatedEmbedding
 from .ops.norm import embed_dual_rmsnorm_cat, embed_rmsnorm
 
 # Checkpoint attention projections (wq_du/wk_dv/wv_dv/wr_du) -> fused qkvr.
-# Mirrors the backbone's hf_to_vllm_mapper.orig_to_new_stacked; kept as a
+# Mirrors the backbone's hf_to_aphrodite_mapper.orig_to_new_stacked; kept as a
 # local (pname, wname, shard) list since the MTP loader remaps by hand.
 _ATTENTION_PARAMS_MAPPING = [
     ("qkvr", "wq_du", 0),
@@ -62,7 +62,6 @@ class InklingMTPDepthLayer(nn.Module):
             is_local=is_local,
             quant_config=None,
             prefix=f"{prefix}.transformer_block",
-            nvfp4_config=None,
             force_dense_mlp=True,
         )
 
