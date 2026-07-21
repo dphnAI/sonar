@@ -178,6 +178,13 @@ def test_models(
 
                 prompt_embeds.append(embed.squeeze(0))
 
+    aphrodite_kwargs = {}
+    if model == "bigscience/bloom-560m" and current_platform.is_device_capability_family(90):
+        # On SM90, the metadata builder otherwise selects FA3 AOT scheduling
+        # before Bloom's ALiBi layers fall back to FA2. Pinning FA2 keeps the
+        # builder and layer consistent and preserves the L4 test path.
+        aphrodite_kwargs["attention_config"] = {"flash_attn_version": 2}
+
     with aphrodite_runner(
         model,
         tokenizer_name=model_info.tokenizer or model,
@@ -190,6 +197,7 @@ def test_models(
         max_num_seqs=1 if current_platform.is_rocm() else 2,
         enable_prompt_embeds=use_prompt_embeds,
         compilation_config={"cudagraph_capture_sizes": [1, 2]},
+        **aphrodite_kwargs,
     ) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
         if prompt_embeds is not None:

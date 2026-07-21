@@ -349,7 +349,14 @@ def test_fp32_cache_state(
     with hf_runner(model) as hf_model:
         hf_outputs = hf_model.generate_greedy_logprobs_limit(example_prompts, max_tokens, num_logprobs)
 
-    with aphrodite_runner(model, max_num_seqs=MAX_NUM_SEQS, **{cache_dtype_param: "float32"}) as aphrodite_model:
+    # Leave enough headroom for repeated engine initialization on a
+    # 32.5 GiB MIG.
+    with aphrodite_runner(
+        model,
+        max_num_seqs=MAX_NUM_SEQS,
+        gpu_memory_utilization=0.9,
+        **{cache_dtype_param: "float32"},
+    ) as aphrodite_model:
         aphrodite_outputs = aphrodite_model.generate_greedy_logprobs(example_prompts, max_tokens, num_logprobs)
 
     check_logprobs_close(
