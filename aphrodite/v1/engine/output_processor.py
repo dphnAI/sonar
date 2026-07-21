@@ -166,6 +166,7 @@ class RequestState:
         self.is_prefilling = True
         self.queue = queue
         self.num_cached_tokens = 0
+        self.num_cache_creation_tokens = 0
 
         self.stats = RequestStateStats(arrival_time=arrival_time) if log_stats else None
 
@@ -358,6 +359,7 @@ class RequestState:
             kv_transfer_params=kv_transfer_params,
             ec_transfer_params=ec_transfer_params,
             num_cached_tokens=self.num_cached_tokens,
+            num_cache_creation_tokens=self.num_cache_creation_tokens,
             metrics=self.stats,
         )
 
@@ -612,6 +614,7 @@ class OutputProcessor:
             if req_state.is_prefilling:
                 if engine_core_output.prefill_stats is not None:
                     req_state.num_cached_tokens = engine_core_output.prefill_stats.num_cached_tokens
+                    req_state.num_cache_creation_tokens = engine_core_output.prefill_stats.num_cache_creation_tokens
                 req_state.is_prefilling = False
 
             if pooling_output is None:
