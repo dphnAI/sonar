@@ -10,6 +10,14 @@ from aphrodite import _custom_ops as ops
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import get_dcp_group, get_pcp_group
 from aphrodite.logger import init_logger
+from aphrodite.model_executor.warmup.jit_warmup import (
+    AphroditeJitKernel,
+    WarmupIntRange,
+)
+from aphrodite.model_executor.warmup.jit_warmup_triton_helper import (
+    TritonPointerInputVariant,
+    TritonWarmupTensor,
+)
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import tl, triton
 from aphrodite.utils.deep_gemm import (
@@ -192,6 +200,132 @@ class DeepseekV32IndexerPrefillChunkMetadata:
     local_cu_seq_lens: torch.Tensor | None = None
     local_total_seq_lens: int = 0
     max_local_total_seq_lens: int = 0
+
+
+_BUILD_PREFILL_CHUNK_METADATA_INPUT_VARIANTS = (
+    TritonPointerInputVariant.from_alignment(uncompressed_seq_lens=True),
+    TritonPointerInputVariant.from_alignment(uncompressed_seq_lens=False),
+)
+
+
+class BuildPrefillChunkMetadataKernel(AphroditeJitKernel["BuildPrefillChunkMetadataKernel.CompileKey"]):
+    BLOCK_SIZE = 1024
+
+    @dataclass(frozen=True)
+    class CompileKey:
+        query_slice_start: int
+        query_slice_stop: int
+        DCP_RANK: int
+        DCP_WORLD: int
+        DCP_INTERLEAVE: int
+        BLOCK_SIZE: int
+        COMPRESS_RATIO: int
+        input_variant: TritonPointerInputVariant
+
+    def dispatch(  # type: ignore[override]
+        self,
+        *,
+        query_slice_start: int,
+        query_slice_stop: int,
+        DCP_RANK: int,
+        DCP_WORLD: int,
+        DCP_INTERLEAVE: int,
+        BLOCK_SIZE: int,
+        COMPRESS_RATIO: int,
+        input_variant: TritonPointerInputVariant,
+    ) -> CompileKey:
+        return self.CompileKey(
+            query_slice_start=query_slice_start,
+            query_slice_stop=query_slice_stop,
+            DCP_RANK=DCP_RANK,
+            DCP_WORLD=DCP_WORLD,
+            DCP_INTERLEAVE=DCP_INTERLEAVE,
+            BLOCK_SIZE=BLOCK_SIZE,
+            COMPRESS_RATIO=COMPRESS_RATIO,
+            input_variant=input_variant,
+        )
+
+    def get_warmup_keys(self, aphrodite_config: AphroditeConfig) -> list[CompileKey]:
+        max_tokens = max(
+            1,
+            min(aphrodite_config.scheduler_config.max_num_batched_tokens, 8),
+        )
+        hf_config = aphrodite_config.model_config.hf_config
+        parallel_config = aphrodite_config.parallel_config
+        dcp_world = parallel_config.decode_context_parallel_size
+        dcp_interleave = parallel_config.cp_kv_cache_interleave_size
+        dcp_rank = get_dcp_group().rank_in_group if dcp_world > 1 else 0
+        compress_ratios = tuple(int(ratio) for ratio in (getattr(hf_config, "compress_ratios", None) or (1,)))
+        return self._trace_dispatch(self.dispatch)(
+            query_slice_start=WarmupIntRange(0, 2),
+            query_slice_stop=(1, 2 * max_tokens - 1, 2 * max_tokens),
+            DCP_RANK=dcp_rank,
+            DCP_WORLD=dcp_world,
+            DCP_INTERLEAVE=dcp_interleave,
+            BLOCK_SIZE=self.BLOCK_SIZE,
+            COMPRESS_RATIO=list(compress_ratios),
+            input_variant=_BUILD_PREFILL_CHUNK_METADATA_INPUT_VARIANTS,
+        )
+
+    def compile(self, compile_key: CompileKey) -> None:
+        warmup = getattr(_build_prefill_chunk_metadata_kernel, "warmup", None)
+        assert warmup is not None
+        int32_ptr = TritonWarmupTensor(torch.int32)
+        warmup(
+            int32_ptr,
+            compile_key.input_variant.pointer("uncompressed_seq_lens", torch.int32),
+            int32_ptr,
+            int32_ptr,
+            int32_ptr,
+            int32_ptr,
+            int32_ptr,
+            compile_key.query_slice_start,
+            compile_key.query_slice_stop,
+            compile_key.DCP_RANK,
+            compile_key.DCP_WORLD,
+            compile_key.DCP_INTERLEAVE,
+            BLOCK_SIZE=compile_key.BLOCK_SIZE,
+            COMPRESS_RATIO=compile_key.COMPRESS_RATIO,
+            grid=(1,),
+        )
+
+    def __call__(
+        self,
+        query_start_loc: torch.Tensor,
+        uncompressed_seq_lens: torch.Tensor,
+        cu_seq_lens: torch.Tensor,
+        local_cu_seq_lens: torch.Tensor,
+        token_to_seq: torch.Tensor,
+        cu_seq_len_ks: torch.Tensor,
+        cu_seq_len_ke: torch.Tensor,
+        qs_start: int,
+        qs_stop: int,
+        dcp_rank: int,
+        dcp_world_size: int,
+        cp_kv_cache_interleave_size: int,
+        *,
+        compress_ratio: int,
+        num_reqs: int,
+    ) -> None:
+        _build_prefill_chunk_metadata_kernel[(num_reqs,)](
+            query_start_loc,
+            uncompressed_seq_lens,
+            cu_seq_lens,
+            local_cu_seq_lens,
+            token_to_seq,
+            cu_seq_len_ks,
+            cu_seq_len_ke,
+            qs_start,
+            qs_stop,
+            dcp_rank,
+            dcp_world_size,
+            cp_kv_cache_interleave_size,
+            BLOCK_SIZE=self.BLOCK_SIZE,
+            COMPRESS_RATIO=compress_ratio,
+        )
+
+
+_BUILD_PREFILL_CHUNK_METADATA_KERNEL = BuildPrefillChunkMetadataKernel()
 
 
 @dataclass
@@ -991,7 +1125,7 @@ def build_prefill_chunk_metadata(
 
     # Under DCP the kernel writes this rank's local row bounds into
     # cu_seq_len_ks/ke; otherwise local_cu_seq_lens aliases cu_seq_lens.
-    _build_prefill_chunk_metadata_kernel[(num_reqs,)](
+    _BUILD_PREFILL_CHUNK_METADATA_KERNEL(
         query_start_loc,
         uncompressed_seq_lens[start_idx:end_idx],
         cu_seq_lens,
@@ -1004,8 +1138,8 @@ def build_prefill_chunk_metadata(
         dcp_rank,
         dcp_world_size,
         cp_kv_cache_interleave_size,
-        BLOCK_SIZE=1024,
-        COMPRESS_RATIO=compress_ratio,
+        compress_ratio=compress_ratio,
+        num_reqs=num_reqs,
     )
 
     token_start = query_start_loc_cpu[start_idx].item()
