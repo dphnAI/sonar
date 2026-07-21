@@ -195,7 +195,9 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
 
         Returns True if all beams are exhausted and search should stop.
         """
-        all_beams: list[BeamSearchSequence] = list(sum((instance.beams for instance in instances_batch), []))
+        all_beams: list[BeamSearchSequence] = list(
+            itertools.chain.from_iterable(instance.beams for instance in instances_batch)
+        )
         pos = [0] + list(itertools.accumulate(len(instance.beams) for instance in instances_batch))
         instance_start_and_end: list[tuple[int, int]] = list(zip(pos[:-1], pos[1:]))
 
