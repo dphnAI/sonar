@@ -85,6 +85,12 @@ from .utils import (
 
 logger = init_logger(__name__)
 
+_GEMMA4_EXPERT_PARENT_MAPPER = WeightsMapper(
+    orig_to_new_regex={
+        re.compile(r"(?<!\.moe)\.experts$"): ".moe.experts",
+    }
+)
+
 
 def _remap_gemma4_expert_weight_name(name: str) -> str:
     return re.sub(r"(?<!\.moe)\.experts\.(\d+)\.", r".moe.experts.\1.", name)
@@ -1392,7 +1398,7 @@ class Gemma4Model(nn.Module, EagleModelMixin):
 
 
 class Gemma4ForCausalLM(nn.Module, SupportsLoRA, SupportsPP, MixtureOfExperts, SupportsEagle3):
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_aphrodite_mapper = _GEMMA4_EXPERT_PARENT_MAPPER | WeightsMapper(
         orig_to_new_prefix={
             # Gemma4ForConditionalGeneration already loads the text stack
             # from `model.language_model.*`. We reuse that same checkpoint
