@@ -40,7 +40,10 @@ from aphrodite.inputs import MultiModalDataDict
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.linear import ReplicatedLinear
-from aphrodite.model_executor.models.gemma4 import Gemma4ForCausalLM
+from aphrodite.model_executor.models.gemma4 import (
+    _GEMMA4_EXPERT_PARENT_MAPPER,
+    Gemma4ForCausalLM,
+)
 from aphrodite.model_executor.models.module_mapping import MultiModelKeys
 from aphrodite.model_executor.models.transformers.utils import recursive_replace_linear
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
@@ -946,7 +949,7 @@ class Gemma4ForConditionalGeneration(
     }
 
     # Maps checkpoint prefixes to Aphrodite module paths.
-    hf_to_aphrodite_mapper = WeightsMapper(
+    hf_to_aphrodite_mapper = _GEMMA4_EXPERT_PARENT_MAPPER | WeightsMapper(
         orig_to_new_prefix={
             # vision tower
             "model.vision_tower": "vision_tower",
@@ -958,7 +961,7 @@ class Gemma4ForConditionalGeneration(
             "model.language_model.": "language_model.model.",
             "lm_head.": "language_model.lm_head.",
             "model": "language_model.model",
-        }
+        },
     )
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
