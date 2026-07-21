@@ -8,7 +8,11 @@ and configurable secondary tiers (e.g., Storage, Network).
 
 Configuration via kv_connector_extra_config:
   - cpu_bytes_to_use: (required) Bytes to allocate for CPU primary tier
-  - block_size: (optional) Block size for offloaded blocks (default: GPU block size)
+  - block_size: (optional) Chunk size in tokens for offloaded blocks
+    (default: GPU block size). Mutually exclusive with blocks_per_chunk.
+  - blocks_per_chunk: (optional) Chunk size in GPU blocks (default: 1).
+    Must be greater than 0. Use this instead of block_size when KV cache
+    groups have different block sizes.
   - eviction_policy: (optional) Primary tier eviction policy: "lru" or
     "arc" (default: "lru")
   - secondary_tiers: (optional) List of secondary tier configurations
