@@ -129,7 +129,7 @@ def _topk_topp_kernel(
                 # Zeroth pass: Compute avg and std from a sample block
                 offs = tl.arange(0, BLOCK_SIZE)
                 mask_n = offs < VOCAB_SIZE
-                logits_blk0 = tl.load(LOGITS_ROW + offs, mask=mask_n, other=-float("inf"))
+                logits_blk0 = tl.load(LOGITS_ROW + offs, mask=mask_n, other=-float("inf")).to(tl.float32)
                 # Exclude -inf values (e.g. from grammar bitmasks) from
                 # statistics to avoid NaN in pivot computation.
                 finite_mask = (logits_blk0 > -float("inf")) & mask_n
@@ -156,7 +156,7 @@ def _topk_topp_kernel(
                 for i in range(0, NUM_TILES):
                     offs_n = i * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
                     mask_n = offs_n < VOCAB_SIZE
-                    logits_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf"))
+                    logits_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf")).to(tl.float32)
 
                     max_logit = tl.maximum(max_logit, tl.max(logits_blk))
                     # Exclude -inf from min to keep binary search bounds
@@ -209,7 +209,11 @@ def _topk_topp_kernel(
                         for i in range(0, search_iters):
                             offs_n = i * BLOCK_SIZE_TRUNC + tl.arange(0, BLOCK_SIZE_TRUNC)
                             mask_n_2 = offs_n < search_range
-                            logits_blk2 = tl.load(BUFFER_ROW + offs_n, mask=mask_n_2, other=-float("inf"))
+                            logits_blk2 = tl.load(
+                                BUFFER_ROW + offs_n,
+                                mask=mask_n_2,
+                                other=-float("inf"),
+                            ).to(tl.float32)
 
                             above_0 = logits_blk2 > k_pivot_0
                             above_1 = logits_blk2 > k_pivot_1
@@ -283,7 +287,11 @@ def _topk_topp_kernel(
                         for i in range(0, NUM_TILES):
                             offs_n = i * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
                             mask_n = offs_n < VOCAB_SIZE
-                            logits_blk2 = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf"))
+                            logits_blk2 = tl.load(
+                                LOGITS_ROW + offs_n,
+                                mask=mask_n,
+                                other=-float("inf"),
+                            ).to(tl.float32)
 
                             above_0 = logits_blk2 > k_pivot_0
                             above_1 = logits_blk2 > k_pivot_1
@@ -369,7 +377,7 @@ def _topk_topp_kernel(
                                     BUFFER_ROW + offs_n,
                                     mask=mask_n_2,
                                     other=-float("inf"),
-                                )
+                                ).to(tl.float32)
 
                                 outlier_mask = (probs_blk > min_logit) & mask_n_2
 
@@ -396,7 +404,7 @@ def _topk_topp_kernel(
                                     BUFFER_ROW + offs_n,
                                     mask=mask_n_2,
                                     other=-float("inf"),
-                                )
+                                ).to(tl.float32)
 
                                 probs_blk = probs_blk - max_logit
                                 probs_blk = tl.exp(probs_blk)
@@ -413,7 +421,7 @@ def _topk_topp_kernel(
                                     LOGITS_ROW + offs_n,
                                     mask=mask_n,
                                     other=-float("inf"),
-                                )
+                                ).to(tl.float32)
 
                                 outlier_mask = (probs_blk > min_logit) & mask_n
 
@@ -449,7 +457,7 @@ def _topk_topp_kernel(
                                 offs_n = i * BLOCK_SIZE_TRUNC + tl.arange(0, BLOCK_SIZE_TRUNC)
                                 mask_n_2 = offs_n < search_range
 
-                                probs_blk = tl.load(BUFFER_ROW + offs_n, mask=mask_n_2, other=0.0)
+                                probs_blk = tl.load(BUFFER_ROW + offs_n, mask=mask_n_2, other=0.0).to(tl.float32)
                                 probs_blk = probs_blk / sum_exp_logits
                                 tl.store(BUFFER_ROW + offs_n, probs_blk, mask=mask_n_2)
 
@@ -527,7 +535,7 @@ def _topk_topp_kernel(
                 # Zeroth pass: Compute avg and std from a sample block
                 offs = tl.arange(0, BLOCK_SIZE)
                 mask_n = offs < VOCAB_SIZE
-                logits_blk0 = tl.load(LOGITS_ROW + offs, mask=mask_n, other=-float("inf"))
+                logits_blk0 = tl.load(LOGITS_ROW + offs, mask=mask_n, other=-float("inf")).to(tl.float32)
                 # Exclude -inf values (e.g. from grammar bitmasks) from
                 # statistics to avoid NaN in pivot computation.
                 finite_mask = (logits_blk0 > -float("inf")) & mask_n
@@ -547,7 +555,7 @@ def _topk_topp_kernel(
                 for i in range(0, NUM_TILES):
                     offs_n = i * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
                     mask_n = offs_n < VOCAB_SIZE
-                    logits_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf"))
+                    logits_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf")).to(tl.float32)
                     max_logit = tl.maximum(max_logit, tl.max(logits_blk))
                     # Exclude -inf from min to keep binary search bounds
                     # finite (avoids NaN pivots).
@@ -577,7 +585,7 @@ def _topk_topp_kernel(
                     offs_n = i * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
                     mask_n = offs_n < VOCAB_SIZE
 
-                    probs_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf"))
+                    probs_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf")).to(tl.float32)
                     probs_blk = tl.exp(probs_blk - max_sample)
                     probs_blk = probs_blk / sum_exp_logits
 
@@ -660,7 +668,7 @@ def _topk_topp_kernel(
                         offs_n = i * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
                         mask_n = offs_n < VOCAB_SIZE
 
-                        probs_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf"))
+                        probs_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf")).to(tl.float32)
                         probs_blk = tl.exp(probs_blk - max_sample)
                         probs_blk = probs_blk / sum_exp_logits
                         tl.store(BUFFER_ROW + offs_n, probs_blk, mask=mask_n)
@@ -732,7 +740,7 @@ def _topk_topp_kernel(
             for i in range(0, NUM_TILES):
                 offs_n = i * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
                 mask_n = offs_n < VOCAB_SIZE
-                logits_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf"))
+                logits_blk = tl.load(LOGITS_ROW + offs_n, mask=mask_n, other=-float("inf")).to(tl.float32)
                 keep_mask = (logits_blk > final_pivot) & mask_n
 
                 # Duplicate logit handling
@@ -761,9 +769,9 @@ def apply_top_k_top_p_triton(
     to the remaining k values (by probability).
 
     Args:
-        logits: [batch_size, vocab_size] float32 tensor. The returned tensor
-            may alias this input or be a new contiguous tensor for unsupported
-            layouts.
+        logits: [batch_size, vocab_size] float32, bfloat16, or float16 tensor.
+            The returned tensor may alias this input or be a new contiguous
+            tensor for unsupported layouts.
         k: [batch_size] int32 tensor of top-k values per row, or None to disable top-k
         p: [batch_size] float32 tensor of top-p values per row (0 to 1),
             or None to disable top-p
@@ -773,7 +781,7 @@ def apply_top_k_top_p_triton(
         The masked logits tensor. It may or may not be modified in-place.
     """
     assert logits.ndim == 2
-    assert logits.dtype == torch.float32
+    assert logits.dtype in (torch.float32, torch.bfloat16, torch.float16)
     batch_size, vocab_size = logits.shape
     topk_enabled = k is not None
     topp_enabled = p is not None
@@ -806,7 +814,7 @@ def apply_top_k_top_p_triton(
     buffer = _TRITON_BUFFER_CACHE.get(buf_key)
     if buffer is None or buffer.shape[0] < NUM_PROGRAMS:
         size = min(next_power_of_2(NUM_PROGRAMS), num_sm)
-        buffer = logits.new_empty((size, vocab_size))
+        buffer = torch.empty((size, vocab_size), dtype=torch.float32, device=logits.device)
         _TRITON_BUFFER_CACHE[buf_key] = buffer
     if buffer.shape[0] > NUM_PROGRAMS:
         buffer = buffer[:NUM_PROGRAMS]
@@ -814,8 +822,8 @@ def apply_top_k_top_p_triton(
     # Cache lookup table entries on each device.
     tables = _TRITON_TABLE_CACHE.get(logits.device)
     if tables is None:
-        normal_cdf_to_sigma_table = logits.new_tensor(_NORMAL_CDF_TO_SIGMA_TABLE)
-        percentile_to_std_table = logits.new_tensor(_PERCENTILE_TO_STD_TABLE)
+        normal_cdf_to_sigma_table = torch.tensor(_NORMAL_CDF_TO_SIGMA_TABLE, dtype=torch.float32, device=logits.device)
+        percentile_to_std_table = torch.tensor(_PERCENTILE_TO_STD_TABLE, dtype=torch.float32, device=logits.device)
         _TRITON_TABLE_CACHE[logits.device] = (
             normal_cdf_to_sigma_table,
             percentile_to_std_table,
