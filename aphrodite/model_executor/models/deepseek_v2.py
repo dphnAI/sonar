@@ -33,6 +33,7 @@ from torch import nn
 from transformers import DeepseekV2Config, DeepseekV3Config
 
 import aphrodite._custom_ops as ops
+import aphrodite.envs as envs
 from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import AphroditeConfig, CacheConfig, ParallelConfig, get_current_aphrodite_config
@@ -56,6 +57,7 @@ from aphrodite.model_executor.layers.fused_moe import (
 from aphrodite.model_executor.layers.layernorm import LayerNorm, RMSNorm
 from aphrodite.model_executor.layers.linear import (
     ColumnParallelLinear,
+    DCPGroupColumnParallelLinear,
     MergedColumnParallelLinear,
     QKVParallelLinear,
     ReplicatedLinear,
@@ -962,6 +964,12 @@ class DeepseekV2MLAAttention(nn.Module):
         # Use input_size for projection input dimensions if provided,
         # otherwise default to hidden_size (used in Eagle3 Deepseek with MLA)
         proj_input_size = input_size if input_size is not None else self.hidden_size
+        qrep_enabled = (
+            envs.APHRODITE_DCP_Q_REPLICATE
+            and aphrodite_config.parallel_config.decode_context_parallel_size > 1
+            and aphrodite_config.parallel_config.prefill_context_parallel_size <= 1
+        )
+        q_proj_cls = DCPGroupColumnParallelLinear if qrep_enabled else ColumnParallelLinear
 
         if self.q_lora_rank is not None:
             self.fused_qkv_a_proj = DeepSeekV2FusedQkvAProjLinear(
@@ -981,7 +989,7 @@ class DeepseekV2MLAAttention(nn.Module):
 
         if self.q_lora_rank is not None:
             self.q_a_layernorm = RMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
-            self.q_b_proj = ColumnParallelLinear(
+            self.q_b_proj = q_proj_cls(
                 self.q_lora_rank,
                 self.num_heads * self.qk_head_dim,
                 bias=False,
@@ -989,7 +997,7 @@ class DeepseekV2MLAAttention(nn.Module):
                 prefix=f"{prefix}.q_b_proj",
             )
         else:
-            self.q_proj = ColumnParallelLinear(
+            self.q_proj = q_proj_cls(
                 proj_input_size,
                 self.num_heads * self.qk_head_dim,
                 bias=False,
