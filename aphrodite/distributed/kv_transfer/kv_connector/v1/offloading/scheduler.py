@@ -122,9 +122,7 @@ def is_store_reachable_swa_chunk(
     assert sliding_window_chunks is not None
     position_in_segment = absolute_chunk_index % alignment_chunk_count
     segment_start = absolute_chunk_index - position_in_segment
-    actual_segment_length = min(
-        alignment_chunk_count, storable_chunk_count - segment_start
-    )
+    actual_segment_length = min(alignment_chunk_count, storable_chunk_count - segment_start)
     reachable_tail = sliding_window_chunks + int(is_eagle_group)
     return position_in_segment >= actual_segment_length - reachable_tail
 
