@@ -8,7 +8,6 @@ from aphrodite.entrypoints.chat_utils import (
     parse_chat_messages,
     parse_chat_messages_async,
 )
-from aphrodite.logger import init_logger
 from aphrodite.tokenizers.deepseek_v32 import DeepseekV32Tokenizer
 from aphrodite.utils.async_utils import make_async
 
@@ -16,8 +15,6 @@ from .base import BaseRenderer
 from .inputs import DictPrompt
 from .inputs.preprocess import parse_dec_only_prompt
 from .params import ChatParams
-
-logger = init_logger(__name__)
 
 
 class DeepseekV32Renderer(BaseRenderer[DeepseekV32Tokenizer]):
