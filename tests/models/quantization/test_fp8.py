@@ -10,7 +10,9 @@ import pytest
 
 from tests.quantization.utils import is_quant_method_supported
 from aphrodite.platforms import current_platform
-from aphrodite.v1.attention.backends.fa_utils import get_flash_attn_version
+from aphrodite.v1.attention.backends.fa_utils import (
+    flash_attn_supports_kv_cache_dtype,
+)
 from ..utils import check_logprobs_close
 
 
@@ -70,10 +72,7 @@ def test_models(
     if kv_cache_dtype == "fp8_e5m2" and current_platform.is_cuda():
         pytest.skip(f"{kv_cache_dtype} is not supported by FLASH_ATTN on CUDA.")
 
-    if not (
-        current_platform.is_xpu()
-        or (get_flash_attn_version() == 3 and current_platform.is_device_capability_family(90))
-    ):
+    if not flash_attn_supports_kv_cache_dtype(kv_cache_dtype):
         pytest.skip(f"{kv_cache_dtype} is not supported on this GPU type with {backend} attention.")
 
     with monkeypatch.context() as m:
