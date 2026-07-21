@@ -3,6 +3,7 @@
 
 # Adapted from
 # https://github.com/lm-sys/FastChat/blob/168ccc29d3f7edc50823016105c024fe2282732a/fastchat/protocol/openai_api_protocol.py
+import json
 import time
 from http import HTTPStatus
 from typing import Any, ClassVar, Literal, TypeAlias
@@ -16,9 +17,11 @@ from pydantic import (
     model_validator,
 )
 
+from aphrodite.config.utils import replace
 from aphrodite.entrypoints.chat_utils import make_tool_call_id
 from aphrodite.exceptions import APHRODITEValidationError
 from aphrodite.logger import init_logger
+from aphrodite.sampling_params import StructuredOutputsParams
 from aphrodite.utils import random_uuid
 from aphrodite.utils.import_utils import resolve_obj_by_qualname
 
@@ -169,6 +172,37 @@ class ResponseFormat(OpenAIBaseModel):
 AnyResponseFormat: TypeAlias = ResponseFormat | StructuralTagResponseFormat | LegacyStructuralTagResponseFormat
 
 
+def structured_outputs_from_response_format(
+    structured_outputs: StructuredOutputsParams | None,
+    response_format: AnyResponseFormat | None,
+) -> StructuredOutputsParams | None:
+    """Apply ``response_format`` overrides to ``structured_outputs``."""
+    if response_format is None or response_format.type == "text":
+        return structured_outputs
+
+    overrides: dict[str, Any]
+    if response_format.type == "json_object":
+        overrides = {"json_object": True}
+    elif response_format.type == "json_schema":
+        json_schema = response_format.json_schema
+        assert json_schema is not None
+        overrides = {"json": json_schema.json_schema}
+    else:
+        assert isinstance(
+            response_format,
+            (
+                LegacyStructuralTagResponseFormat,
+                StructuralTagResponseFormat,
+            ),
+        )
+        overrides = {"structural_tag": json.dumps(response_format.model_dump(by_alias=True))}
+
+    if structured_outputs is None:
+        return StructuredOutputsParams(**overrides)
+
+    return replace(structured_outputs, **overrides)  # type: ignore[type-var]
+
+
 def validate_structural_tag_response_format(
     response_format: AnyStructuralTagResponseFormat | dict[str, Any],
 ) -> None:
@@ -177,8 +211,6 @@ def validate_structural_tag_response_format(
     Engine-side validation reports malformed structural tags as generation
     failures. OpenAI request parsing should classify them as bad requests.
     """
-    import json
-
     from pydantic import TypeAdapter, ValidationError
 
     if isinstance(response_format, dict):

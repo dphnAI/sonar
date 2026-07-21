@@ -11,15 +11,13 @@ from pydantic import AliasChoices, Field, model_validator
 
 import aphrodite.envs as envs
 from aphrodite.config import ModelConfig
-from aphrodite.config.utils import replace
 from aphrodite.entrypoints.openai.engine.protocol import (
     AnyResponseFormat,
-    LegacyStructuralTagResponseFormat,
     OpenAIBaseModel,
     PerRequestTimingMetrics,
     StreamOptions,
-    StructuralTagResponseFormat,
     UsageInfo,
+    structured_outputs_from_response_format,
     validate_structural_tag_response_format,
     validate_structured_outputs_structural_tag,
 )
@@ -319,6 +317,13 @@ class CompletionRequest(OpenAIBaseModel):
             include_stop_str_in_output=self.include_stop_str_in_output,
         )
 
+    def extract_structured_outputs(self) -> StructuredOutputsParams | None:
+        """Normalize request constraints into ``StructuredOutputsParams``."""
+        return structured_outputs_from_response_format(
+            self.structured_outputs,
+            self.response_format,
+        )
+
     def to_sampling_params(
         self,
         max_tokens: int,
@@ -358,38 +363,6 @@ class CompletionRequest(OpenAIBaseModel):
 
         echo_without_generation = self.echo and self.max_tokens == 0
 
-        response_format = self.response_format
-        if response_format is not None:
-            structured_outputs_kwargs = dict[str, Any]()
-
-            # Set structured output params for response format
-            if response_format.type == "json_object":
-                structured_outputs_kwargs["json_object"] = True
-            elif response_format.type == "json_schema":
-                json_schema = response_format.json_schema
-                assert json_schema is not None
-                structured_outputs_kwargs["json"] = json_schema.json_schema
-            elif response_format.type == "structural_tag":
-                structural_tag = response_format
-                assert isinstance(
-                    structural_tag,
-                    (
-                        LegacyStructuralTagResponseFormat,
-                        StructuralTagResponseFormat,
-                    ),
-                )
-                s_tag_obj = structural_tag.model_dump(by_alias=True)
-                structured_outputs_kwargs["structural_tag"] = json.dumps(s_tag_obj)
-
-            # If structured outputs wasn't already enabled,
-            # we must enable it for these features to work
-            if len(structured_outputs_kwargs) > 0:
-                self.structured_outputs = (
-                    StructuredOutputsParams(**structured_outputs_kwargs)
-                    if self.structured_outputs is None
-                    else replace(self.structured_outputs, **structured_outputs_kwargs)  # type: ignore[type-var]
-                )
-
         extra_args: dict[str, Any] = self.aphrodite_xargs if self.aphrodite_xargs else {}
         if self.kv_transfer_params:
             # Pass in kv_transfer_params via extra_args
@@ -419,7 +392,7 @@ class CompletionRequest(OpenAIBaseModel):
             spaces_between_special_tokens=self.spaces_between_special_tokens,
             include_stop_str_in_output=self.include_stop_str_in_output,
             output_kind=RequestOutputKind.DELTA if self.stream else RequestOutputKind.FINAL_ONLY,
-            structured_outputs=self.structured_outputs,
+            structured_outputs=self.extract_structured_outputs(),
             logit_bias=self.logit_bias,
             allowed_token_ids=self.allowed_token_ids,
             bad_words=self.bad_words,
