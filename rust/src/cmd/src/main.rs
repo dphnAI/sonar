@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use aphrodite_managed_engine::ManagedEngineHandle;
 
-use crate::cli::{Cli, Command};
+use crate::cli::{BenchCommand, Cli, Command};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -99,6 +99,10 @@ fn main() -> Result<()> {
 
 async fn async_main(cli: Cli) -> Result<()> {
     match cli.command {
+        Command::Bench(BenchCommand::Serve(bench_args)) => {
+            aphrodite_bench::prepare_process();
+            aphrodite_bench::run(bench_args).await
+        }
         Command::Frontend(args) => aphrodite_server::serve(args.into_config(), shutdown_signal()).await,
         Command::Serve(args) => {
             let handshake_port = args.managed_engine.resolve_handshake_port()?;

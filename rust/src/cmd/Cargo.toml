@@ -29,6 +29,7 @@ tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+aphrodite-bench.workspace = true
 aphrodite-chat.workspace = true
 aphrodite-engine-core-client.workspace = true
 aphrodite-managed-engine.workspace = true
