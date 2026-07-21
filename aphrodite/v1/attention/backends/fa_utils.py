@@ -258,6 +258,19 @@ def flash_attn_supports_quant_query_input() -> bool:
     return not current_platform.is_xpu()
 
 
+def flash_attn_supports_kv_cache_dtype(kv_cache_dtype: str) -> bool:
+    if kv_cache_dtype in ("auto", "float16", "bfloat16"):
+        return True
+    if kv_cache_dtype in ("fp8", "fp8_e4m3"):
+        if current_platform.is_xpu():
+            return True
+        fa_version = get_flash_attn_version()
+        return fa_version in (3, 4) and (
+            current_platform.is_device_capability_family(90) or current_platform.is_device_capability_family(100)
+        )
+    return False
+
+
 def flash_attn_supports_sinks() -> bool:
     if current_platform.is_xpu():
         return True

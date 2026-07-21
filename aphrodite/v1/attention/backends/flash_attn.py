@@ -22,6 +22,7 @@ from aphrodite.v1.attention.backend import (
     MultipleOf,
 )
 from aphrodite.v1.attention.backends.fa_utils import (
+    flash_attn_supports_kv_cache_dtype,
     flash_attn_supports_quant_query_input,
     get_flash_attn_version,
     is_fa_version_supported,
@@ -174,11 +175,7 @@ class FlashAttentionBackend(AttentionBackend):
     def supports_kv_cache_dtype(cls, kv_cache_dtype: CacheDType | None) -> bool:
         if kv_cache_dtype is None:
             return True
-        if kv_cache_dtype in ("fp8", "fp8_e4m3"):
-            if current_platform.is_xpu():
-                return True
-            return get_flash_attn_version() == 3 and current_platform.is_device_capability_family(90)
-        return kv_cache_dtype in ["auto", "float16", "bfloat16"]
+        return flash_attn_supports_kv_cache_dtype(kv_cache_dtype)
 
     @classmethod
     def supports_mm_prefix(cls) -> bool:
