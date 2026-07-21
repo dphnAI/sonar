@@ -14,6 +14,10 @@ from aphrodite.model_executor.layers.fused_moe.config import (
     get_routing_method_type,
 )
 from aphrodite.model_executor.layers.fused_moe.router.base_router import BaseRouter
+from aphrodite.model_executor.layers.fused_moe.router.dsv4_topk import (
+    can_use_dsv4_topk,
+    dsv4_topk,
+)
 
 
 def aphrodite_topk_softmax(
@@ -176,13 +180,29 @@ def fused_topk_bias(
     if not rocm_aiter_ops.is_fused_moe_enabled():
         assert hidden_states.size(0) == gating_output.size(0), "Number of tokens mismatch"
 
+        output_indices_dtype = torch.int32 if indices_type is None else indices_type
+        if scoring_func == "sqrtsoftplus" and can_use_dsv4_topk(
+            gating_output,
+            e_score_correction_bias,
+            topk,
+            renormalize,
+            output_indices_dtype,
+        ):
+            assert e_score_correction_bias is not None
+            return dsv4_topk(
+                gating_output,
+                e_score_correction_bias,
+                output_indices_dtype,
+                routed_scaling_factor,
+            )
+
         M, _ = hidden_states.size()
 
         topk_weights = torch.empty(M, topk, dtype=torch.float32, device=hidden_states.device)
         topk_ids = torch.empty(
             M,
             topk,
-            dtype=torch.int32 if indices_type is None else indices_type,
+            dtype=output_indices_dtype,
             device=hidden_states.device,
         )
         token_expert_indices = torch.empty(M, topk, dtype=torch.int32, device=hidden_states.device)
