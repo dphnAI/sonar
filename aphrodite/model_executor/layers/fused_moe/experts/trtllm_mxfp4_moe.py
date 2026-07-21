@@ -116,6 +116,9 @@ class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMon
     Wraps flashinfer.trtllm_fp4_block_scale_moe().
     """
 
+    def supports_routing_replay_capture(self) -> bool:
+        return True
+
     @staticmethod
     def _supports_parallel_config(
         moe_parallel_config: FusedMoEParallelConfig,
@@ -178,6 +181,10 @@ class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMon
             device=hidden_states.device,
         )
 
+        routing_replay_out = self._maybe_make_routing_replay_buffer(
+            num_tokens=hidden_states.shape[0],
+            device=hidden_states.device,
+        )
         trtllm_fp4_block_scale_moe(
             routing_logits=router_logits.to(torch.bfloat16),
             routing_bias=None,
@@ -207,7 +214,9 @@ class TrtLlmMxfp4ExpertsMonolithic(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsMon
             do_finalize=True,
             tune_max_num_tokens=max(self.max_capture_size, 1),
             output=output,
+            routing_replay_out=routing_replay_out,
         )
+        self._maybe_dispatch_routing_replay(routing_replay_out, num_tokens=hidden_states.shape[0])
 
         return output
 
