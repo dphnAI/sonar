@@ -34,6 +34,7 @@ from aphrodite.model_executor.models.kimi_k25_vit import (
     MoonViT3dPretrainedModel,
     vision_tower_forward,
 )
+from aphrodite.model_executor.models.vision import is_vit_use_data_parallel
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.inputs import (
     MultiModalFieldConfig,
@@ -329,8 +330,7 @@ class KimiK25ForConditionalGeneration(
         self.config = config
         quant_config = aphrodite_config.quant_config
 
-        # Check for MoonViT config compatibility
-        self.use_data_parallel = model_config.multimodal_config.mm_encoder_tp_mode == "data"
+        self.use_data_parallel = is_vit_use_data_parallel(config.vision_config.num_attention_heads)
         self.hidden_size = config.text_config.hidden_size
         self.device = current_platform.current_device()
         # Build vision tower directly with KimiK25VisionConfig
