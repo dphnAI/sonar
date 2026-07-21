@@ -281,6 +281,15 @@ class LinearBase(PluggableLayer):
         self.tp_size = get_tensor_model_parallel_world_size() if not disable_tp else 1
 
     def update_param_tp_status(self):
+        # Single source of truth for a parameter's TP state.
+        # BaseAphroditeParameter stamps self.tp_rank with the global rank in
+        # __init__; this reconciles every child parameter to the layer's
+        # tp_rank/tp_size, which correctly accounts for disable_tp.
+        #
+        # Must be re-run whenever parameters are (re-)created after
+        # construction, e.g. after quant_method.process_weights_after_loading()
+        # swaps in fresh Parameters. Otherwise a later load_weights()/weight
+        # refit would narrow a replicated weight at global_rank * shard_size.
         for param in self.parameters():
             if isinstance(param, BaseAphroditeParameter):
                 param.tp_rank = self.tp_rank
@@ -851,7 +860,6 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             shard_id=loaded_shard_id,
             shard_offset=shard_offset,
             shard_size=shard_size,
-            tp_rank=self.tp_rank,
         )
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> Iterable[str]:
@@ -1039,10 +1047,10 @@ class QKVParallelLinear(ColumnParallelLinear):
                 # to ensure that any subsequent reduction (like .max())
                 # works correctly while preserving the parameter shape.
                 for idx in range(param.data.shape[0]):
-                    param.load_qkv_weight(loaded_weight=loaded_weight, shard_id=idx, tp_rank=self.tp_rank)
+                    param.load_qkv_weight(loaded_weight=loaded_weight, shard_id=idx)
                 return
             elif type(param) in (RowAphroditeParameter, BaseAphroditeParameter):
-                param.load_qkv_weight(loaded_weight=loaded_weight, tp_rank=self.tp_rank)
+                param.load_qkv_weight(loaded_weight=loaded_weight)
                 return
             # TODO: @dsikka - move to parameter.py
             self._load_fused_module_from_checkpoint(param, loaded_weight)
@@ -1064,7 +1072,6 @@ class QKVParallelLinear(ColumnParallelLinear):
             shard_id=loaded_shard_id,
             shard_offset=shard_offset,
             shard_size=shard_size,
-            tp_rank=self.tp_rank,
         )
 
     def weight_loader(
@@ -1390,7 +1397,6 @@ class MinimaxM3QKVParallelLinearWithIndexer(QKVParallelLinear):
             shard_id=loaded_shard_id,
             shard_offset=shard_offset,
             shard_size=shard_size,
-            tp_rank=self.tp_rank,
         )
 
     def weight_loader(
