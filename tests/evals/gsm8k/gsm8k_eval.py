@@ -211,6 +211,7 @@ def evaluate_gsm8k(
     seed: int | None = 42,
     request_timeout_seconds: float = 600,
     gen_prefix: str = "",
+    max_concurrency: int | None = None,
 ) -> dict[str, float | int]:
     """
     Evaluate GSM8K accuracy using Aphrodite serve endpoint.
@@ -255,7 +256,8 @@ def evaluate_gsm8k(
             return answer, tokens
 
         timeout = aiohttp.ClientTimeout(total=request_timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        connector = aiohttp.TCPConnector(limit=max_concurrency) if max_concurrency is not None else None
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             tasks = [get_answer(session, i) for i in range(num_questions)]
             await tqdm.gather(*tasks, desc="Evaluating")
 
@@ -326,6 +328,11 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000, help="Port number")
     parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for generation")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument(
+        "--max-concurrency",
+        type=int,
+        help="Maximum number of concurrent requests",
+    )
     parser.add_argument("--save-results", type=str, help="Save results to JSON file")
 
     args = parser.parse_args()
@@ -338,6 +345,7 @@ def main() -> None:
         port=args.port,
         temperature=args.temperature,
         seed=args.seed,
+        max_concurrency=args.max_concurrency,
     )
 
     # Print results to terminal

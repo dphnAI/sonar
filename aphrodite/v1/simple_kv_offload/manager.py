@@ -82,8 +82,7 @@ class SimpleCPUOffloadScheduler:
             aphrodite_config.kv_events_config is not None and aphrodite_config.kv_events_config.enable_kv_cache_events
         )
         dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
-        pcp_world_size = aphrodite_config.parallel_config.prefill_context_parallel_size
-        self.cp_world_size = dcp_world_size * pcp_world_size
+        self.cp_world_size = dcp_world_size
         self.block_size = scheduler_block_size
         self.hash_block_size = hash_block_size
         assert self.block_size % self.hash_block_size == 0
@@ -121,7 +120,7 @@ class SimpleCPUOffloadScheduler:
             enable_caching=True,
             enable_kv_cache_events=self.enable_kv_cache_events,
             dcp_world_size=dcp_world_size,
-            pcp_world_size=pcp_world_size,
+            pcp_world_size=1,
             scheduler_block_size=self.block_size,
             hash_block_size=self.hash_block_size,
         )
@@ -331,8 +330,7 @@ class SimpleCPUOffloadScheduler:
         for g in range(num_groups):
             g_block_size = kv_cache_groups[g].kv_cache_spec.block_size * self.cp_world_size
             assert num_external_tokens % g_block_size == 0, (
-                f"num_external_tokens={num_external_tokens} not aligned to "
-                f"group {g} effective block_size={g_block_size}"
+                f"num_external_tokens={num_external_tokens} not aligned to group {g} block_size={g_block_size}"
             )
             n_take_g = num_external_tokens // g_block_size
             cpu_hit_blocks.append(cpu_hit_blocks_full[g][:n_take_g])

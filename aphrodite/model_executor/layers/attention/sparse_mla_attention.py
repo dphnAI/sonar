@@ -58,12 +58,11 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
             device=device,
         )
         parallel_config = aphrodite_config.parallel_config
+        self.use_pcp = parallel_config.prefill_context_parallel_size > 1
         try:
             self.dcp_world_size = get_dcp_group().world_size
-            self.dcp_rank = get_dcp_group().rank_in_group
         except AssertionError:
             self.dcp_world_size = 1
-            self.dcp_rank = 0
         self.cp_kv_cache_interleave_size = parallel_config.cp_kv_cache_interleave_size
         self.dcp_local_block_size = self.cp_kv_cache_interleave_size
         self.dcp_virtual_block_size = self.dcp_local_block_size * self.dcp_world_size
@@ -154,6 +153,7 @@ class SparseMLACommonMetadataBuilder(AttentionMetadataBuilder[T]):
             common_attn_metadata,
             decode_threshold=self.reorder_batch_threshold or 1,
             require_uniform=self.require_uniform_decodes,
+            treat_short_extends_as_decodes=not self.use_pcp,
         )
         prefill_query_start_loc, prefill_max_query_len, prefill_query_lens_cpu = self._build_prefill_fields(
             common_attn_metadata, num_decodes, num_prefills

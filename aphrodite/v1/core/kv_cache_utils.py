@@ -601,8 +601,8 @@ def resolve_kv_cache_block_sizes(
 
     - ``scheduler_block_size`` is the token-alignment invariant used by the
       scheduler (e.g. for ``num_computed_tokens`` rounding). Single group:
-      ``cache_config.block_size * dcp * pcp``. Multiple groups: LCM of every
-      group's block size — context parallelism is not supported here.
+      ``cache_config.block_size * dcp``. Multiple groups: LCM of every
+      group's block size; DCP is not supported here.
     - ``hash_block_size`` is the granularity at which ``Request.block_hashes``
       is computed. Single group: equals scheduler block size. Multiple groups:
       ``cache_config.prefix_match_unit`` override if set, else the GCD of group
@@ -613,17 +613,16 @@ def resolve_kv_cache_block_sizes(
     """
     cache_config = aphrodite_config.cache_config
     dcp = aphrodite_config.parallel_config.decode_context_parallel_size
-    pcp = aphrodite_config.parallel_config.prefill_context_parallel_size
     groups = kv_cache_config.kv_cache_groups
 
-    if len(groups) <= 1:  # Single group: block_size * dcp * pcp
-        bs = cache_config.block_size * dcp * pcp
+    if len(groups) <= 1:
+        bs = cache_config.block_size * dcp
         return bs, bs
 
-    if dcp != 1 or pcp != 1:
+    if dcp != 1:
         raise ValueError(
             "Hybrid KV cache groups with multiple block sizes do not "
-            "support context parallelism (dcp_world_size/pcp_world_size > 1)."
+            "support decode context parallelism (dcp_world_size > 1)."
         )
 
     group_block_sizes = [g.kv_cache_spec.block_size for g in groups]
