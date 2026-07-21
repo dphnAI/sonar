@@ -3,9 +3,12 @@
 
 from typing import Any, Literal, get_args
 
+from pydantic import model_validator
+from pydantic_core import ArgsKwargs
+
 from aphrodite.config.utils import config
 from aphrodite.logger import init_logger
-from aphrodite.tasks import PoolingTask
+from aphrodite.tasks import PoolingTask, check_removed_pooling_task
 from aphrodite.utils.hashing import safe_hash
 
 logger = init_logger(__name__)
@@ -111,6 +114,17 @@ class PoolerConfig:
     such as the token IDs of `good_token` and `bad_token` in the
     `math-shepherd-mistral-7b-prm` model.
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_removed_parameters(cls, data):
+        values = data.kwargs if isinstance(data, ArgsKwargs) else data
+        if not isinstance(values, dict):
+            return data
+        if "normalize" in values:
+            raise ValueError("Parameter `normalize` was removed; use `use_activation` instead.")
+        check_removed_pooling_task(values.get("task"))
+        return data
 
     def __post_init__(self) -> None:
         if self.logit_sigma is not None and self.logit_sigma == 0:

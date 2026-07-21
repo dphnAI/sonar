@@ -14,8 +14,21 @@ from aphrodite.entrypoints.chat_utils import (
 from aphrodite.entrypoints.openai.engine.protocol import OpenAIBaseModel
 from aphrodite.exceptions import APHRODITEValidationError
 from aphrodite.renderers import ChatParams, TokenizeParams, merge_kwargs
+from aphrodite.tasks import check_removed_pooling_task
 from aphrodite.utils import random_uuid
 from aphrodite.utils.serial_utils import EmbedDType, EncodingFormat, Endianness
+
+
+def reject_removed_pooling_parameters(data):
+    if not isinstance(data, dict):
+        return data
+    if "normalize" in data:
+        raise APHRODITEValidationError(
+            "Parameter `normalize` was removed; use `use_activation` instead.",
+            parameter="normalize",
+        )
+    check_removed_pooling_task(data.get("task"))
+    return data
 
 
 class PoolingBasicRequestMixin(OpenAIBaseModel):
