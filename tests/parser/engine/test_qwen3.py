@@ -309,7 +309,11 @@ class TestStreaming:
         parsed = json.loads(args_text)
         assert parsed == {"city": "Tokyo", "unit": "celsius"}
 
-    def test_streaming_args_arrive_incrementally(self, parser, mock_request):
+    def test_streaming_args_arrive_incrementally(
+        self,
+        parser: ParserEngine,
+        mock_request: MagicMock,
+    ) -> None:
         """Arguments must stream as intermediate deltas, not batch at
         tool-end."""
         chunks = [
@@ -336,7 +340,11 @@ class TestStreaming:
         parsed = json.loads(concatenated)
         assert parsed == {"city": "Tokyo", "unit": "celsius", "days": "5"}
 
-    def test_streaming_long_string_arg_before_parameter_end(self, parser, mock_request):
+    def test_streaming_long_string_arg_before_parameter_end(
+        self,
+        parser: ParserEngine,
+        mock_request: MagicMock,
+    ) -> None:
         """Long string arguments should stream before the closing parameter tag."""
         chunks = [
             "<tool_call>\n",
@@ -443,10 +451,10 @@ class TestStreaming:
 
         args_after_partial_tag = collect_tool_arguments(results[:4])
         assert "<param" not in args_after_partial_tag
-        assert args_after_partial_tag == '{"query": "hello'
+        assert args_after_partial_tag == '{"query": "hello '
 
         args_text = collect_tool_arguments(results)
-        assert json.loads(args_text) == {"query": "hello", "limit": "10"}
+        assert json.loads(args_text) == {"query": "hello ", "limit": "10"}
 
     def test_streaming_numeric_values(self, parser, mock_request):
         chunks = [

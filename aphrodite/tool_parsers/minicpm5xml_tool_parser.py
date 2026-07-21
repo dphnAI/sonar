@@ -341,7 +341,7 @@ def _parse_function_block(
                 if not key:
                     has_invalid_param = True
                     break
-                val_text = (param.text or "").strip()
+                val_text = param.text or ""
                 if not _add_argument(
                     func_name or "",
                     key,
@@ -373,7 +373,8 @@ def _parse_function_block(
                 val_text = pm.group(2) or ""
                 if val_text.startswith("<![CDATA[") and val_text.endswith("]]>"):
                     val_text = val_text[len("<![CDATA[") : -len("]]>")]
-                val_text = val_text.strip()
+                else:
+                    val_text = val_text.strip()
                 if not _add_argument(
                     func_name or "",
                     key,
@@ -426,7 +427,8 @@ def _parse_partial_params(
         val_text = pm.group(2) or ""
         if val_text.startswith("<![CDATA[") and val_text.endswith("]]>"):
             val_text = val_text[len("<![CDATA[") : -len("]]>")]
-        val_text = val_text.strip()
+        else:
+            val_text = val_text.strip()
         _add_argument(
             func_name,
             key,
@@ -456,8 +458,8 @@ class MiniCPM5XMLToolParser(ToolParser):
         self._processed_len = 0
         self.current_tool_id = -1
         self.current_tool_name_sent = False
-        self.prev_tool_call_arr = []
-        self.streamed_args_for_tool = []
+        self.prev_tool_call_arr: list[dict[str, Any]] = []
+        self.streamed_args_for_tool: list[str] = []
 
     def adjust_request(
         self, request: ChatCompletionRequest | ResponsesRequest
