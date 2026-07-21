@@ -412,14 +412,28 @@ class OffloadingConnectorScheduler:
         if req_status.req.is_finished() and not req_status.transfer_jobs:
             del self._req_status[req_id]
 
-    def _maximal_prefix_lookup(self, keys: Iterable[OffloadKey], req_context: ReqContext) -> int | None:
+    def _maximal_prefix_lookup(
+        self,
+        keys: Sequence[OffloadKey],
+        req_context: ReqContext,
+        req: Request | None = None,
+        group_config: GroupOffloadConfig | None = None,
+        start_chunk_idx: int = 0,
+    ) -> int | None:
         """Return the number of consecutive offloaded blocks from the start,
         or None if the backend deferred a lookup."""
         hit_count = 0
         defer_lookup = False
-        for key in keys:
+        for idx, key in enumerate(keys):
             match self.manager.lookup(key, req_context):
                 case LookupResult.HIT:
+                    if req is not None and group_config is not None:
+                        self._events_tracker.record_lookup(
+                            req,
+                            group_config,
+                            start_chunk_idx + idx,
+                            key,
+                        )
                     hit_count += 1
                 case LookupResult.HIT_PENDING:
                     defer_lookup = True
@@ -437,6 +451,9 @@ class OffloadingConnectorScheduler:
         keys: Sequence[OffloadKey],
         sliding_window_size: int,
         req_context: ReqContext,
+        req: Request | None = None,
+        group_config: GroupOffloadConfig | None = None,
+        start_chunk_idx: int = 0,
     ) -> int | None:
         """Return the end index (in `keys`) of the last run of
         `sliding_window_size` consecutive hits, scanning from the end.
@@ -444,8 +461,16 @@ class OffloadingConnectorScheduler:
         defer_lookup = False
         consecutive_hits = 0
         for idx in range(len(keys) - 1, -1, -1):
-            match self.manager.lookup(keys[idx], req_context):
+            key = keys[idx]
+            match self.manager.lookup(key, req_context):
                 case LookupResult.HIT:
+                    if req is not None and group_config is not None:
+                        self._events_tracker.record_lookup(
+                            req,
+                            group_config,
+                            start_chunk_idx + idx,
+                            key,
+                        )
                     consecutive_hits += 1
                 case LookupResult.HIT_PENDING:
                     # Block is in cache, just not readable yet — counts
@@ -548,7 +573,13 @@ class OffloadingConnectorScheduler:
                 # have backend-confirmed hits
                 num_hit_chunks: int | None
                 if sliding_window_size_in_chunks is None:
-                    num_hit_chunks = self._maximal_prefix_lookup(offload_keys, req_status.req_context)
+                    num_hit_chunks = self._maximal_prefix_lookup(
+                        offload_keys,
+                        req_status.req_context,
+                        req_status.req,
+                        group_config,
+                        start_block_idx,
+                    )
                 else:
                     required_window = sliding_window_size_in_chunks
                     if is_eagle_unverified:
@@ -557,6 +588,9 @@ class OffloadingConnectorScheduler:
                         offload_keys,
                         required_window,
                         req_status.req_context,
+                        req_status.req,
+                        group_config,
+                        start_block_idx,
                     )
                 if num_hit_chunks == 0:
                     return 0

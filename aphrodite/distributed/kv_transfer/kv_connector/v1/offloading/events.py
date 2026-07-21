@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from aphrodite.distributed.kv_events import BlockRemoved, BlockStored, KVCacheEvent
+from aphrodite.distributed.kv_events import MEDIUM_CPU, BlockRemoved, BlockStored, KVCacheEvent
 from aphrodite.logger import init_logger
 from aphrodite.v1.core.kv_cache_utils import BlockHash, maybe_convert_block_hash
 from aphrodite.v1.kv_cache_interface import (
@@ -110,6 +110,28 @@ class OffloadingEventsTracker:
         if not self.self_describing_enabled:
             return
         if group_config.sliding_window_size_in_chunks is not None:
+            return
+        meta = self._build_event_metadata(req, group_config, chunk_idx)
+        self._pending_event_metadata[offload_key] = meta
+
+    def record_lookup(
+        self,
+        req: Request,
+        group_config: "GroupOffloadConfig",
+        chunk_idx: int,
+        offload_key: OffloadKey,
+    ) -> None:
+        """Snapshot event payload for a request-visible offload hit.
+
+        Tiering promotions can emit primary-tier store events without a GPU
+        store job, so lookup hits are the only point where the request still
+        carries the token/hash context needed to describe those events.
+        """
+        if not self.self_describing_enabled:
+            return
+        if group_config.sliding_window_size_in_chunks is not None:
+            return
+        if offload_key in self._pending_event_metadata:
             return
         meta = self._build_event_metadata(req, group_config, chunk_idx)
         self._pending_event_metadata[offload_key] = meta
@@ -255,7 +277,10 @@ class OffloadingEventsTracker:
         locality = event.locality.value if event.locality is not None else None
         by_group: dict[int, list] = {}
         for key in event.keys:
-            meta = self._pending_event_metadata.pop(key, None)
+            if event.medium == MEDIUM_CPU:
+                meta = self._pending_event_metadata.pop(key, None)
+            else:
+                meta = self._pending_event_metadata.get(key)
             if meta is not None:
                 group_idx = meta.group_idx
                 by_group.setdefault(group_idx, []).extend(maybe_convert_block_hash(h) for h in meta.block_hashes)
