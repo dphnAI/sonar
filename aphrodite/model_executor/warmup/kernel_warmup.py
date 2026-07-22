@@ -66,10 +66,16 @@ def _warmup_ll_bf16_router_gemm() -> None:
         return
 
     logger.info("Warming up ll_bf16 router GEMM kernels.")
-    ll_bf16_gemm_kernel.warmup(
-        shapes=_LL_BF16_WARMUP_MODEL_SHAPES,
-        m_values=_LL_BF16_WARMUP_M_RANGE,
-    )
+    try:
+        ll_bf16_gemm_kernel.warmup(
+            shapes=_LL_BF16_WARMUP_MODEL_SHAPES,
+            m_values=_LL_BF16_WARMUP_M_RANGE,
+        )
+    except Exception:
+        # cuteDSL JIT can fail on architectures its bundled toolchain does not
+        # target (e.g. NVVM ICE on SM 11.0); the kernel is optional, so never
+        # let warmup take down the engine.
+        logger.warning("ll_bf16 router GEMM warmup failed; kernel disabled.", exc_info=True)
 
 
 def kernel_warmup(worker: "Worker"):
@@ -116,7 +122,10 @@ def kernel_warmup(worker: "Worker"):
     elif has_flashinfer() and current_platform.has_device_capability(90):
         flashinfer_autotune(worker.model_runner)
 
-    if current_platform.has_device_capability(90):
+    # Match the runtime eligibility in fused_moe/router/gate_linear.py: SM 9.0
+    # or 10.x only. A plain >=90 check would include SM 11.x (Thor), where
+    # cuteDSL's NVVM backend cannot compile and the JIT ICEs at startup.
+    if current_platform.is_device_capability((9, 0)) or current_platform.is_device_capability_family(100):
         _warmup_ll_bf16_router_gemm()
 
     # FlashInfer attention warmup
