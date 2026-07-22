@@ -76,6 +76,7 @@ def create_sampling_metadata(
     repetition_penalties: list[float] | None = None,
     bad_words_token_ids: dict[int, list[list[int]]] | None = None,
     allowed_token_ids_mask: torch.Tensor | None = None,
+    logitsprocs: LogitsProcessors | None = None,
 ) -> SamplingMetadata:
     """Create a v1 sampling metadata object with all_greedy set
     to the given value. Either all greedy or all random sampling
@@ -119,7 +120,7 @@ def create_sampling_metadata(
         spec_token_ids=[] if spec_token_ids is None else spec_token_ids,
         allowed_token_ids_mask=allowed_token_ids_mask,
         bad_words_token_ids={} if bad_words_token_ids is None else bad_words_token_ids,
-        logitsprocs=LogitsProcessors(),
+        logitsprocs=logitsprocs if logitsprocs is not None else LogitsProcessors(),
     )
 
 
@@ -686,6 +687,55 @@ def test_top_p(rejection_sampler, top_p):
         vocab_size=vocab_size,
         target_logits=target_logits,
         unmasked_indices=top_p_indices,
+        sampling_metadata=sampling_metadata,
+    )
+
+
+@pytest.mark.parametrize("min_p", [0.1, 0.5, 0.9])
+def test_min_p(rejection_sampler, min_p):
+    """Test rejection sampling with min-p sampling"""
+    from types import SimpleNamespace
+
+    from aphrodite.v1.sample.logits_processor import MinPLogitsProcessor
+
+    vocab_size = 100
+    batch_size = 100
+    num_draft_tokens = 3
+    num_tokens = batch_size * num_draft_tokens
+
+    target_logits = torch.randn((num_tokens, vocab_size), device=DEVICE_TYPE)
+    temperature = torch.ones(batch_size, dtype=torch.float32, device=DEVICE_TYPE)
+
+    # With temperature=1, min_p thresholds on softmax of the raw logits.
+    probs = (target_logits / temperature[0]).softmax(dim=-1)
+    threshold = probs.amax(dim=-1, keepdim=True) * min_p
+    min_p_indices = []
+    for i in range(num_tokens):
+        min_p_indices.append(torch.nonzero(probs[i] >= threshold[i]).flatten().tolist())
+
+    # Build a MinPLogitsProcessor with populated per-request state, as
+    # build_logitsprocs does under spec decode.
+    fake_config = SimpleNamespace(scheduler_config=SimpleNamespace(max_num_seqs=batch_size))
+    min_p_proc = MinPLogitsProcessor(fake_config, torch.device(DEVICE_TYPE), is_pin_memory=False)
+    min_p_proc.min_p_cpu[:batch_size] = min_p
+    min_p_proc.min_p_count = batch_size
+    min_p_proc.min_p = min_p_proc.min_p_device[:batch_size]
+    min_p_proc.min_p.copy_(min_p_proc.min_p_cpu_tensor[:batch_size])
+    min_p_proc.min_p.unsqueeze_(1)
+
+    sampling_metadata = create_sampling_metadata(
+        all_greedy=False,
+        temperature=temperature,
+        logitsprocs=LogitsProcessors([min_p_proc]),
+    )
+
+    _test_masked_logits(
+        rejection_sampler,
+        batch_size=batch_size,
+        num_draft_tokens=num_draft_tokens,
+        vocab_size=vocab_size,
+        target_logits=target_logits,
+        unmasked_indices=min_p_indices,
         sampling_metadata=sampling_metadata,
     )
 
