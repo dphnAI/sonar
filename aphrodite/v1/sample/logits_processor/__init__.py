@@ -187,8 +187,13 @@ def build_logitsprocs(
     if aphrodite_config.speculative_config:
         if custom_logitsprocs:
             raise ValueError(STR_SPEC_DEC_REJECTS_LOGITSPROCS)
-        logger.warning("min_p and logit_bias parameters won't work with speculative decoding.")
-        return LogitsProcessors([MinTokensLogitsProcessor(aphrodite_config, device, is_pin_memory)])
+        logger.warning("logit_bias parameter won't work with speculative decoding.")
+        return LogitsProcessors(
+            [
+                MinTokensLogitsProcessor(aphrodite_config, device, is_pin_memory),
+                MinPLogitsProcessor(aphrodite_config, device, is_pin_memory),
+            ]
+        )
 
     custom_logitsprocs_classes = _load_custom_logitsprocs(custom_logitsprocs)
     return LogitsProcessors(
