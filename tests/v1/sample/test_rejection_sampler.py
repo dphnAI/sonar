@@ -863,6 +863,58 @@ def test_allowed_token_ids(rejection_sampler):
     assert torch.equal(output.sampled_token_ids, expected)
 
 
+def test_logit_bias(rejection_sampler):
+    """Test rejection sampling with logit_bias.
+
+    The bias must reach every speculated (draft) position, not only the
+    first/bonus token. Request 0 is biased at draft position 1, request 1 at
+    position 0, and request 2 is left unbiased.
+    """
+    from aphrodite.v1.sample.logits_processor import LogitBiasLogitsProcessor
+
+    spec_tokens = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    output_tokens = [[1, 2, 3, 4], [4, 5, 6, 7], [7, 8, 9, 5]]
+
+    # Token 15 is the fallback the sampler falls back to when the intended
+    # token is biased below it (create_logits_tensor sets 15 to 99.0 vs 100.0).
+    logits = create_logits_tensor(output_tokens, token_idx_to_override=15)
+
+    # A -50 bias drops the target token from 100.0 to 50.0, below the 99.0
+    # fallback, flipping the greedy argmax to token 15 (i.e. a rejection).
+    logit_bias_proc = LogitBiasLogitsProcessor(None, torch.device(DEVICE_TYPE), is_pin_memory=False)
+    logit_bias_proc.biases = {
+        0: {2: -50.0},  # suppress token 2 -> reject req 0 at draft position 1
+        1: {4: -50.0},  # suppress token 4 -> reject req 1 at draft position 0
+        # request 2 is intentionally left unbiased
+    }
+
+    metadata = create_sampling_metadata(
+        all_greedy=True,
+        output_token_ids=[[], [], []],
+        spec_token_ids=spec_tokens,
+        logitsprocs=LogitsProcessors([logit_bias_proc]),
+    )
+    bonus_token_tensor = torch.tensor([output_tokens[i][-1] for i in range(len(output_tokens))], device=logits.device)
+    spec_decode_metadata = create_spec_decode_metadata(spec_tokens, logits)
+    mock_sampler_output(rejection_sampler, bonus_token_tensor)
+    output = rejection_sampler(
+        spec_decode_metadata,
+        draft_probs=None,
+        logits=logits,
+        sampling_metadata=metadata,
+    )
+
+    # Request 0: token 1 accepted, token 2 biased out -> 15, rest discarded.
+    # Request 1: token 4 biased out at the first position -> 15, rest discarded.
+    # Request 2: unbiased, all draft tokens accepted plus the bonus token.
+    expected = torch.tensor(
+        [[1, 15, -1, -1], [15, -1, -1, -1], [7, 8, 9, 5]],
+        dtype=torch.int,
+        device=logits.device,
+    )
+    assert torch.equal(output.sampled_token_ids, expected)
+
+
 @pytest.mark.parametrize("batch_size", [1, 100])
 @pytest.mark.parametrize("vocab_size", [100, 8192, 10000])
 @pytest.mark.parametrize("max_spec_len", [1, 3])

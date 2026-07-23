@@ -12,10 +12,7 @@ import torch.nn as nn
 from aphrodite.logger import init_logger
 from aphrodite.triton_utils import tl, triton
 from aphrodite.v1.outputs import LogprobsLists, LogprobsTensors, SamplerOutput
-from aphrodite.v1.sample.logits_processor.builtin import (
-    MinPLogitsProcessor,
-    MinTokensLogitsProcessor,
-)
+from aphrodite.v1.sample.logits_processor.builtin import MinPLogitsProcessor
 from aphrodite.v1.sample.metadata import SamplingMetadata
 from aphrodite.v1.sample.ops.bad_words import apply_bad_words_with_drafts
 from aphrodite.v1.sample.ops.penalties import apply_all_penalties
@@ -308,8 +305,7 @@ class RejectionSampler(nn.Module):
             apply_bad_words_with_drafts(logits, bad_words_token_ids, output_token_ids, metadata.num_draft_tokens)
 
         for processor in sampling_metadata.logitsprocs.non_argmax_invariant:
-            if isinstance(processor, MinTokensLogitsProcessor):
-                logits = processor.apply_with_spec_decode(logits, metadata.num_draft_tokens)
+            logits = processor.apply_with_spec_decode(logits, metadata.num_draft_tokens)
         holder = sampling_metadata.thinking_budget_state_holder
         if holder is not None and holder.has_tracked_requests():
             logits = holder.apply_to_logits(
