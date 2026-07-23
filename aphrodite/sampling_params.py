@@ -1001,10 +1001,7 @@ class SamplingParams(
     ) -> None:
         if speculative_config is None:
             return
-
-        # Some sampling parameters are not yet compatible with spec decoding.
-        if self.logit_bias:
-            raise ValueError("The logit_bias sampling parameter is not yet supported with speculative decoding.")
+        return
 
     def _validate_diffusion(self, model_config: ModelConfig) -> None:
         if not model_config.is_diffusion:

@@ -79,6 +79,17 @@ class LogitsProcessor(ABC):
         """
         raise NotImplementedError
 
+    def apply_with_spec_decode(
+        self,
+        logits: torch.Tensor,
+        num_draft_tokens: list[int],
+    ) -> torch.Tensor:
+        """Apply to speculative-decode target logits."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support speculative decoding. "
+            "apply_with_spec_decode() must be implemented in order to do so."
+        )
+
     @abstractmethod
     def is_argmax_invariant(self) -> bool:
         """True if logits processor has no impact on the
