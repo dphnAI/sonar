@@ -100,7 +100,7 @@ __launch_bounds__(128) __global__
   float weight_sum = weight;
   #pragma unroll
   for (int mask = 16; mask > 0; mask >>= 1) {
-    weight_sum += VLLM_SHFL_XOR_SYNC(weight_sum, mask);
+    weight_sum += APHRODITE_SHFL_XOR_SYNC(weight_sum, mask);
   }
 
   #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900)
