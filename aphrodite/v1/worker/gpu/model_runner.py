@@ -43,6 +43,10 @@ from aphrodite.model_executor.layers.mamba.ops.ssu_dispatch import (
 )
 from aphrodite.model_executor.model_loader import get_model_loader
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from aphrodite.multimodal.encoder_budget import (
+    MultiModalBudget,
+    get_dummy_encoder_profile_inputs,
+)
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.tasks import SupportedTask
 from aphrodite.utils.math_utils import cdiv
@@ -641,6 +645,20 @@ class GPUModelRunner(LoRAModelRunnerMixin):
 
     @torch.inference_mode()
     def profile_run(self) -> None:
+        if self.supports_mm_inputs and self.is_first_pp_rank:
+            mm_config = self.model_config.multimodal_config
+            if mm_config is not None and not mm_config.skip_mm_profiling:
+                mm_budget = MultiModalBudget(
+                    self.aphrodite_config,
+                    self.mm_registry,
+                    enable_cache=False,
+                )
+                dummy_mm_inputs = get_dummy_encoder_profile_inputs(
+                    self.mm_registry,
+                    mm_budget,
+                )
+                self.model_state.encoder_runner.profile_encoder_cache(dummy_mm_inputs, mm_budget)
+
         hidden_states, sample_hidden_states = self._dummy_run(self.max_num_tokens, skip_attn=True, is_profile=True)
 
         # Only run sampler/pooler on last PP rank (non-last ranks return None).
@@ -653,6 +671,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
 
         torch.accelerator.synchronize()
         del hidden_states, sample_hidden_states
+        self.reset_encoder_cache()
         gc.collect()
 
     def post_kv_cache_wake_up(self) -> None:
