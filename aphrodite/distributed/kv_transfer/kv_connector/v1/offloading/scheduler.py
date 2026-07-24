@@ -291,16 +291,21 @@ class RequestOffloadState:
         for group_state, new_blocks in zip(self.group_states, new_block_id_groups):
             group_state.block_ids.extend(new_blocks)
 
-    def storable_chunks(self, group_config: "GroupOffloadConfig", num_offloadable_tokens: int) -> int:
-        """Number of leading offloaded blocks eligible for store.
+    def storable_chunks(
+        self,
+        group_config: "GroupOffloadConfig",
+        group_state: RequestGroupState,
+        num_offloadable_tokens: int,
+    ) -> int:
+        """Number of allocated leading offloaded chunks eligible for store.
 
-        For eagle/MTP groups the volatile trailing block of the offloadable
+        For eagle/MTP groups the volatile trailing chunk of the offloadable
         range is excluded while decoding: the draft-layer KV of the last
         accepted position may be rewritten after spec-token rejection. During
-        prefill the trailing block is stable (the draft input for a chunk's
+        prefill the trailing chunk is stable (the draft input for a chunk's
         last position is the next prompt token), so it is stored immediately.
         The exclusion must be applied consistently everywhere
-        ``next_stored_chunk_idx`` is derived: otherwise the trailing block of
+        ``next_stored_chunk_idx`` is derived: otherwise the trailing chunk of
         each step is skipped on collection but jumped over by
         ``next_stored_chunk_idx``, so it is never re-considered and a
         permanent hole breaks prefix-reuse lookup.
@@ -309,7 +314,8 @@ class RequestOffloadState:
         is_decoding = num_offloadable_tokens > self.req.num_prompt_tokens
         if group_config.is_eagle_group and is_decoding:
             num_blocks = max(0, num_blocks - 1)
-        return num_blocks
+        num_allocated_chunks = len(group_state.block_ids) // self.config.blocks_per_chunk
+        return min(num_blocks, num_allocated_chunks)
 
     def advance_stored_idx(self, num_offloadable_tokens: int) -> None:
         # max(): at the prefill->decode transition of a block-aligned prompt,
@@ -318,7 +324,7 @@ class RequestOffloadState:
         for group_config, group_state in zip(self.config.kv_group_configs, self.group_states):
             group_state.next_stored_chunk_idx = max(
                 group_state.next_stored_chunk_idx,
-                self.storable_chunks(group_config, num_offloadable_tokens),
+                self.storable_chunks(group_config, group_state, num_offloadable_tokens),
             )
 
     def update_num_hit_chunks(self, num_cached_tokens: int) -> None:
@@ -909,7 +915,11 @@ class OffloadingConnectorScheduler:
             # or unreachable by the load path's alignment constraints.
             new_offload_keys: list[OffloadKey] = []
             for group_config, group_state in zip(self.config.kv_group_configs, req_status.group_states):
-                num_blocks = req_status.storable_chunks(group_config, num_offloadable_tokens)
+                num_blocks = req_status.storable_chunks(
+                    group_config,
+                    group_state,
+                    num_offloadable_tokens,
+                )
 
                 start_block_idx = group_state.next_stored_chunk_idx
                 if num_blocks <= start_block_idx:
@@ -973,7 +983,11 @@ class OffloadingConnectorScheduler:
             non_sliding_window_block_ids: list[int] = []
             for group_config, group_state in zip(self.config.kv_group_configs, req_status.group_states):
                 is_sliding_window = group_config.sliding_window_size_in_chunks is not None
-                num_blocks = req_status.storable_chunks(group_config, num_offloadable_tokens)
+                num_blocks = req_status.storable_chunks(
+                    group_config,
+                    group_state,
+                    num_offloadable_tokens,
+                )
                 start_block_idx = group_state.next_stored_chunk_idx
                 block_ids = group_state.block_ids
                 num_group_blocks = 0
