@@ -155,6 +155,40 @@ class LogitBiasLogitsProcessor(LogitsProcessor):
             logits[self.logits_slice] += self.bias_tensor
         return logits
 
+    def apply_with_spec_decode(
+        self,
+        logits: torch.Tensor,
+        num_draft_tokens: list[int],
+    ) -> torch.Tensor:
+        if not self.biases:
+            return logits
+
+        num_draft_arr = np.asarray(num_draft_tokens, dtype=np.int64)
+        cumsum = np.concatenate([[0], np.cumsum(num_draft_arr)])
+
+        all_rows: list[np.ndarray] = []  # row indices to bias
+        all_toks: list[np.ndarray] = []  # token ids at those rows
+        all_biases: list[np.ndarray] = []  # bias values at those rows
+        for req_idx, lb in self.biases.items():
+            n_rows = int(num_draft_arr[req_idx])
+            if n_rows <= 0 or not lb:
+                continue
+            offset = cumsum[req_idx]
+            row_indices = np.arange(offset, offset + n_rows, dtype=np.int64)
+            tok_ids = np.fromiter(lb.keys(), dtype=np.int64, count=len(lb))
+            bias_vals = np.fromiter(lb.values(), dtype=np.float32, count=len(lb))
+            all_rows.append(np.repeat(row_indices, len(lb)))
+            all_toks.append(np.tile(tok_ids, n_rows))
+            all_biases.append(np.tile(bias_vals, n_rows))
+
+        if all_rows:
+            logits_slice = (
+                self._device_tensor(np.concatenate(all_rows), torch.int64),
+                self._device_tensor(np.concatenate(all_toks), torch.int64),
+            )
+            logits[logits_slice] += self._device_tensor(np.concatenate(all_biases), torch.float32)
+        return logits
+
 
 class MinTokensLogitsProcessor(LogitsProcessor):
     def __init__(self, aphrodite_config: "AphroditeConfig", device: torch.device, is_pin_memory: bool):
