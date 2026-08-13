@@ -123,6 +123,21 @@ class Sampler(nn.Module):
         for processor in sampling_metadata.logitsprocs.argmax_invariant:
             logits = processor.apply(logits)
 
+        # ThinkingBudgetStateHolder.apply_to_logits() forces the reasoning
+        # end tokens into the logits once thinking_token_budget is exceeded.
+        # It was previously wired only into rejection_sampler.py (the
+        # speculative-decoding sampler path), so requests without
+        # speculative decoding never had budget overrun forced onto the
+        # logits here and generation ran past the budget every time. Mirror
+        # the same call for the normal (non-spec-decode) path.
+        thinking_budget_state_holder = sampling_metadata.thinking_budget_state_holder
+        if thinking_budget_state_holder is not None and thinking_budget_state_holder.has_tracked_requests():
+            logits = thinking_budget_state_holder.apply_to_logits(
+                logits,
+                predict_bonus_token=predict_bonus_token,
+                spec_token_ids=sampling_metadata.spec_token_ids,
+            )
+
         # Sample the next token.
         sampled, processed_logprobs = self.sample(logits, sampling_metadata)
         if processed_logprobs is not None:

@@ -3413,6 +3413,19 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # Update output token ids with tokens sampled in last step
         # if async scheduling and required by current sampling params.
         self.input_batch.update_async_output_token_ids()
+        # ThinkingBudgetStateHolder.update_state() drives the per-request
+        # think/end state machine forward; it was previously never called
+        # from the decode loop (only sync_batch() ran, on batch add/remove/
+        # move), so budget overrun was never detected past the first step
+        # and thinking_token_budget had no effect once generation was under
+        # way. Call it here every step, before sampling, using this step's
+        # freshly-updated token lists.
+        thinking_budget_state_holder = sampling_metadata.thinking_budget_state_holder
+        if thinking_budget_state_holder is not None and thinking_budget_state_holder.has_tracked_requests():
+            thinking_budget_state_holder.update_state(
+                sampling_metadata.output_token_ids,
+                sampling_metadata.spec_token_ids,
+            )
         if spec_decode_metadata is None:
             return self.sampler(
                 logits=logits,

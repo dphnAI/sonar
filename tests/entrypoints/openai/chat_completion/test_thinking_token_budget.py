@@ -142,11 +142,36 @@ def server_qwen35_fp8_mtp_tp2():
         yield remote_server
 
 
+@pytest.fixture(scope="module")
+def server_async_scheduling():
+    """Same as ``server``, but leaves async scheduling at its default
+    (enabled), instead of passing --no-async-scheduling. Async scheduling
+    is the default for compatible executors, so this covers the actual
+    default configuration rather than only the opted-out one.
+    """
+    args = [
+        "--reasoning-parser",
+        "qwen3",
+        "--reasoning-config",
+        '{"reasoning_start_str": "<think>", "reasoning_end_str": "</think>"}',
+        "--max-model-len",
+        "2048",
+        "--enforce-eager",
+        "--gpu-memory-utilization",
+        "0.4",
+    ]
+    # thinking_token_budget is not yet supported by the V2 model runner.
+    env_dict = {"APHRODITE_USE_V2_MODEL_RUNNER": "0"}
+    with RemoteOpenAIServer(MODEL_NAME, args, env_dict=env_dict) as remote_server:
+        yield remote_server
+
+
 @pytest_asyncio.fixture
-async def client(request, server, server_with_auto_reasoning_config):
+async def client(request, server, server_with_auto_reasoning_config, server_async_scheduling):
     server_map = {
         "default": server,
         "auto_config": server_with_auto_reasoning_config,
+        "async_scheduling": server_async_scheduling,
     }
     target_server = server_map[request.param]
     async with target_server.get_async_client() as async_client:
@@ -179,9 +204,17 @@ async def test_thinking_token_budget_mixed_requests(client: openai.AsyncOpenAI):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("client", ["default", "auto_config"], indirect=True)
+@pytest.mark.parametrize("client", ["default", "auto_config", "async_scheduling"], indirect=True)
 async def test_thinking_token_budget_limits_reasoning(client: openai.AsyncOpenAI):
     """Test that thinking_token_budget limits the number of reasoning tokens.
+
+    The "async_scheduling" param covers the actual default configuration
+    (async scheduling enabled): ThinkingBudgetStateHolder.update_state()
+    previously ran only from sync_batch() (add/remove/move bookkeeping),
+    never once per decode step, so a request's think state was never
+    advanced past the first step and the budget was silently ignored for
+    the rest of generation whenever async scheduling was on. "default" and
+    "auto_config" pass --no-async-scheduling and would not have caught this.
 
     Counts reasoning decode tokens by id, which is robust to how tokens are
     grouped into streamed chunks (a single chunk can carry several tokens under
