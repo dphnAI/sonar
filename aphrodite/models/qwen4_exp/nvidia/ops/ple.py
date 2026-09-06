@@ -326,6 +326,7 @@ def _ple_conv_kernel(
     has_token_map,
     num_reqs,
     bs_iters,
+    state_idx_stride,
     state_bs,
     state_ws,
     state_cs,
@@ -380,7 +381,7 @@ def _ple_conv_kernel(
         else:
             slot_off = tl.full([], 0, tl.int32)
 
-    sid = tl.load(state_idx_ptr + r).to(tl.int64)
+    sid = tl.load(state_idx_ptr + r * state_idx_stride).to(tl.int64)
     state_ok = sid != NULL_STATE_ID
     sid_safe = tl.where(state_ok, sid, 0)
     if HAS_INIT:
@@ -478,6 +479,7 @@ def _ple_conv_writeback_kernel(
     has_init_ptr,
     token_idx_ptr,
     has_token_map,
+    state_idx_stride,
     state_bs,
     state_ws,
     state_cs,
@@ -495,7 +497,7 @@ def _ple_conv_writeback_kernel(
     c_offs = pid_c * BLOCK_C + tl.arange(0, BLOCK_C)
     c_mask = c_offs < C
 
-    sid = tl.load(state_idx_ptr + r).to(tl.int64)
+    sid = tl.load(state_idx_ptr + r * state_idx_stride).to(tl.int64)
     state_ok = sid != NULL_STATE_ID
     if not state_ok:
         return
@@ -599,6 +601,8 @@ def ple_conv(
 
     num_warps = 4 if mode == "prefill" else 8
     launch_pdl = current_platform.is_arch_support_pdl()
+    # Pure-prefill indices can be a strided block-table column view.
+    state_idx_stride = state_indices.stride(0)
 
     # Constexpr flags eliminate accesses to optional None arguments. Without a
     # token map, state_indices is an unused but device-resident placeholder.
@@ -615,6 +619,7 @@ def ple_conv(
         token_indices is not None,
         num_reqs,
         binary_search_iters,
+        state_idx_stride,
         state_bs,
         state_ws,
         state_cs,
@@ -641,6 +646,7 @@ def ple_conv(
             has_initial_states,
             token_indices if token_indices is not None else state_indices,
             token_indices is not None,
+            state_idx_stride,
             state_bs,
             state_ws,
             state_cs,

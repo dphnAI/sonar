@@ -35,7 +35,6 @@ from aphrodite.inputs import EngineInput, TokensPrompt, mm_input
 from aphrodite.logger import init_logger
 from aphrodite.logprobs import Logprob
 from aphrodite.multimodal.inputs import (
-    MultiModalKwargsItem,
     MultiModalKwargsItems,
     PlaceholderRange,
 )
@@ -45,7 +44,7 @@ from aphrodite.sampling_params import RequestOutputKind, SamplingParams
 from aphrodite.utils.collection_utils import as_list
 from aphrodite.utils.serial_utils import numpy2base64
 
-from .mm_serde import decode_mm_kwargs_item
+from .mm_features import mm_kwargs_from_features
 from .protocol import (
     GenerateRequest,
     GenerateResponse,
@@ -168,14 +167,9 @@ class ServingTokens(GenerateBaseServing):
                 for modality, ranges in features.mm_placeholders.items()
             }
 
-            # Deserialize tensor data when present; None → cache hit.
-            mm_kwargs: dict[str, list[MultiModalKwargsItem | None]] = {}
-            if features.kwargs_data is not None:
-                for modality, items in features.kwargs_data.items():
-                    mm_kwargs[modality] = [decode_mm_kwargs_item(item) if item is not None else None for item in items]
-            else:
-                for modality, hashes in features.mm_hashes.items():
-                    mm_kwargs[modality] = [None] * len(hashes)
+            # Deserialize full tensor data and optional metadata-only data.
+            # Metadata-only items are valid when ec_transfer_params is set.
+            mm_kwargs = mm_kwargs_from_features(features)
 
             engine_input = mm_input(
                 prompt_token_ids=request.token_ids,

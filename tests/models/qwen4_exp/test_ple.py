@@ -1011,6 +1011,8 @@ class _ConvBatchCase:
     dilation: int = 3
     spec_query_len: int = 1
     graph_padding: int = 0
+    state_index_stride: int = 1
+    include_null_state: bool = True
 
 
 def _make_conv_metadata(
@@ -1055,9 +1057,18 @@ def _make_conv_metadata(
         dtype=torch.int32,
         device=device,
     )
+    if case.state_index_stride > 1:
+        strided_indices = torch.full(
+            (non_spec_state_indices.numel(), case.state_index_stride),
+            NULL_BLOCK_ID,
+            dtype=torch.int32,
+            device=device,
+        )
+        strided_indices[:, 0] = non_spec_state_indices
+        non_spec_state_indices = strided_indices[:, 0]
     if case.num_decodes > 1:
         non_spec_state_indices[case.num_decodes - 1] = NULL_BLOCK_ID
-    if num_prefills > 1:
+    if num_prefills > 1 and case.include_null_state:
         non_spec_state_indices[case.num_decodes + 1] = NULL_BLOCK_ID
 
     spec_query_start_loc = torch.tensor([0, *accumulate(case.spec_query_lens)], dtype=torch.int32, device=device)
@@ -1119,6 +1130,15 @@ def _make_conv_metadata(
         ),
         pytest.param(
             _ConvBatchCase(
+                prefill_query_lens=(16, 676),
+                channels=10240,
+                state_index_stride=4,
+                include_null_state=False,
+            ),
+            id="prefill-strided-state-indices",
+        ),
+        pytest.param(
+            _ConvBatchCase(
                 spec_query_lens=(1, 4, 4, 0),
                 num_accepted=(1, 2, 4, 1),
                 spec_query_len=4,
@@ -1157,6 +1177,8 @@ def test_fused_conv_correctness(
 ) -> None:
     device = torch.device("cuda")
     metadata, num_real_tokens = _make_conv_metadata(case, device)
+    if case.state_index_stride > 1:
+        assert metadata.state_indices_tensor.stride(0) == case.state_index_stride
     module = Qwen4ExpPLELayer.__new__(Qwen4ExpPLELayer)
     nn.Module.__init__(module)
     module.conv_state_len = (case.kernel_size - 1) * case.dilation

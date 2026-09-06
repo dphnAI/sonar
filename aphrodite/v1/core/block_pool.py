@@ -388,6 +388,7 @@ class BlockPool:
         num_tokens: int,
         kv_cache_group_id: int,
         block_size: int,
+        replace_existing_hashes: bool = False,
     ) -> BlockHashWithGroupId | None:
         """Register a partial prefix-cache entry for an existing block.
 
@@ -415,6 +416,9 @@ class BlockPool:
                 entry hash itself is always the prefix-chain hash at
                 ``num_tokens``; ``block_size`` is used to assert that the
                 entry is partial within the owning cache block.
+            replace_existing_hashes: Whether the block contents were replaced
+                and all existing cache entries must be removed before the new
+                entry is registered.
 
         Returns:
             The hash key with group ID if a partial entry can be registered;
@@ -423,16 +427,19 @@ class BlockPool:
         if block.is_null:
             return None
 
-        assert block_size > self.hash_block_size
         assert block_size % self.hash_block_size == 0
-        assert num_tokens % block_size != 0
+        assert replace_existing_hashes or (block_size > self.hash_block_size and num_tokens % block_size != 0)
         block_hash = self._get_partial_block_hash(request, num_tokens)
         num_hash_blocks = num_tokens // self.hash_block_size
         block_hash_with_group_id = make_block_hash_with_group_id(block_hash, kv_cache_group_id)
         already_cached = block.block_hash == block_hash_with_group_id or (
             self.cached_block_hash_to_block.contain(block_hash_with_group_id, block.block_id)
         )
-        if (
+        if replace_existing_hashes:
+            removed_hashes = self._remove_cached_block_hashes(block)
+            self._emit_block_removed_events(removed_hashes)
+            already_cached = False
+        elif (
             not already_cached
             and block.block_hash is not None
             and block.block_hash_num_tokens is not None

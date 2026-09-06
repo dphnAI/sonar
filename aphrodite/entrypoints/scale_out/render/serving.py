@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-from typing import cast
-
 from aphrodite.entrypoints.anthropic.protocol import AnthropicMessagesRequest
 from aphrodite.entrypoints.anthropic.serving import AnthropicServingMessages
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
@@ -10,23 +8,20 @@ from aphrodite.entrypoints.openai.models.serving import (
     OpenAIModelRegistry,
     OpenAIServingModels,
 )
-from aphrodite.entrypoints.scale_out.token_in_token_out.mm_serde import encode_mm_kwargs_item
+from aphrodite.entrypoints.scale_out.token_in_token_out.mm_features import (
+    extract_mm_features,
+)
 from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateRequest,
     MultiModalFeatures,
-    PlaceholderRangeInfo,
 )
 from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
 from aphrodite.entrypoints.serve.engine.serving import BaseServing
 from aphrodite.entrypoints.serve.utils.api_utils import get_max_tokens
 from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.inputs import (
-    EngineInput,
-    MultiModalHashes,
-    MultiModalInput,
-    MultiModalPlaceholders,
-)
+from aphrodite.inputs import EngineInput
 from aphrodite.logger import init_logger
+from aphrodite.multimodal.parse import MultiModalDataParser
 from aphrodite.renderers.inputs.preprocess import (
     extract_prompt_components,
     extract_prompt_len,
@@ -54,6 +49,9 @@ class ServingRender(BaseServing):
         self.online_renderer = online_renderer
 
         self._merge_inline_system = AnthropicServingMessages._detect_merge_inline_system(online_renderer.chat_template)
+
+        self._placeholder_metadata_parser: MultiModalDataParser | None = None
+        self._placeholder_metadata_parser_failed = False
 
         self.default_sampling_params = online_renderer.model_config.get_diff_sampling_param()
         mc = online_renderer.model_config
@@ -209,36 +207,30 @@ class ServingRender(BaseServing):
 
         return generate_requests
 
-    @staticmethod
+    def _placeholder_metadata_fields(self, modality: str) -> set[str]:
+        """Fields the EC consumer still requires after embeddings transfer."""
+        if self._placeholder_metadata_parser_failed:
+            return set()
+        if self._placeholder_metadata_parser is None:
+            try:
+                from aphrodite.multimodal import MULTIMODAL_REGISTRY
+
+                self._placeholder_metadata_parser = MULTIMODAL_REGISTRY.create_processor(
+                    self.model_config
+                ).info.data_parser
+            except Exception:
+                logger.debug(
+                    "Could not load placeholder metadata fields; mm_metadata will use keep_on_cpu fields only."
+                )
+                self._placeholder_metadata_parser_failed = True
+                return set()
+        return set(self._placeholder_metadata_parser.placeholder_metadata_fields(modality))
+
     def _extract_mm_features(
+        self,
         engine_input: EngineInput,
     ) -> MultiModalFeatures | None:
-        """Extract multimodal metadata from a rendered engine prompt.
-
-        Returns ``None`` for text-only prompts.
-        """
-        if engine_input.get("type") != "multimodal":
-            return None
-
-        # At this point engine_input is a MultiModalInput TypedDict.
-        mm_engine_input = cast(MultiModalInput, engine_input)
-        mm_hashes: MultiModalHashes = mm_engine_input["mm_hashes"]
-        raw_placeholders: MultiModalPlaceholders = mm_engine_input["mm_placeholders"]
-
-        mm_placeholders = {
-            modality: [PlaceholderRangeInfo(offset=p.offset, length=p.length) for p in ranges]
-            for modality, ranges in raw_placeholders.items()
-        }
-
-        # Serialize tensor data per modality.
-        kwargs_data: dict[str, list[str | None]] | None = None
-        if raw_mm_kwargs := mm_engine_input.get("mm_kwargs"):
-            kwargs_data = {}
-            for modality, items in raw_mm_kwargs.items():
-                kwargs_data[modality] = [encode_mm_kwargs_item(item) if item is not None else None for item in items]
-
-        return MultiModalFeatures(
-            mm_hashes=mm_hashes,
-            mm_placeholders=mm_placeholders,
-            kwargs_data=kwargs_data,
+        return extract_mm_features(
+            engine_input,
+            metadata_fields_for=self._placeholder_metadata_fields,
         )

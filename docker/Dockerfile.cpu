@@ -20,7 +20,7 @@
 #
 
 ######################### COMMON BASE IMAGE #########################
-FROM ubuntu:22.04 AS base-common
+FROM ubuntu:25.04 AS base-common
 
 WORKDIR /workspace/
 
@@ -31,12 +31,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update -y \
     && apt-get install -y --no-install-recommends ccache git curl wget ca-certificates \
-        gcc-12 g++-12 libtcmalloc-minimal4 libnuma-dev ffmpeg libsm6 libxext6 libgl1 jq lsof \
+        software-properties-common libtcmalloc-minimal4 libnuma-dev ffmpeg libsm6 libxext6 libgl1 jq lsof \
         make perl pkg-config protobuf-compiler libprotobuf-dev \
-    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 10 \
-        --slave /usr/bin/g++ g++ /usr/bin/g++-12 \
-        --slave /usr/bin/cc cc /usr/bin/gcc-12 \
-        --slave /usr/bin/c++ c++ /usr/bin/g++-12 \
+    && for i in 1 2 3; do \
+        add-apt-repository -y ppa:ubuntu-toolchain-r/test && break || \
+        { echo "Attempt $i failed, retrying toolchain PPA..."; sleep 5; }; \
+    done \
+    && apt-get update -y \
+    && apt-get install -y --no-install-recommends gcc-15 g++-15 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 10 \
+        --slave /usr/bin/g++ g++ /usr/bin/g++-15 \
+        --slave /usr/bin/cc cc /usr/bin/gcc-15 \
+        --slave /usr/bin/c++ c++ /usr/bin/g++-15 \
     && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --profile minimal --default-toolchain stable
@@ -82,6 +88,7 @@ RUN echo 'ulimit -c 0' >> ~/.bashrc
 ######################### BUILD IMAGE #########################
 FROM base AS aphrodite-build
 
+ARG ENABLE_AMX_FP8=1
 ARG GIT_REPO_CHECK=0
 ENV APHRODITE_REQUIRE_RUST_FRONTEND=1
 ARG MAX_JOBS=4
@@ -116,6 +123,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,target=/workspace/aphrodite/rust/target,sharing=locked \
     --mount=type=bind,source=.git,target=.git \
     APHRODITE_VERSION_OVERRIDE="${APHRODITE_VERSION_OVERRIDE}" \
+    CMAKE_ARGS="-DENABLE_AMX_FP8=${ENABLE_AMX_FP8}" \
     APHRODITE_TARGET_DEVICE=cpu python3 setup.py bdist_wheel \
       --py-limited-api=cp311
 

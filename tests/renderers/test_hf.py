@@ -6,6 +6,7 @@ import pytest
 from aphrodite.config import ModelConfig
 from aphrodite.entrypoints.chat_utils import load_chat_template
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
+from aphrodite.exceptions import APHRODITEValidationError
 from aphrodite.renderers.hf import (
     _consolidate_system_messages,
     _convert_developer_to_system,
@@ -97,7 +98,7 @@ def test_no_load_chat_template_filelike():
     # Testing chatml template
     template = "../../examples/does_not_exist"
 
-    with pytest.raises(ValueError, match="looks like a file path"):
+    with pytest.raises(APHRODITEValidationError, match="looks like a file path"):
         load_chat_template(chat_template=template)
 
 

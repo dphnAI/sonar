@@ -10,6 +10,7 @@ from aphrodite.entrypoints.launchers.cli_args import (
     validate_parsed_serve_args,
 )
 from aphrodite.entrypoints.openai.models.protocol import LoRAModulePath
+from aphrodite.exceptions import APHRODITEValidationError
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 from tests.utils import APHRODITE_PATH
 
@@ -196,7 +197,7 @@ def test_chat_template_validation_for_happy_paths(serve_parser):
 def test_chat_template_validation_for_sad_paths(serve_parser):
     """Ensure validation fails if the chat template doesn't exist"""
     args = serve_parser.parse_args(args=["--chat-template", "does/not/exist"])
-    with pytest.raises(ValueError):
+    with pytest.raises(APHRODITEValidationError):
         validate_parsed_serve_args(args)
 
 
