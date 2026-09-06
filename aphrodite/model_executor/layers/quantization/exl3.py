@@ -1429,7 +1429,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
             layer.exl3_down_ptrs_trellis,
             layer.exl3_small_out_d,
             layer.exl3_down_ptrs_suh,
-            layer.exl3_small_interm_a,
+            layer.exl3_small_interm_a_had,
             layer.exl3_down_ptrs_svh,
             topk_ids,
             topk_weights,
@@ -1529,7 +1529,7 @@ class Exl3MoEMethod(FusedMoEMethodBase):
                 layer.exl3_down_ptrs_trellis,
                 layer.exl3_small_out_d,
                 layer.exl3_down_ptrs_suh,
-                layer.exl3_small_interm_a,
+                layer.exl3_small_interm_a_had,
                 layer.exl3_down_ptrs_svh,
                 topk_ids_3d[i],
                 topk_weights_3d[i],
@@ -1623,6 +1623,12 @@ class Exl3MoEMethod(FusedMoEMethodBase):
         layer.exl3_small_interm_u = layer.exl3_small_interm_gu[layer.top_k :]
         layer.exl3_small_gate_up_ids = torch.empty((1, layer.top_k * 2), dtype=torch.long, device=device)
         layer.exl3_small_interm_a = torch.empty((layer.top_k, 1, intermediate_size), dtype=torch.float16, device=device)
+        # Hadamard scratch for the down projection. exl3_mgemm reads A and
+        # writes A_had; the autotuner re-launches the kernel many times on the
+        # same arguments, so passing interm_a as both makes every launch after
+        # the first re-transform the previous launch's output (wrong result on
+        # the first call for a shape, correct afterwards from the cache).
+        layer.exl3_small_interm_a_had = torch.empty_like(layer.exl3_small_interm_a)
         layer.exl3_small_out_d = torch.empty((layer.top_k, 1, layer.hidden_size), dtype=torch.float32, device=device)
         layer.exl3_small_batch_out = torch.empty(
             (layer.exl3_small_batch_threshold, layer.hidden_size),
