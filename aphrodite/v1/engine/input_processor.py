@@ -84,6 +84,14 @@ class InputProcessor:
     ) -> None:
         """Raise `ValueError` if SamplingParams or PoolingParams is not valid."""
         if isinstance(params, SamplingParams):
+            if "banned_strings" in (params.extra_args or {}) or "_sonar_phrase_retry" in (params.extra_args or {}):
+                from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
+                from aphrodite.v1.phrase_guard.scheduler import PhraseScheduler
+
+                PhraseRetryProcessor.validate_params(params)
+                if not issubclass(self.aphrodite_config.scheduler_config.get_scheduler_cls(), PhraseScheduler):
+                    raise ValueError("banned_strings requires PhraseScheduler")
+                PhraseRetryProcessor.validate_runtime(self.aphrodite_config, self.tokenizer)
             supported_generation_tasks = [task for task in supported_tasks if task in GENERATION_TASKS]
             if not supported_generation_tasks:
                 raise APHRODITEValidationError("This model does not support generation")
@@ -375,6 +383,13 @@ class InputProcessor:
                         mm_hash=base_mm_hash,
                     )
                 )
+
+        if sampling_params is not None and "banned_strings" in (sampling_params.extra_args or {}):
+            from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
+
+            PhraseRetryProcessor.validate_input(
+                resumable, bool(mm_features) or encoder_input is not None, prompt_embeds
+            )
 
         return EngineCoreRequest(
             request_id=request_id,

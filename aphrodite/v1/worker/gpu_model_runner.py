@@ -1104,6 +1104,11 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         The SamplingMetadata is updated and copied to the GPU if there is a
         new/resumed/paused/finished request in the batch.
         """
+        if rewinds := getattr(scheduler_output, "phrase_rewinds", None):
+            from aphrodite.v1.phrase_guard.worker import restore_requests
+
+            restore_requests(self, rewinds)
+
         # Remove finished requests from the cached states.
         for req_id in scheduler_output.finished_req_ids:
             req_state = self.requests.pop(req_id, None)
@@ -1155,7 +1160,11 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         for req_id in unscheduled_req_ids:
             self.input_batch.remove_request(req_id)
 
-        is_ngram_gpu = self.speculative_config is not None and self.speculative_config.use_ngram_gpu()
+        is_ngram_gpu = (
+            self.speculative_config is not None
+            and self.speculative_config.use_ngram_gpu()
+            and get_pp_group().is_last_rank
+        )
         if is_ngram_gpu:
             ngram_gpu_new_reqs: list[CachedRequestState] = []
 
@@ -2413,6 +2422,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
         # Prepare the attention metadata for each KV cache group and make layers
         # in the same group share the same metadata.
         spec_decode_common_attn_metadata = None
+        has_drafter = self.speculative_config is not None and get_pp_group().is_last_rank
         for kv_cache_gid, kv_cache_group in enumerate(kv_cache_groups):
             cm = copy(cm_base)  # shallow copy
 
@@ -2428,7 +2438,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 cm.block_table_tensor = _get_block_table(kv_cache_gid)
                 cm.slot_mapping = slot_mappings[kv_cache_gid]
 
-            if self.speculative_config and spec_decode_common_attn_metadata is None:
+            if has_drafter and spec_decode_common_attn_metadata is None:
                 if isinstance(
                     self.drafter,
                     (
@@ -2443,9 +2453,9 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin, ECConnec
                 else:
                     spec_decode_common_attn_metadata = cm
             # Capture per-group block tables for multi-group proposers.
-            if self.speculative_config and isinstance(self.drafter, Step3p5MTPProposer):
+            if has_drafter and isinstance(self.drafter, Step3p5MTPProposer):
                 self.drafter.set_per_group_attn_metadata(kv_cache_gid, cm.block_table_tensor, cm.slot_mapping)
-            elif self.speculative_config and isinstance(self.drafter, Gemma4Proposer):
+            elif has_drafter and isinstance(self.drafter, Gemma4Proposer):
                 self.drafter.set_per_group_block_table(kv_cache_gid, cm.block_table_tensor)
 
             for attn_gid in range(len(self.attn_groups[kv_cache_gid])):

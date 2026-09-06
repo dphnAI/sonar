@@ -132,6 +132,18 @@ else()
 endif()
 
 #
+# Pure CPU matcher, independent of Torch and CUDA ABIs.
+#
+define_extension_target(
+  _phrase_matcher
+  DESTINATION aphrodite
+  LANGUAGE CXX
+  SOURCES csrc/phrase_matcher.cpp
+  NO_TORCH
+  USE_SABI 3.8
+  WITH_SOABI)
+
+#
 # spinloop extension (pure CXX; must stay above the non-CUDA device branch so
 # CPU builds define the target before the early return)
 # This extension requires SABI 3.11 since it relies on Py_buffer support. Loading

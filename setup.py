@@ -636,6 +636,8 @@ def get_requirements() -> list[str]:
 
 ext_modules = []
 
+ext_modules.append(CMakeExtension(name="aphrodite._phrase_matcher"))
+
 if _is_cuda() or _is_hip():
     ext_modules.append(CMakeExtension(name="aphrodite.cumem_allocator"))
     # Optional since this doesn't get built (produce an .so file). This is just

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
 
@@ -29,6 +31,9 @@ from aphrodite.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
 from aphrodite.v1.worker.gpu.sample.trace_replay import TraceReplayState
 from aphrodite.v1.worker.gpu.states import RequestState
 
+if TYPE_CHECKING:
+    from aphrodite.v1.phrase_guard.v2 import RetryMask
+
 
 class Sampler:
     def __init__(
@@ -56,6 +61,7 @@ class Sampler:
         self.logprob_token_ids_state = LogprobTokenIdsState(max_num_reqs, device)
         self.thinking_budget_state = ThinkingBudgetState(req_states, reasoning_config)
         self.trace_replay_state = TraceReplayState(req_states) if enable_trace_replay else None
+        self.phrase_retry_mask: RetryMask | None = None
         self.needs_logits_processing = np.zeros(max_num_reqs, dtype=bool)
         self.num_speculative_tokens = num_speculative_tokens
         self.return_sampling_mask = return_sampling_mask
@@ -73,8 +79,16 @@ class Sampler:
 
         states = self.sampling_states
         temperature = states.temperature.np[req_idx]
+        retry = (sampling_params.extra_args or {}).get("_sonar_phrase_retry")
+        if retry is not None and self.phrase_retry_mask is None:
+            from aphrodite.v1.phrase_guard.v2 import RetryMask
+
+            self.phrase_retry_mask = RetryMask(self.req_states.max_num_reqs, self.req_states.device)
+        if self.phrase_retry_mask is not None:
+            self.phrase_retry_mask.add_request(req_idx, prompt_len, retry)
         self.needs_logits_processing[req_idx] = (
-            self.logit_bias_state.use_logit_bias[req_idx]
+            retry is not None
+            or self.logit_bias_state.use_logit_bias[req_idx]
             or self.penalties_state.use_penalty[req_idx]
             or self.bad_words_state.num_bad_words.np[req_idx] > 0
             or (self.thinking_budget_state.enabled and self.thinking_budget_state.use_thinking_budget[req_idx])
@@ -85,6 +99,8 @@ class Sampler:
         )
 
     def apply_staged_writes(self) -> None:
+        if self.phrase_retry_mask is not None:
+            self.phrase_retry_mask.apply_staged_writes()
         self.sampling_states.apply_staged_writes()
         self.penalties_state.apply_staged_writes()
         self.logit_bias_state.apply_staged_writes()
@@ -239,6 +255,8 @@ class Sampler:
         )
 
         # Apply temperature in place.
+        if self.phrase_retry_mask is not None:
+            self.phrase_retry_mask.apply(logits, expanded_idx_mapping, idx_mapping_np, pos)
         self.sampling_states.apply_temperature(logits, expanded_idx_mapping, idx_mapping_np)
 
         # Apply min_p in place.
