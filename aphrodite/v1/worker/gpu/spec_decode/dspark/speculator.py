@@ -107,7 +107,32 @@ class DSparkSpeculator(DFlashSpeculator):
         idx_map: torch.Tensor,
         sample_pos: torch.Tensor,
         step: int,
+        *,
+        bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if bias is not None:
+            fused_sample = getattr(self.model, "sample_draft_with_bias", None)
+            if (
+                fused_sample is not None
+                and self.draft_logits is not None
+                and self._d2t_scatter_index is None
+                and self.draft_watermarker is None
+                and self.acceptance_estimator is None
+            ):
+                sampled = fused_sample(
+                    logits,
+                    bias,
+                    idx_map,
+                    self.temperature,
+                    self.seeds,
+                    sample_pos - 1,
+                    self.draft_logits,
+                    self._step_cols[step],
+                    use_fp64=self.use_fp64_gumbel,
+                )
+                if sampled is not None:
+                    return sampled
+            logits = logits + bias
         self._maybe_predict_acceptance(logits, idx_map, self._step_cols[step])
         if self.draft_logits is None:
             draft_ids = logits.argmax(dim=-1)
@@ -166,8 +191,7 @@ class DSparkSpeculator(DFlashSpeculator):
             if self.use_confidence_head:
                 confidence_markov_embeds.append(markov_embed)
             bias = self.model.markov_bias(markov_embed)
-            logits_i = base_logits[:, i] + bias
-            draft_sampled_i = self._sample_logits(logits_i, idx_map[:, i], sample_pos[:, i], i)
+            draft_sampled_i = self._sample_logits(base_logits[:, i], idx_map[:, i], sample_pos[:, i], i, bias=bias)
             self.draft_tokens[:num_reqs, i] = draft_sampled_i
             prev = draft_sampled_i
 

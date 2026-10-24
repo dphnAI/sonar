@@ -46,9 +46,12 @@ from .b12x_layers import (
     B12xFP8LinearMethod,
     B12xLinearMethod,
     B12xRMSNorm,
+    block32_linear_plan,
+    block32_linear_prequantized,
 )
 from .ced import CED_WINDOW, ced_decoder_start
 from .compressor import DeepseekCompressor
+from .qkv_norm import fused_qkv_norm_quant, prepare_qkv_norm_quant
 from .sparse_mla import (
     SWA_BLOCK_SIZE,
     DeepseekV41B12xBackend,
@@ -508,6 +511,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         )
         self.q_norm = B12xRMSNorm(hf.q_lora_rank, hf.rms_norm_eps)
         self.kv_norm = B12xRMSNorm(512, hf.rms_norm_eps)
+        self._qkv_norm_quant = False
         self.wq_b = ColumnParallelLinear(
             hf.q_lora_rank,
             hf.num_attention_heads * 512,
@@ -1225,9 +1229,19 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             raise PreparationResourceUnavailableError("V4.1 attention metadata is not prepared")
         rows = hidden_states.shape[0]
         qr_kv, _ = self.fused_wqa_wkv(hidden_states)
-        qr, kv = qr_kv.split((self.q_lora_rank, 512), dim=-1)
-        qr, kv = self.q_norm(qr), self.kv_norm(kv)
-        q = self.wq_b(qr).view(rows, self.n_local_heads, 512)
+        norm_quant = self._qkv_norm_quant and rows <= self.DECODE_CHUNK and qr_kv.dtype == torch.bfloat16
+        qr = q_values = q_scale_mma = None
+        if norm_quant:
+            q_plan = block32_linear_plan(self.wq_b, rows)
+            q_values, q_scale_mma, kv = fused_qkv_norm_quant(
+                qr_kv, self.q_norm.weight, self.kv_norm.weight, self.q_norm.variance_epsilon, q_plan.query.max_tokens
+            )
+            q = block32_linear_prequantized(self.wq_b, q_plan, q_values, q_scale_mma)
+        else:
+            qr, kv = qr_kv.split((self.q_lora_rank, 512), dim=-1)
+            qr, kv = self.q_norm(qr), self.kv_norm(kv)
+            q = self.wq_b(qr)
+        q = q.view(rows, self.n_local_heads, 512)
         q = _rotated(
             q,
             positions,
@@ -1253,7 +1267,12 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             index_query = None
             if self.indexer is not None:
                 h = self.indexer.heads
-                iq = self.indexer.wq_b(qr).view(rows, h, 128)
+                if norm_quant:
+                    index_plan = block32_linear_plan(self.indexer.wq_b, rows)
+                    iq = block32_linear_prequantized(self.indexer.wq_b, index_plan, q_values, q_scale_mma)
+                else:
+                    iq = self.indexer.wq_b(qr)
+                iq = iq.view(rows, h, 128)
                 iq = _rotated(
                     iq,
                     positions,
@@ -1505,6 +1524,36 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             hidden=hidden,
             block_size=(32, 32),
         )
+        q_weight, kv_weight = self.q_norm.weight, self.kv_norm.weight
+        capacities = getattr(self.wq_b, "b12x_capacities", ())
+        consumers = (self.wq_b,) if self.indexer is None else (self.wq_b, self.indexer.wq_b)
+        eps = self.q_norm.variance_epsilon
+        self._qkv_norm_quant = (
+            self.q_lora_rank == 1280
+            and q_weight.shape == (1280,)
+            and kv_weight.shape == (512,)
+            and q_weight.dtype == kv_weight.dtype == torch.bfloat16
+            and q_weight.device == kv_weight.device
+            and q_weight.device.type == "cuda"
+            and q_weight.is_contiguous()
+            and kv_weight.is_contiguous()
+            and self.q_norm.streams == self.kv_norm.streams == 1
+            and eps == self.kv_norm.variance_epsilon
+            and math.isfinite(eps)
+            and eps > 0
+            and bool(capacities)
+            and capacities[-1] >= 64
+            and all(
+                getattr(layer, "b12x_capacities", ()) == capacities
+                and getattr(layer, "b12x_weight", None) is not None
+                and layer.b12x_weight.in_features == 1280
+                and layer.b12x_weight.block_size == (32, 32)
+                and getattr(layer, "bias", None) is None
+                for layer in consumers
+            )
+        )
+        if self._qkv_norm_quant:
+            prepare_qkv_norm_quant(q_weight.device)
 
     def _wo_preparation_unit(self, workload):
         from b12x.preparation import PreparedCall

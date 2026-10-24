@@ -227,6 +227,17 @@ experimental native B12x backend. With DSpark, also set
 This path uses packed compressed KV caches, native sparse attention, fused
 output projections, and native Engram lookup. It retains Sonar's MoE scheduling.
 
+For BF16 chunks of up to 64 tokens, the backend fuses query/KV RMSNorm
+with MXFP8 query quantization. The query projection and optional indexer
+reuse the quantized query with their original prepared GEMMs. The kernel
+preserves BF16 normalization rounding and keeps KV in BF16.
+
+DSpark projects the draft layers' context keys and values together, with one
+input quantization. Full-vocabulary drafting can also combine the Markov-logit
+addition, sampling, and proposal-cache write when their layouts match.
+Sampling preserves the existing dtype rounding, per-request seeds, and
+proposal-cache layout. These optimizations require no additional flags.
+
 Use the bundled B12x provider described above. The archived standalone package
 is not supported.
 

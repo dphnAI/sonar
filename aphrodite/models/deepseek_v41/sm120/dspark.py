@@ -67,18 +67,28 @@ _EXPERT_SCALE_RE = re.compile(r"\.experts\.\d+\.w[123]\.scale$")
 
 
 class _ContextKVProjection:
-    """KV-only view of checkpoint block32 weights, packed once after loading."""
+    """Project and normalize all draft context KVs with one input quantization."""
 
-    def __init__(self, attn: nn.Module, capacity: int) -> None:
-        fused = attn.fused_wqa_wkv
-        start = attn.q_lora_rank
-        if start % 32:
+    def __init__(self, attns: Iterable[nn.Module], capacity: int) -> None:
+        attns = tuple(attns)
+        fused = attns[0].fused_wqa_wkv
+        starts = tuple(attn.q_lora_rank for attn in attns)
+        if any(start % 32 for start in starts):
             raise ValueError("DSpark context KV must start on a checkpoint scale block")
+        weights = tuple(attn.fused_wqa_wkv.weight[start:] for attn, start in zip(attns, starts))
+        scales = tuple(attn.fused_wqa_wkv.weight_scale_inv[start // 32 :] for attn, start in zip(attns, starts))
         self.weight = block_fp8_linear.pack_weight(
-            fused.weight[start:],
-            fused.weight_scale_inv[start // 32 :],
+            torch.cat([weight.view(torch.uint8) for weight in weights]).view(weights[0].dtype),
+            torch.cat([scale.view(torch.uint8) for scale in scales]).view(scales[0].dtype),
             block_size=(32, 32),
         )
+        self.num_layers = len(attns)
+        self.norm = RMSNorm(
+            attns[0].kv_norm.weight.numel(),
+            attns[0].kv_norm.variance_epsilon,
+            streams=self.num_layers,
+        )
+        self.norm.weight = nn.Parameter(torch.cat([attn.kv_norm.weight for attn in attns]), requires_grad=False)
         self.capacities = tuple(
             sorted(
                 {
@@ -93,7 +103,7 @@ class _ContextKVProjection:
                     device=fused.weight.device,
                     max_tokens=bound,
                     in_features=fused.weight.shape[1],
-                    out_features=fused.weight.shape[0] - start,
+                    out_features=self.weight.out_features,
                     block_size=(32, 32),
                     output_mode="provided",
                 )
@@ -143,7 +153,7 @@ class _ContextKVProjection:
             )
             for bound, plan in zip(self.capacities, self.plans)
         )
-        return (
+        return self.norm.get_b12x_preparation_units(self.norm, workload) + (
             B12xPreparationUnit(
                 name="DSparkContextKV",
                 key=(id(self), self.capacities),
@@ -175,7 +185,7 @@ class _ContextKVProjection:
         )
         retain_cuda_graph_capture_resource(scratch)
         block_fp8_linear.run(binding=binding)
-        return out
+        return self.norm(out).view(rows, self.num_layers, self.weight.out_features // self.num_layers)
 
 
 class DSparkDeepseekV4Model(nn.Module):
@@ -189,7 +199,7 @@ class DSparkDeepseekV4Model(nn.Module):
         self.num_hidden_layers = config.num_hidden_layers
         self.target_layer_ids = tuple(config.dspark_target_layer_ids)
         self.context_capacity = aphrodite_config.scheduler_config.max_num_batched_tokens
-        self._context_kv_projections: list[_ContextKVProjection] = []
+        self._context_kv_projection: _ContextKVProjection | None = None
 
         self.num_dspark_layers = (
             getattr(config, "n_mtp_layers", None) or getattr(config, "num_nextn_predict_layers", None) or 3
@@ -277,6 +287,8 @@ class DSparkDeepseekV4Model(nn.Module):
         ``None`` (or a ``None`` entry) runs the projection to reserve workspace
         but writes nothing (profiling).
         """
+        assert self._context_kv_projection is not None
+        kvs = self._context_kv_projection(main_x)
         for i, layer in enumerate(self.layers):
             slot_mapping = (
                 context_slot_mappings
@@ -284,7 +296,7 @@ class DSparkDeepseekV4Model(nn.Module):
                 else context_slot_mappings[i]
             )
             attn = layer.attn
-            kv = attn.kv_norm(self._context_kv_projections[i](main_x))
+            kv = kvs[:, i]
             if slot_mapping is None:
                 continue
             attn.insert_context_kv(kv, context_positions, slot_mapping)
@@ -390,6 +402,25 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
     def compute_draft_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Full-vocab draft: base logits, no d2t scatter.
         return self.compute_logits(hidden_states)
+
+    @staticmethod
+    def sample_draft_with_bias(
+        logits, bias, idx_map, temperature, seeds, positions, cache, column, *, use_fp64=False
+    ) -> torch.Tensor | None:
+        from .sampling import sample_rounded_sum
+
+        if (
+            logits.dtype != bias.dtype
+            or logits.dtype != cache.dtype
+            or logits.dtype not in (torch.bfloat16, torch.float16, torch.float32)
+            or logits.stride(-1) != 1
+            or bias.stride(-1) != 1
+            or cache.stride(-1) != 1
+        ):
+            return None
+        return sample_rounded_sum(
+            logits, bias, idx_map, temperature, seeds, positions, cache, column, use_fp64=use_fp64
+        )
 
     def map_draft_to_target(self, draft_ids: torch.Tensor) -> torch.Tensor:
         return draft_ids  # full-vocab: draft ids are target ids
@@ -519,9 +550,9 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
     def process_weights_after_loading(self) -> None:
         for layer in self.model.layers:
             layer.attn.setup_wo_projection()
-        self.model._context_kv_projections = [
-            _ContextKVProjection(layer.attn, self.model.context_capacity) for layer in self.model.layers
-        ]
+        self.model._context_kv_projection = _ContextKVProjection(
+            (layer.attn for layer in self.model.layers), self.model.context_capacity
+        )
         _finalize_mhc_broadcast_weights(self.model.layers[0])
         for layer in self.model.layers:
             mhc = layer._b12x_mhc

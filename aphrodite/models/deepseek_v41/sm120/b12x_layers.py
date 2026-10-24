@@ -93,14 +93,56 @@ def _mhc_caps(device, capacity, hidden):
     return mhc.Caps(device=device, max_tokens=capacity, hidden_size=hidden, split_k=hidden // 64)
 
 
+def block32_linear_plan(layer: nn.Module, rows: int) -> Plan:
+    """Select the original block32 declaration for the live row count."""
+    index = bisect_left(layer.b12x_capacities, rows)
+    if index == len(layer.b12x_capacities):
+        raise ValueError("V4.1 linear rows exceed planned capacity")
+    return layer.b12x_plans[index]
+
+
+def block32_linear_prequantized(
+    layer: nn.Module, plan: Plan, values: torch.Tensor, scale_mma: torch.Tensor
+) -> torch.Tensor:
+    """Run the original prepared dense projection without quantizing Q again."""
+    prepared = plan.prepared
+    packed = getattr(layer, "b12x_weight", None)
+    if prepared is None or packed is None or prepared.state.dense is None:
+        raise PreparationResourceUnavailableError("V4.1 prequantized block32 projection is not prepared")
+    if getattr(layer, "bias", None) is not None:
+        raise ValueError("V4.1 block32 projections require bias-free weights")
+    state = prepared.state
+    query = state.query
+    if query.source_dtype != "bfloat16" or query.output_dtype != "bfloat16" or query.output_mode != "provided":
+        raise ValueError("V4.1 prequantized block32 projection requires the original BF16 output contract")
+    rows = values.shape[0]
+    output = torch.empty((rows, query.out_features, 1), dtype=torch.bfloat16, device=state.device)
+    workspace = None
+    if state.scratch.workspace_nbytes:
+        specs = (((state.scratch.workspace_nbytes // 4,), torch.float32),)
+        manager = current_workspace_manager()
+        stream = current_stream()
+        buffers = (
+            manager.get_stream_simultaneous(stream.stream_id, *specs)
+            if stream == aux_stream()
+            else manager.get_simultaneous(*specs)
+        )
+        retain_cuda_graph_capture_resource(buffers)
+        workspace = buffers[0]
+    state.dense.run(
+        (values.view(rows, query.in_features, 1), scale_mma),
+        (packed.weight.values.view(query.out_features, query.in_features, 1), packed.weight.scale_mma),
+        out=output,
+        split_k_workspace=workspace,
+    )
+    return output[:, :, 0]
+
+
 @torch.library.custom_op("aphrodite::dsv41_block32_linear", mutates_args=("out",))
 def _block32_linear(x: torch.Tensor, out: torch.Tensor, key: int) -> None:
     layer = _LINEARS[key]
     rows = x.numel() // layer.weight.shape[1]
-    index = bisect_left(layer.b12x_capacities, rows)
-    if index == len(layer.b12x_capacities):
-        raise ValueError("V4.1 linear rows exceed planned capacity")
-    plan = layer.b12x_plans[index]
+    plan = block32_linear_plan(layer, rows)
     specs = tuple((spec.shape, spec.dtype) for spec in plan.scratch_specs())
     manager = current_workspace_manager()
     stream = current_stream()
@@ -435,7 +477,7 @@ def _rmsnorm(
         p,
         normalized=out,
         bottleneck=x.view(-1)[: x.shape[0]].view(-1, 1),
-        block_input=x,
+        block_input=x.view(-1)[: x.shape[0] * p.query.hidden_size].view(-1, p.query.hidden_size),
         tokens=x.shape[0],
     )
     hyperconnection.run_grouped_rmsnorm(x, weight, eps=eps, binding=binding, zero_centered=False)
@@ -447,13 +489,14 @@ def _rmsnorm_fake(x, weight, out, eps, plan_handle):
 
 
 class B12xRMSNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, *, streams: int = 1):
         super().__init__()
         self.weight = nn.Parameter(
-            torch.ones(hidden_size, dtype=torch.bfloat16),
+            torch.ones(hidden_size * streams, dtype=torch.bfloat16),
             requires_grad=False,
         )
         self.variance_epsilon = eps
+        self.streams = streams
         self.capacity = _capacity()
         self._plan = None
         set_b12x_preparation_provider(self, self)
@@ -466,8 +509,8 @@ class B12xRMSNorm(nn.Module):
                 hyperconnection.Caps(
                     device=self.weight.device,
                     max_tokens=self.capacity,
-                    hidden_size=self.weight.numel(),
-                    streams=1,
+                    hidden_size=self.weight.numel() // self.streams,
+                    streams=self.streams,
                     lowrank=1,
                 ),
                 invocation={
