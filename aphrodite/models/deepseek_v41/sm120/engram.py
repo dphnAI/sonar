@@ -426,7 +426,9 @@ class ParallelEngramEmbedding(nn.Module):
         retain_cuda_graph_capture_resource(binding)
         if self.mapped_host_nbytes:
             retain_cuda_graph_capture_resource(self)
-        native.run_lookup(binding)
+        # Launch only the live rows. Readers slice the staging buffer to the
+        # same rows, so the capacity tail is never read and is not cleared.
+        native.run_lookup(binding, indices.shape[0], clear_tail=False)
 
 
 class Engram(nn.Module):
