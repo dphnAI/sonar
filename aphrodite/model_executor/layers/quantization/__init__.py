@@ -117,9 +117,9 @@ def get_quantization_config(quantization: str) -> type[QuantizationConfig]:
     if quantization == "deepseek_v41_fp8":
         if quantization in _CUSTOMIZED_METHOD_TO_QUANT_CONFIG:
             return _CUSTOMIZED_METHOD_TO_QUANT_CONFIG[quantization]
-        from aphrodite.models.deepseek_v41.sm120.quant_config import DeepseekV41FP8Config
+        from aphrodite.models.deepseek_v41.sm120.quant_config import DeepseekV41FP8Config as NativeDeepseekV41FP8Config
 
-        return DeepseekV41FP8Config
+        return NativeDeepseekV41FP8Config
 
     # lazy import to avoid triggering `torch.compile` too early
     from aphrodite.config.quantization import _ONLINE_SHORTHANDS

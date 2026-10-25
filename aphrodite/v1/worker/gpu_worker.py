@@ -618,7 +618,7 @@ class Worker(WorkerBase):
                     return self.model_runner.profile_cudagraph_memory(callback)
                 return self.model_runner.profile_cudagraph_memory()
             if native:
-                return self.model_runner.profile_run(
+                return cast("GPUModelRunnerV2", self.model_runner).profile_run(
                     randomize_inputs=self.randomize_dummy_inputs,
                     prepare_profile_state=callback,
                 )

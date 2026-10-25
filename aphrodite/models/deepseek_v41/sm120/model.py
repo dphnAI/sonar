@@ -57,6 +57,7 @@ from .b12x_layers import B12xRMSNorm as RMSNorm
 from .ced import ced_decoder_start, gather_rows, scatter_rows
 from .engram import Engram, EngramLayout, NgramHashState
 from .mhc_split import join_mhc_split
+from .sparse_mla import DeepseekV41B12xMetadata
 
 logger = init_logger(__name__)
 
@@ -370,7 +371,8 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
             if isinstance(attn_metadata, list):
                 attn_metadata = attn_metadata[0]
             if isinstance(attn_metadata, dict):
-                swa_metadata = attn_metadata[self.engram_swa_prefix]
+                assert self.engram_swa_prefix is not None
+                swa_metadata = typing.cast(DeepseekV41B12xMetadata, attn_metadata[self.engram_swa_prefix])
                 query_start_loc = swa_metadata.query_start_loc
                 if lookback_token_ids is None:
                     raise ValueError("V4.1 Engram requires accepted-only lookback_token_ids")
