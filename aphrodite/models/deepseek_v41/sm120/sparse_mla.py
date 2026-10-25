@@ -22,19 +22,6 @@ MAIN_BLOCK_SIZE = 256
 SWA_BLOCK_SIZE = 128
 
 
-@triton.jit(do_not_specialize=["nr", "nt"])
-def _requests(Starts, Seq, OutStarts, Pos, Counts, nr, nt, R: tl.constexpr, B: tl.constexpr):
-    r = tl.program_id(0) * B + tl.arange(0, B)
-    start = tl.load(Starts + r, r <= nr, other=nt)
-    end = tl.load(Starts + r + 1, r < nr, other=nt)
-    seq = tl.load(Seq + r, r < nr, other=0)
-    tl.store(OutStarts + r, start, r <= R)
-    tl.store(Pos + r, tl.where(r < nr, seq - (end - start), -1), r < R)
-    if tl.program_id(0) == 0:
-        tl.store(Counts, nt)
-        tl.store(Counts + 1, nr)
-
-
 @triton.jit(do_not_specialize=["nr", "nt", "stride", "table_width"])
 def _tokens(
     Starts,
@@ -45,16 +32,32 @@ def _tokens(
     Reqs,
     Slots,
     Visible,
+    OutStarts,
+    RequestPositions,
+    Counts,
     nr,
     nt,
     stride,
     table_width,
+    R: tl.constexpr,
     T: tl.constexpr,
     PAGE: tl.constexpr,
     RATIO: tl.constexpr,
     B: tl.constexpr,
     CIRCULAR: tl.constexpr = False,
 ):
+    if tl.program_id(0) == 0:
+        # Per-request metadata rides in the first program instead of a
+        # separate launch: request starts, prefix positions and live counts.
+        for first in range(0, R + 1, B):
+            r = first + tl.arange(0, B)
+            start = tl.load(Starts + r, r <= nr, other=nt)
+            end = tl.load(Starts + r + 1, r < nr, other=nt)
+            seq = tl.load(Seq + r, r < nr, other=0)
+            tl.store(OutStarts + r, start, r <= R)
+            tl.store(RequestPositions + r, tl.where(r < nr, seq - (end - start), -1), r < R)
+        tl.store(Counts, nt)
+        tl.store(Counts + 1, nr)
     t = tl.program_id(0) * B + tl.arange(0, B)
     lo = tl.full((B,), 0, tl.int32)
     hi = tl.full((B,), nr, tl.int32)
@@ -204,17 +207,6 @@ class DeepseekV41B12xMetadataBuilder(AttentionMetadataBuilder[DeepseekV41B12xMet
     ):
         cm = common_attn_metadata
         table = cm.block_table_tensor
-        _requests[(triton.cdiv(self.requests + 1, 128),)](
-            cm.query_start_loc,
-            cm.seq_lens,
-            self.starts,
-            self.request_positions,
-            self.counts,
-            cm.num_reqs,
-            cm.num_actual_tokens,
-            self.requests,
-            128,
-        )
         # num_actual_tokens already includes the selected graph's padding.
         # Retain capacity-sized storage, but refresh only that readable domain.
         _tokens[(max(1, triton.cdiv(cm.num_actual_tokens, 128)),)](
@@ -226,10 +218,14 @@ class DeepseekV41B12xMetadataBuilder(AttentionMetadataBuilder[DeepseekV41B12xMet
             self.reqs,
             self.slots,
             self.lengths,
+            self.starts,
+            self.request_positions,
+            self.counts,
             cm.num_reqs,
             cm.num_actual_tokens,
             table.stride(0),
             table.shape[1],
+            self.requests,
             self.tokens,
             self.page,
             self.ratio,
