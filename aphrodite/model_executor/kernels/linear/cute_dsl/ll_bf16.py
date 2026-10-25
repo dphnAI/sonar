@@ -37,6 +37,8 @@ _DEFAULT_SPLITK_CONFIG = (6, 4)
 # (6144, 256)  # GLM5.2
 # (7168, 256)  # DSV3.2
 # (7168, 384)  # DSV4-Pro
+# (5120, 384)  # DSV4.1-Flash (SM120)
+# (5120, 128)  # DSV4.1-Flash DSpark draft (SM120)
 
 # SM100f-specific tuned configs
 _SM100F_TUNED_DOTPROD_BS: dict[tuple[int, int], dict[int, int]] = {
@@ -74,6 +76,16 @@ _SM90_TUNED_SPLITK_CONFIGS: dict[tuple[int, int], dict[int, tuple[int, int]]] = 
     },
 }
 
+# SM120-specific tuned configs (RTX PRO 6000). Split-K is limited to 4 stages
+# by the 99 KiB shared-memory budget.
+_SM120_TUNED_DOTPROD_BS: dict[tuple[int, int], dict[int, int]] = {
+    (5120, 384): {1: 256},
+    (5120, 128): {M: 128 for M in (1, 7, 8)},
+}
+_SM120_TUNED_SPLITK_CONFIGS: dict[tuple[int, int], dict[int, tuple[int, int]]] = {
+    (5120, 384): {7: (2, 4), 8: (4, 4)},
+}
+
 
 def _arch_tuned_configs() -> tuple[
     dict[tuple[int, int], dict[int, int]],
@@ -90,6 +102,11 @@ def _arch_tuned_configs() -> tuple[
         return (
             _SM90_TUNED_DOTPROD_BS,
             _SM90_TUNED_SPLITK_CONFIGS,
+        )
+    if current_platform.is_device_capability(120):
+        return (
+            _SM120_TUNED_DOTPROD_BS,
+            _SM120_TUNED_SPLITK_CONFIGS,
         )
     return {}, {}
 
@@ -114,8 +131,11 @@ class LLBf16Gemm:
 
     def dispatch(self, *, M: int, K: int, N: int, output_dtype: torch.dtype = torch.float32) -> CompileKey:
         tuned_bs, tuned_splitk = _arch_tuned_configs()
-        if M <= _DEFAULT_DOTPROD_MAX_M or K < 2048:
-            bs = tuned_bs.get((K, N), {}).get(M, _DEFAULT_DOTPROD_BS)
+        shape_bs = tuned_bs.get((K, N), {})
+        # A tuned dot-product block size also selects dot-product above the
+        # default M cutoff.
+        if M <= _DEFAULT_DOTPROD_MAX_M or K < 2048 or M in shape_bs:
+            bs = shape_bs.get(M, _DEFAULT_DOTPROD_BS)
             return self.CompileKey(backend="dotprod", M=M, K=K, bs=bs, output_dtype=output_dtype)
 
         split_k, num_stages = tuned_splitk.get((K, N), {}).get(M, _DEFAULT_SPLITK_CONFIG)

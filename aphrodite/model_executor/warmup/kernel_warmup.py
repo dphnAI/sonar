@@ -210,9 +210,13 @@ def kernel_warmup(worker: "Worker", *, process_local_only: bool = False):
             worker.scheduler_config.max_num_batched_tokens,
         )
 
-    # Match runtime eligibility: SM 9.0 or 10.x, not SM 11.x (Thor),
+    # Match runtime eligibility: SM 9.0, 10.x or 12.0, not SM 11.x (Thor),
     # where cuteDSL's NVVM backend cannot compile this kernel.
-    if current_platform.is_device_capability((9, 0)) or current_platform.is_device_capability_family(100):
+    if (
+        current_platform.is_device_capability((9, 0))
+        or current_platform.is_device_capability_family(100)
+        or current_platform.is_device_capability((12, 0))
+    ):
         _warmup_ll_bf16_router_gemm(worker.get_model())
 
     _warmup_gemm_rs_ar()

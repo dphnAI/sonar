@@ -12,6 +12,7 @@ from aphrodite.model_executor.layers.linear import (
     UnquantizedLinearMethod,
 )
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
+from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import direct_register_custom_op
 
@@ -22,7 +23,7 @@ logger = init_logger(__name__)
 class GateLinear(ReplicatedLinear):
     """MoE gate linear layer with multi-tier GEMM dispatch:
 
-    1. cuteDSL ll_bf16_gemm (SM90+, M<=16, bf16 in, fp32 out,
+    1. cuteDSL ll_bf16_gemm (SM90+ and SM120, M<=16, bf16 in, fp32 out,
        any shape w/ K divisible by 8)
     2. fp32 specialized kernel (bf16/fp32 in, fp32 out; SM90+
        model-specific shapes and batch limits, gfx950 any shape with M<=32)
@@ -45,6 +46,9 @@ class GateLinear(ReplicatedLinear):
     ``APHRODITE_BATCH_INVARIANT`` also disables tiers 1-5: they pick kernels and
     split-K from the token count and skip the batch-invariant linear path.
     """
+
+    # Declared here because __init__ may replace the base layer's method.
+    quant_method: QuantizeMethodBase
 
     # (hidden_size, num_experts) pairs with an instantiated fp32 kernel.
     FP32_SUPPORTED_SHAPES = {
@@ -74,6 +78,7 @@ class GateLinear(ReplicatedLinear):
     ):
         is_hopper = current_platform.is_device_capability((9, 0))
         is_blackwell = current_platform.is_device_capability_family(100)
+        is_sm120 = current_platform.is_device_capability((12, 0))
         is_gfx950 = False
         if current_platform.is_rocm():
             from aphrodite.platforms.rocm import on_gfx950
@@ -83,6 +88,8 @@ class GateLinear(ReplicatedLinear):
         can_use_specialized_kernels = (
             current_platform.is_cuda() and (is_hopper or is_blackwell) and not bias and not batch_invariant
         )
+        # Tier 1 is also tuned for SM120; the other specialized tiers are not.
+        can_use_ll_bf16 = current_platform.is_cuda() and is_sm120 and not bias and not batch_invariant
 
         # If fp32 compute is required and no specialized kernel is available,
         # store weights in fp32 so the fallback linear path computes in fp32.
@@ -106,8 +113,10 @@ class GateLinear(ReplicatedLinear):
         # tier below is disabled and forward falls back to ReplicatedLinear.
         self.is_unquantized = isinstance(self.quant_method, UnquantizedLinearMethod)
         can_use_specialized_kernels &= self.is_unquantized
+        can_use_ll_bf16 = (can_use_ll_bf16 or can_use_specialized_kernels) and self.is_unquantized
 
         self.allow_specialized_router_gemm = can_use_specialized_kernels
+        self.allow_ll_bf16_router_gemm = can_use_ll_bf16
 
         # fp32 specialized kernel eligibility (exact dims, fp32 weight)
         fp32_router_gemm_available = hasattr(torch.ops, "_C") and hasattr(torch.ops._C, "fp32_router_gemm")
@@ -183,19 +192,22 @@ class GateLinear(ReplicatedLinear):
         # SM90+ required because:
         # 1. PDL support. Both dot-product and split-K kernels.
         # 2. Thread Block Clusters. Split-K kernel for cross-CTA reduction.
+        # SM120 has both and is tuned for ll_bf16_gemm only.
         self.allow_ll_bf16_gemm = False
         self.allow_ll_fp32w_gemm = False
-        if can_use_specialized_kernels:
+        if can_use_ll_bf16:
             from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
                 is_available as is_ll_bf16_gemm_available,
-            )
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
-                is_available as is_ll_fp32w_gemm_available,
             )
 
             self.allow_ll_bf16_gemm = (
                 is_ll_bf16_gemm_available() and self.weight.dtype == torch.bfloat16 and self.out_dtype == torch.float32
             )
+        if can_use_specialized_kernels:
+            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
+                is_available as is_ll_fp32w_gemm_available,
+            )
+
             self.allow_ll_fp32w_gemm = (
                 is_ll_fp32w_gemm_available() and self.weight.dtype == torch.float32 and self.out_dtype == torch.float32
             )
@@ -236,17 +248,19 @@ class GateLinear(ReplicatedLinear):
         # out_dtype may start as None -> recompute eligibility here
         self.allow_rocm_bf16x3_router_gemm = self._rocm_bf16x3_weight_eligible and out_dtype == torch.float32
 
-        if self.allow_specialized_router_gemm:
+        if self.allow_ll_bf16_router_gemm:
             from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
                 is_available as is_ll_bf16_gemm_available,
-            )
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
-                is_available as is_ll_fp32w_gemm_available,
             )
 
             self.allow_ll_bf16_gemm = (
                 is_ll_bf16_gemm_available() and self.weight.dtype == torch.bfloat16 and out_dtype == torch.float32
             )
+        if self.allow_specialized_router_gemm:
+            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
+                is_available as is_ll_fp32w_gemm_available,
+            )
+
             self.allow_ll_fp32w_gemm = (
                 is_ll_fp32w_gemm_available() and self.weight.dtype == torch.float32 and out_dtype == torch.float32
             )
@@ -256,7 +270,7 @@ class GateLinear(ReplicatedLinear):
         return output if not self.return_bias else (output, None)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor | tuple[torch.Tensor, Parameter | None]:
-        # Tier 1: cuteDSL ll_bf16_gemm (SM90+, bf16 in, fp32 out,
+        # Tier 1: cuteDSL ll_bf16_gemm (SM90+ and SM120, bf16 in, fp32 out,
         # any dims w/ K divisible by 8)
         if self.allow_ll_bf16_gemm and x.shape[0] <= self.LL_BF16_MAX_TOKENS and x.dtype == torch.bfloat16:
             from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
