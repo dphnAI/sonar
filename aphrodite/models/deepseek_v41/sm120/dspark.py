@@ -595,6 +595,7 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
             name = b12x_layer_prefix(layer)
             register_b12x_layer(name, layer)
             mhc.bind_layer_name(name)
+            mhc.prepare_split(layer.hc_attn_fn.device)
 
     def _remap_dspark_name(self, name: str) -> str | None:
         """Map a checkpoint ``mtp.{i}.*`` name to this model's parameter path.

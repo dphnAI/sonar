@@ -45,6 +45,8 @@ from aphrodite.v1.worker.workspace import (
     retain_cuda_graph_capture_resource,
 )
 
+from .mhc_split import join_mhc_split, lagged_post_pre, prepare_mhc_split, split_available, supported_hidden
+
 
 def _capacity() -> int:
     return get_current_aphrodite_config().scheduler_config.max_num_batched_tokens
@@ -591,6 +593,28 @@ def _mhc_pre(
     previous_post: torch.Tensor | None = None,
     previous_comb: torch.Tensor | None = None,
 ) -> None:
+    # Coefficients from the previous boundary may still be on the split's side stream.
+    join_mhc_split(residual.device)
+    if previous_output is not None and split_available(residual.device, residual.shape[0], residual.shape[-1]):
+        if previous_post is None or previous_comb is None:
+            raise ValueError("lagged mHC post-pre requires both previous mix tensors")
+        lagged_post_pre(
+            previous_output,
+            residual,
+            previous_post,
+            previous_comb,
+            fn,
+            scale,
+            base,
+            norm,
+            pre,
+            residual_out,
+            y,
+            post,
+            comb,
+            pre_out,
+        )
+        return
     mhc_module = b12x_layer(_resolve_layer_name(layer_name))._b12x_mhc
     operation = "pre" if previous_output is None else "post_pre"
     plan = mhc_module._plan_for(operation, int(residual.shape[0]))
@@ -676,6 +700,7 @@ def _mhc_post(
     out: torch.Tensor,
     layer_name: LayerNameType,
 ) -> None:
+    join_mhc_split(residual.device)
     mhc_module = b12x_layer(_resolve_layer_name(layer_name))._b12x_mhc
     plan = mhc_module._plan_for("post", int(residual.shape[0]))
     mhc.run_post(x, residual, post, comb, plan=plan, out=out)
@@ -707,6 +732,11 @@ class B12xMHC(nn.Module):
     def bind_layer_name(self, name: str) -> None:
         """Record the encoded name of the decoder layer that owns this module."""
         self._layer_name = _encode_layer_name(name)
+
+    def prepare_split(self, device: torch.device) -> None:
+        """Compile the decode post_pre split that defers coefficients to a side stream."""
+        if supported_hidden(self.hidden_size):
+            prepare_mhc_split(device, self.hidden_size, self.rms_eps, self.hc_eps, self.iterations)
 
     def _plan_for(self, operation, tokens):
         tokens = int(tokens)
@@ -996,6 +1026,7 @@ class B12xMHC(nn.Module):
         return out
 
     def collapse(self, state: torch.Tensor, pre: torch.Tensor | None = None) -> torch.Tensor:
+        join_mhc_split(state.device)
         out = torch.empty(
             (state.shape[0], state.shape[-1]),
             dtype=state.dtype,

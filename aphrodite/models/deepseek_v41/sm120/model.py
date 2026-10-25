@@ -56,6 +56,7 @@ from .b12x_layers import B12xMHC
 from .b12x_layers import B12xRMSNorm as RMSNorm
 from .ced import ced_decoder_start, gather_rows, scatter_rows
 from .engram import Engram, EngramLayout, NgramHashState
+from .mhc_split import join_mhc_split
 
 logger = init_logger(__name__)
 
@@ -198,6 +199,8 @@ class DeepseekV4DecoderLayer(nn.Module):
         )
         global_kv_ready = None
         if ced_indices is not None:
+            # The coefficient gathers below read the split's side-stream outputs.
+            join_mhc_split(x.device)
             # Decoder global KV needs every encoder row, but decoder queries,
             # residual updates and experts only need the selected replay rows.
             global_kv_ready = self.attn.prepare_global_kv(positions, x)
@@ -459,6 +462,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
                 hidden_states = layer._b12x_mhc.post(hidden_states, residual, post_mix, res_mix)
 
         if not get_pp_group().is_last_rank:
+            join_mhc_split(hidden_states.device)
             if decoder_compacted:
                 hidden_states = scatter_rows(hidden_states, ced_indices, full_num_tokens)
                 pre_mix = scatter_rows(pre_mix, ced_indices, full_num_tokens)
@@ -700,6 +704,7 @@ class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
                 name = b12x_layer_prefix(module)
                 register_b12x_layer(name, module)
                 module._b12x_mhc.bind_layer_name(name)
+                module._b12x_mhc.prepare_split(module.hc_attn_fn.device)
             if isinstance(module, DeepseekV41B12xAttention):
                 module.setup_wo_projection()
             if isinstance(module, Engram):

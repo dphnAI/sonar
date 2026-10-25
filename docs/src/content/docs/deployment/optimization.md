@@ -233,6 +233,11 @@ projection and optional indexer reuse the quantized query with their
 original prepared GEMMs. The kernel preserves BF16 normalization rounding
 and keeps KV in BF16.
 
+For mHC boundaries of up to 64 tokens, the backend computes the coefficients
+for the next boundary on a separate CUDA stream while attention or the MoE
+layer runs. The residual mix, the input collapse, and its RMSNorm stay on the
+critical path. Results match the fused B12x kernels bit for bit.
+
 DSpark projects the draft layers' context keys and values together, with one
 input quantization. Drafting combines the Markov-logit addition, sampling, and
 proposal-cache write when their layouts match. Sampling preserves the existing
