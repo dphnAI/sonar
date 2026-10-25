@@ -1133,17 +1133,18 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             self._index_plans[key] = self._declare_index_plan(mode, capacity)
         return self._index_plans[key]
 
-    def insert_context_kv(self, kv, positions, slot_mapping):
+    def insert_context_kv(self, kv, positions, slot_mapping, *, rotated=False):
         if not self._ready:
             raise PreparationResourceUnavailableError("V4.1 attention metadata is not prepared")
-        rotated = _rotated(
-            kv,
-            positions,
-            self.rotary_emb.cos_sin_cache,
-            plan=self._helper_plan("kv"),
-        )
+        if not rotated:
+            kv = _rotated(
+                kv,
+                positions,
+                self.rotary_emb.cos_sin_cache,
+                plan=self._helper_plan("kv"),
+            )
         mla.write_cache(
-            rotated,
+            kv,
             self.swa_cache_layer.kv_cache,
             slot_mapping,
             page_size=self.swa_cache_layer.block_size,
@@ -1158,12 +1159,12 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         return metadata
 
     @eager_break_during_capture
-    def _cache_context_kv(self, kv, positions):
+    def _cache_context_kv(self, kv, positions, *, rotated=False):
         # Resolve live request metadata inside the eager segment. A captured
         # slot-mapping argument could refer to a previous request's cache pages.
         metadata = get_forward_context().attn_metadata
         swa = self._query_metadata(metadata[self.swa_cache_layer.prefix])
-        self.insert_context_kv(kv, positions, swa.slot_mapping[: kv.shape[0]])
+        self.insert_context_kv(kv, positions, swa.slot_mapping[: kv.shape[0]], rotated=rotated)
 
     def prepare_global_kv(self, positions, hidden_states):
         """Build full-row global KV before the CED boundary gathers decoder rows."""
@@ -1234,7 +1235,13 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         if norm_quant:
             q_plan = block32_linear_plan(self.wq_b, rows)
             q_values, q_scale_mma, kv = fused_qkv_norm_quant(
-                qr_kv, self.q_norm.weight, self.kv_norm.weight, self.q_norm.variance_epsilon, q_plan.query.max_tokens
+                qr_kv,
+                self.q_norm.weight,
+                self.kv_norm.weight,
+                self.q_norm.variance_epsilon,
+                q_plan.query.max_tokens,
+                positions,
+                self.rotary_emb.cos_sin_cache,
             )
             q = block32_linear_prequantized(self.wq_b, q_plan, q_values, q_scale_mma)
         else:
@@ -1261,7 +1268,8 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             original_swa = metadata[self.swa_cache_layer.prefix]
             swa = self._query_metadata(original_swa)
             is_prefill = not swa.is_decode
-            self._cache_context_kv(kv, positions)
+            # The fused path already applied the native KV rotation.
+            self._cache_context_kv(kv, positions, rotated=norm_quant)
             if swa is original_swa:
                 self._prepare_global_kv(positions, hidden_states)
             index_query = None
@@ -1543,6 +1551,8 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             and eps > 0
             and bool(capacities)
             and capacities[-1] >= 64
+            and self.rotary_emb.cos_sin_cache.dtype == torch.float32
+            and self.rotary_emb.cos_sin_cache.stride(1) == 1
             and all(
                 getattr(layer, "b12x_capacities", ()) == capacities
                 and getattr(layer, "b12x_weight", None) is not None

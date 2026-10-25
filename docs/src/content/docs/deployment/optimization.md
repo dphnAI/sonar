@@ -228,9 +228,10 @@ This path uses packed compressed KV caches, native sparse attention, fused
 output projections, and native Engram lookup. It retains Sonar's MoE scheduling.
 
 For BF16 chunks of up to 64 tokens, the backend fuses query/KV RMSNorm
-with MXFP8 query quantization. The query projection and optional indexer
-reuse the quantized query with their original prepared GEMMs. The kernel
-preserves BF16 normalization rounding and keeps KV in BF16.
+with MXFP8 query quantization and the KV rotary embedding. The query
+projection and optional indexer reuse the quantized query with their
+original prepared GEMMs. The kernel preserves BF16 normalization rounding
+and keeps KV in BF16.
 
 DSpark projects the draft layers' context keys and values together, with one
 input quantization. Drafting combines the Markov-logit addition, sampling, and
