@@ -358,6 +358,8 @@ __device__ __forceinline__ PairedPacked8 paired_pack8(int rank, uint4 own,
 }
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 1200
+// Tile loads are prefetched into registers one tile ahead, so their latency
+// overlaps staging and the TMA issue of the previous tile.
 template <int Round>
 __device__ __forceinline__ void paired_bulk_payload(const Params& p,
                                                     const unsigned short* input,
@@ -365,12 +367,39 @@ __device__ __forceinline__ void paired_bulk_payload(const Params& p,
                                                     Word epoch, uint64_t count,
                                                     uint4* tiles) {
   constexpr unsigned kTileVectors = kPairedTileBytes / sizeof(uint4);
+  // Items per lane and tile for the smallest supported CTA (128 threads).
+  constexpr int kItems = kTileVectors / 128;
   constexpr int kPartnerMask = Round == 1 ? 1 : 2;
   const uint64_t bytes = count * (Round == 1 ? 2 : 4);
   char* destination =
       reinterpret_cast<char*>(payload(p, p.rank ^ kPartnerMask, epoch)) +
       (Round == 1 ? 0 : p.r2_offset);
   const bool aligned = (reinterpret_cast<uintptr_t>(input) & 15) == 0;
+  uint4 own[kItems];
+  uint4 peer[kItems];
+  // A Round 1 item is one 16-byte vector; a Round 2 item is one 32-byte group.
+  const auto tile_items = [&](uint64_t offset) {
+    const uint64_t tile_bytes =
+        bytes - offset < kPairedTileBytes ? bytes - offset : kPairedTileBytes;
+    return static_cast<unsigned>(tile_bytes / (Round == 1 ? 16 : 32));
+  };
+  const auto load_tile = [&](uint64_t offset) {
+    const unsigned items = tile_items(offset);
+  #pragma unroll
+    for (int k = 0; k < kItems; ++k) {
+      const unsigned item = threadIdx.x + k * blockDim.x;
+      if (item < items) {
+        if constexpr (Round == 1) {
+          own[k] = paired_load8(input + offset / 2 + item * 8, aligned);
+        } else {
+          const uint64_t i = offset / 4 + item * 8;
+          own[k] = paired_load8(input + i, aligned);
+          peer[k] = load_vector(r1 + i);
+        }
+      }
+    }
+  };
+  if (bytes > 0) load_tile(0);
   for (uint64_t offset = 0, index = 0; offset < bytes;
        offset += kPairedTileBytes, ++index) {
     // Only the leader issues TMA. Its oldest of two shared tiles is no longer
@@ -380,27 +409,23 @@ __device__ __forceinline__ void paired_bulk_payload(const Params& p,
       asm volatile("fence.proxy.async.shared::cta;" : : : "memory");
     }
     __syncthreads();
-    const unsigned tile_bytes = bytes - offset < kPairedTileBytes
-                                    ? static_cast<unsigned>(bytes - offset)
-                                    : kPairedTileBytes;
+    const unsigned items = tile_items(offset);
+    const unsigned tile_bytes = items * (Round == 1 ? 16 : 32);
     uint4* staging = tiles + (index & 1) * kTileVectors;
-    if constexpr (Round == 1) {
-      for (unsigned vector = threadIdx.x; vector < tile_bytes / sizeof(uint4);
-           vector += blockDim.x) {
-        staging[vector] =
-            paired_load8(input + offset / 2 + vector * 8, aligned);
-      }
-    } else {
-      for (unsigned group = threadIdx.x; group < tile_bytes / 32;
-           group += blockDim.x) {
-        const uint64_t i = offset / 4 + group * 8;
-        const uint4 own = paired_load8(input + i, aligned);
-        const uint4 peer = load_vector(r1 + i);
-        const PairedPacked8 packed = paired_pack8(p.rank, own, peer);
-        staging[2 * group] = packed.lo;
-        staging[2 * group + 1] = packed.hi;
+  #pragma unroll
+    for (int k = 0; k < kItems; ++k) {
+      const unsigned item = threadIdx.x + k * blockDim.x;
+      if (item < items) {
+        if constexpr (Round == 1) {
+          staging[item] = own[k];
+        } else {
+          const PairedPacked8 packed = paired_pack8(p.rank, own[k], peer[k]);
+          staging[2 * item] = packed.lo;
+          staging[2 * item + 1] = packed.hi;
+        }
       }
     }
+    if (offset + kPairedTileBytes < bytes) load_tile(offset + kPairedTileBytes);
     // Fence every writer before the leader can issue the async read.
     asm volatile("fence.proxy.async.shared::cta;" : : : "memory");
     __syncthreads();
@@ -413,7 +438,6 @@ __device__ __forceinline__ void paired_bulk_payload(const Params& p,
                    : "memory");
       asm volatile("cp.async.bulk.commit_group;" : : : "memory");
     }
-    __syncthreads();
   }
   if (threadIdx.x == 0) {
     asm volatile("cp.async.bulk.wait_group 0;" : : : "memory");
@@ -461,9 +485,10 @@ __device__ __forceinline__ uint4 paired_result8(int rank, uint4 own, uint4 peer,
   return make_uint4(words[0], words[1], words[2], words[3]);
 }
 
+// Exchanges the payload with both partners and records the epoch. The
+// reduction itself runs in paired_combine on the same stream.
 __global__ void paired_single(const __grid_constant__ Params p,
-                              const unsigned short* input,
-                              unsigned short* output, uint64_t count) {
+                              const unsigned short* input, uint64_t count) {
   __shared__ __align__(16) uint4 tiles[2 * kPairedTileBytes / sizeof(uint4)];
   __shared__ Word epoch;
   __shared__ Word timeout_ns;
@@ -490,8 +515,6 @@ __global__ void paired_single(const __grid_constant__ Params p,
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 1200
   const unsigned short* r1 = payload(p, p.rank, epoch);
-  const unsigned* r2 = reinterpret_cast<const unsigned*>(
-      reinterpret_cast<const char*>(r1) + p.r2_offset);
   if (!bad) {
     paired_bulk_payload<1>(p, input, r1, epoch, count, tiles);
     if (threadIdx.x == 0) {
@@ -525,50 +548,72 @@ __global__ void paired_single(const __grid_constant__ Params p,
     }
     __syncthreads();
   }
-  if (!bad) {
-    const bool input_aligned = (reinterpret_cast<uintptr_t>(input) & 15) == 0;
-    const bool output_aligned = (reinterpret_cast<uintptr_t>(output) & 15) == 0;
-    for (uint64_t vector = threadIdx.x; vector < count / 8;
-         vector += blockDim.x) {
-      const uint64_t i = vector * 8;
-      const uint4 own = paired_load8(input + i, input_aligned);
-      const uint4 peer = load_vector(r1 + i);
-      const uint4 r2_lo =
-          load_vector(reinterpret_cast<const unsigned short*>(r2 + i));
-      const uint4 r2_hi =
-          load_vector(reinterpret_cast<const unsigned short*>(r2 + i + 4));
-      const uint4 result = paired_result8(p.rank, own, peer, r2_lo, r2_hi);
-      if (output_aligned) {
-        store_vector(output + i, result);
-      } else {
-        const unsigned words[4] = {result.x, result.y, result.z, result.w};
-  #pragma unroll
-        for (int j = 0; j < 4; ++j) {
-          output[i + 2 * j] = static_cast<unsigned short>(words[j]);
-          output[i + 2 * j + 1] = static_cast<unsigned short>(words[j] >> 16);
-        }
-      }
-    }
-  }
 #endif
 
-  device_fence();
-  __syncthreads();
-  if (threadIdx.x == 0) {
-    bad = observe_fault(p, kConsume);
-    if (!bad) bad = observe_fault(p, kComplete);
-  }
-  __syncthreads();
-  if (bad) {
-    for (uint64_t i = threadIdx.x; i < count; i += blockDim.x) output[i] = 0;
-  }
   device_fence();
   __syncthreads();
   if (threadIdx.x == 0 && !bad) {
     // DATA has no completion/publication tickets. Both state words 1/7 stay 0.
     // Before E+2 can overwrite a parity, E+1 must have consumed READY from both
-    // write partners, which follows their completed E. Keep R1 until here.
+    // write partners, which follows their completed E. paired_combine reads
+    // this epoch's inboxes before the next paired_single on the same stream
+    // can publish READY(E+1), so recording E here keeps R1 and R2 intact.
     write_local(p.state, epoch);
+  }
+}
+
+// Reduces the inboxes of the epoch paired_single just completed. It runs on
+// many CTAs: a single CTA is limited by one SM's memory bandwidth. A sticky
+// fault, local or propagated from a peer, before or after the reduction
+// zeroes this CTA's output range instead.
+__global__ void paired_combine(const __grid_constant__ Params p,
+                               const unsigned short* input,
+                               unsigned short* output, uint64_t count) {
+  __shared__ Word epoch;
+  __shared__ int bad;
+  if (threadIdx.x == 0) {
+    bad = observe_fault(p, kConsume);
+    epoch = read_state(p.state);
+  }
+  __syncthreads();
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  const uint64_t first =
+      static_cast<uint64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (bad) {
+    for (uint64_t i = first; i < count; i += stride) output[i] = 0;
+    return;
+  }
+  const unsigned short* r1 = payload(p, p.rank, epoch);
+  const unsigned* r2 = reinterpret_cast<const unsigned*>(
+      reinterpret_cast<const char*>(r1) + p.r2_offset);
+  const bool input_aligned = (reinterpret_cast<uintptr_t>(input) & 15) == 0;
+  const bool output_aligned = (reinterpret_cast<uintptr_t>(output) & 15) == 0;
+  for (uint64_t vector = first; vector < count / 8; vector += stride) {
+    const uint64_t i = vector * 8;
+    const uint4 own = paired_load8(input + i, input_aligned);
+    const uint4 peer = load_vector(r1 + i);
+    const uint4 r2_lo =
+        load_vector(reinterpret_cast<const unsigned short*>(r2 + i));
+    const uint4 r2_hi =
+        load_vector(reinterpret_cast<const unsigned short*>(r2 + i + 4));
+    const uint4 result = paired_result8(p.rank, own, peer, r2_lo, r2_hi);
+    if (output_aligned) {
+      store_vector(output + i, result);
+    } else {
+      const unsigned words[4] = {result.x, result.y, result.z, result.w};
+#pragma unroll
+      for (int j = 0; j < 4; ++j) {
+        output[i + 2 * j] = static_cast<unsigned short>(words[j]);
+        output[i + 2 * j + 1] = static_cast<unsigned short>(words[j] >> 16);
+      }
+    }
+  }
+  device_fence();
+  __syncthreads();
+  if (threadIdx.x == 0) bad = observe_fault(p, kComplete);
+  __syncthreads();
+  if (bad) {
+    for (uint64_t i = first; i < count; i += stride) output[i] = 0;
   }
 }
 
@@ -777,6 +822,12 @@ void all_reduce(int64_t handle, const torch::stable::Tensor& input,
   STD_TORCH_CHECK(count % 8 == 0,
                   "PCIe paired single-CTA count must be divisible by 8");
   paired_single<<<1, ctx.threads, 0, stream>>>(
+      ctx.params, static_cast<const unsigned short*>(source), count);
+  STD_CUDA_CHECK(cudaGetLastError());
+  constexpr unsigned kCombineThreads = 128;
+  const unsigned combine_blocks = static_cast<unsigned>(
+      (count / 8 + kCombineThreads - 1) / kCombineThreads);
+  paired_combine<<<combine_blocks, kCombineThreads, 0, stream>>>(
       ctx.params, static_cast<const unsigned short*>(source),
       static_cast<unsigned short*>(destination), count);
   STD_CUDA_CHECK(cudaGetLastError());
