@@ -66,13 +66,49 @@ def _rounded_sum_gumbel_kernel(
     tl.store(LocalScores + row * partial_rs + tile, score)
 
 
+@triton.jit
+def _first_max(best, best_index, score, index):
+    # torch.argmax order: a later value wins only if strictly greater, and the
+    # first NaN beats every number.
+    take = (score > best) | ((score != score) & (best == best))
+    return tl.where(take, score, best), tl.where(take, index, best_index)
+
+
+@triton.jit
+def _block_winner_kernel(Scores, IDs, partial_rs, Out, BLOCKS: tl.constexpr, PACKET: tl.constexpr):
+    row = tl.program_id(0).to(tl.int64)
+    best = tl.load(Scores + row * partial_rs)
+    best_block = tl.full([], 0, tl.int32)
+    for block in tl.static_range(1, BLOCKS):
+        best, best_block = _first_max(best, best_block, tl.load(Scores + row * partial_rs + block), block)
+    winner = tl.load(IDs + row * partial_rs + best_block)
+    if PACKET:
+        # FP32 scores and ids below 2^53 are exact in float64.
+        tl.store(Out + row * 2, best.to(tl.float64))
+        tl.store(Out + row * 2 + 1, winner.to(tl.float64))
+    else:
+        tl.store(Out + row, winner)
+
+
+@triton.jit(do_not_specialize=["rows"])
+def _rank_winner_kernel(Packets, IDs, rows, WORLD: tl.constexpr):
+    row = tl.program_id(0).to(tl.int64)
+    best = tl.load(Packets + row * 2)
+    best_id = tl.load(Packets + row * 2 + 1)
+    for rank in tl.static_range(1, WORLD):
+        packet = (rank * rows + row) * 2
+        best, best_id = _first_max(best, best_id, tl.load(Packets + packet), tl.load(Packets + packet + 1))
+    tl.store(IDs + row, best_id.to(tl.int64))
+
+
 def _rounded_sum_local(
-    base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, key_offset, *, use_fp64
+    base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, key_offset, *, use_fp64, packet
 ):
     """Run the rounded-sum Gumbel kernel over `base`'s columns.
 
     Column `i` is token `key_offset + i`. Writes cache columns [0, V) and
-    returns each row's winner as (score, global id).
+    returns each row's winner: a [B, 2] float64 (score, global id) packet, or
+    int64 global ids [B] when `packet` is false.
     """
     if (
         base.ndim != 2
@@ -104,6 +140,9 @@ def _rounded_sum_local(
     positions_minus_one = positions_minus_one.contiguous()
     column = column.contiguous()
     blocks = triton.cdiv(vocab, 1024)
+    out = base.new_empty((batch, 2) if packet else (batch,), dtype=torch.float64 if packet else torch.int64)
+    if batch == 0:
+        return out
     local_ids = base.new_empty((batch, blocks), dtype=torch.int64)
     local_scores = base.new_empty((batch, blocks), dtype=torch.float64 if use_fp64 else torch.float32)
     _rounded_sum_gumbel_kernel[(batch, blocks)](
@@ -128,10 +167,8 @@ def _rounded_sum_local(
         BLOCK=1024,
     )
     # First max -> lowest block -> lowest token id, as within each block.
-    max_block = local_scores.argmax(dim=-1, keepdim=True)
-    score = local_scores.gather(dim=-1, index=max_block).view(-1)
-    ids = local_ids.gather(dim=-1, index=max_block).view(-1)
-    return score, ids
+    _block_winner_kernel[(batch,)](local_scores, local_ids, local_ids.stride(0), out, BLOCKS=blocks, PACKET=packet)
+    return out
 
 
 def sample_rounded_sum(base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, *, use_fp64=False):
@@ -141,10 +178,9 @@ def sample_rounded_sum(base, bias, idx_map, temperature, seeds, positions_minus_
     Caller owns graph/capture and all production buffers. No global RNG is used.
     Unsupported layouts/dtypes raise rather than silently changing arithmetic.
     """
-    _, ids = _rounded_sum_local(
-        base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, 0, use_fp64=use_fp64
+    return _rounded_sum_local(
+        base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, 0, use_fp64=use_fp64, packet=False
     )
-    return ids
 
 
 def rounded_sum_shard_partial(
@@ -158,10 +194,19 @@ def rounded_sum_shard_partial(
     """
     if base.shape[-1] != shard.size:
         raise ValueError("vocab-parallel sampling requires shard-width logits")
-    score, ids = _rounded_sum_local(
-        base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, shard.start, use_fp64=use_fp64
+    return _rounded_sum_local(
+        base,
+        bias,
+        idx_map,
+        temperature,
+        seeds,
+        positions_minus_one,
+        cache,
+        column,
+        shard.start,
+        use_fp64=use_fp64,
+        packet=True,
     )
-    return torch.stack((score.to(torch.float64), ids.to(torch.float64)), dim=-1)
 
 
 def combine_rounded_sum_partials(packets: torch.Tensor) -> torch.Tensor:
@@ -170,8 +215,14 @@ def combine_rounded_sum_partials(packets: torch.Tensor) -> torch.Tensor:
     First max wins, so exact ties resolve to the lowest rank and therefore the
     lowest global token id.
     """
-    best = packets[..., 0].argmax(dim=0, keepdim=True)
-    return packets[..., 1].gather(dim=0, index=best).view(-1).to(torch.int64)
+    if packets.ndim != 3 or packets.shape[-1] != 2 or packets.dtype != torch.float64:
+        raise ValueError("requires [world, B, 2] float64 winner packets")
+    packets = packets.contiguous()
+    world, rows, _ = packets.shape
+    ids = packets.new_empty((rows,), dtype=torch.int64)
+    if rows:
+        _rank_winner_kernel[(rows,)](packets, ids, rows, WORLD=world)
+    return ids
 
 
 def sample_rounded_sum_vocab_parallel(
