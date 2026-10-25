@@ -1115,9 +1115,9 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         )
 
     def _index_plan(self, mode: str, rows: int):
-        key = (mode, rows)
-        if key in self._index_plans:
-            return self._index_plans[key]
+        plan = self._index_plans.get((mode, rows))
+        if plan is not None:
+            return plan
         if mode == "decode":
             capacity = self.DECODE_CHUNK
         elif mode == "prefill":
@@ -1128,10 +1128,13 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             raise ValueError(f"unsupported V4.1 indexer mode {mode!r}")
         if not 0 < rows <= capacity:
             raise ValueError(f"V4.1 {mode} indexer rows {rows} exceed chunk capacity {capacity}")
-        key = (mode, capacity)
-        if key not in self._index_plans:
-            self._index_plans[key] = self._declare_index_plan(mode, capacity)
-        return self._index_plans[key]
+        # Only session-prepared plans can run. Keep the full chunk plan when it
+        # was prepared; otherwise use the smallest prepared plan that covers rows
+        # (a token budget below the chunk never declares the full chunk).
+        covering = sorted(prepared for kind, prepared in self._index_plans if kind == mode and prepared >= rows)
+        if covering:
+            return self._index_plans[mode, capacity if capacity in covering else covering[0]]
+        raise PreparationResourceUnavailableError(f"{self.prefix} lacks a prepared {mode} indexer plan for {rows} rows")
 
     def insert_context_kv(self, kv, positions, slot_mapping, *, rotated=False):
         if not self._ready:
