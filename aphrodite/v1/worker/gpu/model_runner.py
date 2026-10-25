@@ -335,6 +335,9 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         self.sampler: Sampler | None = None
         self.rejection_sampler: RejectionSampler | None = None
         self.batch_sharder: BatchSharder | None = None
+        # Full-vocab draft logits, rebuilt per batch only when verification
+        # falls back from vocab-parallel sampling.
+        self._full_draft_logits_buffer: torch.Tensor | None = None
         self.prompt_logprobs_worker: PromptLogprobsWorker | None = None
         self.structured_outputs_worker: StructuredOutputsWorker | None = None
         self.cudagraph_manager: ModelCudaGraphManager | None = None
@@ -412,6 +415,14 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                     eplb_models_added = self.eplb.maybe_register_speculator(
                         self.speculator, self.speculative_config, load_dummy_weights
                     )
+                    draft_logits = self.speculator.draft_logits
+                    vocab_shard = self.speculator.draft_vocab_shard
+                    if vocab_shard is not None and draft_logits is not None:
+                        # Full-vocab rows for verification that falls back from
+                        # the vocab shards, sized here so profiling counts them.
+                        self._full_draft_logits_buffer = draft_logits.new_empty(
+                            *draft_logits.shape[:-1], vocab_shard.vocab_size
+                        )
         time_after_load = time.perf_counter()
 
         self.model_memory_usage = m.consumed_memory
@@ -1555,6 +1566,11 @@ class GPUModelRunner(LoRAModelRunnerMixin):
     ) -> tuple[SamplerOutput, torch.Tensor, torch.Tensor]:
         shard_metadata = None
         global_input_batch = input_batch
+        vocab_shard = None
+        rejection_sampler = self.rejection_sampler
+        speculator = self.speculator
+        if speculator is not None and rejection_sampler is not None:
+            vocab_shard = speculator.draft_vocab_shard
         if self.batch_sharder is not None:
             # Shard the inputs along the batch dimension to sample in parallel
             # across TP ranks.
@@ -1570,6 +1586,26 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             logits = logits[:, : self.vocab_size]
         else:
             sample_hidden_states = hidden_states[input_batch.logits_indices]
+            if (
+                vocab_shard is not None
+                and isinstance(rejection_sampler, RejectionSampler)
+                and speculator is not None
+                and grammar_output is None
+                and input_batch.num_reqs > 0
+                and input_batch.num_draft_tokens > 0
+                and rejection_sampler.supports_vocab_parallel(input_batch)
+            ):
+                # Verify on this rank's vocab shard; only small per-row
+                # partials cross ranks instead of full-vocab logits.
+                local_logits = self.model.compute_logits_local(sample_hidden_states)
+                vocab_parallel_output = rejection_sampler.sample_vocab_parallel(
+                    local_logits, input_batch, speculator.draft_logits, vocab_shard
+                )
+                return (
+                    vocab_parallel_output,
+                    vocab_parallel_output.num_sampled,
+                    vocab_parallel_output.num_rejected,
+                )
             logits = self.model.compute_logits(sample_hidden_states)
 
         invalid_drafts = None
@@ -1602,11 +1638,18 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             # Rejection sampling for spec decoding.
             assert self.rejection_sampler is not None
             assert self.speculator is not None
+            # Draft logits are needed for probabilistic rejection sampling.
+            draft_logits = self.speculator.draft_logits
+            if vocab_shard is not None and draft_logits is not None:
+                # The draft cache holds only this rank's vocab columns.
+                assert self._full_draft_logits_buffer is not None
+                draft_logits = vocab_shard.gather_rows(
+                    draft_logits, input_batch.idx_mapping, self._full_draft_logits_buffer
+                )
             sampler_output = self.rejection_sampler(
                 logits,
                 input_batch,
-                # Draft logits are needed for probabilistic rejection sampling.
-                self.speculator.draft_logits,
+                draft_logits,
                 invalid_drafts,
             )
 

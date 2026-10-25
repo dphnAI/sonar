@@ -86,6 +86,8 @@ class Sampler:
         self.trace_replay_state = TraceReplayState(req_states) if enable_trace_replay else None
         self.phrase_retry_mask: RetryMask | None = None
         self.needs_logits_processing = np.zeros(max_num_reqs, dtype=bool)
+        # Requests whose only processing is a temperature other than 0 or 1.
+        self.temperature_only_processing = np.zeros(max_num_reqs, dtype=bool)
         self.num_speculative_tokens = num_speculative_tokens
         self.return_sampling_mask = return_sampling_mask
         self.fork_state: ForkSamplingState | None = None
@@ -94,13 +96,13 @@ class Sampler:
         self.use_xpu_sampler = not return_sampling_mask and not use_fp64_gumbel and xpu_sampler_supported()
 
     def add_request(self, req_idx: int, sampling_params: SamplingParams) -> None:
-        needs_processing = self.sampling_states.add_request(req_idx, sampling_params)
-        needs_processing |= self.thinking_budget_state.add_request(req_idx, sampling_params)
+        sampling_needs = self.sampling_states.add_request(req_idx, sampling_params)
+        other_needs = self.thinking_budget_state.add_request(req_idx, sampling_params)
         is_custom = needs_fork_sampling(sampling_params)
         if is_custom and self.fork_state is None:
             self.fork_state = ForkSamplingState(self.req_states)
         if self.fork_state is not None:
-            needs_processing |= self.fork_state.add_request(
+            other_needs |= self.fork_state.add_request(
                 req_idx, sampling_params, int(self.sampling_states.seeds.np[req_idx])
             )
         for processor in self.logits_processors:
@@ -111,8 +113,11 @@ class Sampler:
                 self.penalties_state.frequency_penalty.np[req_idx] = 0.0
                 self.penalties_state.presence_penalty.np[req_idx] = 0.0
             else:
-                needs_processing |= processor.add_request(req_idx, sampling_params)
-        self.needs_logits_processing[req_idx] = needs_processing
+                other_needs |= processor.add_request(req_idx, sampling_params)
+        self.needs_logits_processing[req_idx] = sampling_needs or other_needs
+        self.temperature_only_processing[req_idx] = (
+            sampling_needs and not other_needs and not self.sampling_states.uses_filters(req_idx)
+        )
 
         self.logprob_token_ids_state.add_request(req_idx, sampling_params)
         if self.trace_replay_state is not None:
@@ -126,6 +131,7 @@ class Sampler:
         if self.phrase_retry_mask is not None:
             self.phrase_retry_mask.add_request(req_idx, int(self.req_states.prompt_len.np[req_idx]), retry)
         self.needs_logits_processing[req_idx] |= retry is not None
+        self.temperature_only_processing[req_idx] &= retry is None
 
     def remove_request(self, req_idx: int) -> None:
         """Detach before RequestState frees the slot; retain preempted state."""

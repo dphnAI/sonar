@@ -25,16 +25,19 @@ def _rounded_sum_gumbel_kernel(
     LocalIDs,
     LocalScores,
     partial_rs,
+    key_offset,
     V: tl.constexpr,
     USE_FP64: tl.constexpr,
     BLOCK: tl.constexpr,
 ):
     row = tl.program_id(0).to(tl.int64)
     tile = tl.program_id(1)
-    keys = tile * BLOCK + tl.arange(0, BLOCK)
-    mask = keys < V
-    base = tl.load(Base + row * base_rs + keys, mask, other=0)
-    bias = tl.load(Bias + row * bias_rs + keys, mask, other=0)
+    local = tile * BLOCK + tl.arange(0, BLOCK)
+    mask = local < V
+    # Noise is keyed by the global token id; `key_offset` is the shard start.
+    keys = key_offset + local
+    base = tl.load(Base + row * base_rs + local, mask, other=0)
+    bias = tl.load(Bias + row * bias_rs + local, mask, other=0)
     # Native torch.add writes the same-dtype tensor before the sampler reads it.
     # Preserve that exact seam: BF16/FP16 round-trip is NOT optional.
     rounded = (base.to(tl.float32) + bias.to(tl.float32)).to(Base.dtype.element_ty)
@@ -43,7 +46,7 @@ def _rounded_sum_gumbel_kernel(
     valid_req = req >= 0
     temperature = tl.load(Temperature + req, valid_req, other=0).to(tl.float32)
     col = tl.load(Column)
-    tl.store(Cache + req * cache_rs + col * cache_cs + keys, rounded, mask & valid_req)
+    tl.store(Cache + req * cache_rs + col * cache_cs + local, rounded, mask & valid_req)
     seed = tl.load(Seeds + req, valid_req, other=0)
     seed = spec_step_seed(seed, col)
     pos = tl.load(Positions + row)
@@ -59,16 +62,17 @@ def _rounded_sum_gumbel_kernel(
         USE_FP64=USE_FP64,
         APPLY_TEMPERATURE=True,
     )
-    tl.store(LocalIDs + row * partial_rs + tile, tile * BLOCK + index)
+    tl.store(LocalIDs + row * partial_rs + tile, key_offset + tile * BLOCK + index)
     tl.store(LocalScores + row * partial_rs + tile, score)
 
 
-def sample_rounded_sum(base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, *, use_fp64=False):
-    """Sample one full-vocab position; same key/cache API as native gumbel_sample.
+def _rounded_sum_local(
+    base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, key_offset, *, use_fp64
+):
+    """Run the rounded-sum Gumbel kernel over `base`'s columns.
 
-    `column` is a scalar tensor, `positions_minus_one` is already P-1.
-    Caller owns graph/capture and all production buffers. No global RNG is used.
-    Unsupported layouts/dtypes raise rather than silently changing arithmetic.
+    Column `i` is token `key_offset + i`. Writes cache columns [0, V) and
+    returns each row's winner as (score, global id).
     """
     if (
         base.ndim != 2
@@ -118,9 +122,67 @@ def sample_rounded_sum(base, bias, idx_map, temperature, seeds, positions_minus_
         local_ids,
         local_scores,
         local_ids.stride(0),
+        key_offset,
         V=vocab,
         USE_FP64=use_fp64,
         BLOCK=1024,
     )
+    # First max -> lowest block -> lowest token id, as within each block.
     max_block = local_scores.argmax(dim=-1, keepdim=True)
-    return local_ids.gather(dim=-1, index=max_block).view(-1)
+    score = local_scores.gather(dim=-1, index=max_block).view(-1)
+    ids = local_ids.gather(dim=-1, index=max_block).view(-1)
+    return score, ids
+
+
+def sample_rounded_sum(base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, *, use_fp64=False):
+    """Sample one full-vocab position; same key/cache API as native gumbel_sample.
+
+    `column` is a scalar tensor, `positions_minus_one` is already P-1.
+    Caller owns graph/capture and all production buffers. No global RNG is used.
+    Unsupported layouts/dtypes raise rather than silently changing arithmetic.
+    """
+    _, ids = _rounded_sum_local(
+        base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, 0, use_fp64=use_fp64
+    )
+    return ids
+
+
+def rounded_sum_shard_partial(
+    base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, shard, *, use_fp64=False
+):
+    """Rank-local phase of `sample_rounded_sum_vocab_parallel`.
+
+    `base`/`bias`/`cache` hold only `shard`'s columns. Writes the cache shard
+    and returns the packed [B, 2] float64 (score, global id) row winner. FP32
+    scores and ids below 2^53 are exact in float64.
+    """
+    if base.shape[-1] != shard.size:
+        raise ValueError("vocab-parallel sampling requires shard-width logits")
+    score, ids = _rounded_sum_local(
+        base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, shard.start, use_fp64=use_fp64
+    )
+    return torch.stack((score.to(torch.float64), ids.to(torch.float64)), dim=-1)
+
+
+def combine_rounded_sum_partials(packets: torch.Tensor) -> torch.Tensor:
+    """Pick each row's winner from [world, B, 2] packets in rank order.
+
+    First max wins, so exact ties resolve to the lowest rank and therefore the
+    lowest global token id.
+    """
+    best = packets[..., 0].argmax(dim=0, keepdim=True)
+    return packets[..., 1].gather(dim=0, index=best).view(-1).to(torch.int64)
+
+
+def sample_rounded_sum_vocab_parallel(
+    base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, shard, *, use_fp64=False
+):
+    """`sample_rounded_sum` over this rank's vocab shard; returns global ids [B].
+
+    Same noise, cache and tie semantics as the full-vocab sampler; `cache` is
+    the [.., .., shard.size] local shard. One all-gather of [B, 2] float64.
+    """
+    packet = rounded_sum_shard_partial(
+        base, bias, idx_map, temperature, seeds, positions_minus_one, cache, column, shard, use_fp64=use_fp64
+    )
+    return combine_rounded_sum_partials(shard.all_gather(packet))

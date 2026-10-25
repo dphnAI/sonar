@@ -233,10 +233,16 @@ reuse the quantized query with their original prepared GEMMs. The kernel
 preserves BF16 normalization rounding and keeps KV in BF16.
 
 DSpark projects the draft layers' context keys and values together, with one
-input quantization. Full-vocabulary drafting can also combine the Markov-logit
-addition, sampling, and proposal-cache write when their layouts match.
-Sampling preserves the existing dtype rounding, per-request seeds, and
-proposal-cache layout. These optimizations require no additional flags.
+input quantization. Drafting combines the Markov-logit addition, sampling, and
+proposal-cache write when their layouts match. Sampling preserves the existing
+dtype rounding, per-request seeds, and noise.
+
+With tensor parallelism, drafting and verification sample on each rank's
+vocabulary shard. Only a few values per row cross GPUs, instead of
+full-vocabulary logits. A step falls back to gathered logits when any request
+uses top-k, top-p, min-p, logits processors such as penalties or logit bias,
+logprobs, or structured outputs. These optimizations require no additional
+flags.
 
 Use the bundled B12x provider described above. The archived standalone package
 is not supported.

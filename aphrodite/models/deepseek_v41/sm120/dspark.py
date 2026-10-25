@@ -12,6 +12,7 @@ include the future query tokens in the top-k indices for each query token.
 
 from bisect import bisect_left
 from collections.abc import Iterable
+from types import SimpleNamespace
 
 import regex as re
 import torch
@@ -420,6 +421,40 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
             return None
         return sample_rounded_sum(
             logits, bias, idx_map, temperature, seeds, positions, cache, column, use_fp64=use_fp64
+        )
+
+    def draft_vocab_shard(self):
+        """This rank's vocab shard of the aliased target lm_head, or None."""
+        from aphrodite.v1.worker.gpu.sample.vocab_parallel import vocab_shard_for
+
+        if self.lm_head is None:
+            return None
+        return vocab_shard_for(self.lm_head)
+
+    def compute_draft_logits_local(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """This rank's base-logit shard: the gathered path's per-rank GEMM, no gather."""
+        assert self.lm_head is not None
+        return self.logits_processor(self.lm_head, self.model.norm(hidden_states), skip_gather=True)
+
+    def markov_bias_local(self, markov_embed: torch.Tensor, shard) -> torch.Tensor:
+        """Markov bias for global tokens [shard.start, shard.end) only.
+
+        Restricts the replicated markov_w2 to the shard's rows and projects
+        through the same `_apply_head` arithmetic as the full bias.
+        """
+        head = self.model.markov_head.markov_w2
+        rows = SimpleNamespace(weight=head.weight[shard.start : shard.end], quant_method=head.quant_method)
+        return self.logits_processor(rows, markov_embed, skip_gather=True)
+
+    @staticmethod
+    def sample_draft_with_bias_vocab_parallel(
+        logits, bias, idx_map, temperature, seeds, positions, cache, column, shard, *, use_fp64=False
+    ) -> torch.Tensor:
+        """Fused rounded-sum draft sampling on this rank's shard; global ids."""
+        from .sampling import sample_rounded_sum_vocab_parallel
+
+        return sample_rounded_sum_vocab_parallel(
+            logits, bias, idx_map, temperature, seeds, positions, cache, column, shard, use_fp64=use_fp64
         )
 
     def map_draft_to_target(self, draft_ids: torch.Tensor) -> torch.Tensor:

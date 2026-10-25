@@ -33,6 +33,7 @@ from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
 from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
 from aphrodite.v1.worker.gpu.model_states.interface import ModelState
 from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
+from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
 from aphrodite.v1.worker.gpu.spec_decode.acceptance_estimator import (
     OnlineAcceptanceEstimator,
 )
@@ -62,6 +63,10 @@ class BaseSpeculator(ABC):
     num_query_per_req: int = 1
     # Extra query slots reserved per request outside the regular queries.
     num_extra_query_per_req: int = 0
+    # Set by speculators that sample on this rank's vocab shard. When set,
+    # draft_logits is [max_num_reqs, num_speculative_steps, shard.size]
+    # and holds only columns [shard.start, shard.end).
+    draft_vocab_shard: VocabShard | None = None
 
     @abstractmethod
     def init_cudagraph_manager(self, cudagraph_mode: CUDAGraphMode) -> None:
@@ -169,18 +174,7 @@ class DraftModelSpeculator(BaseSpeculator):
 
         self.draft_logits: torch.Tensor | None = None
         if self.speculative_config.draft_sample_method == "probabilistic":
-            # Pre-temperature logits, cached from the previous decode step.
-            dtype, fill = self.draft_logits_spec(aphrodite_config)
-            self.draft_logits = torch.full(
-                (
-                    self.max_num_reqs,
-                    self.num_speculative_steps,
-                    self.vocab_size,
-                ),
-                fill,
-                dtype=dtype,
-                device=device,
-            )
+            self.allocate_draft_logits(self.vocab_size)
 
         self.draft_watermarker: DraftWatermarker | None = None
         watermark_config = getattr(aphrodite_config, "watermark_config", None)
@@ -201,6 +195,19 @@ class DraftModelSpeculator(BaseSpeculator):
         # Whether every draft attention builder can refresh its decode metadata
         # in place, so the refresh can be recorded in the draft CUDA graph.
         self.supports_decode_metadata_update = False
+
+    def allocate_draft_logits(self, width: int) -> None:
+        """(Re)allocate the pre-temperature draft logits cache, `width` columns wide.
+
+        The cache is filled from the previous decode step's draft.
+        """
+        dtype, fill = self.draft_logits_spec(self.aphrodite_config)
+        self.draft_logits = torch.full(
+            (self.max_num_reqs, self.num_speculative_steps, width),
+            fill,
+            dtype=dtype,
+            device=self.device,
+        )
 
     @abstractmethod
     def load_draft_model(self, target_model: nn.Module, target_attn_layer_names: set[str]) -> nn.Module:
