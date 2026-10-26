@@ -12,6 +12,7 @@ from aphrodite.distributed import (
     get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
+    tensor_model_parallel_all_reduce,
 )
 from aphrodite.forward_context import get_forward_context, is_forward_context_available
 from aphrodite.logger import init_logger
@@ -51,6 +52,7 @@ from aphrodite.utils.b12x import (
 )
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
+from . import l2_prefetch
 from .attention import DeepseekV41B12xAttention
 from .b12x_layers import B12xMHC
 from .b12x_layers import B12xRMSNorm as RMSNorm
@@ -104,11 +106,16 @@ class DeepseekV4DecoderLayer(nn.Module):
             raise ValueError("V4.1 requires normalized sqrtsoftplus routing")
         if getattr(config, "gate_temp", 1.0) != 1.0:
             raise ValueError("V4.1 requires gate_temp=1")
+        # The layer all-reduces the MoE output itself so the next layer's
+        # attention weights can be read into L2 while the all-reduce waits.
         self.ffn = DeepseekV4MoE(
             aphrodite_config,
             prefix=f"{prefix}.ffn",
             use_sequence_parallel=False,
+            reduce_results=False,
         )
+        self.reduce_ffn = get_tensor_model_parallel_world_size() > 1
+        self.next_attn_prefetch: l2_prefetch.PrefetchPlan | None = None
 
         self.attn_norm = RMSNorm(self.hidden_size, self.rms_norm_eps)
         self.ffn_norm = RMSNorm(self.hidden_size, self.rms_norm_eps)
@@ -226,6 +233,10 @@ class DeepseekV4DecoderLayer(nn.Module):
             attn_pre,
         )
         x = self.ffn(x, input_ids, mega_gate_metadata=mega_gate_metadata)
+        if self.reduce_ffn:
+            if self.next_attn_prefetch is not None:
+                l2_prefetch.launch(self.next_attn_prefetch)
+            x = tensor_model_parallel_all_reduce(x)
         return x, residual, post_mix, res_mix, ffn_pre
 
 
@@ -465,6 +476,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
 
         if not get_pp_group().is_last_rank:
             join_mhc_split(hidden_states.device)
+            l2_prefetch.join(hidden_states.device)
             if decoder_compacted:
                 hidden_states = scatter_rows(hidden_states, ced_indices, full_num_tokens)
                 pre_mix = scatter_rows(pre_mix, ced_indices, full_num_tokens)
@@ -482,6 +494,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
         # ``last_layer.hc_pre(h, pre_mix)`` (v4.1 has no learned hc_head).
         hidden_states = layer._b12x_mhc.collapse(hidden_states, pre_mix)
         hidden_states = self.norm(hidden_states)
+        l2_prefetch.join(hidden_states.device)
         if decoder_compacted:
             hidden_states = scatter_rows(hidden_states, ced_indices, full_num_tokens)
         if len(aux_hidden_states) > 0:
@@ -711,3 +724,6 @@ class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
                 module.setup_wo_projection()
             if isinstance(module, Engram):
                 module.process_weights_after_loading()
+        layers = [module for module in self.model.layers if isinstance(module, DeepseekV4DecoderLayer)]
+        for layer, following in zip(layers, layers[1:]):
+            layer.next_attn_prefetch = l2_prefetch.attention_plan(following.attn)
