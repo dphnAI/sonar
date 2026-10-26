@@ -727,3 +727,5 @@ class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
         layers = [module for module in self.model.layers if isinstance(module, DeepseekV4DecoderLayer)]
         for layer, following in zip(layers, layers[1:]):
             layer.next_attn_prefetch = l2_prefetch.attention_plan(following.attn)
+        for layer in layers:
+            layer.attn.ffn_prefetch = l2_prefetch.router_plan(layer.ffn)

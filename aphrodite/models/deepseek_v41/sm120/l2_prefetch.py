@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Warm L2 with the next layer's attention weights during the MoE all-reduce.
+"""Warm L2 with weights the next sublayer reads, during the all-reduce before it.
 
-At decode sizes the MoE all-reduce mostly waits on peers while the GPU's
-memory system sits idle, and the next layer's attention projections then read
-their weights cold from HBM. A side-stream read of those weights during the
-all-reduce lets the projections hit L2 instead. It only reads static weights,
+At decode sizes an all-reduce mostly waits on peers while the GPU's memory
+system sits idle, and the sublayer after it then reads its weights cold from
+HBM. A side-stream read of those weights during the all-reduce lets them hit
+L2 instead: the next layer's attention projections during the MoE all-reduce,
+and the router during the attention all-reduce. It only reads static weights,
 so it cannot change results; callers join the side stream once per forward.
 """
 
@@ -68,9 +69,16 @@ def attention_plan(attn) -> PrefetchPlan | None:
             tensors.extend(_rows(packed.weight))
     wo = getattr(attn, "_wo_projection_weights", None)
     if wo is not None:
+        # Decode wo_b quantizes its input inside the GEMM loop, which bounds
+        # it whether or not its weights are in L2, so only wo_a is warmed.
         tensors.extend(_rows(wo.wo_a))
-        tensors.extend(_rows(wo.wo_b))
     return PrefetchPlan(tensors) if tensors else None
+
+
+def router_plan(ffn) -> PrefetchPlan | None:
+    """The router weight the MoE reads first after the attention all-reduce."""
+    weight = getattr(getattr(ffn, "gate", None), "weight", None)
+    return PrefetchPlan([weight]) if weight is not None else None
 
 
 _STREAMS: dict[int, torch.cuda.Stream] = {}

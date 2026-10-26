@@ -42,6 +42,7 @@ from aphrodite.v1.worker.workspace import (
     retain_cuda_graph_capture_resource,
 )
 
+from . import l2_prefetch
 from .b12x_layers import (
     B12xFP8LinearMethod,
     B12xLinearMethod,
@@ -541,6 +542,9 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self.wo_b.quant_method = _WOProjectionWeightMethod(self.wo_b.quant_method)
         self._wo_projection_weights = None
         self._wo_plans = {}
+        # Set by the model after loading: weights the FFN reads after the
+        # output all-reduce, warmed into L2 while the all-reduce waits.
+        self.ffn_prefetch: l2_prefetch.PrefetchPlan | None = None
         for linear in (self.fused_wqa_wkv, self.wq_b):
             _native_linear(linear)
         self.rotary_emb = build_deepseek_v4_rope(
@@ -1713,5 +1717,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         if local.dtype != torch.bfloat16:
             raise TypeError("V4.1 WO projection must return BF16")
         if get_tensor_model_parallel_world_size() > 1:
+            if self.ffn_prefetch is not None:
+                l2_prefetch.launch(self.ffn_prefetch)
             local = get_tp_group().all_reduce(local)
         return local
