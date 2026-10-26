@@ -12,7 +12,6 @@ include the future query tokens in the top-k indices for each query token.
 
 from bisect import bisect_left
 from collections.abc import Iterable
-from types import SimpleNamespace
 
 import regex as re
 import torch
@@ -424,10 +423,15 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
         )
 
     def draft_vocab_shard(self):
-        """This rank's vocab shard of the aliased target lm_head, or None."""
+        """This rank's vocab shard of the aliased target lm_head, or None.
+
+        The shard path forms the Markov bias inside its sampling kernel, so it
+        needs a logits processor that neither scales nor soft-caps.
+        """
         from aphrodite.v1.worker.gpu.sample.vocab_parallel import vocab_shard_for
 
-        if self.lm_head is None:
+        processor = self.logits_processor
+        if self.lm_head is None or processor.scale != 1.0 or processor.soft_cap is not None:
             return None
         return vocab_shard_for(self.lm_head)
 
@@ -436,25 +440,19 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
         assert self.lm_head is not None
         return self.logits_processor(self.lm_head, self.model.norm(hidden_states), skip_gather=True)
 
-    def markov_bias_local(self, markov_embed: torch.Tensor, shard) -> torch.Tensor:
-        """Markov bias for global tokens [shard.start, shard.end) only.
-
-        Restricts the replicated markov_w2 to the shard's rows and projects
-        through the same `_apply_head` arithmetic as the full bias.
-        """
-        head = self.model.markov_head.markov_w2
-        rows = SimpleNamespace(weight=head.weight[shard.start : shard.end], quant_method=head.quant_method)
-        return self.logits_processor(rows, markov_embed, skip_gather=True)
-
-    @staticmethod
-    def sample_draft_with_bias_vocab_parallel(
-        logits, bias, idx_map, temperature, seeds, positions, cache, column, shard, *, use_fp64=False
+    def sample_draft_markov_vocab_parallel(
+        self, logits, markov_embed, idx_map, temperature, seeds, positions, cache, column, shard, *, use_fp64=False
     ) -> torch.Tensor:
-        """Fused rounded-sum draft sampling on this rank's shard; global ids."""
-        from .sampling import sample_rounded_sum_vocab_parallel
+        """Draft sampling on this rank's shard with the Markov bias formed in-kernel; global ids.
 
-        return sample_rounded_sum_vocab_parallel(
-            logits, bias, idx_map, temperature, seeds, positions, cache, column, shard, use_fp64=use_fp64
+        Restricts the replicated markov_w2 to the shard's rows, so the bias of
+        global tokens [shard.start, shard.end) is projected where it is used.
+        """
+        from .sampling import sample_markov_vocab_parallel
+
+        rows = self.model.markov_head.markov_w2.weight[shard.start : shard.end]
+        return sample_markov_vocab_parallel(
+            logits, markov_embed, rows, idx_map, temperature, seeds, positions, cache, column, shard, use_fp64=use_fp64
         )
 
     def map_draft_to_target(self, draft_ids: torch.Tensor) -> torch.Tensor:

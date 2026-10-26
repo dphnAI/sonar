@@ -114,7 +114,7 @@ class DSparkSpeculator(DFlashSpeculator):
         if (
             self.draft_logits is None
             or get_shard is None
-            or getattr(model, "sample_draft_with_bias_vocab_parallel", None) is None
+            or getattr(model, "sample_draft_markov_vocab_parallel", None) is None
             or self._d2t_scatter_index is not None
             or self.draft_watermarker is not None
             or self.use_acceptance_estimator
@@ -141,13 +141,15 @@ class DSparkSpeculator(DFlashSpeculator):
         step: int,
         *,
         bias: torch.Tensor | None = None,
+        markov_embed: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if self.draft_vocab_shard is not None:
-            # Shard-local logits, bias and cache; ids come back global.
-            assert bias is not None
-            return self.model.sample_draft_with_bias_vocab_parallel(
+            # Shard-local logits and cache; the model projects the Markov bias
+            # for its own columns. Ids come back global.
+            assert markov_embed is not None
+            return self.model.sample_draft_markov_vocab_parallel(
                 logits,
-                bias,
+                markov_embed,
                 idx_map,
                 self.temperature,
                 self.seeds,
@@ -242,11 +244,10 @@ class DSparkSpeculator(DFlashSpeculator):
             markov_embed = self.model.markov_embed(prev)
             if self.use_confidence_head:
                 confidence_markov_embeds.append(markov_embed)
-            if shard is None:
-                bias = self.model.markov_bias(markov_embed)
-            else:
-                bias = self.model.markov_bias_local(markov_embed, shard)
-            draft_sampled_i = self._sample_logits(base_logits[:, i], idx_map[:, i], sample_pos[:, i], i, bias=bias)
+            bias = None if shard is not None else self.model.markov_bias(markov_embed)
+            draft_sampled_i = self._sample_logits(
+                base_logits[:, i], idx_map[:, i], sample_pos[:, i], i, bias=bias, markov_embed=markov_embed
+            )
             self.draft_tokens[:num_reqs, i] = draft_sampled_i
             prev = draft_sampled_i
 
