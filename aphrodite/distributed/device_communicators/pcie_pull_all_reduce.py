@@ -55,6 +55,8 @@ class PciePullAllReduce:
     TRANSPORT = 2
     TIMEOUT_NS = 2_000_000_000
     HIDDEN_SIZE = 5120
+    # Per-rank payload limit of the one-shot gather (native kGatherBytes).
+    GATHER_BYTES = 16384
     CONTROL_TIMEOUT = timedelta(seconds=30)
 
     def __init__(self, group: ProcessGroup, device: torch.device) -> None:
@@ -198,6 +200,7 @@ class PciePullAllReduce:
             "buffer_size",
             "init",
             "all_reduce",
+            "all_gather",
             "close_step",
             "bind_stream",
             "local_status",
@@ -216,6 +219,7 @@ class PciePullAllReduce:
                 self.MAX_ROWS,
                 self.WIDTHS,
                 self.TIMEOUT_NS,
+                self.GATHER_BYTES,
                 self.HIDDEN_SIZE,
                 str(model.dtype),
                 tuple(model.architectures),
@@ -381,6 +385,16 @@ class PciePullAllReduce:
             and 0 < inp.numel() <= self.CAPACITY
         )
 
+    def should_use_gather(self, inp: torch.Tensor) -> bool:
+        # Rank-agreed like should_use: never consult fault or failure state.
+        return bool(
+            self.initialized
+            and inp.device == self.device
+            and inp.is_contiguous()
+            and inp.ndim >= 1
+            and 0 < inp.numel() * inp.element_size() <= self.GATHER_BYTES
+        )
+
     @contextmanager
     def _execution(self):
         if not self._lock.acquire(blocking=False):
@@ -413,6 +427,16 @@ class PciePullAllReduce:
             self._retain_graph_owner()
             out = torch.empty_like(inp)
             self._native.all_reduce(self._ptr, inp, out)
+            return out
+
+    def all_gather(self, inp: torch.Tensor) -> torch.Tensor:
+        """Concatenate every rank's ``inp`` along dim 0 in rank order."""
+        with self._execution():
+            if not self.should_use_gather(inp):
+                raise ValueError("tensor does not satisfy the rank-agreed PCIe gather admission policy")
+            self._retain_graph_owner()
+            out = inp.new_empty((self.world_size * inp.shape[0], *inp.shape[1:]))
+            self._native.all_gather(self._ptr, inp, out)
             return out
 
     def close_step(self) -> torch.Tensor:

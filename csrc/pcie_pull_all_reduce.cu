@@ -23,6 +23,11 @@ constexpr uint64_t kLine = 128;
 constexpr uint64_t kSlotAlignment = 256;
 constexpr uint64_t kReadyBankBytes = 2 * kRanks * kLine;
 constexpr unsigned kPairedTileBytes = 16384;
+// Per-rank payload limit of the one-shot gather, and its cells per sender: one
+// header plus one cell per four payload bytes.
+constexpr uint64_t kGatherBytes = 16384;
+constexpr uint64_t kGatherCells = kGatherBytes / 4 + 1;
+constexpr uint64_t kGatherBankBytes = 2 * kRanks * kGatherCells * 8;
 
 enum Error : Word {
   kReadyTimeout = 1,
@@ -58,6 +63,7 @@ struct Layout {
   uint64_t fault_offset;
   uint64_t ready_offset;
   uint64_t r2_offset;
+  uint64_t gather_offset;
 };
 
 Layout layout(int64_t capacity, int64_t blocks, int64_t transport) {
@@ -68,12 +74,13 @@ Layout layout(int64_t capacity, int64_t blocks, int64_t transport) {
   STD_TORCH_CHECK(blocks == 1,
                   "PCIe paired single-CTA transport requires blocks=1");
   // R1, R2 and CLOSE each have two parity banks of four origin cells.
-  // Fault records follow these banks.
+  // Fault records follow these banks; gather cells follow the payload slots.
   const uint64_t fault_offset = 3 * kReadyBankBytes;
   const uint64_t offset = fault_offset + kRanks * kLine;
-  STD_TORCH_CHECK(static_cast<uint64_t>(capacity) <=
-                      (limit - offset - 4 * (kSlotAlignment - 1)) / 12,
-                  "PCIe paired allocation size overflows int64");
+  STD_TORCH_CHECK(
+      static_cast<uint64_t>(capacity) <=
+          (limit - offset - kGatherBankBytes - 4 * (kSlotAlignment - 1)) / 12,
+      "PCIe paired allocation size overflows int64");
   const uint64_t r1 =
       (2 * static_cast<uint64_t>(capacity) + kSlotAlignment - 1) &
       ~(kSlotAlignment - 1);
@@ -81,9 +88,13 @@ Layout layout(int64_t capacity, int64_t blocks, int64_t transport) {
       (4 * static_cast<uint64_t>(capacity) + kSlotAlignment - 1) &
       ~(kSlotAlignment - 1);
   const uint64_t stride = r1 + r2;
-  return {
-      offset, stride, offset + 2 * stride, fault_offset, 2 * kReadyBankBytes,
-      r1};
+  return {offset,
+          stride,
+          offset + 2 * stride + kGatherBankBytes,
+          fault_offset,
+          2 * kReadyBankBytes,
+          r1,
+          offset + 2 * stride};
 }
 
 struct Params {
@@ -95,6 +106,7 @@ struct Params {
   uint64_t fault_offset;
   uint64_t ready_offset;
   uint64_t r2_offset;
+  uint64_t gather_offset;
   int rank;
 };
 
@@ -617,6 +629,113 @@ __global__ void paired_combine(const __grid_constant__ Params p,
   }
 }
 
+// A one-shot small all-gather in LL form. Each 8-byte cell carries four payload
+// bytes and a nonzero epoch tag, so one posted store per cell needs neither a
+// fence nor a separate READY; cell 0 carries the byte count. Receivers clear
+// every consumed cell and slabs start zeroed, so a nonzero tag can only be this
+// epoch's. No rank reaches E+2 before every rank has published E+1, which
+// follows its completed E, so a parity bank is never rewritten while read.
+// A fault zeroes the whole output.
+__device__ __forceinline__ Word gather_tag(Word epoch) {
+  return (epoch % 0xffffffffULL + 1) << 32;
+}
+__device__ __forceinline__ Word* gather_cells(const Params& p, int receiver,
+                                              int sender, Word epoch) {
+  return reinterpret_cast<Word*>(p.slabs[receiver] + p.gather_offset) +
+         ((epoch & 1) * kRanks + sender) * kGatherCells;
+}
+
+__global__ void gather_small(const __grid_constant__ Params p,
+                             const unsigned char* input, unsigned char* output,
+                             uint64_t bytes) {
+  __shared__ Word epoch;
+  __shared__ Word timeout_ns;
+  __shared__ int bad;
+  if (threadIdx.x == 0) {
+    const Word prior = read_state(p.state);
+    epoch = prior + 1;
+    timeout_ns = read_state(p.state + 6);
+    bad = observe_fault(p, kPublish);
+    if (!bad && prior == std::numeric_limits<Word>::max()) {
+      fail(p, kEpochExhausted, p.rank, prior, kPublish);
+      bad = 1;
+    }
+  }
+  __syncthreads();
+  const uint64_t words = (bytes + 3) / 4;
+  const Word tag = gather_tag(epoch);
+  int failed = bad;
+  if (!failed) {
+    for (uint64_t cell = threadIdx.x; cell <= words; cell += blockDim.x) {
+      unsigned value = static_cast<unsigned>(bytes);
+      if (cell > 0) {
+        const uint64_t first = 4 * (cell - 1);
+        value = 0;
+        for (uint64_t b = 0; b < 4 && first + b < bytes; ++b) {
+          const unsigned char byte = __ldcg(input + first + b);
+          output[p.rank * bytes + first + b] = byte;
+          value |= static_cast<unsigned>(byte) << (8 * b);
+        }
+      }
+#pragma unroll
+      for (int receiver = 0; receiver < kRanks; ++receiver) {
+        if (receiver != p.rank) {
+          store(gather_cells(p, receiver, p.rank, epoch) + cell, tag | value);
+        }
+      }
+    }
+    const Word started = timer_ns();
+    unsigned misses = 0;
+    for (int sender = 0; sender < kRanks && !failed; ++sender) {
+      if (sender == p.rank) continue;
+      Word* cells = gather_cells(p, p.rank, sender, epoch);
+      for (uint64_t cell = threadIdx.x; cell <= words && !failed;
+           cell += blockDim.x) {
+        Word seen = relaxed(cells + cell);
+        while (seen == 0) {
+          if ((++misses & 63U) == 0 && observe_fault(p, kReady)) {
+            failed = 1;
+            break;
+          }
+          if (timer_ns() - started >= timeout_ns) {
+            fail(p, kReadyTimeout, sender, epoch, kReady);
+            failed = 1;
+            break;
+          }
+          seen = relaxed(cells + cell);
+        }
+        if (failed) break;
+        const unsigned value = static_cast<unsigned>(seen);
+        if ((seen & ~0xffffffffULL) != tag || (cell == 0 && value != bytes)) {
+          fail(p, kMetadataMismatch, sender, epoch, kReady);
+          failed = 1;
+          break;
+        }
+        store(cells + cell, 0);
+        if (cell > 0) {
+          const uint64_t first = 4 * (cell - 1);
+          for (uint64_t b = 0; b < 4 && first + b < bytes; ++b) {
+            output[sender * bytes + first + b] =
+                static_cast<unsigned char>(value >> (8 * b));
+          }
+        }
+      }
+    }
+  }
+  if (__syncthreads_or(failed) && threadIdx.x == 0) bad = 1;
+  device_fence();
+  __syncthreads();
+  if (threadIdx.x == 0 && !bad) bad = observe_fault(p, kComplete);
+  __syncthreads();
+  if (bad) {
+    for (uint64_t i = threadIdx.x; i < kRanks * bytes; i += blockDim.x) {
+      output[i] = 0;
+    }
+    return;
+  }
+  if (threadIdx.x == 0) write_local(p.state, epoch);
+}
+
 __global__ void pull_reduce(const __grid_constant__ Params p, Word* snapshot) {
   __shared__ Word epoch;
   __shared__ Word started;
@@ -765,6 +884,7 @@ int64_t init(const std::vector<int64_t>& peer_ptrs,
   ctx->params.fault_offset = sizes.fault_offset;
   ctx->params.ready_offset = sizes.ready_offset;
   ctx->params.r2_offset = sizes.r2_offset;
+  ctx->params.gather_offset = sizes.gather_offset;
   ctx->params.rank = static_cast<int>(rank);
   initialize_state<<<1, 1, 0, stream>>>(ctx->params.state, timeout_ns);
   STD_CUDA_CHECK(cudaGetLastError());
@@ -830,6 +950,36 @@ void all_reduce(int64_t handle, const torch::stable::Tensor& input,
   paired_combine<<<combine_blocks, kCombineThreads, 0, stream>>>(
       ctx.params, static_cast<const unsigned short*>(source),
       static_cast<unsigned short*>(destination), count);
+  STD_CUDA_CHECK(cudaGetLastError());
+}
+
+void all_gather(int64_t handle, const torch::stable::Tensor& input,
+                torch::stable::Tensor& output) {
+  const Context& ctx = context(handle);
+  const torch::stable::accelerator::DeviceGuard guard(ctx.device);
+  const cudaStream_t stream = checked_stream(ctx);
+  STD_TORCH_CHECK(
+      input.device().is_cuda() && output.device().is_cuda() &&
+          input.get_device_index() == ctx.device &&
+          output.get_device_index() == ctx.device &&
+          output.scalar_type() == input.scalar_type() &&
+          input.is_contiguous() && output.is_contiguous() &&
+          output.numel() == kRanks * input.numel(),
+      "PCIe gather output must be a contiguous local stack of four inputs");
+  const uint64_t bytes = input.numel() * input.element_size();
+  STD_TORCH_CHECK(bytes > 0 && bytes <= kGatherBytes,
+                  "PCIe gather payload is empty or exceeds the gather cells");
+  const void* source = input.const_data_ptr();
+  void* destination = output.mutable_data_ptr();
+  STD_TORCH_CHECK(
+      !overlaps(reinterpret_cast<uintptr_t>(source), bytes,
+                reinterpret_cast<uintptr_t>(destination), kRanks * bytes),
+      "PCIe gather input and output must not overlap");
+  reject_workspace_alias(ctx, source, bytes);
+  reject_workspace_alias(ctx, destination, kRanks * bytes);
+  gather_small<<<1, ctx.threads, 0, stream>>>(
+      ctx.params, static_cast<const unsigned char*>(source),
+      static_cast<unsigned char*>(destination), bytes);
   STD_CUDA_CHECK(cudaGetLastError());
 }
 
@@ -907,6 +1057,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C_pcie_pull, ops) {
       "init(int[] peer_ptrs, Tensor state, int rank, int capacity, int blocks, "
       "int threads, int timeout_ns, int transport=2) -> int");
   ops.def("all_reduce(int handle, Tensor input, Tensor! output) -> ()");
+  ops.def("all_gather(int handle, Tensor input, Tensor! output) -> ()");
   ops.def("close_step(int handle, Tensor! snapshot) -> ()");
   ops.def("bind_stream(int handle) -> ()");
   ops.def("local_status(int handle) -> int");
@@ -917,6 +1068,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C_pcie_pull, ops) {
 STABLE_TORCH_LIBRARY_IMPL(_C_pcie_pull, CUDA, ops) {
   ops.impl("init", TORCH_BOX(&aphrodite::pcie_pull::init));
   ops.impl("all_reduce", TORCH_BOX(&aphrodite::pcie_pull::all_reduce));
+  ops.impl("all_gather", TORCH_BOX(&aphrodite::pcie_pull::all_gather));
   ops.impl("close_step", TORCH_BOX(&aphrodite::pcie_pull::close_step));
 }
 

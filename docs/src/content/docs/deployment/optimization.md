@@ -276,6 +276,11 @@ The reduction adds operands in rank order in FP32, then rounds once to BF16.
 This uses a different rounding contract from BF16 NCCL. Do not assume that
 the modes are numerically interchangeable.
 
+The same backend also all-gathers contiguous tensors of up to 16 KiB per rank,
+such as the per-row packets of vocabulary-parallel sampling. A gather copies
+bytes, so its results are identical to NCCL. Larger all-gathers retain their
+existing backend.
+
 The engine checks a collective completion snapshot before it releases each
 step's tokens or logprobs. A protocol failure stops the engine; it does not
 switch the affected collective to NCCL or retry it. Restart the engine after

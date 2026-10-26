@@ -445,6 +445,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
         # uses dim=0 with tp-aligned (uniform) shards.
         if dim < 0:
             dim += input_.dim()
+        pcie_pull_ar_comm = self.pcie_pull_ar_comm
+        if pcie_pull_ar_comm is not None and pcie_pull_ar_comm.should_use_gather(input_):
+            input_size = input_.size()
+            output = pcie_pull_ar_comm.all_gather(input_).reshape((self.world_size,) + input_size).movedim(0, dim)
+            return output.reshape(input_size[:dim] + (self.world_size * input_size[dim],) + input_size[dim + 1 :])
         # On ROCm, the base-class all_gather (all_gather_into_tensor) is faster
         # than pynccl-based paths for TP forward passes.
         if current_platform.is_rocm():
