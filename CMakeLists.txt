@@ -664,6 +664,23 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_ENGRAM_SRC}")
     endif()
 
+    # DeepSeek-V4.1 sparse MLA decode. Its E2M1 converts need the SM120
+    # family-specific target (12.0f, or 12.0a before CUDA 13).
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
+      cuda_archs_loose_intersection(SM120_SPARSE_DECODE_ARCHS "12.0f" "${CUDA_ARCHS}")
+    else()
+      cuda_archs_loose_intersection(SM120_SPARSE_DECODE_ARCHS "12.0a" "${CUDA_ARCHS}")
+    endif()
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND SM120_SPARSE_DECODE_ARCHS)
+      set(SM120_SPARSE_DECODE_SRC "csrc/dsv41_sparse_decode_sm120.cu")
+      set_gencode_flags_for_srcs(
+        SRCS "${SM120_SPARSE_DECODE_SRC}"
+        CUDA_ARCHS "${SM120_SPARSE_DECODE_ARCHS}")
+      set_property(SOURCE "${SM120_SPARSE_DECODE_SRC}" "csrc/torch_bindings.cpp"
+        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_SPARSE_DECODE=1)
+      list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_SPARSE_DECODE_SRC}")
+    endif()
+
     #
     # Swordfish kernels: w4a16 GEMM for the Blackwell sm100 family
     # (datacenter sm100 + Thor sm110). Family (f) variants need CUDA >= 13.0;

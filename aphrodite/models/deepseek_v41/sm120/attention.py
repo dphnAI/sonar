@@ -433,6 +433,16 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self.capacity = aphrodite_config.scheduler_config.max_num_batched_tokens
         self.max_model_len = aphrodite_config.model_config.max_model_len
         self.compress_ratio = hf.compress_ratios[self.layer_id] if self.layer_id < len(hf.compress_ratios) else 0
+        # Decode in one launch (csrc/dsv41_sparse_decode_sm120.cu) when the SWA
+        # and indexed widths fit its 8-CTA split. It reads the same metadata
+        # as the b12x decode; DSpark's wider window keeps the b12x decode.
+        width = self.swa_width + (512 if self.compress_ratio else 0)
+        self._cluster_decode = (
+            self.n_local_heads == 16
+            and width % 128 == 0
+            and width <= 640
+            and hasattr(torch.ops._C, "dsv41_sparse_decode_sm120")
+        )
         self.is_kv_source = self.layer_id in hf.kv_source_layer_ids
         self.is_index_source = self.layer_id in hf.index_source_layer_ids
         self.kv_source_layer_id = (
@@ -1410,10 +1420,14 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         # Reuse the shared arena only after indexing completes. Keep full-batch
         # metadata beside, not overlapping, the native attention scratch.
         metadata_specs = self._attention_workspace_specs[mode]
-        arena = current_workspace_manager().get_simultaneous(
-            *metadata_specs,
-            *((spec.shape, spec.dtype) for spec in state.scratch_plan.scratch_specs()),
+        cluster = mode == "decode" and self._cluster_decode and q.is_contiguous() and output.is_contiguous()
+        heads = self.n_local_heads
+        scratch_specs = (
+            (((rows * 8 * heads * 512,), torch.float32), ((rows * 8 * heads * 2,), torch.float32))
+            if cluster
+            else tuple((spec.shape, spec.dtype) for spec in state.scratch_plan.scratch_specs())
         )
+        arena = current_workspace_manager().get_simultaneous(*metadata_specs, *scratch_specs)
         buffers = arena
         metadata_count = len(metadata_specs)
         # Decode layers sharing cache groups map identical pages, so the first
@@ -1442,6 +1456,28 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         else:
             self._write_decode_metadata(buffers, swa, main, rows)
         swa_indices, swa_lengths, top_lengths = buffers[:3]
+        if cluster:
+            partial, stats = buffers[metadata_count:]
+            retain_cuda_graph_capture_resource(arena)
+            indexed = main is not None
+            torch.ops._C.dsv41_sparse_decode_sm120(
+                q,
+                output,
+                self.swa_cache_layer.kv_cache,
+                self.swa_cache_layer.block_size,
+                swa_indices[:rows],
+                swa_lengths[:rows],
+                self._owner().kv_cache if indexed else None,
+                self._main_page,
+                owner.topk_indices_buffer[:rows] if indexed else None,
+                top_lengths[:rows] if indexed else None,
+                buffers[3][:rows] if indexed else None,
+                self.attn_sink,
+                512**-0.5,
+                partial,
+                stats,
+            )
+            return
         kwargs = {}
         if main is not None:
             kwargs = dict(

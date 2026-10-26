@@ -4,6 +4,9 @@
 #if defined(APHRODITE_ENABLE_SM120_ENGRAM) && !defined(USE_ROCM)
   #include "engram_sm120.h"
 #endif
+#if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
+  #include "dsv41_sparse_decode_sm120.h"
+#endif
 
 #include <torch/csrc/stable/library.h>
 
@@ -53,6 +56,15 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "sm120_engram_finish(Tensor hidden, Tensor gathered_packets, "
       "Tensor? token_mask, Tensor! output, int num_valid_tokens, float eps, "
       "float clamp_value) -> ()");
+#endif
+
+#if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
+  ops.def(
+      "dsv41_sparse_decode_sm120(Tensor q, Tensor! out, Tensor swa_cache, "
+      "int swa_page_size, Tensor swa_indices, Tensor swa_lengths, "
+      "Tensor? indexed_cache, int indexed_page_size, Tensor? indexed_indices, "
+      "Tensor? indexed_lengths, Tensor? indexed_page_table, Tensor attn_sink, "
+      "float sm_scale, Tensor! partial, Tensor! stats) -> ()");
 #endif
 
 #ifndef USE_ROCM
@@ -858,6 +870,9 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
 #if defined(APHRODITE_ENABLE_SM120_ENGRAM) && !defined(USE_ROCM)
   ops.impl("sm120_engram_pack", TORCH_BOX(&sm120_engram_pack));
   ops.impl("sm120_engram_finish", TORCH_BOX(&sm120_engram_finish));
+#endif
+#if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
+  ops.impl("dsv41_sparse_decode_sm120", TORCH_BOX(&dsv41_sparse_decode_sm120));
 #endif
 
   // Per-token group quantization
