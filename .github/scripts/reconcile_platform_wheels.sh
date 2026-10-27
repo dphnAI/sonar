@@ -203,7 +203,8 @@ echo "Platform: ${PLATFORM_BACKEND}/${PLATFORM_ARCHITECTURE}"
 echo "Last contiguous build: ${last_built:-none}"
 echo "Commits requiring reconciliation: ${#commits[@]}"
 
-for commit in "${commits[@]}"; do
+# macOS bash 3.2 treats "${empty[@]}" as unbound under set -u.
+for commit in ${commits[@]+"${commits[@]}"}; do
   restore_tracked_build_changes
   git checkout --detach "$commit"
   wheel_name="$(find_commit_wheel "$commit")"
