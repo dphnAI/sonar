@@ -102,6 +102,7 @@ def _run_prepare(
         max_num_tokens=max_num_tokens,
         max_model_len=128,
         sample_from_anchor=True,
+        num_cached_tokens=torch.zeros(max_num_reqs, dtype=torch.int32, device=device),
     )
     with (
         patch(

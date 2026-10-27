@@ -55,6 +55,7 @@ def _run_prepare(
     *,
     use_global_cache_positions: bool = False,
     cached_tokens: list[int] | None = None,
+    groups: list[tuple[torch.Tensor, int]] | None = None,
 ):
     context_positions = [
         torch.arange(100, 120, device=DEVICE),
@@ -90,9 +91,11 @@ def _run_prepare(
         .to(torch.int32)
     )
 
-    query_slot_mapping = torch.zeros(MAX_NUM_TOKENS, dtype=torch.int64, device=DEVICE)
+    if groups is None:
+        groups = [(block_table, BLOCK_SIZE)]
+    query_slot_mappings = [torch.zeros(MAX_NUM_TOKENS, dtype=torch.int64, device=DEVICE) for _ in groups]
     output_context_positions = torch.zeros(MAX_NUM_TOKENS, dtype=torch.int64, device=DEVICE)
-    context_slot_mapping = torch.zeros(MAX_NUM_TOKENS, dtype=torch.int64, device=DEVICE)
+    context_slot_mappings = [torch.zeros(MAX_NUM_TOKENS, dtype=torch.int64, device=DEVICE) for _ in groups]
     max_num_sampled = MAX_NUM_REQS * NUM_SPECULATIVE_STEPS
     sample_indices = torch.zeros(max_num_sampled, dtype=torch.int64, device=DEVICE)
     sample_pos = torch.zeros(max_num_sampled, dtype=torch.int64, device=DEVICE)
@@ -107,9 +110,9 @@ def _run_prepare(
 
     prepare_dflash_inputs(
         input_buffers,
-        query_slot_mapping,
+        query_slot_mappings,
         output_context_positions,
-        context_slot_mapping,
+        context_slot_mappings,
         sample_indices,
         sample_pos,
         sample_idx_mapping,
@@ -122,8 +125,8 @@ def _run_prepare(
         next_prefill_tokens,
         temperature,
         seeds,
-        block_table,
-        BLOCK_SIZE,
+        [table for table, _ in groups],
+        [block_size for _, block_size in groups],
         num_cached_tokens,
         parallel_drafting_token_id=1,
         num_query_per_req=NUM_QUERY_PER_REQ,
@@ -144,9 +147,16 @@ def _run_prepare(
         query_start_loc=query_start_loc,
         block_table=block_table,
         input_buffers=input_buffers,
-        query_slot_mapping=query_slot_mapping,
+        query_slot_mapping=query_slot_mappings[-1],
         output_context_positions=output_context_positions,
-        context_slot_mapping=context_slot_mapping,
+        context_slot_mapping=context_slot_mappings[-1],
+        query_slot_mappings=query_slot_mappings,
+        context_slot_mappings=context_slot_mappings,
+        sample_indices=sample_indices,
+        sample_pos=sample_pos,
+        sample_idx_mapping=sample_idx_mapping,
+        temperature=temperature,
+        seeds=seeds,
     )
 
 
@@ -242,3 +252,42 @@ def test_restored_draft_prefix_keeps_cache_origin_consistent(use_global_cache_po
         block_id = int(result.block_table[req, last_position // BLOCK_SIZE])
         expected_slot = block_id * BLOCK_SIZE + last_position % BLOCK_SIZE if block_id else PAD_SLOT_ID
         assert int(result.query_slot_mapping[(req + 1) * NUM_QUERY_PER_REQ - 1]) == expected_slot
+
+
+@pytest.mark.parametrize("use_global_cache_positions", [False, True])
+def test_one_launch_prepares_every_draft_group_like_its_own_launch(use_global_cache_positions: bool):
+    # Draft KV-cache groups differ in block table and block size; one launch
+    # must give each group the slots it gets alone, and the shared outputs of
+    # the last group (seq_lens depends on its block size via cached tokens).
+    generator = torch.Generator(device=DEVICE).manual_seed(7)
+    groups = []
+    for block_size in (16, 32, 8):
+        blocks = MAX_MODEL_LEN // block_size
+        table = torch.randperm(MAX_NUM_REQS * blocks, generator=generator, device=DEVICE).view(MAX_NUM_REQS, blocks)
+        groups.append((table.to(torch.int32), block_size))
+    cached = [64, 0, 40]
+    together = _run_prepare(
+        1, 0, 1, use_global_cache_positions=use_global_cache_positions, cached_tokens=cached, groups=groups
+    )
+    alone = [
+        _run_prepare(
+            1, 0, 1, use_global_cache_positions=use_global_cache_positions, cached_tokens=cached, groups=[group]
+        )
+        for group in groups
+    ]
+    for g, single in enumerate(alone):
+        assert torch.equal(together.query_slot_mappings[g], single.query_slot_mappings[0])
+        assert torch.equal(together.context_slot_mappings[g], single.context_slot_mappings[0])
+    last = alone[-1]
+    buffers = ("input_ids", "positions", "is_padding", "query_start_loc", "seq_lens")
+    for name in buffers:
+        assert torch.equal(getattr(together.input_buffers, name), getattr(last.input_buffers, name)), name
+    for name in (
+        "output_context_positions",
+        "sample_indices",
+        "sample_pos",
+        "sample_idx_mapping",
+        "temperature",
+        "seeds",
+    ):
+        assert torch.equal(getattr(together, name), getattr(last, name)), name
