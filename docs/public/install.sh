@@ -457,7 +457,12 @@ case "$backend:$channel" in
             --extra-index-url "$wheel_index" \
             --index-strategy first-index
         if [ "$backend" = cpu ]; then
-            set -- "$@" --torch-backend cpu
+            # triton-cpu is a direct URL dependency, which wheels cannot declare for uv, so
+            # request it here. Keep the URLs and markers in sync with requirements/cpu.txt.
+            triton_cpu=https://github.com/triton-lang/triton-cpu/releases/download/v3.8.0/triton-3.8.0+cpu
+            set -- "$@" --torch-backend cpu \
+                "triton @ $triton_cpu-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64' and python_version == '3.11'" \
+                "triton @ $triton_cpu-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64' and python_version >= '3.12'"
         fi
         ;;
 esac
