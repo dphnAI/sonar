@@ -30,6 +30,14 @@ a running server for the installed version's exact request schema.
 Use `/tokenize` to convert text to token IDs. Use `/detokenize` for the reverse
 operation. These endpoints use the tokenizer loaded by the server.
 
+To serve only a model's tokenizer, run `aphrodite tokenizer <model>`. It loads
+the tokenizer and model config without weights, an engine, or a GPU, and serves
+`/tokenize` and `/detokenize` with the same request and response formats as
+`aphrodite serve`, including chat `messages`. It also serves `/v1/models`,
+`/health`, `/version`, and `/metrics`. Pass `--enable-tokenizer-info-endpoint`
+to expose `/tokenizer_info`. It accepts the `aphrodite serve` options for the
+tokenizer, chat template, host, port, and API key.
+
 ## Render and derender
 
 The render API performs request preprocessing without model execution. The
