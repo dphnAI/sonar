@@ -7,6 +7,9 @@
 #if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
   #include "dsv41_sparse_decode_sm120.h"
 #endif
+#if defined(APHRODITE_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
+  #include "b12x_moe_fused_sm120.h"
+#endif
 
 #include <torch/csrc/stable/library.h>
 
@@ -65,6 +68,17 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "Tensor? indexed_cache, int indexed_page_size, Tensor? indexed_indices, "
       "Tensor? indexed_lengths, Tensor? indexed_page_table, Tensor attn_sink, "
       "float sm_scale, Tensor! partial, Tensor! stats) -> ()");
+#endif
+
+#if defined(APHRODITE_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
+  ops.def("b12x_w4a8_moe_fused_ctrl_init(Tensor! ctrl) -> ()");
+  ops.def(
+      "b12x_w4a8_moe_fused_sm120(Tensor a_values, Tensor a_scales, "
+      "Tensor w13, Tensor w13_scales, Tensor! projections, "
+      "Tensor! intermediate, Tensor w2, Tensor w2_scales, Tensor topk_ids, "
+      "Tensor topk_weights, Tensor alpha1, Tensor input_scale, Tensor alpha2, "
+      "Tensor down_scale, Tensor! route_output, Tensor! ctrl, int num_pairs, "
+      "int topk, int rows_capacity, int n, float swiglu_limit) -> ()");
 #endif
 
 #ifndef USE_ROCM
@@ -873,6 +887,11 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
 #endif
 #if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
   ops.impl("dsv41_sparse_decode_sm120", TORCH_BOX(&dsv41_sparse_decode_sm120));
+#endif
+#if defined(APHRODITE_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
+  ops.impl("b12x_w4a8_moe_fused_ctrl_init",
+           TORCH_BOX(&b12x_w4a8_moe_fused_ctrl_init));
+  ops.impl("b12x_w4a8_moe_fused_sm120", TORCH_BOX(&b12x_w4a8_moe_fused_sm120));
 #endif
 
   // Per-token group quantization

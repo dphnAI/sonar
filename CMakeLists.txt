@@ -664,21 +664,25 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_ENGRAM_SRC}")
     endif()
 
-    # DeepSeek-V4.1 sparse MLA decode. Its E2M1 converts need the SM120
+    # DeepSeek-V4.1 SM120 decode kernels: the sparse MLA decode (E2M1 converts)
+    # and the fused b12x W4A8 decode MoE (block-scaled QMMA) need the SM120
     # family-specific target (12.0f, or 12.0a before CUDA 13).
     if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
-      cuda_archs_loose_intersection(SM120_SPARSE_DECODE_ARCHS "12.0f" "${CUDA_ARCHS}")
+      cuda_archs_loose_intersection(SM120_FAMILY_ARCHS "12.0f" "${CUDA_ARCHS}")
     else()
-      cuda_archs_loose_intersection(SM120_SPARSE_DECODE_ARCHS "12.0a" "${CUDA_ARCHS}")
+      cuda_archs_loose_intersection(SM120_FAMILY_ARCHS "12.0a" "${CUDA_ARCHS}")
     endif()
-    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND SM120_SPARSE_DECODE_ARCHS)
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND SM120_FAMILY_ARCHS)
       set(SM120_SPARSE_DECODE_SRC "csrc/dsv41_sparse_decode_sm120.cu")
+      set(SM120_MOE_FUSED_SRC "csrc/b12x_moe_fused_sm120.cu")
       set_gencode_flags_for_srcs(
-        SRCS "${SM120_SPARSE_DECODE_SRC}"
-        CUDA_ARCHS "${SM120_SPARSE_DECODE_ARCHS}")
+        SRCS "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}"
+        CUDA_ARCHS "${SM120_FAMILY_ARCHS}")
       set_property(SOURCE "${SM120_SPARSE_DECODE_SRC}" "csrc/torch_bindings.cpp"
         APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_SPARSE_DECODE=1)
-      list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_SPARSE_DECODE_SRC}")
+      set_property(SOURCE "${SM120_MOE_FUSED_SRC}" "csrc/torch_bindings.cpp"
+        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_MOE_FUSED=1)
+      list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}")
     endif()
 
     #

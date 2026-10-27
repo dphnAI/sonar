@@ -11,6 +11,7 @@ import torch
 
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
 from aphrodite import envs
+from aphrodite.model_executor.layers.fused_moe import b12x_fused_decode
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.config import (
     FusedMoEParallelConfig,
@@ -55,6 +56,7 @@ _B12X_MOE_MODES: dict[
 def _require_b12x_fused_moe() -> Any:
     fused_moe = get_b12x_fused_moe()
     assert fused_moe is not None
+    b12x_fused_decode.install()
     return fused_moe
 
 
