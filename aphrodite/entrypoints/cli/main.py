@@ -24,6 +24,7 @@ def main():
     import aphrodite.entrypoints.cli.run_batch
     import aphrodite.entrypoints.cli.serve
     import aphrodite.entrypoints.cli.snapshot
+    import aphrodite.entrypoints.cli.tokenizer
     from aphrodite.entrypoints.serve.utils.api_utils import (
         APHRODITE_SUBCMD_PARSER_EPILOG,
         cli_env_setup,
@@ -41,6 +42,7 @@ def main():
         aphrodite.entrypoints.cli.preload,
         aphrodite.entrypoints.cli.run_batch,
         aphrodite.entrypoints.cli.snapshot,
+        aphrodite.entrypoints.cli.tokenizer,
     ]
 
     if sys.argv[1:2] != ["snapshot"]:
@@ -48,11 +50,13 @@ def main():
 
     aphrodite.entrypoints.cli.benchmark.main.maybe_exec_rust_bench()
 
-    # For 'aphrodite bench *': use CPU instead of UnspecifiedPlatform by default
-    if len(sys.argv) > 1 and sys.argv[1] == "bench":
+    # For 'aphrodite bench *' and the GPU-less 'aphrodite tokenizer': use CPU instead of
+    # UnspecifiedPlatform by default
+    if len(sys.argv) > 1 and sys.argv[1] in ("bench", "tokenizer"):
         logger.debug(
-            "Bench command detected, must ensure current platform is not "
-            "UnspecifiedPlatform to avoid device type inference error"
+            "%s command detected, must ensure current platform is not "
+            "UnspecifiedPlatform to avoid device type inference error",
+            sys.argv[1],
         )
         from aphrodite import platforms
 

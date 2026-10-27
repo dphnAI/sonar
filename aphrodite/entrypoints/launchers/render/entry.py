@@ -5,6 +5,9 @@ import asyncio
 import signal
 import socket
 from argparse import Namespace
+from collections.abc import Callable
+
+from fastapi import FastAPI
 
 from aphrodite import AsyncEngineArgs, envs
 from aphrodite.config import AphroditeConfig
@@ -18,24 +21,30 @@ from .app_state import init_render_app_state
 logger = init_logger("aphrodite.entrypoints.launchers.render.entry")
 
 
+def build_render_app(args: Namespace) -> FastAPI:
+    return build_app(args, ("render",))
+
+
 async def build_and_serve_renderer(
     aphrodite_config: AphroditeConfig,
     listen_address: str,
     sock: socket.socket,
     args: Namespace,
+    app_builder: Callable[[Namespace], FastAPI] = build_render_app,
     **uvicorn_kwargs,
 ) -> asyncio.Task:
     """Build FastAPI app for a CPU-only render server, initialize state, and
     start serving.
 
-    Returns the shutdown task for the caller to await.
+    ``app_builder`` selects the routes; the tokenizer-only server passes its
+    own. Returns the shutdown task for the caller to await.
     """
     # Get uvicorn log config (from file or with endpoint filter)
     log_config = get_uvicorn_log_config(args)
     if log_config is not None:
         uvicorn_kwargs["log_config"] = log_config
 
-    app = build_app(args, ("render",))
+    app = app_builder(args)
     await init_render_app_state(aphrodite_config, app.state, args)
 
     logger.info("Starting Aphrodite server on %s", listen_address)
@@ -62,20 +71,8 @@ async def build_and_serve_renderer(
     )
 
 
-async def run_launch_fastapi(args: argparse.Namespace) -> None:
-    """Run the online serving layer with FastAPI (no GPU inference)."""
-
-    # Interrupt initialization if SIGTERM arrives before uvicorn installs
-    # its own signal handlers. Once uvicorn is running it replaces this.
-    def _interrupt_init(*_) -> None:
-        raise KeyboardInterrupt("terminated")
-
-    signal.signal(signal.SIGTERM, _interrupt_init)
-
-    # 1. Socket binding
-    listen_address, sock = setup_server(args, reuse_port=False)
-
-    # 2. Build and serve the API server
+def create_render_config(args: argparse.Namespace) -> AphroditeConfig:
+    """Build the AphroditeConfig for a GPU-less server (render or tokenizer-only)."""
     engine_args = AsyncEngineArgs.from_cli_args(args)
     model_config = engine_args.create_model_config()
 
@@ -91,12 +88,32 @@ async def run_launch_fastapi(args: argparse.Namespace) -> None:
     # structured outputs config, mirroring `create_engine_config`, which this
     # GPU-less entrypoint bypasses. Model-specific defaults are then applied
     # by `verify_and_update_config` during AphroditeConfig construction.
-    aphrodite_config = AphroditeConfig(
+    return AphroditeConfig(
         model_config=model_config,
         logging_config=engine_args.create_logging_config(),
         structured_outputs_config=engine_args.create_structured_outputs_config(),
     )
-    shutdown_task = await build_and_serve_renderer(aphrodite_config, listen_address, sock, args)
+
+
+async def run_launch_fastapi(
+    args: argparse.Namespace,
+    app_builder: Callable[[Namespace], FastAPI] = build_render_app,
+) -> None:
+    """Run the online serving layer with FastAPI (no GPU inference)."""
+
+    # Interrupt initialization if SIGTERM arrives before uvicorn installs
+    # its own signal handlers. Once uvicorn is running it replaces this.
+    def _interrupt_init(*_) -> None:
+        raise KeyboardInterrupt("terminated")
+
+    signal.signal(signal.SIGTERM, _interrupt_init)
+
+    # 1. Socket binding
+    listen_address, sock = setup_server(args, reuse_port=False)
+
+    # 2. Build and serve the API server
+    aphrodite_config = create_render_config(args)
+    shutdown_task = await build_and_serve_renderer(aphrodite_config, listen_address, sock, args, app_builder)
     try:
         await shutdown_task
     finally:
