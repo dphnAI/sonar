@@ -3,7 +3,10 @@ ARG REMOTE_APHRODITE="0"
 ARG APHRODITE_REPO="https://github.com/aphrodite-engine/aphrodite-engine.git"
 ARG APHRODITE_BRANCH="main"
 ARG COMMON_WORKDIR=/app
-ARG BASE_IMAGE=rocm/vllm-dev:base
+# Pinned: the rocm/vllm-dev:base tag moved from /opt/rocm 7.2.3 to the ROCm SDK 10.0.0
+# on 2026-10-18. When bumping, also bump the aphrodite-rocm-cmake-* cache id below
+# and the rocm723 wheel label in the wheel workflows.
+ARG BASE_IMAGE=rocm/vllm-dev:base@sha256:3cead535c32c11c59b222bbaa502076b9c737fb969b70b7bc9bb8ce77da5698e
 
 # Sccache configuration (only used in release pipeline)
 ARG USE_SCCACHE
@@ -223,7 +226,7 @@ COPY --from=rust-build ${COMMON_WORKDIR}/aphrodite/aphrodite/_rust_*.so aphrodit
 # Build Aphrodite. setup.py auto-detects sccache in PATH.
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,id=aphrodite-rocm-ccache,target=/root/.cache/ccache,sharing=locked \
-    --mount=type=cache,id=aphrodite-rocm-cmake-v1,target=${COMMON_WORKDIR}/aphrodite/build,sharing=locked \
+    --mount=type=cache,id=aphrodite-rocm-cmake-v2,target=${COMMON_WORKDIR}/aphrodite/build,sharing=locked \
     --mount=type=cache,id=aphrodite-rocm-deps,target=${COMMON_WORKDIR}/aphrodite/.deps,sharing=locked \
     --mount=type=secret,id=aws-credentials,target=/root/.aws/credentials,required=false \
     cd aphrodite \
