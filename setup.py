@@ -710,7 +710,10 @@ def get_requirements() -> list[str]:
     elif _is_tpu():
         requirements = _read_requirements("tpu.txt")
     elif _is_cpu():
-        requirements = _read_requirements("cpu.txt")
+        # Direct URL requirements (triton-cpu) work with `pip install -r`, but uv rejects them in
+        # a wheel's metadata unless the user also requests the same URL, which breaks
+        # `uv pip install aphrodite-engine`. docs/public/install.sh requests triton-cpu itself.
+        requirements = [req for req in _read_requirements("cpu.txt") if " @ " not in req.split(";")[0]]
     elif _is_metal():
         requirements = _read_requirements("metal.txt")
     elif _is_xpu():
