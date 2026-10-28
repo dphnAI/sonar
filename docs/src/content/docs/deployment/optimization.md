@@ -246,6 +246,13 @@ top-k kernel resolves exact boundary ties by thread arrival order, so even
 repeated unsharded launches can select different tied indices. Do not assume
 bit-identical selected indices or final model outputs from row sharding.
 
+The native backend also applies an identity-only missing-argument check to
+the verified CuTe argument binder. Its original membership check invokes
+tensor equality on a private sentinel, adding exception-handling overhead
+to eager launches. The compatibility fix changes no kernel arguments or
+GPU arithmetic. It checks the complete binder implementation before replacing
+it; unknown implementations stay unchanged and produce a warning.
+
 For mHC boundaries of up to 64 tokens, the backend computes the coefficients
 for the next boundary on a separate CUDA stream while attention or the MoE
 layer runs. The residual mix, the input collapse, and its RMSNorm stay on the
