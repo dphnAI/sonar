@@ -18,7 +18,7 @@ H, D, WINDOW, TOPK, SWA_PAGE = 16, 512, 128, 512, 128
 SCALE = 512**-0.5
 
 
-def _case(*, seed, ratio, positions_per_request, visible_cap=10**9, padding_rows=0, hole=False):
+def _case(*, seed, ratio, positions_per_request, visible_cap=10**9, padding_rows=0, hole=False, indexed_width=TOPK):
     """Encode random caches and build the metadata the b12x decode path consumes."""
     gen = torch.Generator(device="cuda").manual_seed(seed)
     indexed = ratio > 0
@@ -48,8 +48,8 @@ def _case(*, seed, ratio, positions_per_request, visible_cap=10**9, padding_rows
     sink = torch.randn(H, generator=gen, device="cuda")
     swa_slots = torch.full((rows, WINDOW), -1, dtype=torch.int32, device="cuda")
     swa_len = torch.zeros(rows, dtype=torch.int32, device="cuda")
-    logical = torch.full((rows, TOPK), -1, dtype=torch.int32, device="cuda")
-    idx_slots = torch.full((rows, TOPK), -1, dtype=torch.int32, device="cuda")
+    logical = torch.full((rows, indexed_width), -1, dtype=torch.int32, device="cuda")
+    idx_slots = torch.full((rows, indexed_width), -1, dtype=torch.int32, device="cuda")
     top_len = torch.zeros(rows, dtype=torch.int32, device="cuda")
     table = torch.full((rows, width), -1, dtype=torch.int32, device="cuda")
     for row, (req, pos) in enumerate(zip(reqs, positions)):
@@ -61,7 +61,7 @@ def _case(*, seed, ratio, positions_per_request, visible_cap=10**9, padding_rows
         if not indexed:
             continue
         visible = min(max((pos + 1) // ratio, 1), comp, visible_cap)
-        count = min(visible, TOPK)
+        count = min(visible, indexed_width)
         chosen = torch.randperm(visible, generator=gen, device="cuda")[:count].sort().values
         logical[row, :count] = chosen.to(torch.int32)
         pages = idx_phys[req][chosen // idx_page]
@@ -151,6 +151,9 @@ def _reference(c):
         dict(seed=5, ratio=0, positions_per_request=[list(range(60, 68))]),
         dict(seed=6, ratio=4, positions_per_request=[list(range(4096, 4102))], padding_rows=2),
         dict(seed=7, ratio=4, positions_per_request=[list(range(3000, 3008))], hole=True),
+        dict(seed=8, ratio=2, positions_per_request=[[128, 511, 2048]], indexed_width=128),
+        dict(seed=9, ratio=2, positions_per_request=[[128, 511, 2048]], indexed_width=256),
+        dict(seed=10, ratio=2, positions_per_request=[[128, 511, 2048]], indexed_width=384),
     ],
 )
 def test_matches_reference_and_is_deterministic(spec):
@@ -164,3 +167,56 @@ def test_matches_reference_and_is_deterministic(spec):
         # No keys and only the sink: the output is exactly zero.
         assert torch.count_nonzero(actual[-padding:]) == 0
     assert torch.equal(actual, _run(c))
+
+
+@pytest.mark.parametrize("ratio, hole", [(0, False), (1, False), (2, True)])
+def test_single_stage_prefill_mixed_rows_and_capacity_reuse(ratio, hole):
+    from aphrodite.models.deepseek_v41.sm120.prefill_attention import prepare_prefill
+
+    c = _case(
+        seed=19,
+        ratio=ratio,
+        positions_per_request=[list(range(65)), list(range(999, 1064))],
+        hole=hole,
+        padding_rows=1,
+    )
+    out = torch.empty_like(c["q"])
+    lse = torch.empty(c["q"].shape[:2], dtype=torch.float32, device="cuda")
+    arguments = dict(
+        q=c["q"],
+        out=out,
+        lse=lse,
+        swa_cache=c["swa_cache"],
+        swa_indices=c["swa_slots"],
+        swa_lengths=c["swa_len"],
+        attn_sink=c["sink"],
+        sm_scale=SCALE,
+    )
+    if c["indexed"]:
+        arguments.update(
+            indexed_cache=c["idx_cache"],
+            indexed_indices=c["logical"],
+            indexed_lengths=c["top_len"],
+            indexed_page_table=c["table"],
+        )
+    prepared = prepare_prefill(
+        **arguments,
+        swa_page_size=SWA_PAGE,
+        indexed_page_size=c["idx_page"],
+    )
+    prepared.run(**arguments)
+    expected = _reference(c)
+    rel = ((out.float() - expected).norm() / expected.norm().clamp_min(1e-12)).item()
+    assert rel < 4e-3, f"relative L2 error {rel:.2e}"
+    assert torch.count_nonzero(out[-1]) == 0
+
+    # Reuse the warmed program with a smaller live batch and different output
+    # storage. Its capacity descriptors must not capture trial activations.
+    smaller = dict(arguments)
+    for name in ("q", "swa_indices", "swa_lengths", "indexed_indices", "indexed_lengths", "indexed_page_table"):
+        if name in smaller:
+            smaller[name] = smaller[name][:7]
+    smaller["out"] = torch.empty_like(out[:7])
+    smaller["lse"] = torch.empty_like(lse[:7])
+    prepared.run(**smaller)
+    assert torch.equal(smaller["out"], out[:7])
