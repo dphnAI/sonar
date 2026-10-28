@@ -407,6 +407,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self.hidden_size, self.head_dim = hf.hidden_size, hf.head_dim
         self.rope_head_dim = hf.qk_rope_head_dim
         tp = get_tensor_model_parallel_world_size()
+        self.indexer_tp_shard_min_rows = aphrodite_config.attention_config.indexer_tp_shard_min_rows
         if (
             hf.num_attention_heads <= 0
             or hf.o_groups <= 0
@@ -1370,8 +1371,26 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                 chunk_rows = self._short_index_shape[0]
                 index_pages = self._short_index_pages
             index_width = index_pages.shape[1]
-            for offset in range(0, rows, chunk_rows):
-                end = min(offset + chunk_rows, rows)
+            # Query rows are independent, including decode rows in a mixed
+            # extend batch. Keep global offsets for request/page/candidate
+            # metadata and restore the complete row order before attention.
+            # The candidate producer stays replicated: its 16K-wide output
+            # would cost far more to gather than the 512 selected indices.
+            tp_group = get_tp_group()
+            shard_indexer = (
+                mode == "extend"
+                and rows >= self.indexer_tp_shard_min_rows
+                and tp_group.world_size > 1
+                and self.layer_id != self.candidate_source_layer
+                and not torch.cuda.is_current_stream_capturing()
+            )
+            if shard_indexer:
+                boundaries = [rows * rank // tp_group.world_size for rank in range(tp_group.world_size + 1)]
+                row_begin, row_end = boundaries[tp_group.rank_in_group : tp_group.rank_in_group + 2]
+            else:
+                row_begin, row_end = 0, rows
+            for offset in range(row_begin, row_end, chunk_rows):
+                end = min(offset + chunk_rows, row_end)
                 count = end - offset
                 _pages[(count, triton.cdiv(index_width, 128))](
                     im.req_id_per_token,
@@ -1416,6 +1435,12 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                 retain_cuda_graph_capture_resource(scratch)
                 dsa_indexer.score(binding)
                 dsa_indexer.select(binding)
+            if shard_indexer:
+                indices = tp_group.all_gatherv(
+                    self.topk_indices_buffer[row_begin:row_end],
+                    sizes=[end - begin for begin, end in zip(boundaries, boundaries[1:])],
+                )
+                self.topk_indices_buffer[:rows].copy_(indices)
 
         # Reuse the shared arena only after indexing completes. Keep full-batch
         # metadata beside, not overlapping, the native attention scratch.

@@ -233,6 +233,19 @@ projection and optional indexer reuse the quantized query with their
 original prepared GEMMs. The kernel preserves BF16 normalization rounding
 and keeps KV in BF16.
 
+The native indexer can split prefill query rows across tensor-parallel ranks
+and all-gather the selected indices before attention. Set
+`--attention-config '{"indexer_tp_shard_min_rows":2048}'` to enable it for
+chunks of at least 2048 rows; the default threshold is 65536. Request/page
+metadata retains its global row offsets, including mixed prefill/decode
+batches and uneven row splits. Pure decode and CUDA-graph capture retain
+their existing path. The candidate-producing layer stays replicated to
+avoid gathering its much wider candidate buffer.
+The score arithmetic and production top-k policy are unchanged. The existing
+top-k kernel resolves exact boundary ties by thread arrival order, so even
+repeated unsharded launches can select different tied indices. Do not assume
+bit-identical selected indices or final model outputs from row sharding.
+
 For mHC boundaries of up to 64 tokens, the backend computes the coefficients
 for the next boundary on a separate CUDA stream while attention or the MoE
 layer runs. The residual mix, the input collapse, and its RMSNorm stay on the
