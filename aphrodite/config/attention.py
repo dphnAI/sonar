@@ -110,7 +110,9 @@ class AttentionConfig:
 
     indexer_tp_shard_min_rows: int = Field(default=65536, ge=1)
     """Minimum total prefill rows for the sparse-attention indexer to split
-    them across TP ranks instead of scoring every row on each rank."""
+    them across TP ranks instead of scoring every row on each rank. The native
+    SM120 backend also honors this threshold for eager prefill/mixed batches;
+    its candidate-producing layer and pure decode remain replicated."""
 
     hisparse_config: HiSparseConfig | None = None
     """HiSparse host-resident KV configuration. Setting this enables experimental

@@ -58,6 +58,7 @@ from .b12x_layers import B12xMHC
 from .b12x_layers import B12xRMSNorm as RMSNorm
 from .ced import ced_decoder_start, gather_rows, scatter_rows
 from .engram import Engram, EngramLayout, NgramHashState
+from .launch_args import install_identity_argument_check
 from .mhc_split import join_mhc_split
 from .sparse_mla import DeepseekV41B12xMetadata
 
@@ -243,6 +244,7 @@ class DeepseekV4DecoderLayer(nn.Module):
 class DeepseekV4Model(nn.Module, EagleModelMixin):
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         super().__init__()
+        install_identity_argument_check()
 
         config = aphrodite_config.model_config.hf_config
         quant_config = aphrodite_config.quant_config

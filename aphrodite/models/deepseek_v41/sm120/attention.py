@@ -52,6 +52,7 @@ from .b12x_layers import (
 )
 from .ced import CED_WINDOW, ced_decoder_start
 from .compressor import DeepseekCompressor
+from .prefill_attention import PreparedPrefill, prepare_prefill
 from .qkv_norm import fused_qkv_norm_quant, prepare_qkv_norm_quant
 from .sparse_mla import (
     SWA_BLOCK_SIZE,
@@ -407,6 +408,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self.hidden_size, self.head_dim = hf.hidden_size, hf.head_dim
         self.rope_head_dim = hf.qk_rope_head_dim
         tp = get_tensor_model_parallel_world_size()
+        self.indexer_tp_shard_min_rows = aphrodite_config.attention_config.indexer_tp_shard_min_rows
         if (
             hf.num_attention_heads <= 0
             or hf.o_groups <= 0
@@ -443,6 +445,8 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             and width <= 640
             and hasattr(torch.ops._C, "dsv41_sparse_decode_sm120")
         )
+        self._single_stage_prefill = not self.is_draft and self.n_local_heads == 16 and self.swa_width % 64 == 0
+        self._prefill_attention: PreparedPrefill | None = None
         self.is_kv_source = self.layer_id in hf.kv_source_layer_ids
         self.is_index_source = self.layer_id in hf.index_source_layer_ids
         self.kv_source_layer_id = (
@@ -910,11 +914,6 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             source = torch.randn((rows, self.n_local_heads, 512), dtype=torch.bfloat16, device=device)
             q = torch.empty_like(source)
             out = torch.empty_like(source)
-            # Trial scratch belongs to the trial; the serving workspace is
-            # never drawn from while candidates are timed.
-            scratch = [
-                torch.empty(spec.shape, dtype=spec.dtype, device=device) for spec in state.scratch_plan.scratch_specs()
-            ]
             snapshots = []
             initializers = []
 
@@ -974,13 +973,6 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                     indexed_lengths=lengths,
                     indexed_page_table=table,
                 )
-            binding = state.bind_for_preparation(
-                scratch=scratch,
-                q=q,
-                swa_indices=swa_indices,
-                swa_lengths=swa_lengths,
-                **kwargs,
-            )
 
             def reset():
                 for target, payload, width, scale in initializers:
@@ -992,6 +984,46 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                 from b12x.preparation.types import _close_all
 
                 _close_all((lambda target=target, saved=saved: target.copy_(saved)) for target, saved in snapshots)
+
+            if mode == "extend" and self._single_stage_prefill:
+                lse = torch.empty((rows, self.n_local_heads), dtype=torch.float32, device=device)
+                arguments = dict(
+                    q=q,
+                    out=out,
+                    lse=lse,
+                    swa_cache=self.swa_cache_layer.kv_cache,
+                    swa_indices=swa_indices,
+                    swa_lengths=swa_lengths,
+                    indexed_cache=self._owner().kv_cache if self.compress_ratio else None,
+                    attn_sink=self.attn_sink,
+                    sm_scale=512**-0.5,
+                    **kwargs,
+                )
+                prepared = prepare_prefill(
+                    **arguments,
+                    swa_page_size=self.swa_cache_layer.block_size,
+                    indexed_page_size=self._main_page,
+                )
+                self._prefill_attention = prepared
+                return PreparedCall(
+                    run=lambda: prepared.run(**arguments),
+                    output=out,
+                    produce=lambda: q.copy_(source),
+                    reset=reset,
+                    restore=restore,
+                )
+
+            # Trial scratch belongs to the trial, never the serving workspace.
+            scratch = [
+                torch.empty(spec.shape, dtype=spec.dtype, device=device) for spec in state.scratch_plan.scratch_specs()
+            ]
+            binding = state.bind_for_preparation(
+                scratch=scratch,
+                q=q,
+                swa_indices=swa_indices,
+                swa_lengths=swa_lengths,
+                **kwargs,
+            )
 
             return PreparedCall(
                 run=lambda: state.run(
@@ -1247,7 +1279,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             raise PreparationResourceUnavailableError("V4.1 attention metadata is not prepared")
         rows = hidden_states.shape[0]
         qr_kv, _ = self.fused_wqa_wkv(hidden_states)
-        norm_quant = self._qkv_norm_quant and rows <= self.DECODE_CHUNK and qr_kv.dtype == torch.bfloat16
+        norm_quant = self._qkv_norm_quant and qr_kv.dtype == torch.bfloat16
         qr = q_values = q_scale_mma = None
         if norm_quant:
             q_plan = block32_linear_plan(self.wq_b, rows)
@@ -1370,8 +1402,26 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                 chunk_rows = self._short_index_shape[0]
                 index_pages = self._short_index_pages
             index_width = index_pages.shape[1]
-            for offset in range(0, rows, chunk_rows):
-                end = min(offset + chunk_rows, rows)
+            # Query rows are independent, including decode rows in a mixed
+            # extend batch. Keep global offsets for request/page/candidate
+            # metadata and restore the complete row order before attention.
+            # The candidate producer stays replicated: its 16K-wide output
+            # would cost far more to gather than the 512 selected indices.
+            tp_group = get_tp_group()
+            shard_indexer = (
+                mode == "extend"
+                and rows >= self.indexer_tp_shard_min_rows
+                and tp_group.world_size > 1
+                and self.layer_id != self.candidate_source_layer
+                and not torch.cuda.is_current_stream_capturing()
+            )
+            if shard_indexer:
+                boundaries = [rows * rank // tp_group.world_size for rank in range(tp_group.world_size + 1)]
+                row_begin, row_end = boundaries[tp_group.rank_in_group : tp_group.rank_in_group + 2]
+            else:
+                row_begin, row_end = 0, rows
+            for offset in range(row_begin, row_end, chunk_rows):
+                end = min(offset + chunk_rows, row_end)
                 count = end - offset
                 _pages[(count, triton.cdiv(index_width, 128))](
                     im.req_id_per_token,
@@ -1416,15 +1466,28 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                 retain_cuda_graph_capture_resource(scratch)
                 dsa_indexer.score(binding)
                 dsa_indexer.select(binding)
+            if shard_indexer:
+                indices = tp_group.all_gatherv(
+                    self.topk_indices_buffer[row_begin:row_end],
+                    sizes=[end - begin for begin, end in zip(boundaries, boundaries[1:])],
+                )
+                self.topk_indices_buffer[:rows].copy_(indices)
 
         # Reuse the shared arena only after indexing completes. Keep full-batch
         # metadata beside, not overlapping, the native attention scratch.
         metadata_specs = self._attention_workspace_specs[mode]
         cluster = mode == "decode" and self._cluster_decode and q.is_contiguous() and output.is_contiguous()
+        prefill = None
+        if mode == "extend" and self._single_stage_prefill:
+            prefill = self._prefill_attention
+            if prefill is None:
+                raise PreparationResourceUnavailableError(f"{self.prefix} lacks prepared single-stage prefill")
         heads = self.n_local_heads
         scratch_specs = (
             (((rows * 8 * heads * 512,), torch.float32), ((rows * 8 * heads * 2,), torch.float32))
             if cluster
+            else (((rows, heads), torch.float32),)
+            if prefill is not None
             else tuple((spec.shape, spec.dtype) for spec in state.scratch_plan.scratch_specs())
         )
         arena = current_workspace_manager().get_simultaneous(*metadata_specs, *scratch_specs)
@@ -1485,6 +1548,21 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                 indexed_lengths=top_lengths[:rows],
                 indexed_page_table=buffers[3][:rows],
             )
+        if prefill is not None:
+            retain_cuda_graph_capture_resource(arena)
+            prefill.run(
+                q=q,
+                out=output,
+                lse=buffers[metadata_count],
+                swa_cache=self.swa_cache_layer.kv_cache,
+                swa_indices=swa_indices[:rows],
+                swa_lengths=swa_lengths[:rows],
+                indexed_cache=self._owner().kv_cache if main is not None else None,
+                attn_sink=self.attn_sink,
+                sm_scale=512**-0.5,
+                **kwargs,
+            )
+            return
         binding = mla.bind(
             plan,
             scratch=buffers[metadata_count:],

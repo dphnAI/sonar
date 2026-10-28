@@ -227,11 +227,42 @@ experimental native B12x backend. With DSpark, also set
 This path uses packed compressed KV caches, native sparse attention, fused
 output projections, and native Engram lookup. It retains Sonar's MoE scheduling.
 
-For BF16 chunks of up to 64 tokens, the backend fuses query/KV RMSNorm
+For BF16 query chunks, including prefill, the backend fuses query/KV RMSNorm
 with MXFP8 query quantization and the KV rotary embedding. The query
 projection and optional indexer reuse the quantized query with their
 original prepared GEMMs. The kernel preserves BF16 normalization rounding
 and keeps KV in BF16.
+
+With 16 local query heads, target-model prefill decodes each packed K=V tile
+once into shared memory for both QK and PV, mapping indexed pages during the
+gather. It retains BF16 attention arithmetic and the native 64-candidate
+tile and reduction order. Programs compile during preparation and reuse
+caller-owned output/LSE storage across live batch sizes. Other head counts
+and draft-model prefill retain the provider route.
+
+Native clustered decode specializes its shared-memory allocation to the
+actual candidate width. The eight-way partition and ordered merge are
+unchanged; smaller SWA-only partitions no longer reserve indexed-key storage.
+
+The native indexer can split prefill query rows across tensor-parallel ranks
+and all-gather the selected indices before attention. Set
+`--attention-config '{"indexer_tp_shard_min_rows":2048}'` to enable it for
+chunks of at least 2048 rows; the default threshold is 65536. Request/page
+metadata retains its global row offsets, including mixed prefill/decode
+batches and uneven row splits. Pure decode and CUDA-graph capture retain
+their existing path. The candidate-producing layer stays replicated to
+avoid gathering its much wider candidate buffer.
+The score arithmetic and production top-k policy are unchanged. The existing
+top-k kernel resolves exact boundary ties by thread arrival order, so even
+repeated unsharded launches can select different tied indices. Do not assume
+bit-identical selected indices or final model outputs from row sharding.
+
+The native backend also applies an identity-only missing-argument check to
+the verified CuTe argument binder. Its original membership check invokes
+tensor equality on a private sentinel, adding exception-handling overhead
+to eager launches. The compatibility fix changes no kernel arguments or
+GPU arithmetic. It checks the complete binder implementation before replacing
+it; unknown implementations stay unchanged and produce a warning.
 
 For mHC boundaries of up to 64 tokens, the backend computes the coefficients
 for the next boundary on a separate CUDA stream while attention or the MoE

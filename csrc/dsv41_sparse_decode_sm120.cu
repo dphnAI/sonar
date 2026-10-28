@@ -39,7 +39,7 @@ constexpr int CL = 8;
 constexpr int MAXK = 80;
 constexpr int WARPS = 8;
 constexpr int THREADS = WARPS * 32;
-constexpr int PS = MAXK + 8;
+// Each supported width gets its own exact key partition and shared allocation.
 constexpr int SPLIT = WARPS / 2;
 constexpr int SWA_BYTES = 528;
 constexpr int IDX_BYTES = 288;
@@ -66,16 +66,16 @@ struct Args {
   int64_t idx_table_stride;
   int idx_table_width;
   int idx_width;
-  int per_cta;
   const float* sink;
   float scale;
   float* partial;
   float2* stats;
 };
 
+template <int Keys>
 struct Smem {
   __nv_bfloat16 q[H * D];
-  __nv_bfloat16 k[MAXK * D];
+  __nv_bfloat16 k[Keys * D];
   float red[WARPS][H];
   union {
     // Score sums of the two spill tiles.
@@ -84,8 +84,8 @@ struct Smem {
   };
   float m[H];
   float l[H];
-  int slots[MAXK];
-  int64_t offsets[MAXK];
+  int slots[Keys];
+  int64_t offsets[Keys];
 };
 
 __device__ __forceinline__ int swz(int row, int col) {
@@ -194,10 +194,11 @@ __device__ __forceinline__ int slot_of(const Args& a, int row, int k) {
   return static_cast<int>(pid * a.idx_page + logical % a.idx_page);
 }
 
-__device__ __forceinline__ void decode_keys(const Args& a, Smem& sm, int first,
-                                            int warp, int lane) {
-  constexpr int PER = MAXK / WARPS;
-  const int per = a.per_cta / WARPS;
+template <int Keys>
+__device__ __forceinline__ void decode_keys(const Args& a, Smem<Keys>& sm,
+                                            int first, int warp, int lane) {
+  constexpr int PER = Keys / WARPS;
+  constexpr int per = PER;
   uint4 raw[PER];
   uint8_t scale[PER];
   #pragma unroll
@@ -249,10 +250,10 @@ __device__ __forceinline__ void decode_keys(const Args& a, Smem& sm, int first,
   }
 }
 
-template <class Op>
-__device__ __forceinline__ float across_warps(Smem& sm, int warp, int lane,
-                                              int tid, float lo, float hi,
-                                              float init, Op op) {
+template <int Keys, class Op>
+__device__ __forceinline__ float across_warps(Smem<Keys>& sm, int warp,
+                                              int lane, int tid, float lo,
+                                              float hi, float init, Op op) {
   const int g = lane / 4;
   if (lane % 4 == 0) sm.red[warp][g] = lo, sm.red[warp][g + 8] = hi;
   __syncthreads();
@@ -264,13 +265,16 @@ __device__ __forceinline__ float across_warps(Smem& sm, int warp, int lane,
   return v;
 }
 
+template <int Keys>
 __global__ void __cluster_dims__(CL, 1, 1) __launch_bounds__(THREADS, 1)
     sparse_decode(Args a) {
   extern __shared__ __align__(128) uint8_t raw_smem[];
-  Smem& sm = *reinterpret_cast<Smem*>(raw_smem);
+  Smem<Keys>& sm = *reinterpret_cast<Smem<Keys>*>(raw_smem);
+  constexpr int PS = Keys + 8;
   const int rank = blockIdx.x, row = blockIdx.y, tid = threadIdx.x;
   const int warp = tid / 32, lane = tid % 32;
-  const int keys = a.per_cta, first = rank * keys, tiles = keys / 8;
+  constexpr int keys = Keys, tiles = Keys / 8;
+  const int first = rank * keys;
   asm volatile("griddepcontrol.launch_dependents;");
   // Every input may come from the previous kernel on the stream.
   asm volatile("griddepcontrol.wait;" ::: "memory");
@@ -323,23 +327,25 @@ __global__ void __cluster_dims__(CL, 1, 1) __launch_bounds__(THREADS, 1)
   const bool spills = spill > 0 && WARPS + t < tiles;
   float part[4] = {};
   if (spills) score(part, WARPS + t, j * quarter, (j + 1) * quarter);
+  if constexpr (tiles > WARPS) {
   #pragma unroll
-  for (int turn = 0; turn < SPLIT; ++turn) {
-    if (spills && j == turn) {
-      float* lo = &sm.extra[t][lane / 4][col];
-      float* hi = &sm.extra[t][lane / 4 + 8][col];
-      lo[0] = turn ? lo[0] + part[0] : part[0];
-      lo[1] = turn ? lo[1] + part[1] : part[1];
-      hi[0] = turn ? hi[0] + part[2] : part[2];
-      hi[1] = turn ? hi[1] + part[3] : part[3];
+    for (int turn = 0; turn < SPLIT; ++turn) {
+      if (spills && j == turn) {
+        float* lo = &sm.extra[t][lane / 4][col];
+        float* hi = &sm.extra[t][lane / 4 + 8][col];
+        lo[0] = turn ? lo[0] + part[0] : part[0];
+        lo[1] = turn ? lo[1] + part[1] : part[1];
+        hi[0] = turn ? hi[0] + part[2] : part[2];
+        hi[1] = turn ? hi[1] + part[3] : part[3];
+      }
+      __syncthreads();
     }
-    __syncthreads();
-  }
-  if (warp < spill) {
-    s[1][0] = sm.extra[warp][lane / 4][col];
-    s[1][1] = sm.extra[warp][lane / 4][col + 1];
-    s[1][2] = sm.extra[warp][lane / 4 + 8][col];
-    s[1][3] = sm.extra[warp][lane / 4 + 8][col + 1];
+    if (warp < spill) {
+      s[1][0] = sm.extra[warp][lane / 4][col];
+      s[1][1] = sm.extra[warp][lane / 4][col + 1];
+      s[1][2] = sm.extra[warp][lane / 4 + 8][col];
+      s[1][3] = sm.extra[warp][lane / 4 + 8][col + 1];
+    }
   }
   const int g = lane / 4;
   const float scale = a.scale * LOG2E;
@@ -383,7 +389,7 @@ __global__ void __cluster_dims__(CL, 1, 1) __launch_bounds__(THREADS, 1)
     l0 += __low2float(r0) + __high2float(r0);
     l1 += __low2float(r1) + __high2float(r1);
   }
-  __syncthreads();
+  // across_warps also publishes all probability writes before the PV loads.
   const float head_sum =
       across_warps(sm, warp, lane, tid, quad_sum(l0), quad_sum(l1), 0.0f,
                    [](float x, float y) { return x + y; });
@@ -458,7 +464,30 @@ __global__ void __cluster_dims__(CL, 1, 1) __launch_bounds__(THREADS, 1)
   *reinterpret_cast<uint2*>(a.out + (int64_t(row) * H + h) * D + d4 * 4) =
       make_uint2(pack_bf16(acc.x * inv, acc.y * inv),
                  pack_bf16(acc.z * inv, acc.w * inv));
-  cluster_sync();
+  // No DSM is used: after the merge, CTAs may retire independently.
+}
+
+template <int Keys>
+void launch_decode(Args a, int64_t rows, int device) {
+  // The opt-in is a per-device, per-specialization function attribute.
+  const cudaError_t opted_in = cudaFuncSetAttribute(
+      sparse_decode<Keys>, cudaFuncAttributeMaxDynamicSharedMemorySize,
+      static_cast<int>(sizeof(Smem<Keys>)));
+  STD_TORCH_CHECK(opted_in == cudaSuccess,
+                  "sparse decode shared memory opt-in failed");
+  cudaLaunchAttribute attr{};
+  attr.id = cudaLaunchAttributeProgrammaticStreamSerialization;
+  attr.val.programmaticStreamSerializationAllowed = 1;
+  cudaLaunchConfig_t config{};
+  config.gridDim = dim3(CL, static_cast<unsigned>(rows));
+  config.blockDim = dim3(THREADS);
+  config.dynamicSmemBytes = sizeof(Smem<Keys>);
+  config.stream = get_current_cuda_stream(device);
+  config.attrs = &attr;
+  config.numAttrs = 1;
+  const cudaError_t err = cudaLaunchKernelEx(&config, sparse_decode<Keys>, a);
+  STD_TORCH_CHECK(err == cudaSuccess,
+                  "sparse decode launch failed: ", cudaGetErrorString(err));
 }
 
 void check_int_rows(const Tensor& t, int64_t rows, const char* name) {
@@ -542,7 +571,6 @@ void dsv41_sparse_decode_sm120(
   STD_TORCH_CHECK(total > 0 && total % (CL * 16) == 0 && total / CL <= MAXK,
                   "SWA plus indexed width must be a positive multiple of 128 "
                   "and at most 640");
-  a.per_cta = total / CL;
   STD_TORCH_CHECK(partial.scalar_type() == ScalarType::Float &&
                       partial.is_contiguous() &&
                       partial.numel() >= rows * CL * H * D,
@@ -560,25 +588,23 @@ void dsv41_sparse_decode_sm120(
 
   const int device = q.get_device_index();
   const torch::stable::accelerator::DeviceGuard guard(device);
-  // The opt-in is a per-device function attribute.
-  const cudaError_t opted_in = cudaFuncSetAttribute(
-      sparse_decode, cudaFuncAttributeMaxDynamicSharedMemorySize,
-      static_cast<int>(sizeof(Smem)));
-  STD_TORCH_CHECK(opted_in == cudaSuccess,
-                  "sparse decode shared memory opt-in failed");
-  cudaLaunchAttribute attr{};
-  attr.id = cudaLaunchAttributeProgrammaticStreamSerialization;
-  attr.val.programmaticStreamSerializationAllowed = 1;
-  cudaLaunchConfig_t config{};
-  config.gridDim = dim3(CL, static_cast<unsigned>(rows));
-  config.blockDim = dim3(THREADS);
-  config.dynamicSmemBytes = sizeof(Smem);
-  config.stream = get_current_cuda_stream(device);
-  config.attrs = &attr;
-  config.numAttrs = 1;
-  const cudaError_t err = cudaLaunchKernelEx(&config, sparse_decode, a);
-  STD_TORCH_CHECK(err == cudaSuccess,
-                  "sparse decode launch failed: ", cudaGetErrorString(err));
+  switch (total / CL) {
+    case 16:
+      launch_decode<16>(a, rows, device);
+      break;
+    case 32:
+      launch_decode<32>(a, rows, device);
+      break;
+    case 48:
+      launch_decode<48>(a, rows, device);
+      break;
+    case 64:
+      launch_decode<64>(a, rows, device);
+      break;
+    case 80:
+      launch_decode<80>(a, rows, device);
+      break;
+  }
 }
 
 #endif

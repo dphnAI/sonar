@@ -31,12 +31,13 @@ ROPE_START = KV_WIDTH - ROPE_DIM
 THREADS = 256
 # kv_norm gives each thread two KV columns and pairs RoPE columns across lanes.
 assert 2 * THREADS == KV_WIDTH and ROPE_START % 32 == 0
-_COMPILED: dict[int, tuple[object, object]] = {}
+_COMPILED: dict[int, tuple[object, object, object]] = {}
 
 
 class _QKVNormQuant:
-    def __init__(self, subgroup_width: int):
+    def __init__(self, subgroup_width: int, wide_rows: bool = False):
         self.subgroup_width = subgroup_width
+        self.wide_rows = wide_rows
 
     @cute.jit
     def __call__(
@@ -194,12 +195,14 @@ class _QKVNormQuant:
                         values8[7] * inv_scale,
                     )
                 if lane == Int32(0):
-                    # Native F8_128x4 physical offset; M<=64 stays in tile_m=0.
+                    # Native F8_128x4 physical offset; decode stays in tile_m=0.
                     row32 = row % Int32(32)
                     row4 = (row // Int32(32)) % Int32(4)
                     k4 = group % Int32(4)
                     tile_k = group // Int32(4)
                     offset = row32 * Int32(16) + row4 * Int32(4) + k4 + tile_k * Int32(512)
+                    if cutlass.const_expr(self.wide_rows):
+                        offset += (row // Int32(128)) * Int32(10 * 512)
                     scale_mma[offset] = Uint8(scale_byte)
 
     @cute.jit
@@ -271,7 +274,7 @@ _KERNEL_SHA = hashlib.sha256(inspect.getsource(_QKVNormQuant).encode()).hexdiges
 
 def _allocate_outputs(rows, device):
     values = torch.empty((rows, Q_WIDTH), dtype=torch.float8_e4m3fn, device=device)
-    physical = torch.empty((1, 1, 10, 32, 4, 4), dtype=torch.uint8, device=device)
+    physical = torch.empty((1, (rows + 127) // 128, 10, 32, 4, 4), dtype=torch.uint8, device=device)
     scale_mma = physical.permute(3, 4, 1, 5, 2, 0).view(torch.float8_e8m0fnu)
     kv = torch.empty((rows, KV_WIDTH), dtype=torch.bfloat16, device=device)
     return values, scale_mma, kv
@@ -298,7 +301,7 @@ def _run(compiled, source, q_weight, kv_weight, values, scale_mma, kv, positions
 
 
 def prepare_qkv_norm_quant(device: torch.device) -> None:
-    """Compile and real-warm both native capacity families before freeze/capture."""
+    """Compile and real-warm decode and multi-tile prefill before freeze/capture."""
     ordinal = device.index
     assert ordinal is not None
     if ordinal in _COMPILED:
@@ -309,16 +312,16 @@ def prepare_qkv_norm_quant(device: torch.device) -> None:
                 "V4.1 Q/KV normalization and quantization must be prepared before capture"
             )
         raise_if_kernel_resolution_frozen("qkv_norm_quant.prepare")
-        source = torch.ones((64, ROW_STRIDE), dtype=torch.bfloat16, device=device)
+        source = torch.ones((256, ROW_STRIDE), dtype=torch.bfloat16, device=device)
         q_weight = torch.ones(Q_WIDTH, dtype=torch.bfloat16, device=device)
         kv_weight = torch.ones(KV_WIDTH, dtype=torch.bfloat16, device=device)
-        positions = torch.zeros(64, dtype=torch.int64, device=device)
+        positions = torch.zeros(256, dtype=torch.int64, device=device)
         cos_sin_cache = torch.ones((1, ROPE_DIM), dtype=torch.float32, device=device)
-        values, scale_mma, kv = _allocate_outputs(64, device)
+        values, scale_mma, kv = _allocate_outputs(256, device)
         launchers = []
-        for subgroup, rows in ((8, 1), (4, 64)):
+        for subgroup, rows, wide_rows in ((8, 1, False), (4, 64, False), (4, 256, True)):
             compiled = compiler.compile(
-                _QKVNormQuant(subgroup),
+                _QKVNormQuant(subgroup, wide_rows),
                 *(provider._fake_pointer() for _ in range(4)),
                 utils.make_ptr(Uint32, 16, cute.AddressSpace.gmem, assumed_align=4),
                 utils.make_ptr(Uint8, 16, cute.AddressSpace.gmem, assumed_align=1),
@@ -331,7 +334,7 @@ def prepare_qkv_norm_quant(device: torch.device) -> None:
                 compile_spec=KernelCompileSpec.from_key(
                     "aphrodite.dsv41.qkv_norm_quant",
                     1,
-                    (Q_WIDTH, KV_WIDTH, ROW_STRIDE, ROPE_DIM, THREADS, subgroup, _KERNEL_SHA),
+                    (Q_WIDTH, KV_WIDTH, ROW_STRIDE, ROPE_DIM, THREADS, subgroup, wide_rows, _KERNEL_SHA),
                 ),
             )
             _run(
@@ -348,7 +351,7 @@ def prepare_qkv_norm_quant(device: torch.device) -> None:
             )
             launchers.append(compiled)
         torch.accelerator.current_stream().synchronize()
-        _COMPILED[ordinal] = (launchers[0], launchers[1])
+        _COMPILED[ordinal] = (launchers[0], launchers[1], launchers[2])
 
 
 def fused_qkv_norm_quant(
@@ -366,11 +369,11 @@ def fused_qkv_norm_quant(
     and capacity is the actual selected original Q-plan capacity, not live M.
     KV is normalized, rounded to BF16, then GPT-J rotated over its last 64
     columns with the FP32 cos/sin table, exactly as the native KV rotation.
-    Rows with a negative position are zero.
+    KV rows with a negative position are zero.
     """
     rows = source.shape[0]
-    if not 1 <= rows <= 64 or rows > capacity:
-        raise ValueError("V4.1 fused Q/KV norm/quant requires M1..64 within capacity")
+    if not 1 <= rows <= capacity:
+        raise ValueError("V4.1 fused Q/KV norm/quant requires positive M within capacity")
     if positions.dtype != torch.int64 or positions.shape != (rows,) or not positions.is_contiguous():
         raise ValueError("V4.1 fused KV rotation requires contiguous int64 positions[M]")
     if (
@@ -385,7 +388,7 @@ def fused_qkv_norm_quant(
         raise PreparationResourceUnavailableError("V4.1 Q/KV normalization and quantization was not prepared")
     values, scale_mma, kv = _allocate_outputs(rows, source.device)
     _run(
-        launchers[0 if capacity <= 8 else 1],
+        launchers[2 if rows > 128 else 0 if capacity <= 8 else 1],
         source,
         q_weight,
         kv_weight,
