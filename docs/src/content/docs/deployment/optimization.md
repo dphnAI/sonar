@@ -307,12 +307,12 @@ both W4A8 and W4A16; the declared `w31` layout controls provider packing.
 Do not pre-swap those rows. The fused W4A8 decode kernel admits hidden sizes
 divisible by 512 in the range 512–8192; other shapes retain provider kernels.
 
-### Experimental paired PCIe all-reduce
+### Experimental checked PCIe collectives
 
 Set `APHRODITE_ALLREDUCE_USE_PCIE_PULL=1` to select the experimental paired
-all-reduce. Initial support targets the native DeepSeek-V4.1 backend on four
-SM120 GPUs in one node. All selected GPU pairs must support CUDA peer reads and
-writes without crossing a NUMA system link.
+transport. Initial support targets the native DeepSeek-V4.1 backend on four
+SM120 GPUs in one node. The default `paired` transport requires CUDA peer reads
+and writes between all selected GPU pairs without crossing a NUMA system link.
 
 This path requires the V2 model runner, BF16 activations, and a model hidden
 size of 5120. A speculative draft must use the same TP4 group. Keep adaptive
@@ -340,6 +340,31 @@ failure.
 
 This option is disabled by default. Compare output quality and latency with
 the option disabled before you use it in a deployment.
+
+#### Host-memory transport without P2P
+
+Set `APHRODITE_ALLREDUCE_PCIE_TRANSPORT=host` together with
+`APHRODITE_ALLREDUCE_USE_PCIE_PULL=1` to use shared, pinned host memory instead
+of peer VRAM. This transport requires neither GPU peer access nor a CPU
+progress thread. It does not impose the paired transport's same-NUMA
+restriction; the TP4, native SM120, and model-runner restrictions above still
+apply.
+
+The host kernel handles contiguous BF16 tensors with 1–32 rows and width 5120,
+and contiguous all-gathers of up to 1024 bytes per rank. Other shapes retain
+their existing collective backend. Reduction rounding and the checked output,
+fault, and graph-lifetime contracts are the same as the paired transport.
+
+All workers must share a writable local `/dev/shm` namespace and support CUDA
+registration of mapped host memory. GPU placement and host-memory locality
+affect performance; benchmark the actual deployment, especially across NUMA
+domains. Testing with P2P disabled on server GPUs does not establish performance
+on workstation or Max-Q hardware.
+
+For a strictly non-P2P comparison, also disable other custom, FlashInfer, and
+symmetric-memory collective backends. `NCCL_P2P_DISABLE=1` and
+`NCCL_NVLS_ENABLE=0` constrain NCCL, not those other backends. Verify NCCL's
+transport logs rather than assuming its fallback uses host memory.
 
 ## Choose parallelism
 
