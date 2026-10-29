@@ -138,3 +138,45 @@ def test_indexer_row_ownership(monkeypatch, rows, rank, kind):
     assert sum(count for _, count in calls) == end - begin
     assert bool(gathered) == should_shard
     assert torch.equal(fake.topk_indices_buffer, expected)
+
+
+def _plan_owner(plans, *, short_shape=(1024, 16)):
+    owner = SimpleNamespace(
+        prefix="model.layers.2.attn",
+        DECODE_CHUNK=64,
+        INDEX_CHUNK=256,
+        _index_width=128,
+        _short_index_shape=short_shape,
+        _index_plans=plans,
+    )
+    owner._index_geometry = lambda mode, rows=None: attention.DeepseekV41B12xAttention._index_geometry(
+        owner, mode, rows
+    )
+    return owner
+
+
+@pytest.mark.parametrize("mode,capacity", [("decode", 64), ("prefill", 256), ("prefill_short", 1024)])
+def test_indexer_plan_selection_respects_prepared_capacity(mode, capacity):
+    select = attention.DeepseekV41B12xAttention._index_plan
+    small, medium, full = object(), object(), object()
+    owner = _plan_owner({(mode, 4): small, (mode, 16): medium})
+    assert select(owner, mode, 4) is small
+    assert select(owner, mode, 3) is small
+    assert select(owner, mode, 5) is medium
+    with pytest.raises(attention.PreparationResourceUnavailableError, match="lacks a prepared"):
+        select(owner, mode, 17)
+    owner._index_plans[mode, capacity] = full
+    # Exact declarations win; otherwise the native full-chunk plan is preferred.
+    assert select(owner, mode, 4) is small
+    assert select(owner, mode, 3) is full
+    assert select(owner, mode, capacity) is full
+    for rows in (0, -1, capacity + 1):
+        with pytest.raises(ValueError, match="exceed chunk capacity"):
+            select(owner, mode, rows)
+
+
+@pytest.mark.parametrize("mode", ["unknown", "prefill_short"])
+def test_indexer_plan_selection_rejects_unavailable_regimes(mode):
+    owner = _plan_owner({}, short_shape=None)
+    with pytest.raises(ValueError, match="unsupported V4.1 indexer mode"):
+        attention.DeepseekV41B12xAttention._index_plan(owner, mode, 1)

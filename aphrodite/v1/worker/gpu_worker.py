@@ -102,6 +102,11 @@ from aphrodite.v1.outputs import (
     ModelRunnerOutput,
 )
 from aphrodite.v1.utils import compute_iteration_details, report_usage_stats
+from aphrodite.v1.worker.b12x_utils import (
+    capture_b12x_model,
+    prepare_b12x_weights,
+    profile_b12x_memory,
+)
 from aphrodite.v1.worker.sentinel.gpu_worker_sentinel import WorkerSentinel
 from aphrodite.v1.worker.startup_plan import (
     maybe_apply_startup_plan,
@@ -153,7 +158,6 @@ def maybe_rocm_profiling_fallback(profile_result: MemoryProfilingResult) -> int 
 if TYPE_CHECKING:
     from aphrodite.device_allocator.sleep_mode_backend import SleepModeBackend
     from aphrodite.model_executor.model_loader.tensorizer import TensorizerConfig
-    from aphrodite.model_executor.warmup.b12x_prepare import B12xPreparedBatch
     from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
     from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
 
@@ -237,7 +241,6 @@ class Worker(WorkerBase):
 
         self.use_v2_model_runner = aphrodite_config.use_v2_model_runner
         self._b12x_session = None
-        self._b12x_profile_batch: B12xPreparedBatch | None = None
 
         # Device handles of the previous step's PP intermediate-tensor send.
         self._pp_send_work: list[Handle] = []
@@ -590,47 +593,7 @@ class Worker(WorkerBase):
         # valid when requests arrive.
         set_torch_threads_for_runtime()
 
-        from aphrodite.model_executor.warmup.b12x_prepare import (
-            b12x_native_supported,
-            run_b12x_preparation,
-        )
-
-        if b12x_native_supported(self):
-            run_b12x_preparation(self, stage="weights")
-            # Timing trials must not distort subsequent KV-cache admission.
-            gc.collect()
-            torch.accelerator.synchronize()
-            torch.accelerator.empty_cache()
-
-    def _prepare_b12x_profile_state(self) -> None:
-        from aphrodite.model_executor.warmup.b12x_prepare import run_b12x_preparation
-
-        self._b12x_profile_batch = run_b12x_preparation(self, stage="state", autotune=False)
-
-    def _run_memory_profile(self, *, cudagraphs: bool = False):
-        from aphrodite.model_executor.warmup.b12x_prepare import b12x_native_supported
-
-        native = b12x_native_supported(self)
-        callback = self._prepare_b12x_profile_state if native else None
-        try:
-            if cudagraphs:
-                if native:
-                    return self.model_runner.profile_cudagraph_memory(callback)
-                return self.model_runner.profile_cudagraph_memory()
-            if native:
-                return cast("GPUModelRunnerV2", self.model_runner).profile_run(
-                    randomize_inputs=self.randomize_dummy_inputs,
-                    prepare_profile_state=callback,
-                )
-            return self.model_runner.profile_run(randomize_inputs=self.randomize_dummy_inputs)
-        finally:
-            batch, self._b12x_profile_batch = self._b12x_profile_batch, None
-            if batch is not None:
-                # The runner has destroyed every graph/cache alias in its
-                # profiling pool before plan ownership is released here.
-                batch.release()
-                gc.collect()
-                torch.accelerator.empty_cache()
+        prepare_b12x_weights(self)
 
     def update_config(self, overrides: dict[str, Any]) -> None:
         """Apply config overrides to the worker, its model runner and the
@@ -670,7 +633,7 @@ class Worker(WorkerBase):
             # still need a profile run which compiles the model for
             # max_num_batched_tokens
             with set_current_aphrodite_config(self.aphrodite_config):
-                self._run_memory_profile()
+                profile_b12x_memory(self)
 
             msg = (
                 f"Initial free memory {format_gib(self.init_snapshot.free_memory)} "
@@ -708,7 +671,7 @@ class Worker(WorkerBase):
             self._scoped_allocator_max_split(max_split_size_mb=20),
             set_current_aphrodite_config(self.aphrodite_config),
         ):
-            self._run_memory_profile()
+            profile_b12x_memory(self)
 
         # Profile CUDA graph memory if graphs will be captured.
         # ROCm is included: #44825 moved the profiler to
@@ -719,7 +682,7 @@ class Worker(WorkerBase):
         if (
             current_platform.is_cuda_alike() or current_platform.is_xpu()
         ) and self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
-            cudagraph_memory_estimate = self._run_memory_profile(cudagraphs=True)
+            cudagraph_memory_estimate = profile_b12x_memory(self, cudagraphs=True)
 
         # Respect the opt-in flag as originally designed.
         cudagraph_memory_estimate_applied = (
@@ -968,10 +931,7 @@ class Worker(WorkerBase):
         cuda_graph_memory_bytes = 0
         if not self.model_config.enforce_eager:
             with self._get_cudagraph_capture_context():
-                if self._b12x_session is not None:
-                    cuda_graph_memory_bytes = self.model_runner.capture_model(preparation_session=self._b12x_session)
-                else:
-                    cuda_graph_memory_bytes = self.model_runner.capture_model()
+                cuda_graph_memory_bytes = capture_b12x_model(self)
 
         # Compare actual vs estimated CUDA graph memory (if we did profiling)
         if hasattr(self, "cudagraph_memory_estimate") and self.cudagraph_memory_estimate > 0:

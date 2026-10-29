@@ -146,7 +146,9 @@ def test_fused_engram_post_wkv_matches_reference(
 def test_sm120_engram_striped_packets_preserve_masked_rows_and_graph_updates(num_tokens, num_valid_tokens, use_mask):
     if not current_platform.is_device_capability(120):
         pytest.skip("SM120 required")
-    from aphrodite import _custom_ops  # noqa: F401
+    from aphrodite.models.deepseek_v41.common.ops.engram_sm120 import register_sm120_engram_ops
+
+    register_sm120_engram_ops()
 
     torch.manual_seed(41)
     hidden = torch.empty((num_tokens, 4, 5120), dtype=torch.bfloat16, device="cuda")
@@ -183,7 +185,8 @@ def test_sm120_engram_striped_packets_preserve_masked_rows_and_graph_updates(num
         torch.ops._C.sm120_engram_finish(hidden, gathered, token_mask, output, num_valid_tokens, 1e-20, 1e-6)
 
     update(0)
-    run()
+    # Dynamo must trace both native mutations through the feature-local fakes.
+    torch.compile(run, backend="eager", fullgraph=True)()
     torch.cuda.synchronize()
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):

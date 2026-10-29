@@ -545,36 +545,6 @@ def rms_norm(
     torch.ops._C.rms_norm(out, input, weight, epsilon)
 
 
-if hasattr(torch.ops._C, "sm120_engram_pack"):
-
-    @register_fake("_C::sm120_engram_pack")
-    def _sm120_engram_pack_fake(
-        hidden: torch.Tensor,
-        local_projection: torch.Tensor,
-        q_weight: torch.Tensor,
-        k_weight: torch.Tensor,
-        packet: torch.Tensor,
-        rank: int,
-        num_valid_tokens: int,
-    ) -> None:
-        return None
-
-
-if hasattr(torch.ops._C, "sm120_engram_finish"):
-
-    @register_fake("_C::sm120_engram_finish")
-    def _sm120_engram_finish_fake(
-        hidden: torch.Tensor,
-        gathered_packets: torch.Tensor,
-        token_mask: torch.Tensor | None,
-        output: torch.Tensor,
-        num_valid_tokens: int,
-        eps: float,
-        clamp_value: float,
-    ) -> None:
-        return None
-
-
 # Fused vocab-parallel embedding lookup
 # (see csrc/.../vocab_parallel_embedding_kernels.cu).
 def vocab_parallel_embedding(

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from aphrodite.renderers.deepseek_v4 import _order_like_v41_prompt
+from aphrodite.renderers.deepseek_v41 import _order_like_v41_prompt
 from aphrodite.tokenizers.deepseek_v41 import _normalize_messages
 from aphrodite.tokenizers.deepseek_v41_encoding import IMAGE_PLACEHOLDER, encode_messages
 

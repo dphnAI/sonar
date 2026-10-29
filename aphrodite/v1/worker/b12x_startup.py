@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 import msgspec
 
 if TYPE_CHECKING:
-    from b12x.preparation import TuningCacheRequirement, TuningRequirement
+    from b12x.preparation import PreparationRequest, TuningCacheRequirement, TuningRequirement
 
     from aphrodite.distributed.utils import StatelessProcessGroup
     from aphrodite.model_executor.warmup.b12x_prepare import B12xPreparedBatch
@@ -77,7 +77,7 @@ class B12xPreparationCoordinator:
         self._workspace = workspace
         self._request_workspace_lanes = request_workspace_lanes
         self._auxiliary_stream_requests = auxiliary_stream_requests
-        self._active_requests = ()
+        self._active_requests: tuple[PreparationRequest, ...] = ()
         self.global_rank = global_rank
         self.world_group = world_group
         self.world_ranks = _world_ranks(world_group)
@@ -115,12 +115,7 @@ class B12xPreparationCoordinator:
                     raise RuntimeError("native preparation requests require a session")
                 self._begin_next_batch()
         except Exception as error:
-            self._record_error(error)
-            self._stop = True
-            self._safe_close()
-            if self._control is not None:
-                self._control.set("failed", msgspec.msgpack.encode(self._error))
-                self._control.set("stop", b"1")
+            self._fail(error)
 
     def _begin_next_batch(self) -> None:
         requests, autotune = self._batches.pop(0)
@@ -145,12 +140,7 @@ class B12xPreparationCoordinator:
         try:
             self._advance_local()
         except BaseException as error:
-            self._record_error(error)
-            self._stop = True
-            self._safe_close()
-            if self._control is not None:
-                self._control.set("failed", msgspec.msgpack.encode(self._error))
-                self._control.set("stop", b"1")
+            self._fail(error)
 
         if not (self._local_done or self._error or self._ready() or self._ready_tuning() or self._ready_cache()):
             return self._outcome()
@@ -292,30 +282,34 @@ class B12xPreparationCoordinator:
             return
 
         job.result().close()
-        if self._workspace is not None:
-            from aphrodite.utils.torch_utils import aux_stream
-            from aphrodite.v1.worker.workspace import use_workspace_lane
-
-            for request in self._active_requests:
-                specs = tuple(request.plan.scratch_specs())
-                if specs:
-                    lanes = self._request_workspace_lanes[request.name]
-                    for lane in lanes:
-                        with use_workspace_lane(lane):
-                            self._workspace.get_simultaneous(*((spec.shape, spec.dtype) for spec in specs))
-                            if request.name in self._auxiliary_stream_requests:
-                                stream = aux_stream()
-                                if stream is not None:
-                                    self._workspace.get_stream_simultaneous(
-                                        stream.stream_id, *((spec.shape, spec.dtype) for spec in specs)
-                                    )
-            self._workspace.reserve_by_lane()
+        self._reserve_workspace()
         self._active_requests = ()
         self._job = None
         if self._batches:
             self._begin_next_batch()
         else:
             self._local_done = True
+
+    def _reserve_workspace(self) -> None:
+        """Reserve winning plans' scratch on their serving lanes and streams."""
+        if self._workspace is None:
+            return
+        from aphrodite.utils.torch_utils import aux_stream
+        from aphrodite.v1.worker.workspace import use_workspace_lane
+
+        for request in self._active_requests:
+            specs = tuple(request.plan.scratch_specs())
+            if not specs:
+                continue
+            shapes = tuple((spec.shape, spec.dtype) for spec in specs)
+            for lane in self._request_workspace_lanes[request.name]:
+                with use_workspace_lane(lane):
+                    self._workspace.get_simultaneous(*shapes)
+                    if request.name in self._auxiliary_stream_requests:
+                        stream = aux_stream()
+                        if stream is not None:
+                            self._workspace.get_stream_simultaneous(stream.stream_id, *shapes)
+        self._workspace.reserve_by_lane()
 
     def _ready(self) -> tuple[tuple[str, tuple[int, ...]], ...]:
         if self._last_progress is None:
@@ -367,6 +361,14 @@ class B12xPreparationCoordinator:
                 raise RuntimeError("preparation control exchange has inconsistent world domain")
             if entry["round"] != self._round:
                 raise RuntimeError("preparation control exchange has inconsistent round")
+
+    def _fail(self, error: BaseException) -> None:
+        self._record_error(error)
+        self._stop = True
+        self._safe_close()
+        if self._control is not None:
+            self._control.set("failed", msgspec.msgpack.encode(self._error))
+            self._control.set("stop", b"1")
 
     def _record_error(self, error: BaseException) -> None:
         self._error = {

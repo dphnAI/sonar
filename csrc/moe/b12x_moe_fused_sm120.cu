@@ -27,6 +27,7 @@
   #include <cuda_bf16.h>
   #include <cuda_runtime.h>
   #include <torch/csrc/stable/accelerator.h>
+  #include <torch/csrc/stable/library.h>
   #include <torch/headeronly/core/ScalarType.h>
 
   #include <algorithm>
@@ -966,9 +967,12 @@ void b12x_w4a8_moe_fused_sm120(
                   "alphas and scales must be float32");
   STD_TORCH_CHECK(
       route_output.scalar_type() == ScalarType::BFloat16 &&
-          route_output.dim() == 2 && route_output.is_contiguous() &&
-          k % 128 == 0,
+          route_output.dim() == 2 && route_output.is_contiguous(),
       "route_output must be a contiguous bf16 [rows, hidden] tensor");
+  // FC1 copies scales in 16-byte vectors into each fixed-size row slot.
+  // The minimum also covers its seven unconditionally prefetched K64 stages.
+  STD_TORCH_CHECK(k >= 512 && k <= 32 * kF1RowScales && k % 512 == 0,
+                  "hidden must be a multiple of 512 in [512, 8192]");
   STD_TORCH_CHECK(n == 576, "intermediate 576 (five K128 slices, n64 tail)");
   STD_TORCH_CHECK(0 <= num_pairs && num_pairs <= rows_capacity &&
                       rows_capacity <= kMaxPairs &&
@@ -1062,6 +1066,23 @@ void b12x_w4a8_moe_fused_sm120(
   const cudaError_t err = cudaGetLastError();
   STD_TORCH_CHECK(err == cudaSuccess,
                   "fused MoE launch failed: ", cudaGetErrorString(err));
+}
+
+STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
+  ops.def("b12x_w4a8_moe_fused_ctrl_init(Tensor! ctrl) -> ()");
+  ops.def(
+      "b12x_w4a8_moe_fused_sm120(Tensor a_values, Tensor a_scales, "
+      "Tensor w13, Tensor w13_scales, Tensor! projections, "
+      "Tensor! intermediate, Tensor w2, Tensor w2_scales, Tensor topk_ids, "
+      "Tensor topk_weights, Tensor alpha1, Tensor input_scale, Tensor alpha2, "
+      "Tensor down_scale, Tensor! route_output, Tensor! ctrl, int num_pairs, "
+      "int topk, int rows_capacity, int n, float swiglu_limit) -> ()");
+}
+
+STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
+  ops.impl("b12x_w4a8_moe_fused_ctrl_init",
+           TORCH_BOX(&b12x_w4a8_moe_fused_ctrl_init));
+  ops.impl("b12x_w4a8_moe_fused_sm120", TORCH_BOX(&b12x_w4a8_moe_fused_sm120));
 }
 
 #endif

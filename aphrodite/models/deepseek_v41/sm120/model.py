@@ -168,6 +168,22 @@ class DeepseekV4DecoderLayer(nn.Module):
             requires_grad=False,
         )
 
+    def finalize_mhc_broadcast_weights(self) -> None:
+        """Refresh the first layer's broadcast projection without moving graph buffers."""
+        broadcast = self.hc_attn_fn.detach().view(-1, self.hc_mult, self.hidden_size).sum(dim=1)
+        if self.hc_attn_fn_broadcast is None:
+            self.hc_attn_fn_broadcast = broadcast
+        else:
+            self.hc_attn_fn_broadcast.copy_(broadcast)
+
+    def prepare_mhc(self) -> None:
+        """Register this decoder's native plans and prepare its coefficient split."""
+        set_b12x_preparation_provider(self, self._b12x_mhc)
+        name = b12x_layer_prefix(self)
+        register_b12x_layer(name, self)
+        self._b12x_mhc.bind_layer_name(name)
+        self._b12x_mhc.prepare_split(self.hc_attn_fn.device)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -183,17 +199,18 @@ class DeepseekV4DecoderLayer(nn.Module):
         mega_gate_metadata: MegaGateRoutingMetadata | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         previous_output = x if residual is not None else None
-        apply_engram = self.engram is not None and engram_hashes is not None
-        if residual is None:
-            residual = x
-        elif apply_engram:
-            # Engram mutates the reconstructed residual; do not fuse across it.
-            residual = self._b12x_mhc.post(x, residual, post_mix, res_mix)
-            previous_output = None
         if self.engram is not None and engram_hashes is not None:
+            if residual is None:
+                residual = x
+            else:
+                # Engram mutates the reconstructed residual; do not fuse across it.
+                residual = self._b12x_mhc.post(x, residual, post_mix, res_mix)
+                previous_output = None
             if residual.ndim == 2:
                 residual = residual[:, None, :].expand(-1, self.hc_mult, -1).contiguous()
             residual = self.engram(residual, engram_hashes[:, self.engram.layer_hash_index], engram_mask)
+        elif residual is None:
+            residual = x
         fn = self.hc_attn_fn_broadcast if residual.ndim == 2 else self.hc_attn_fn
         residual, post_mix, res_mix, x, attn_pre = self._b12x_mhc.pre(
             residual,
@@ -551,11 +568,6 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
 
                 if is_pp_missing_parameter(name, self):
                     break
-                if name not in params_dict:
-                    head, _, leaf = name.rpartition(".")
-                    suffixed = f"{head}.base_layer.{leaf}"
-                    if suffixed in params_dict:
-                        name = suffixed
                 param = params_dict[name]
                 weight_loader = param.weight_loader
                 weight_loader(param, loaded_weight, shard_id)
@@ -605,13 +617,6 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
                 else:
                     if is_pp_missing_parameter(name, self):
                         continue
-                    # Non-LoRA params on a LoRA-wrapped module live at
-                    # ``<head>.base_layer.<leaf>``; the checkpoint is plain.
-                    if name not in params_dict:
-                        head, _, leaf = name.rpartition(".")
-                        suffixed = f"{head}.base_layer.{leaf}"
-                        if suffixed in params_dict:
-                            name = suffixed
                     param = params_dict[name]
                     weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)
@@ -637,15 +642,7 @@ class DeepseekV4Model(nn.Module, EagleModelMixin):
             return
         layer = self.layers[self.start_layer]
         if isinstance(layer, DeepseekV4DecoderLayer):
-            _finalize_mhc_broadcast_weights(layer)
-
-
-def _finalize_mhc_broadcast_weights(layer: DeepseekV4DecoderLayer) -> None:
-    broadcast = layer.hc_attn_fn.detach().view(-1, layer.hc_mult, layer.hidden_size).sum(dim=1)
-    if layer.hc_attn_fn_broadcast is None:
-        layer.hc_attn_fn_broadcast = broadcast
-    else:
-        layer.hc_attn_fn_broadcast.copy_(broadcast)
+            layer.finalize_mhc_broadcast_weights()
 
 
 class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
@@ -717,11 +714,7 @@ class DeepseekV41LLMForCausalLM(UpstreamDeepseekV41LLMForCausalLM):
         self.model.finalize_mhc_broadcast_weights()
         for module in self.modules():
             if isinstance(module, DeepseekV4DecoderLayer):
-                set_b12x_preparation_provider(module, module._b12x_mhc)
-                name = b12x_layer_prefix(module)
-                register_b12x_layer(name, module)
-                module._b12x_mhc.bind_layer_name(name)
-                module._b12x_mhc.prepare_split(module.hc_attn_fn.device)
+                module.prepare_mhc()
             if isinstance(module, DeepseekV41B12xAttention):
                 module.setup_wo_projection()
             if isinstance(module, Engram):

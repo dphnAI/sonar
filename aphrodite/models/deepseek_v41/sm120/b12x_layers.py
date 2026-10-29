@@ -52,7 +52,7 @@ def _capacity() -> int:
     return get_current_aphrodite_config().scheduler_config.max_num_batched_tokens
 
 
-def _execution_capacities() -> tuple[int, ...]:
+def execution_capacities() -> tuple[int, ...]:
     config = get_current_aphrodite_config()
     capacity = _capacity()
     spec = config.speculative_config
@@ -373,7 +373,7 @@ class B12xFP8LinearMethod(LinearMethodBase):
 
     def process_weights_after_loading(self, layer):
         layer.b12x_weight = block_fp8_linear.pack_weight(layer.weight, layer.weight_scale_inv, block_size=(32, 32))
-        layer.b12x_capacities = _execution_capacities()
+        layer.b12x_capacities = execution_capacities()
         layer.b12x_plans = tuple(
             block_fp8_linear.plan(
                 block_fp8_linear.Caps(
@@ -615,7 +615,7 @@ def _mhc_pre(
             pre_out,
         )
         return
-    mhc_module = b12x_layer(_resolve_layer_name(layer_name))._b12x_mhc
+    mhc_module = b12x_layer(_resolve_layer_name(layer_name)).b12x_preparation_provider
     operation = "pre" if previous_output is None else "post_pre"
     plan = mhc_module._plan_for(operation, int(residual.shape[0]))
     scratch = current_workspace_manager().get_simultaneous(*((spec.shape, spec.dtype) for spec in plan.scratch_specs()))
@@ -701,7 +701,7 @@ def _mhc_post(
     layer_name: LayerNameType,
 ) -> None:
     join_mhc_split(residual.device)
-    mhc_module = b12x_layer(_resolve_layer_name(layer_name))._b12x_mhc
+    mhc_module = b12x_layer(_resolve_layer_name(layer_name)).b12x_preparation_provider
     plan = mhc_module._plan_for("post", int(residual.shape[0]))
     mhc.run_post(x, residual, post, comb, plan=plan, out=out)
 

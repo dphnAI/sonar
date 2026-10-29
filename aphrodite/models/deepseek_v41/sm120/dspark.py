@@ -35,13 +35,14 @@ from aphrodite.model_executor.models.qwen3_dspark import (
     DSparkMarkovHead,
 )
 from aphrodite.model_executor.models.utils import maybe_prefix
+from aphrodite.models.deepseek_v41.nvidia.model import (
+    make_deepseek_v4_expert_params_mapping,
+    prepare_mega_gate_routing_metadata,
+)
 from aphrodite.utils.b12x import (
     B12xPreparationUnit,
     B12xWorkload,
-    b12x_layer_prefix,
-    register_b12x_layer,
     register_b12x_unit_provider,
-    set_b12x_preparation_provider,
 )
 from aphrodite.v1.worker.workspace import (
     current_workspace_manager,
@@ -49,15 +50,8 @@ from aphrodite.v1.worker.workspace import (
 )
 
 from .b12x_layers import B12xRMSNorm as RMSNorm
-from .b12x_layers import (
-    _execution_capacities,
-)
-from .model import (
-    DeepseekV4DecoderLayer,
-    _finalize_mhc_broadcast_weights,
-    make_deepseek_v4_expert_params_mapping,
-    prepare_mega_gate_routing_metadata,
-)
+from .b12x_layers import execution_capacities
+from .model import DeepseekV4DecoderLayer
 
 logger = init_logger(__name__)
 
@@ -93,7 +87,7 @@ class _ContextKVProjection:
             sorted(
                 {
                     capacity,
-                    *(bound for bound in _execution_capacities() if bound <= capacity),
+                    *(bound for bound in execution_capacities() if bound <= capacity),
                 }
             )
         )
@@ -256,6 +250,14 @@ class DSparkDeepseekV4Model(nn.Module):
                 config.hidden_size + config.dspark_markov_rank,
                 prefix=maybe_prefix(prefix, "confidence_head"),
             )
+
+    def process_weights_after_loading(self) -> None:
+        for layer in self.layers:
+            layer.attn.setup_wo_projection()
+        self._context_kv_projection = _ContextKVProjection((layer.attn for layer in self.layers), self.context_capacity)
+        self.layers[0].finalize_mhc_broadcast_weights()
+        for layer in self.layers:
+            layer.prepare_mhc()
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
         assert self.embed_tokens is not None
@@ -581,19 +583,7 @@ class DSparkDeepseekV4ForCausalLM(nn.Module):
         return loaded_params
 
     def process_weights_after_loading(self) -> None:
-        for layer in self.model.layers:
-            layer.attn.setup_wo_projection()
-        self.model._context_kv_projection = _ContextKVProjection(
-            (layer.attn for layer in self.model.layers), self.model.context_capacity
-        )
-        _finalize_mhc_broadcast_weights(self.model.layers[0])
-        for layer in self.model.layers:
-            mhc = layer._b12x_mhc
-            set_b12x_preparation_provider(layer, mhc)
-            name = b12x_layer_prefix(layer)
-            register_b12x_layer(name, layer)
-            mhc.bind_layer_name(name)
-            mhc.prepare_split(layer.hc_attn_fn.device)
+        self.model.process_weights_after_loading()
 
     def _remap_dspark_name(self, name: str) -> str | None:
         """Map a checkpoint ``mtp.{i}.*`` name to this model's parameter path.

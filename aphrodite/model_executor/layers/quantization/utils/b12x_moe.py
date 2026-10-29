@@ -5,9 +5,6 @@
 import torch
 import torch.nn.functional as F
 
-from aphrodite.model_executor.layers.quantization.utils.flashinfer_utils import (
-    swap_w13_to_w31,
-)
 from aphrodite.model_executor.layers.quantization.utils.nvfp4_utils import (
     swizzle_blockscale,
 )
@@ -73,7 +70,6 @@ def prepare_nvfp4_moe_layer_for_b12x(
     w2_scale_2: torch.Tensor,
     a2_scale: torch.Tensor,
     is_act_and_mul: bool,
-    reorder_w13: bool = False,
 ) -> tuple[
     torch.Tensor,
     torch.Tensor,
@@ -84,14 +80,11 @@ def prepare_nvfp4_moe_layer_for_b12x(
     torch.Tensor,
     torch.Tensor,
 ]:
-    """Prepare b12x NVFP4 MoE weights and scales."""
+    """Pad and swizzle b12x NVFP4 weights while retaining gate/up row order."""
     num_experts = w13.shape[0]
     a13_scale = _per_expert_scale(a13_scale, num_experts, "a13_scale")
     a2_scale = _per_expert_scale(a2_scale, num_experts, "a2_scale")
 
-    if reorder_w13 and is_act_and_mul:
-        w13 = swap_w13_to_w31(w13)
-        w13_scale = swap_w13_to_w31(w13_scale)
     if is_act_and_mul:
         w13, w13_scale, w2, w2_scale = _pad_gated_weights(w13, w13_scale, w2, w2_scale)
 

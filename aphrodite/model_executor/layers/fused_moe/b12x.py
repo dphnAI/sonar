@@ -49,7 +49,7 @@ _B12X_MOE_MODES: dict[
     ("mxfp4", None): ("a16", "fp4_e8m0_k32", "w31"),
     ("nvfp4", "nvfp4"): ("a4", "modelopt_nvfp4", "w31"),
     ("nvfp4", "mxfp8"): ("a8", "modelopt_nvfp4", "w31"),
-    ("nvfp4", None): ("a16", "modelopt_nvfp4", "w13"),
+    ("nvfp4", None): ("a16", "modelopt_nvfp4", "w31"),
 }
 
 

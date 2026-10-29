@@ -337,12 +337,10 @@ def test_invalid_non_contiguous():
         _gemm(a, b)
 
 
-# =================================================================
-# GateLinear dispatch integration
-# =================================================================
+# GateLinear numerical integration
 
 
-def _make_gate_linear_fp32w(
+def _make_gate_linear(
     monkeypatch,
     *,
     params_dtype,
@@ -366,14 +364,6 @@ def _make_gate_linear_fp32w(
         "aphrodite.model_executor.parameter.get_tensor_model_parallel_world_size",
         lambda: 1,
     )
-    monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16.is_available",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w.is_available",
-        lambda: True,
-    )
 
     from aphrodite.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 
@@ -386,139 +376,20 @@ def _make_gate_linear_fp32w(
     ).cuda()
 
 
-@pytest.mark.parametrize("x_dtype", [torch.bfloat16, torch.float16, torch.float32])
-def test_gate_linear_uses_ll_fp32w_for_fp32_weight_fast_path(monkeypatch, x_dtype):
-    gate = _make_gate_linear_fp32w(monkeypatch, params_dtype=torch.float32)
-    x = torch.randn(4, 2048, dtype=x_dtype, device="cuda")
-    calls = []
-
-    def fake_ll_fp32w_gemm(hidden_states, router_weight):
-        calls.append((hidden_states, router_weight))
-        return torch.full(
-            (hidden_states.shape[0], router_weight.shape[0]),
-            1.0,
-            dtype=torch.float32,
-            device=hidden_states.device,
-        )
-
-    monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w.LL_FP32W_GEMM_KERNEL",
-        fake_ll_fp32w_gemm,
-    )
-    out, bias = gate(x)
-    assert bias is None
-    assert out.shape == (4, 64)
-    assert out.dtype == torch.float32
-    assert len(calls) == 1
-    assert calls[0][0] is x
-    assert calls[0][1] is gate.weight
-
-
-PREFERRED_FP32W_GATE_CASES = [
-    *((6144, 128, M) for M in range(1, 33)),
-    *((6144, 256, M) for M in (1, 8, 12, 14, 16, 20, 22, 25, 27, 32)),
-]
-
-
-@pytest.mark.parametrize(("input_size", "output_size", "M"), PREFERRED_FP32W_GATE_CASES)
-def test_gate_linear_uses_ll_fp32w_when_cpp_tier_disabled(monkeypatch, input_size, output_size, M):
-    gate = _make_gate_linear_fp32w(
-        monkeypatch,
-        params_dtype=torch.float32,
-        input_size=input_size,
-        output_size=output_size,
-    )
-    gate.allow_fp32_router_gemm = False
-    x = torch.randn(M, input_size, dtype=torch.bfloat16, device="cuda")
-    calls = []
-
-    def fake_ll_fp32w_gemm(hidden_states, router_weight):
-        calls.append((hidden_states, router_weight))
-        return torch.full(
-            (hidden_states.shape[0], router_weight.shape[0]),
-            2.0,
-            dtype=torch.float32,
-            device=hidden_states.device,
-        )
-
-    monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w.LL_FP32W_GEMM_KERNEL",
-        fake_ll_fp32w_gemm,
-    )
-    out, _ = gate(x)
-    assert len(calls) == 1
-    assert calls[0][0] is x
-    assert calls[0][1] is gate.weight
-    assert torch.all(out == 2.0)
-
-
-@pytest.mark.parametrize("M", [8, 16, 32])
-def test_gate_linear_uses_cpp_fp32_router_for_supported_cpp_shape(monkeypatch, M):
-    gate = _make_gate_linear_fp32w(
-        monkeypatch,
-        params_dtype=torch.float32,
-        input_size=3072,
-        output_size=256,
-    )
-    assert gate.allow_fp32_router_gemm
-    x = torch.randn(M, 3072, dtype=torch.bfloat16, device="cuda")
-
-    def fail_ll_fp32w_gemm(hidden_states, router_weight):
-        raise AssertionError("ll_fp32w_gemm should not bypass fp32_router_gemm_dispatch")
-
-    monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w.LL_FP32W_GEMM_KERNEL",
-        fail_ll_fp32w_gemm,
-    )
-    out, _ = gate(x)
-    assert out.shape == (M, 256)
-    assert out.dtype == torch.float32
-
-
-def test_gate_linear_bf16_weight_skips_ll_fp32w(monkeypatch):
-    gate = _make_gate_linear_fp32w(monkeypatch, params_dtype=torch.bfloat16)
-    assert not gate.allow_ll_fp32w_gemm
+@pytest.mark.parametrize("params_dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("output_dtype", [torch.float32, torch.bfloat16])
+def test_gate_linear_output_dtype_initialization_preserves_values(monkeypatch, params_dtype, output_dtype):
+    torch.manual_seed(42)
+    gate = _make_gate_linear(monkeypatch, params_dtype=params_dtype, out_dtype=None)
+    with torch.no_grad():
+        gate.weight.copy_(torch.randn_like(gate.weight))
     x = torch.randn(4, 2048, dtype=torch.bfloat16, device="cuda")
-
-    def fail_ll_fp32w_gemm(hidden_states, router_weight):
-        raise AssertionError("ll_fp32w_gemm should not run for bf16 weights")
-
-    monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w.LL_FP32W_GEMM_KERNEL",
-        fail_ll_fp32w_gemm,
-    )
-    out, _ = gate(x)
-    assert out.shape == (4, 64)
-    assert out.dtype == torch.float32
-
-
-def test_gate_linear_set_out_dtype_enables_ll_fp32w(monkeypatch):
-    gate = _make_gate_linear_fp32w(monkeypatch, params_dtype=torch.float32, out_dtype=None)
-    assert not gate.allow_ll_fp32w_gemm
-    gate.set_out_dtype(torch.float32)
-    assert gate.allow_ll_fp32w_gemm
-
-
-def test_gate_linear_non_fp32_out_dtype_disables_ll_fp32w(monkeypatch):
-    gate = _make_gate_linear_fp32w(monkeypatch, params_dtype=torch.float32, out_dtype=None)
-    gate.set_out_dtype(torch.bfloat16)
-    assert not gate.allow_ll_fp32w_gemm
-
-
-def test_gate_linear_m_gt_32_skips_ll_fp32w(monkeypatch):
-    gate = _make_gate_linear_fp32w(monkeypatch, params_dtype=torch.float32)
-    x = torch.randn(33, 2048, dtype=torch.bfloat16, device="cuda")
-
-    def fail_ll_fp32w_gemm(hidden_states, router_weight):
-        raise AssertionError("ll_fp32w_gemm should not run for M > 32")
-
-    monkeypatch.setattr(
-        "aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w.LL_FP32W_GEMM_KERNEL",
-        fail_ll_fp32w_gemm,
-    )
-    out, _ = gate(x)
-    assert out.shape == (33, 64)
-    assert out.dtype == torch.float32
+    expected = _ref(x, gate.weight)
+    gate.set_out_dtype(output_dtype)
+    actual, bias = gate(x)
+    assert bias is None
+    assert actual.dtype == output_dtype
+    _assert_close(actual, expected, context=f"weight={params_dtype}, output={output_dtype}")
 
 
 if __name__ == "__main__":

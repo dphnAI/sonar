@@ -557,9 +557,7 @@ class PciePullAllReduce:
                         raise RuntimeError("a failed PCIe paired workspace must be retained until process exit")
                     return 0
 
-                statuses = self._stage("retirement", retire)
-                if any(statuses):
-                    raise RuntimeError(f"PCIe paired workspace has sticky faults {statuses}; process exit is required")
+                self._stage("retirement", retire)
                 self._release_resources()
             except BaseException:
                 self._failed = True

@@ -4,7 +4,7 @@
 
 For up to eight tokens b12x runs rows-quant, FC1, the SwiGLU activation and FC2
 as separate kernels. ``install`` wraps b12x's ``launch_w4a8_compact_micro`` so
-the shapes ``csrc/b12x_moe_fused_sm120.cu`` computes exactly like b12x run
+the shapes ``csrc/moe/b12x_moe_fused_sm120.cu`` computes exactly like b12x run
 b12x's rows-quant and then that persistent kernel, which streams FC1 and FC2
 weights back to back. ``projections``, ``intermediate`` and ``route_output``
 keep b12x's bits; every other launch is b12x's own.
@@ -35,10 +35,13 @@ def _supported(
 
     Below 32 pairs (the DSpark drafter's top-3 MoE) the FC1 phase has too few
     weight streams and b12x's kernels win.
+    FC1 stages scales in 16-byte vectors, with sixteen vectors per row.
+    Its seven unconditional K64 preloads also require at least 512 columns.
     """
     return (
         n == 576
-        and k % 128 == 0
+        and 512 <= k <= 8192
+        and k % 512 == 0
         and 1 <= max_tokens <= 8
         and 32 <= max_tokens * num_topk <= 64
         and ids_dtype == torch.int32

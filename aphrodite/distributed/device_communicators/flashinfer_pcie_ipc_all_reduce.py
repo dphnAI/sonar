@@ -216,14 +216,15 @@ def warmup_flashinfer_pcie_ipc_allreduce(worker: "Worker") -> None:
         pcie_comm.disabled = True
         return
 
-    from aphrodite.v1.worker.gpu.cudagraph_utils import CudaGraphManager
+    from aphrodite.v1.worker.gpu.cudagraph_utils import (
+        CudaGraphManager,
+        get_speculator_cudagraph_managers,
+    )
 
     capture_sizes = set(worker.aphrodite_config.compilation_config.cudagraph_capture_sizes or ())
     runner = worker.model_runner
     managers = [getattr(runner, "cudagraph_manager", None)]
-    speculator = getattr(runner, "speculator", None)
-    if speculator is not None:
-        managers.extend(vars(speculator).values())
+    managers.extend(get_speculator_cudagraph_managers(getattr(runner, "speculator", None)).values())
     for manager in managers:
         if isinstance(manager, CudaGraphManager):
             capture_sizes.update(manager.planned_token_counts())

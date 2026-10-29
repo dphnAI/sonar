@@ -43,6 +43,7 @@ from aphrodite.v1.worker.workspace import (
 )
 
 from . import l2_prefetch
+from .attention_preparation import AttentionHelperPreparation
 from .b12x_layers import (
     B12xFP8LinearMethod,
     B12xLinearMethod,
@@ -85,141 +86,6 @@ def _rotated(x, positions, cos_sin_cache, **kwargs):
     out = torch.empty(x.shape, dtype=x.dtype, device=x.device)
     rotary.rotate(x, positions, cos_sin_cache, out=out, **kwargs)
     return out
-
-
-class _AttentionHelpers:
-    """Loaded-resource owner, independent of unpublished attention caches."""
-
-    def __init__(self, attention):
-        self.attention = attention
-
-    def get_b12x_preparation_units(self, layer: object, workload: B12xWorkload) -> tuple[B12xPreparationUnit, ...]:
-        from b12x.preparation import FrozenMapping, MemoryRequirements, PreparedCall
-
-        attn = self.attention
-        table = attn.rotary_emb.cos_sin_cache
-        device = table.device
-        attn._declare_attention(device)
-        roles = [("kv", 1, 512, 1), ("q", attn.n_local_heads, 512, 1)]
-        if attn.indexer is not None:
-            roles.append(("index_query", attn.indexer.heads, 128, 1))
-        if attn.compressor is not None:
-            roles.extend(
-                (
-                    ("index_key", 1, 128, attn.compress_ratio),
-                    ("latent", 1, 512, attn.compress_ratio),
-                )
-            )
-        plans: dict[str, object] = {}
-        requests = []
-        for role, heads, dim, ratio in roles:
-            query = rotary.Query(
-                max_rows=attn.capacity,
-                heads=heads,
-                dim=dim,
-                ratio=ratio,
-                cos_sin_dtype=str(table.dtype).removeprefix("torch."),
-            )
-            declaration = rotary.plan(query, device=device)
-            if role == "kv":
-                native_memory = declaration._memory_requirements
-
-                def memory(config, detected, native_memory=native_memory):
-                    return MemoryRequirements.sequential(
-                        (
-                            native_memory(config, detected),
-                            attn._staging_memory(),
-                        )
-                    )
-
-                declaration = replace(
-                    declaration,
-                    _memory_requirements=memory,
-                    invocation=FrozenMapping(
-                        {
-                            "aphrodite_staging": tuple(
-                                (name, shape, str(dtype)) for name, shape, dtype in attn._staging_specs
-                            )
-                        }
-                    ),
-                )
-            plans[role] = declaration
-
-            def prepare(state, heads=heads, dim=dim):
-                attn._prepare(device)
-                source = torch.ones((1, heads, dim), dtype=torch.bfloat16, device=device)
-                output = torch.empty_like(source)
-                positions = torch.zeros(1, dtype=torch.int64, device=device)
-                return PreparedCall(run=lambda: state.run(source, positions, table, out=output))
-
-            requests.append(
-                declaration.request(
-                    name=f"{attn.prefix}.helper.{role}",
-                    prepare_call=prepare,
-                )
-            )
-        if attn.indexer is not None:
-            declaration = weight_scale.plan(
-                weight_scale.Query(max_elements=attn.capacity * attn.indexer.heads),
-                device=device,
-            )
-            plans["index_weights"] = declaration
-
-            def prepare_weights(state):
-                source = torch.ones((1, attn.indexer.heads), dtype=torch.bfloat16, device=device)
-                output = torch.empty_like(source)
-                return PreparedCall(run=lambda: state.run(source, out=output))
-
-            requests.append(
-                declaration.request(
-                    name=f"{attn.prefix}.helper.index_weights",
-                    prepare_call=prepare_weights,
-                )
-            )
-        cache_roles = [("swa_cache_write", attn.swa_cache_layer.block_size, "swa")]
-        if attn.compressor is not None:
-            cache_roles.append(("indexed_cache_write", attn._main_page, "indexed"))
-        for role, page_size, kind in cache_roles:
-            declaration = mla.plan_cache_writer(
-                mla.CacheWriterQuery(
-                    max_rows=attn.capacity,
-                    page_size=page_size,
-                    cache_kind=kind,
-                    slot_dtype="int64",
-                ),
-                device=device,
-            )
-            plans[role] = declaration
-
-            def prepare_writer(state, page_size=page_size, kind=kind):
-                source = torch.ones((1, 512), dtype=torch.bfloat16, device=device)
-                cache = torch.empty(
-                    (
-                        1,
-                        mla.page_nbytes(page_size, cache_kind=kind, cache_format="deepseek_v41"),
-                    ),
-                    dtype=torch.uint8,
-                    device=device,
-                )
-                slots = torch.zeros(1, dtype=torch.int64, device=device)
-                return PreparedCall(run=lambda: state.run(source, cache, slots))
-
-            requests.append(
-                declaration.request(
-                    name=f"{attn.prefix}.helper.{role}",
-                    prepare_call=prepare_writer,
-                )
-            )
-        attn._helper_plans = plans
-        return (
-            B12xPreparationUnit(
-                name="V41AttentionHelpers",
-                key=(attn.prefix, attn.capacity),
-                requests=tuple(requests),
-                stage="weights",
-            ),
-            attn._wo_preparation_unit(workload),
-        )
 
 
 @triton.jit(do_not_specialize=["offset", "stride", "width"])
@@ -435,7 +301,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self.capacity = aphrodite_config.scheduler_config.max_num_batched_tokens
         self.max_model_len = aphrodite_config.model_config.max_model_len
         self.compress_ratio = hf.compress_ratios[self.layer_id] if self.layer_id < len(hf.compress_ratios) else 0
-        # Decode in one launch (csrc/dsv41_sparse_decode_sm120.cu) when the SWA
+        # Decode in one launch (csrc/attention/mla/dsv41_sparse_decode_sm120.cu) when the SWA
         # and indexed widths fit its 8-CTA split. It reads the same metadata
         # as the b12x decode; DSpark's wider window keeps the b12x decode.
         width = self.swa_width + (512 if self.compress_ratio else 0)
@@ -607,7 +473,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         self._index_plans: dict[tuple[str, int], object] = {}
         self._attention_plans: dict[str, object] = {}
         self._helper_plans: dict[str, object] = {}
-        self._helpers = _AttentionHelpers(self)
+        self._helpers = AttentionHelperPreparation(self)
         register_b12x_unit_provider(self._helpers, owner=self)
         set_b12x_preparation_provider(self, self)
         self._ready = False
@@ -858,13 +724,11 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         index_declarations = {}
         token_counts = self._preparation_token_counts(workload)
         if self.indexer is not None:
-            regimes = [
-                ("decode", self.DECODE_CHUNK, self._index_width),
-                ("prefill", self.INDEX_CHUNK, self._index_width),
-            ]
+            modes = ["decode", "prefill"]
             if self._short_index_shape is not None:
-                regimes.append(("prefill_short", *self._short_index_shape))
-            for mode, chunk, width in regimes:
+                modes.append("prefill_short")
+            for mode in modes:
+                chunk, _ = self._index_geometry(mode)
                 counts: set[int] = set()
                 counts.update(min(rows, chunk) for rows in token_counts)
                 counts.update(rows % chunk for rows in token_counts if rows % chunk)
@@ -1133,7 +997,8 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
                 f"{self.prefix} lacks a declared {mode} MLA attention plan"
             ) from None
 
-    def _declare_index_plan(self, mode: str, rows: int):
+    def _index_geometry(self, mode: str, rows: int | None = None):
+        """One capacity contract for declaring and selecting indexer plans."""
         if mode == "decode":
             chunk, width = self.DECODE_CHUNK, self._index_width
         elif mode == "prefill":
@@ -1142,8 +1007,12 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             chunk, width = self._short_index_shape
         else:
             raise ValueError(f"unsupported V4.1 indexer mode {mode!r}")
-        if not 0 < rows <= chunk:
+        if rows is not None and not 0 < rows <= chunk:
             raise ValueError(f"V4.1 {mode} indexer rows {rows} exceed chunk capacity {chunk}")
+        return chunk, width
+
+    def _declare_index_plan(self, mode: str, rows: int):
+        _, width = self._index_geometry(mode, rows)
         assert self.indexer is not None
         return dsa_indexer.plan(
             dsa_indexer.Caps(
@@ -1164,16 +1033,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
         plan = self._index_plans.get((mode, rows))
         if plan is not None:
             return plan
-        if mode == "decode":
-            capacity = self.DECODE_CHUNK
-        elif mode == "prefill":
-            capacity = self.INDEX_CHUNK
-        elif mode == "prefill_short" and self._short_index_shape is not None:
-            capacity = self._short_index_shape[0]
-        else:
-            raise ValueError(f"unsupported V4.1 indexer mode {mode!r}")
-        if not 0 < rows <= capacity:
-            raise ValueError(f"V4.1 {mode} indexer rows {rows} exceed chunk capacity {capacity}")
+        capacity, _ = self._index_geometry(mode, rows)
         # Only session-prepared plans can run. Keep the full chunk plan when it
         # was prepared; otherwise use the smallest prepared plan that covers rows
         # (a token budget below the chunk never declares the full chunk).

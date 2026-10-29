@@ -168,10 +168,31 @@ class AsyncOutput(AsyncModelRunnerOutput):
                 has_fault = get_ep_all2all_manager().query_fault()
                 self._has_fault = has_fault.to("cpu", non_blocking=True)
             if tp_fault_status is not None:
-                self._tp_fault_status_cpu = tp_fault_status.to("cpu", non_blocking=True, copy=True)
-                if tp_fault_status.is_cuda:
-                    tp_fault_status.record_stream(copy_stream)
+                self._copy_tp_fault_status(tp_fault_status, copy_stream)
             self.copy_event.record(copy_stream)
+
+    def set_tp_fault_status(
+        self,
+        status: torch.Tensor,
+        main_stream: torch.cuda.Stream,
+        copy_stream: torch.cuda.Stream,
+    ) -> None:
+        """Gate output on collectives enqueued after the initial token copy.
+
+        Token copies can overlap draft proposal, but their completion alone
+        cannot release an output until the draft's collective status is known.
+        Re-record the event after copying that final immutable snapshot.
+        """
+        with stream(copy_stream, main_stream):
+            copy_stream.wait_stream(main_stream)
+            self._copy_tp_fault_status(status, copy_stream)
+            self.copy_event.record(copy_stream)
+
+    def _copy_tp_fault_status(self, status: torch.Tensor, copy_stream: torch.cuda.Stream) -> None:
+        self._tp_fault_status_gpu = status
+        self._tp_fault_status_cpu = status.to("cpu", non_blocking=True, copy=True)
+        if status.is_cuda:
+            status.record_stream(copy_stream)
 
     def get_output(self) -> ModelRunnerOutput:
         self.copy_event.synchronize()

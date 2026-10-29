@@ -58,6 +58,7 @@ from aphrodite.v1.worker.workspace import collect_cuda_graph_capture_resources
 if TYPE_CHECKING:
     from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
     from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
+    from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
     from aphrodite.v1.worker.gpu.ubatch_utils import UBatchRunner
 
 logger = init_logger(__name__)
@@ -873,6 +874,13 @@ def prepare_inputs_to_capture(
     return AttentionState(attn_metadata, slot_mappings_by_layer)
 
 
+def get_speculator_cudagraph_managers(speculator: "BaseSpeculator | None") -> dict[str, CudaGraphManager]:
+    """Return the graph owners used for draft warmup, profiling and teardown."""
+    if speculator is None:
+        return {}
+    return {name: value for name, value in vars(speculator).items() if isinstance(value, CudaGraphManager)}
+
+
 # ---------------------------------------------------------------------------
 # CUDA graph memory profiling
 # ---------------------------------------------------------------------------
@@ -950,9 +958,7 @@ def profile_cudagraph_memory(runner: "GPUModelRunner", prepare_profile_state: Ca
                 original_pools[id(wrapper)] = wrapper.graph_pool
                 wrapper.graph_pool = throwaway_pool
             if speculator is not None:
-                spec_manager_names = [
-                    name for name, value in vars(speculator).items() if isinstance(value, CudaGraphManager)
-                ]
+                spec_manager_names = list(get_speculator_cudagraph_managers(speculator))
             manager._max_full_descs_to_capture = _FULL_GRAPH_PROFILING_SAMPLES
             mem_samples: list[int] = []
             manager._capture_mem_samples = mem_samples
@@ -1046,10 +1052,9 @@ def _teardown_profiling_state(runner: "GPUModelRunner") -> None:
     if getattr(runner.model, "supports_b12x_native_preparation", False):
         speculator = getattr(runner, "speculator", None)
         if speculator is not None:
-            for name, value in list(vars(speculator).items()):
-                if isinstance(value, CudaGraphManager):
-                    value.clear()
-                    setattr(speculator, name, None)
+            for name, manager in get_speculator_cudagraph_managers(speculator).items():
+                manager.clear()
+                setattr(speculator, name, None)
             if hasattr(speculator, "attn_groups"):
                 speculator.attn_groups.clear()
     runner.cudagraph_manager = None

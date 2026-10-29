@@ -41,6 +41,19 @@ enum Error : Word {
 enum Stage : Word { kPublish = 1, kReady = 2, kConsume = 3, kComplete = 4 };
 enum Kind : Word { kClose = 1, kPairedR1 = 2, kPairedR2 = 3 };
 
+// Fixed eight-word device-state layout shared with the Python owner.
+enum StateWord : int {
+  kStateEpoch = 0,
+  kStateConsumeTicket = 1,
+  kStateError = 2,
+  kStateErrorPeer = 3,
+  kStateErrorEpoch = 4,
+  kStateErrorStage = 5,
+  kStateTimeout = 6,
+  kStatePublishTicket = 7,
+  kStateWords = 8,
+};
+
 struct alignas(kLine) Ready {
   Word epoch;
   Word count;
@@ -196,10 +209,10 @@ __device__ __forceinline__ unsigned short* payload(const Params& p,
 // Only a local CAS winner writes this origin's immutable records. No peer RMW.
 __device__ __forceinline__ void fail(const Params& p, Word code, Word peer,
                                      Word epoch, Word stage) {
-  if (atomicCAS(p.state + 2, 0ULL, code) != 0) return;
-  store(p.state + 3, peer);
-  store(p.state + 4, epoch);
-  store(p.state + 5, stage);
+  if (atomicCAS(p.state + kStateError, 0ULL, code) != 0) return;
+  store(p.state + kStateErrorPeer, peer);
+  store(p.state + kStateErrorEpoch, epoch);
+  store(p.state + kStateErrorStage, stage);
 #pragma unroll
   for (int receiver = 0; receiver < kRanks; ++receiver) {
     Fault* f = fault(p, receiver, p.rank);
@@ -211,7 +224,7 @@ __device__ __forceinline__ void fail(const Params& p, Word code, Word peer,
 }
 
 __device__ __forceinline__ bool observe_fault(const Params& p, Word stage) {
-  if (read_state(p.state + 2) != 0) return true;
+  if (read_state(p.state + kStateError) != 0) return true;
 #pragma unroll
   for (int origin = 0; origin < kRanks; ++origin) {
     const Fault* local = fault(p, p.rank, origin);
@@ -243,7 +256,8 @@ __device__ __forceinline__ float add_rn(float a, float b) {
 }
 
 __global__ void initialize_state(Word* state, Word timeout_ns) {
-  for (int i = 0; i < 8; ++i) state[i] = i == 6 ? timeout_ns : 0;
+  for (int i = 0; i < kStateWords; ++i)
+    state[i] = i == kStateTimeout ? timeout_ns : 0;
 }
 
 __device__ __forceinline__ Word complete_ticket(Word* ticket) {
@@ -263,7 +277,7 @@ __global__ void publish(const __grid_constant__ Params p, Word* snapshot) {
     if (blockIdx.x == 0 && snapshot != nullptr) {
       write_local(snapshot, std::numeric_limits<Word>::max());
     }
-    const Word prior = read_state(p.state);
+    const Word prior = read_state(p.state + kStateEpoch);
     epoch = prior + 1;
     bad = observe_fault(p, kPublish);
     if (!bad && prior == std::numeric_limits<Word>::max()) {
@@ -278,20 +292,22 @@ __global__ void publish(const __grid_constant__ Params p, Word* snapshot) {
     // Drain each CTA before the last CTA publishes CLOSE.
     asm volatile("fence.acq_rel.sys;" : : : "memory");
     observe_fault(p, kPublish);
-    last = complete_ticket(p.state + 7) == static_cast<Word>(gridDim.x - 1);
+    last = complete_ticket(p.state + kStatePublishTicket) ==
+           static_cast<Word>(gridDim.x - 1);
   }
   __syncthreads();
   if (last) {
     if (threadIdx.x == 0) bad = observe_fault(p, kPublish);
     __syncthreads();
-    if (threadIdx.x < kRanks && !bad && read_state(p.state + 2) == 0) {
+    if (threadIdx.x < kRanks && !bad &&
+        read_state(p.state + kStateError) == 0) {
       Ready* flag = ready(p, threadIdx.x, p.rank, epoch);
       store(&flag->count, 0);
       store(&flag->kind, kClose);
       release(&flag->epoch, epoch);
     }
     __syncthreads();
-    if (threadIdx.x == 0) write_local(p.state + 7, 0);
+    if (threadIdx.x == 0) write_local(p.state + kStatePublishTicket, 0);
   }
 }
 
@@ -506,9 +522,9 @@ __global__ void paired_single(const __grid_constant__ Params p,
   __shared__ Word timeout_ns;
   __shared__ int bad;
   if (threadIdx.x == 0) {
-    const Word prior = read_state(p.state);
+    const Word prior = read_state(p.state + kStateEpoch);
     epoch = prior + 1;
-    timeout_ns = read_state(p.state + 6);
+    timeout_ns = read_state(p.state + kStateTimeout);
     bad = observe_fault(p, kPublish);
     if (!bad && prior == std::numeric_limits<Word>::max()) {
       fail(p, kEpochExhausted, p.rank, prior, kPublish);
@@ -565,12 +581,12 @@ __global__ void paired_single(const __grid_constant__ Params p,
   device_fence();
   __syncthreads();
   if (threadIdx.x == 0 && !bad) {
-    // DATA has no completion/publication tickets. Both state words 1/7 stay 0.
+    // DATA leaves both consume and publish tickets at zero.
     // Before E+2 can overwrite a parity, E+1 must have consumed READY from both
     // write partners, which follows their completed E. paired_combine reads
     // this epoch's inboxes before the next paired_single on the same stream
     // can publish READY(E+1), so recording E here keeps R1 and R2 intact.
-    write_local(p.state, epoch);
+    write_local(p.state + kStateEpoch, epoch);
   }
 }
 
@@ -585,7 +601,7 @@ __global__ void paired_combine(const __grid_constant__ Params p,
   __shared__ int bad;
   if (threadIdx.x == 0) {
     bad = observe_fault(p, kConsume);
-    epoch = read_state(p.state);
+    epoch = read_state(p.state + kStateEpoch);
   }
   __syncthreads();
   const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
@@ -652,9 +668,9 @@ __global__ void gather_small(const __grid_constant__ Params p,
   __shared__ Word timeout_ns;
   __shared__ int bad;
   if (threadIdx.x == 0) {
-    const Word prior = read_state(p.state);
+    const Word prior = read_state(p.state + kStateEpoch);
     epoch = prior + 1;
-    timeout_ns = read_state(p.state + 6);
+    timeout_ns = read_state(p.state + kStateTimeout);
     bad = observe_fault(p, kPublish);
     if (!bad && prior == std::numeric_limits<Word>::max()) {
       fail(p, kEpochExhausted, p.rank, prior, kPublish);
@@ -733,7 +749,7 @@ __global__ void gather_small(const __grid_constant__ Params p,
     }
     return;
   }
-  if (threadIdx.x == 0) write_local(p.state, epoch);
+  if (threadIdx.x == 0) write_local(p.state + kStateEpoch, epoch);
 }
 
 __global__ void pull_reduce(const __grid_constant__ Params p, Word* snapshot) {
@@ -743,8 +759,8 @@ __global__ void pull_reduce(const __grid_constant__ Params p, Word* snapshot) {
   __shared__ int bad;
   __shared__ int last;
   if (threadIdx.x == 0) {
-    const Word prior = read_state(p.state);
-    timeout_ns = read_state(p.state + 6);
+    const Word prior = read_state(p.state + kStateEpoch);
+    timeout_ns = read_state(p.state + kStateTimeout);
     epoch = prior + 1;
     bad = observe_fault(p, kReady);
     if (!bad && prior == std::numeric_limits<Word>::max()) {
@@ -768,10 +784,11 @@ __global__ void pull_reduce(const __grid_constant__ Params p, Word* snapshot) {
   __syncthreads();
   if (threadIdx.x == 0) {
     observe_fault(p, kConsume);
-    last = complete_ticket(p.state + 1) == static_cast<Word>(gridDim.x - 1);
+    last = complete_ticket(p.state + kStateConsumeTicket) ==
+           static_cast<Word>(gridDim.x - 1);
     if (last) {
       observe_fault(p, kComplete);
-      bad = read_state(p.state + 2) != 0;
+      bad = read_state(p.state + kStateError) != 0;
     }
   }
   __syncthreads();
@@ -779,9 +796,10 @@ __global__ void pull_reduce(const __grid_constant__ Params p, Word* snapshot) {
     device_fence();
     __syncthreads();
     if (threadIdx.x == 0) {
-      if (!bad) write_local(p.state, epoch);
-      write_local(p.state + 1, 0);
-      if (snapshot != nullptr) write_local(snapshot, read_state(p.state + 2));
+      if (!bad) write_local(p.state + kStateEpoch, epoch);
+      write_local(p.state + kStateConsumeTicket, 0);
+      if (snapshot != nullptr)
+        write_local(snapshot, read_state(p.state + kStateError));
     }
   }
 }
@@ -825,7 +843,7 @@ int64_t init(const std::vector<int64_t>& peer_ptrs,
   STD_TORCH_CHECK(
       state.device().is_cuda() && state.is_contiguous() &&
           state.scalar_type() == torch::headeronly::ScalarType::Long &&
-          state.numel() >= 8,
+          state.numel() >= kStateWords,
       "PCIe pull state must be contiguous CUDA int64 with >=8 words");
   const int device = state.get_device_index();
   const torch::stable::accelerator::DeviceGuard guard(device);
@@ -846,7 +864,7 @@ int64_t init(const std::vector<int64_t>& peer_ptrs,
     }
     const auto begin = static_cast<uintptr_t>(peer_ptrs[r]);
     STD_TORCH_CHECK(
-        !overlaps(state_begin, 8 * sizeof(Word), begin, sizes.bytes),
+        !overlaps(state_begin, kStateWords * sizeof(Word), begin, sizes.bytes),
         "PCIe pull state must not alias a slab");
     cudaPointerAttributes attributes;
     STD_CUDA_CHECK(
@@ -900,7 +918,7 @@ void reject_workspace_alias(const Context& ctx, const void* pointer,
   const auto begin = reinterpret_cast<uintptr_t>(pointer);
   STD_TORCH_CHECK(
       !overlaps(begin, bytes, reinterpret_cast<uintptr_t>(ctx.params.state),
-                8 * sizeof(Word)),
+                kStateWords * sizeof(Word)),
       "PCIe pull tensors must not alias device state");
   for (int r = 0; r < kRanks; ++r) {
     STD_TORCH_CHECK(!overlaps(begin, bytes,
@@ -1019,11 +1037,13 @@ int64_t local_status(int64_t handle) {
   const cudaStream_t stream = checked_stream(ctx);
   require_outside_capture(stream);
   Word values[kRanks + 3]{};
-  STD_CUDA_CHECK(cudaMemcpyAsync(values, ctx.params.state + 2, sizeof(Word),
-                                 cudaMemcpyDeviceToHost, stream));
-  STD_CUDA_CHECK(cudaMemcpyAsync(values + kRanks + 1, ctx.params.state + 1,
+  STD_CUDA_CHECK(cudaMemcpyAsync(values, ctx.params.state + kStateError,
                                  sizeof(Word), cudaMemcpyDeviceToHost, stream));
-  STD_CUDA_CHECK(cudaMemcpyAsync(values + kRanks + 2, ctx.params.state + 7,
+  STD_CUDA_CHECK(cudaMemcpyAsync(values + kRanks + 1,
+                                 ctx.params.state + kStateConsumeTicket,
+                                 sizeof(Word), cudaMemcpyDeviceToHost, stream));
+  STD_CUDA_CHECK(cudaMemcpyAsync(values + kRanks + 2,
+                                 ctx.params.state + kStatePublishTicket,
                                  sizeof(Word), cudaMemcpyDeviceToHost, stream));
   const auto* faults = reinterpret_cast<const Fault*>(
       ctx.params.slabs[ctx.params.rank] + ctx.params.fault_offset);

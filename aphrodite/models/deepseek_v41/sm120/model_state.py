@@ -58,8 +58,6 @@ class DeepseekV41ModelState(SonarDeepseekV41ModelState):
 
     use_global_draft_cache_positions = True
 
-    _ced_streaming_prefix_start: tuple[str, int] | None = None
-
     def __init__(
         self,
         aphrodite_config: AphroditeConfig,
@@ -72,6 +70,7 @@ class DeepseekV41ModelState(SonarDeepseekV41ModelState):
         self._ced_prompt_logprobs: set[str] = set()
         self._ced_prefix_start: dict[str, int] = {}
         self._ced_batch: InputBatch | None = None
+        self._ced_streaming_prefix_start: tuple[str, int] | None = None
         self.max_cudagraph_query_len: int | None = None
         if ced_decoder_start(self.model_config.hf_config) is not None:
             compact_max = min(self.max_num_tokens, self.max_num_reqs * CED_WINDOW)

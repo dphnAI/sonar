@@ -1,15 +1,6 @@
 #include "ops.h"
 #include "cuda_utils.h"
 #include "core/registration.h"
-#if defined(APHRODITE_ENABLE_SM120_ENGRAM) && !defined(USE_ROCM)
-  #include "engram_sm120.h"
-#endif
-#if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
-  #include "dsv41_sparse_decode_sm120.h"
-#endif
-#if defined(APHRODITE_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
-  #include "b12x_moe_fused_sm120.h"
-#endif
 
 #include <torch/csrc/stable/library.h>
 
@@ -49,37 +40,6 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "    Tensor max_occurrences,"
       "    Tensor early_exit_match_len,"
       "    int vocab_size) -> (Tensor, Tensor, Tensor)");
-
-#if defined(APHRODITE_ENABLE_SM120_ENGRAM) && !defined(USE_ROCM)
-  ops.def(
-      "sm120_engram_pack(Tensor hidden, Tensor local_projection, "
-      "Tensor q_weight, Tensor k_weight, Tensor! packet, int rank, "
-      "int num_valid_tokens) -> ()");
-  ops.def(
-      "sm120_engram_finish(Tensor hidden, Tensor gathered_packets, "
-      "Tensor? token_mask, Tensor! output, int num_valid_tokens, float eps, "
-      "float clamp_value) -> ()");
-#endif
-
-#if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
-  ops.def(
-      "dsv41_sparse_decode_sm120(Tensor q, Tensor! out, Tensor swa_cache, "
-      "int swa_page_size, Tensor swa_indices, Tensor swa_lengths, "
-      "Tensor? indexed_cache, int indexed_page_size, Tensor? indexed_indices, "
-      "Tensor? indexed_lengths, Tensor? indexed_page_table, Tensor attn_sink, "
-      "float sm_scale, Tensor! partial, Tensor! stats) -> ()");
-#endif
-
-#if defined(APHRODITE_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
-  ops.def("b12x_w4a8_moe_fused_ctrl_init(Tensor! ctrl) -> ()");
-  ops.def(
-      "b12x_w4a8_moe_fused_sm120(Tensor a_values, Tensor a_scales, "
-      "Tensor w13, Tensor w13_scales, Tensor! projections, "
-      "Tensor! intermediate, Tensor w2, Tensor w2_scales, Tensor topk_ids, "
-      "Tensor topk_weights, Tensor alpha1, Tensor input_scale, Tensor alpha2, "
-      "Tensor down_scale, Tensor! route_output, Tensor! ctrl, int num_pairs, "
-      "int topk, int rows_capacity, int n, float swiglu_limit) -> ()");
-#endif
 
 #ifndef USE_ROCM
 
@@ -881,18 +841,6 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
   // LongCat n-gram embedding index kernel.
   ops.impl("ngram_compute_n_gram_ids", TORCH_BOX(&ngram_compute_n_gram_ids));
   ops.impl("vocab_parallel_embedding", TORCH_BOX(&vocab_parallel_embedding));
-#if defined(APHRODITE_ENABLE_SM120_ENGRAM) && !defined(USE_ROCM)
-  ops.impl("sm120_engram_pack", TORCH_BOX(&sm120_engram_pack));
-  ops.impl("sm120_engram_finish", TORCH_BOX(&sm120_engram_finish));
-#endif
-#if defined(APHRODITE_ENABLE_SM120_SPARSE_DECODE) && !defined(USE_ROCM)
-  ops.impl("dsv41_sparse_decode_sm120", TORCH_BOX(&dsv41_sparse_decode_sm120));
-#endif
-#if defined(APHRODITE_ENABLE_SM120_MOE_FUSED) && !defined(USE_ROCM)
-  ops.impl("b12x_w4a8_moe_fused_ctrl_init",
-           TORCH_BOX(&b12x_w4a8_moe_fused_ctrl_init));
-  ops.impl("b12x_w4a8_moe_fused_sm120", TORCH_BOX(&b12x_w4a8_moe_fused_sm120));
-#endif
 
   // Per-token group quantization
   ops.impl("per_token_group_fp8_quant", TORCH_BOX(&per_token_group_quant_fp8));

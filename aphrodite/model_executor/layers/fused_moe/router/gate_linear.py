@@ -195,7 +195,10 @@ class GateLinear(ReplicatedLinear):
         # SM120 has both and is tuned for ll_bf16_gemm only.
         self.allow_ll_bf16_gemm = False
         self.allow_ll_fp32w_gemm = False
-        if can_use_ll_bf16:
+        self._update_cutedsl_gemm_eligibility()
+
+    def _update_cutedsl_gemm_eligibility(self) -> None:
+        if self.allow_ll_bf16_router_gemm:
             from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
                 is_available as is_ll_bf16_gemm_available,
             )
@@ -203,7 +206,7 @@ class GateLinear(ReplicatedLinear):
             self.allow_ll_bf16_gemm = (
                 is_ll_bf16_gemm_available() and self.weight.dtype == torch.bfloat16 and self.out_dtype == torch.float32
             )
-        if can_use_specialized_kernels:
+        if self.allow_specialized_router_gemm:
             from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
                 is_available as is_ll_fp32w_gemm_available,
             )
@@ -211,8 +214,7 @@ class GateLinear(ReplicatedLinear):
             self.allow_ll_fp32w_gemm = (
                 is_ll_fp32w_gemm_available() and self.weight.dtype == torch.float32 and self.out_dtype == torch.float32
             )
-
-        self._register_ll_fp32w_warmup()
+            self._register_ll_fp32w_warmup()
 
     def _register_ll_fp32w_warmup(self) -> None:
         # Based on multi-tier GEMM dispatch. See above.
@@ -248,23 +250,7 @@ class GateLinear(ReplicatedLinear):
         # out_dtype may start as None -> recompute eligibility here
         self.allow_rocm_bf16x3_router_gemm = self._rocm_bf16x3_weight_eligible and out_dtype == torch.float32
 
-        if self.allow_ll_bf16_router_gemm:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_bf16 import (
-                is_available as is_ll_bf16_gemm_available,
-            )
-
-            self.allow_ll_bf16_gemm = (
-                is_ll_bf16_gemm_available() and self.weight.dtype == torch.bfloat16 and out_dtype == torch.float32
-            )
-        if self.allow_specialized_router_gemm:
-            from aphrodite.model_executor.kernels.linear.cute_dsl.ll_fp32w import (
-                is_available as is_ll_fp32w_gemm_available,
-            )
-
-            self.allow_ll_fp32w_gemm = (
-                is_ll_fp32w_gemm_available() and self.weight.dtype == torch.float32 and out_dtype == torch.float32
-            )
-            self._register_ll_fp32w_warmup()
+        self._update_cutedsl_gemm_eligibility()
 
     def _return(self, output: torch.Tensor) -> torch.Tensor | tuple[torch.Tensor, Parameter | None]:
         return output if not self.return_bias else (output, None)

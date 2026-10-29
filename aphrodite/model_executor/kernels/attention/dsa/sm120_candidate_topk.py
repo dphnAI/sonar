@@ -10,8 +10,57 @@ from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
     candidate_blocks_to_sparse_indices,
 )
 from aphrodite.model_executor.layers.indexer_topk import RADIX_TOPK_WORKSPACE_SIZE
+from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import tl, triton
 from aphrodite.v1.worker.workspace import current_workspace_manager
+
+
+def supports_sm120_candidate_topk(
+    candidates: torch.Tensor | None,
+    *,
+    candidate_write: bool,
+    candidate_block_size: int,
+    head_dim: int,
+    topk_tokens: int,
+    topk_backend: str,
+    use_fp4_cache: bool,
+    dcp_world_size: int,
+) -> bool:
+    """Admit the fixed candidate-consumer geometry, including profile runs."""
+    return (
+        candidates is not None
+        and not candidate_write
+        and candidate_block_size == 8
+        and candidates.shape[1] == 2048
+        and head_dim == 128
+        and topk_tokens == 512
+        and topk_backend in ("auto", "persistent")
+        and not use_fp4_cache
+        and dcp_world_size == 1
+        and current_platform.is_cuda()
+        and current_platform.is_device_capability_family(120)
+    )
+
+
+def supports_sm120_candidate_decode(
+    q: torch.Tensor,
+    cache: torch.Tensor,
+    weights: torch.Tensor,
+    lengths: torch.Tensor,
+    candidates: torch.Tensor | None,
+) -> bool:
+    """Admit live tensors after the caller has checked the fixed geometry."""
+    batch, next_n = q.shape[:2]
+    return (
+        cache.shape[1] == 128
+        and q.shape[2:] == (32, 128)
+        and q.is_contiguous()
+        and weights.stride(1) == 1
+        and lengths.shape == (batch, next_n)
+        and lengths.is_contiguous()
+        and candidates is not None
+        and candidates.shape[0] >= batch * next_n
+    )
 
 
 @triton.jit

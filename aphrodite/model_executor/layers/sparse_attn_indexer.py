@@ -32,6 +32,8 @@ from aphrodite.model_executor.kernels.attention.dsa.candidate_blocks import (
 from aphrodite.model_executor.kernels.attention.dsa.sm120_candidate_topk import (
     reserve_sm120_candidate_topk,
     sm120_fp8_candidate_topk,
+    supports_sm120_candidate_decode,
+    supports_sm120_candidate_topk,
 )
 from aphrodite.model_executor.kernels.attention.dsa.sm120_indexer import (
     sm120_fp8_mqa_logits,
@@ -475,18 +477,15 @@ def sparse_attn_indexer(
         # would need per-rank translation that is not implemented.
         assert dcp_world_size == 1, "v4.1 two-level candidate filtering is not supported with DCP."
         assert candidate_block_size > 0
-    sm120_candidate_geometry = (
-        candidate_blocks is not None
-        and not candidate_write
-        and candidate_block_size == 8
-        and candidate_blocks.shape[1] == 2048
-        and head_dim == 128
-        and topk_tokens == 512
-        and topk_backend in ("auto", "persistent")
-        and not use_fp4_cache
-        and dcp_world_size == 1
-        and current_platform.is_cuda()
-        and current_platform.is_device_capability_family(120)
+    sm120_candidate_geometry = supports_sm120_candidate_topk(
+        candidate_blocks,
+        candidate_write=candidate_write,
+        candidate_block_size=candidate_block_size,
+        head_dim=head_dim,
+        topk_tokens=topk_tokens,
+        topk_backend=topk_backend,
+        use_fp4_cache=use_fp4_cache,
+        dcp_world_size=dcp_world_size,
     )
 
     if not isinstance(attn_metadata, dict):
@@ -883,16 +882,8 @@ def sparse_attn_indexer(
         padded_q_quant_cast = (
             padded_q_quant_decode_tokens.view(torch.int8) if use_fp4_cache else padded_q_quant_decode_tokens
         )
-        use_compact_candidates = (
-            sm120_candidate_geometry
-            and kv_cache.shape[1] == 128
-            and padded_q_quant_cast.shape[2:] == (32, 128)
-            and padded_q_quant_cast.is_contiguous()
-            and decode_weights.stride(1) == 1
-            and seq_lens.shape == (batch_size, next_n)
-            and seq_lens.is_contiguous()
-            and candidate_blocks is not None
-            and candidate_blocks.shape[0] >= num_padded_tokens
+        use_compact_candidates = sm120_candidate_geometry and supports_sm120_candidate_decode(
+            padded_q_quant_cast, kv_cache, decode_weights, seq_lens, candidate_blocks
         )
         topk_indices = topk_indices_buffer[:num_padded_tokens, :topk_tokens]
         if use_compact_candidates:

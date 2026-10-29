@@ -57,7 +57,6 @@ from aphrodite.model_executor.offloader import (
     get_offloader,
     set_offloader,
 )
-from aphrodite.model_executor.warmup.b12x_warmup import warmup_b12x_model
 from aphrodite.model_executor.warmup.jit_warmup import JitWarmupRegistry
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
 from aphrodite.multimodal.encoder_budget import (
@@ -86,6 +85,7 @@ from aphrodite.v1.watermarking.spec_decode import (
     create_speculative_target_watermarker,
     speculative_target_watermark_key,
 )
+from aphrodite.v1.worker.b12x_utils import warmup_b12x_cudagraphs
 from aphrodite.v1.worker.block_table import get_block_table_width
 from aphrodite.v1.worker.cp_utils import check_attention_cp_compatibility
 from aphrodite.v1.worker.gpu import pcp_manager as pcp
@@ -106,8 +106,8 @@ from aphrodite.v1.worker.gpu.buffer_utils import set_default_max_concurrency
 from aphrodite.v1.worker.gpu.cp_utils import prepare_dcp_local_seq_lens
 from aphrodite.v1.worker.gpu.cudagraph_utils import (
     BatchExecutionDescriptor,
-    CudaGraphManager,
     ModelCudaGraphManager,
+    get_speculator_cudagraph_managers,
     has_compiled_submodule,
     make_cudagraph_stats,
 )
@@ -1044,27 +1044,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             )
             return 0
 
-        if capture_decoder:
-            warmup_b12x_model(
-                self.model,
-                tuple(self.cudagraph_manager.planned_token_counts()),
-                self.dtype,
-            )
-            draft_model = self.get_draft_model()
-            if draft_model is not None:
-                draft_counts = {
-                    count
-                    for manager in vars(self.speculator).values()
-                    if isinstance(manager, CudaGraphManager)
-                    for count in manager.planned_token_counts()
-                }
-                warmup_b12x_model(draft_model, tuple(sorted(draft_counts)), self.dtype)
-        if getattr(self.model, "supports_b12x_native_preparation", False):
-            self.cudagraph_manager.synchronize_warmup = True
-            if self.speculator is not None:
-                for manager in vars(self.speculator).values():
-                    if isinstance(manager, CudaGraphManager):
-                        manager.synchronize_warmup = True
+        warmup_b12x_cudagraphs(self, capture_decoder=capture_decoder)
 
         compilation_counter.num_gpu_runner_capture_triggers += 1
 
@@ -2146,7 +2126,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             pending_aux_output = self.aux_output_connector.prepare_output(input_batch)
 
         tp_fault_status = None
-        if self._pcie_pull_comm is not None and self._pcie_pull_comm.initialized:
+        if self._pcie_pull_comm is not None and self._pcie_pull_comm.initialized and self.speculator is None:
             tp_fault_status = self._pcie_pull_comm.close_step()
         # Start async output copy here so that it can overlap with speculator proposal.
         async_output = AsyncOutput(
@@ -2235,6 +2215,13 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self.kv_connector.finalize_step()
         model_runner_output.ec_connector_output = ec_connector_output
 
+        if self._pcie_pull_comm is not None and self._pcie_pull_comm.initialized and self.speculator is not None:
+            # Close after both target and draft collectives, without delaying
+            # the token copies started before draft proposal.
+            async_output.set_tp_fault_status(
+                self._pcie_pull_comm.close_step(), self.main_stream, self.output_copy_stream
+            )
+
         return async_output
 
     def take_draft_token_ids(self) -> DraftTokenIds | None:
@@ -2305,10 +2292,8 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             BreakableCUDAGraphWrapper.clear_all_graphs()
             if self.cudagraph_manager is not None:
                 self.cudagraph_manager.clear()
-            if self.speculator is not None:
-                for value in vars(self.speculator).values():
-                    if isinstance(value, CudaGraphManager):
-                        value.clear()
+            for manager in get_speculator_cudagraph_managers(self.speculator).values():
+                manager.clear()
             self.execute_model_state = None
         self.cudagraph_manager = None
         self.fast_prefill = None

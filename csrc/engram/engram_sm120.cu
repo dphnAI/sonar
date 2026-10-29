@@ -6,6 +6,7 @@
 #if defined(APHRODITE_ENABLE_SM120_ENGRAM) && !defined(USE_ROCM)
 
   #include <cuda_bf16.h>
+  #include <torch/csrc/stable/library.h>
 
   #include <cmath>
   #include <cstdint>
@@ -430,6 +431,22 @@ void sm120_engram_finish(const Tensor& hidden, const Tensor& gathered_packets,
   else
     launch(std::false_type{});
   check_launch();
+}
+
+STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
+  ops.def(
+      "sm120_engram_pack(Tensor hidden, Tensor local_projection, "
+      "Tensor q_weight, Tensor k_weight, Tensor! packet, int rank, "
+      "int num_valid_tokens) -> ()");
+  ops.def(
+      "sm120_engram_finish(Tensor hidden, Tensor gathered_packets, "
+      "Tensor? token_mask, Tensor! output, int num_valid_tokens, float eps, "
+      "float clamp_value) -> ()");
+}
+
+STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
+  ops.impl("sm120_engram_pack", TORCH_BOX(&sm120_engram_pack));
+  ops.impl("sm120_engram_finish", TORCH_BOX(&sm120_engram_finish));
 }
 
 #endif

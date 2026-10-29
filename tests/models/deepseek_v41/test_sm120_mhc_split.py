@@ -128,3 +128,29 @@ def test_split_matches_fused_lagged_post_pre(rows):
             got.view(torch.int16 if got.dtype == torch.bfloat16 else torch.int32),
             want.view(torch.int16 if want.dtype == torch.bfloat16 else torch.int32),
         ), name
+
+
+def test_broadcast_projection_refit_preserves_captured_buffer():
+    from aphrodite.models.deepseek_v41.sm120.model import DeepseekV4DecoderLayer
+
+    layer = DeepseekV4DecoderLayer.__new__(DeepseekV4DecoderLayer)
+    torch.nn.Module.__init__(layer)
+    layer.hc_mult = 4
+    layer.hidden_size = 8
+    layer.hc_attn_fn = torch.nn.Parameter(torch.randn(24, 32, dtype=torch.float32, device="cuda"), requires_grad=False)
+    layer.hc_attn_fn_broadcast = None
+    layer.finalize_mhc_broadcast_weights()
+    buffer = layer.hc_attn_fn_broadcast
+    expected = layer.hc_attn_fn.view(24, 4, 8).sum(dim=1)
+    torch.testing.assert_close(buffer, expected, rtol=0, atol=0)
+
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        output = buffer.clone()
+    layer.hc_attn_fn.add_(1)
+    layer.finalize_mhc_broadcast_weights()
+    graph.replay()
+
+    assert layer.hc_attn_fn_broadcast is buffer
+    expected = layer.hc_attn_fn.view(24, 4, 8).sum(dim=1)
+    torch.testing.assert_close(output, expected, rtol=0, atol=0)

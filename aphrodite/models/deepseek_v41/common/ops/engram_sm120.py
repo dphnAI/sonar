@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from functools import cache
+
 import torch
 
 from aphrodite.config import get_current_aphrodite_config
@@ -14,6 +16,42 @@ from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.utils import is_weight_cache_model_construction
 from aphrodite.models.deepseek_v41.common.ops.query_quant import can_fuse_query_quant
 from aphrodite.platforms import current_platform
+
+
+@cache
+def register_sm120_engram_ops() -> None:
+    """Load native schemas and install their graph implementations once."""
+    if not current_platform.is_cuda():
+        return
+    current_platform.import_kernels()
+
+    if hasattr(torch.ops._C, "sm120_engram_pack"):
+
+        @torch.library.register_fake("_C::sm120_engram_pack")
+        def _sm120_engram_pack_fake(
+            hidden: torch.Tensor,
+            local_projection: torch.Tensor,
+            q_weight: torch.Tensor,
+            k_weight: torch.Tensor,
+            packet: torch.Tensor,
+            rank: int,
+            num_valid_tokens: int,
+        ) -> None:
+            return None
+
+    if hasattr(torch.ops._C, "sm120_engram_finish"):
+
+        @torch.library.register_fake("_C::sm120_engram_finish")
+        def _sm120_engram_finish_fake(
+            hidden: torch.Tensor,
+            gathered_packets: torch.Tensor,
+            token_mask: torch.Tensor | None,
+            output: torch.Tensor,
+            num_valid_tokens: int,
+            eps: float,
+            clamp_value: float,
+        ) -> None:
+            return None
 
 
 def create_sm120_engram_wkv(
@@ -58,8 +96,7 @@ def create_sm120_engram_wkv(
     ):
         return None
 
-    # Import also installs the native operators' fake implementations.
-    from aphrodite import _custom_ops  # noqa: F401
+    register_sm120_engram_ops()
     from aphrodite.model_executor.kernels.linear import init_mxfp8_linear_kernel
     from aphrodite.model_executor.kernels.linear.mxfp8.flashinfer import (
         FlashInferCutedslMxfp8LinearKernel,

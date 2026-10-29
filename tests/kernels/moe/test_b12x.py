@@ -13,7 +13,7 @@ import aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
 import aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 as nvfp4_oracle
 from aphrodite import _custom_ops as ops
 from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import fused_topk
+from aphrodite.model_executor.layers.fused_moe import b12x_fused_decode, fused_topk
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
@@ -266,6 +266,36 @@ def _quant_config(weight_dtype: str, activation_dtype: str | None):
         g2_alphas=scale,
         a1_gscale=scale,
         a2_gscale=scale,
+    )
+
+
+@pytest.mark.parametrize(
+    "hidden_size,expected",
+    [
+        (128, False),
+        (256, False),
+        (512, True),
+        (768, False),
+        (1024, True),
+        (5120, True),
+        (8192, True),
+        (8448, False),
+        (8704, False),
+    ],
+)
+def test_b12x_fused_decode_hidden_size_eligibility(hidden_size: int, expected: bool) -> None:
+    assert (
+        b12x_fused_decode._supported(
+            n=576,
+            k=hidden_size,
+            num_topk=6,
+            max_tokens=8,
+            ids_dtype=torch.int32,
+            csf_inline=False,
+            experts=384,
+            swiglu_limit=10.0,
+        )
+        is expected
     )
 
 
@@ -573,8 +603,7 @@ def test_b12x_nvfp4_force_a16_updates_quant_config(
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
-@pytest.mark.parametrize("reorder_w13", [False, True])
-def test_b12x_nvfp4_preparation_pads_each_gated_half(reorder_w13: bool) -> None:
+def test_b12x_nvfp4_preparation_pads_each_gated_half() -> None:
     device = torch.device("cuda")
     num_experts, hidden_size, intermediate_size = 2, 64, 48
     w13 = torch.ones(
@@ -620,7 +649,6 @@ def test_b12x_nvfp4_preparation_pads_each_gated_half(reorder_w13: bool) -> None:
         global_scale,
         input_scale,
         is_act_and_mul=True,
-        reorder_w13=reorder_w13,
     )
 
     prepared_w13, prepared_w13_scale, _, prepared_a13 = prepared[:4]
@@ -629,18 +657,17 @@ def test_b12x_nvfp4_preparation_pads_each_gated_half(reorder_w13: bool) -> None:
     assert prepared_w13_scale.shape == (num_experts, 128, hidden_size // 16)
     assert prepared_w2.shape == (num_experts, hidden_size, 32)
     assert prepared_w2_scale.shape == (num_experts, 128, 4)
-    first, second = (0x22, 0x01) if reorder_w13 else (0x01, 0x22)
     expected_w13 = torch.zeros_like(prepared_w13)
-    expected_w13[:, :intermediate_size] = first
-    expected_w13[:, 64 : 64 + intermediate_size] = second
+    expected_w13[:, :intermediate_size] = 0x01
+    expected_w13[:, 64 : 64 + intermediate_size] = 0x22
     torch.testing.assert_close(prepared_w13, expected_w13, rtol=0, atol=0)
     torch.testing.assert_close(prepared_w2[:, :, : intermediate_size // 2], w2, rtol=0, atol=0)
     assert not prepared_w2[:, :, intermediate_size // 2 :].count_nonzero()
     for expert in range(num_experts):
         scale13 = convert_swizzled_to_linear(prepared_w13_scale[expert], 128, hidden_size, 16).float()
         expected_scale13 = torch.zeros_like(scale13)
-        expected_scale13[:intermediate_size] = 2.0 if reorder_w13 else 1.0
-        expected_scale13[64 : 64 + intermediate_size] = 1.0 if reorder_w13 else 2.0
+        expected_scale13[:intermediate_size] = 1.0
+        expected_scale13[64 : 64 + intermediate_size] = 2.0
         torch.testing.assert_close(scale13, expected_scale13, rtol=0, atol=0)
         scale2 = convert_swizzled_to_linear(prepared_w2_scale[expert], 128, 64, 16).float()
         expected_scale2 = torch.zeros_like(scale2)
@@ -756,7 +783,6 @@ def _make_b12x_moe_case(
             1.0 / w2_global_scale,
             input_scale,
             is_act_and_mul=activation.is_gated,
-            reorder_w13=activation_dtype is None and activation.is_gated,
         )
         w1_q, w1_scale, w1_alpha, a1_scale = prepared[:4]
         w2_q, w2_scale, w2_alpha, a2_scale = prepared[4:]
@@ -910,7 +936,7 @@ def _mxfp8_activation_roundtrip(tensor: torch.Tensor) -> torch.Tensor:
 def _clamped_swiglu_reference(
     case: _B12xMoeCase,
     *,
-    swiglu_limit: float = 10.0,
+    swiglu_limit: float | None = 10.0,
     swiglu_alpha: float = 1.0,
     swiglu_beta: float = 0.0,
 ) -> torch.Tensor:
@@ -923,8 +949,9 @@ def _clamped_swiglu_reference(
         token_ids, slots = torch.where(ids == expert)
         projections = (hidden_states[token_ids] @ case.w1_ref[expert].float().t()).to(case.hidden_states.dtype)
         gate, up = projections.float().chunk(2, dim=-1)
-        gate = gate.clamp(max=swiglu_limit)
-        up = up.clamp(-swiglu_limit, swiglu_limit)
+        if swiglu_limit is not None:
+            gate = gate.clamp(max=swiglu_limit)
+            up = up.clamp(-swiglu_limit, swiglu_limit)
         intermediate = (gate * torch.sigmoid(swiglu_alpha * gate) * (up + swiglu_beta)).to(case.hidden_states.dtype)
         intermediate = intermediate.float()
         if case.activation_dtype == "mxfp8":
@@ -1163,9 +1190,9 @@ def test_b12x_moe_warmup_prepares_each_owner_for_static_decode(workspace_init) -
             torch.accelerator.synchronize()
             assert torch.accelerator.memory_allocated() == allocated
             for case, output in zip(cases, outputs):
-                reference = torch_moe(
-                    case.hidden_states, case.w1_ref, case.w2_ref, case.score, case.topk, activation=case.activation
-                )
+                # W4A8 rounds both activation boundaries to MXFP8; an A16
+                # reference measures quantization error, not owner isolation.
+                reference = _clamped_swiglu_reference(case, swiglu_limit=None)
                 _assert_b12x_normwise_close(output, reference, relative_l2=0.05, cosine=0.999)
         graph.reset()
 

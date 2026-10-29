@@ -470,9 +470,9 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
 
   if(APHRODITE_GPU_LANG STREQUAL "CUDA")
     list(APPEND APHRODITE_STABLE_EXT_SRC
-      "csrc/pcie_pull_all_reduce.cu"
+      "csrc/collectives/pcie_pull_all_reduce.cu"
       "csrc/fused_qknorm_rope_cache_kernel.cu")
-    set_property(SOURCE "csrc/pcie_pull_all_reduce.cu" APPEND PROPERTY
+    set_property(SOURCE "csrc/collectives/pcie_pull_all_reduce.cu" APPEND PROPERTY
       COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--fmad=false>")
   endif()
 
@@ -653,13 +653,13 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       endforeach()
     endif()
     if(SM120_ENGRAM_ARCHS)
-      set(SM120_ENGRAM_SRC "csrc/engram_sm120.cu")
+      set(SM120_ENGRAM_SRC "csrc/engram/engram_sm120.cu")
       set_gencode_flags_for_srcs(
         SRCS "${SM120_ENGRAM_SRC}"
         CUDA_ARCHS "${SM120_ENGRAM_ARCHS}")
       set_property(SOURCE ${SM120_ENGRAM_SRC} APPEND PROPERTY COMPILE_OPTIONS
         "$<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true>")
-      set_property(SOURCE "${SM120_ENGRAM_SRC}" "csrc/torch_bindings.cpp"
+      set_property(SOURCE "${SM120_ENGRAM_SRC}"
         APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_ENGRAM=1)
       list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_ENGRAM_SRC}")
     endif()
@@ -673,14 +673,14 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       cuda_archs_loose_intersection(SM120_FAMILY_ARCHS "12.0a" "${CUDA_ARCHS}")
     endif()
     if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND SM120_FAMILY_ARCHS)
-      set(SM120_SPARSE_DECODE_SRC "csrc/dsv41_sparse_decode_sm120.cu")
-      set(SM120_MOE_FUSED_SRC "csrc/b12x_moe_fused_sm120.cu")
+      set(SM120_SPARSE_DECODE_SRC "csrc/attention/mla/dsv41_sparse_decode_sm120.cu")
+      set(SM120_MOE_FUSED_SRC "csrc/moe/b12x_moe_fused_sm120.cu")
       set_gencode_flags_for_srcs(
         SRCS "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}"
         CUDA_ARCHS "${SM120_FAMILY_ARCHS}")
-      set_property(SOURCE "${SM120_SPARSE_DECODE_SRC}" "csrc/torch_bindings.cpp"
+      set_property(SOURCE "${SM120_SPARSE_DECODE_SRC}"
         APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_SPARSE_DECODE=1)
-      set_property(SOURCE "${SM120_MOE_FUSED_SRC}" "csrc/torch_bindings.cpp"
+      set_property(SOURCE "${SM120_MOE_FUSED_SRC}"
         APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_MOE_FUSED=1)
       list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}")
     endif()

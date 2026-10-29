@@ -288,6 +288,25 @@ Do not combine this path with pipeline parallelism, context parallelism, dual
 batch overlap, or LoRA. The existing backend remains the default. Remove the
 environment variable and the B12x attention-backend overrides to return to it.
 
+#### Implementation boundaries
+
+Native model policy and preparation live in
+`aphrodite/models/deepseek_v41/sm120/`; B12x worker lifecycle adapters live in
+`aphrodite/v1/worker/b12x_utils.py`. V4.1 message ordering belongs to its
+renderer, not the shared V4 renderer. Keep shared configuration and worker
+changes limited to dispatch and lifecycle hooks when syncing upstream.
+
+CUDA implementations and their operator registrations are colocated under
+`csrc/attention/mla/`, `csrc/moe/`, `csrc/engram/`, and `csrc/collectives/`.
+Engram fake implementations are registered by its feature module after the
+native operators load, without adding model-specific registrations to global
+operator modules.
+
+B12x weight preparation preserves checkpoint-native `[gate; up]` ordering for
+both W4A8 and W4A16; the declared `w31` layout controls provider packing.
+Do not pre-swap those rows. The fused W4A8 decode kernel admits hidden sizes
+divisible by 512 in the range 512–8192; other shapes retain provider kernels.
+
 ### Experimental paired PCIe all-reduce
 
 Set `APHRODITE_ALLREDUCE_USE_PCIE_PULL=1` to select the experimental paired
@@ -313,9 +332,11 @@ bytes, so its results are identical to NCCL. Larger all-gathers retain their
 existing backend.
 
 The engine checks a collective completion snapshot before it releases each
-step's tokens or logprobs. A protocol failure stops the engine; it does not
-switch the affected collective to NCCL or retry it. Restart the engine after
-such a failure.
+step's tokens or logprobs. With speculation, that snapshot includes both target
+and draft collectives. Token copies overlap draft proposal, but output waits
+for the final snapshot. A protocol failure stops the engine; it does not switch
+the affected collective to NCCL or retry it. Restart the engine after such a
+failure.
 
 This option is disabled by default. Compare output quality and latency with
 the option disabled before you use it in a deployment.

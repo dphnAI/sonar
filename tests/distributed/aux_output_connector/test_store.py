@@ -291,6 +291,95 @@ def test_tp_failure_does_not_release_tokens_or_aux_output(monkeypatch):
     pending.process_output.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("speculative", "fault_phase"),
+    [(False, None), (False, "target"), (True, None), (True, "target"), (True, "draft")],
+)
+def test_tp_output_gate_observes_draft_fault(monkeypatch, speculative, fault_phase):
+    from aphrodite.v1.worker.gpu import model_runner
+
+    monkeypatch.setattr(torch.cuda, "Event", lambda **kwargs: Mock())
+    monkeypatch.setattr(async_utils, "stream", lambda *args: nullcontext())
+    monkeypatch.setattr(model_runner, "get_drafter_hidden_states", lambda model, hidden: hidden)
+
+    class CollectiveStatus:
+        initialized = True
+        fault = 7 if fault_phase == "target" else 0
+
+        def close_step(self):
+            return torch.tensor([self.fault], dtype=torch.int64)
+
+    comm = CollectiveStatus()
+    pending = Mock()
+    pending.process_output.return_value = None
+    sampled = torch.tensor([[7]])
+    num_sampled = torch.tensor([1])
+    num_rejected = torch.tensor([0])
+    idx_mapping = torch.tensor([0])
+    batch = SimpleNamespace(req_ids=["request"], idx_mapping=idx_mapping, query_start_loc=torch.tensor([0, 1]))
+    runner = model_runner.GPUModelRunner.__new__(model_runner.GPUModelRunner)
+    runner.is_last_pp_rank = True
+    runner.pcp_manager = runner.pp_handler = runner.adaptive_verification = None
+    runner._pcie_pull_comm = comm
+    runner.main_stream = Mock()
+    runner.output_copy_stream = Mock()
+    runner.check_ep_fault = False
+    runner.eplb = SimpleNamespace(step=Mock())
+    runner.model_state = SimpleNamespace(supports_mm_inputs=False)
+    runner.req_states = SimpleNamespace(
+        all_token_ids=SimpleNamespace(gpu=None),
+        num_computed_tokens=SimpleNamespace(gpu=None),
+        prompt_len=SimpleNamespace(np=None),
+        last_sampled_tokens=sampled.clone(),
+        next_prefill_tokens=None,
+        draft_tokens=torch.zeros((1, 1), dtype=torch.int64),
+    )
+    runner.sampler = SimpleNamespace(
+        update_custom_state=Mock(),
+        sampling_states=SimpleNamespace(temperature=SimpleNamespace(gpu=None), seeds=SimpleNamespace(gpu=None)),
+    )
+    sampler_output = SamplerOutput(sampled, None, None, num_sampled, num_rejected)
+    runner.sample = lambda *args: (sampler_output, num_sampled, num_rejected)
+    runner.prompt_logprobs_worker = SimpleNamespace(
+        compute_prompt_logprobs=lambda *args: {},
+        compute_prompt_token_id_logprobs=lambda *args: {},
+    )
+    runner.model = SimpleNamespace(compute_logits=None)
+    runner.aux_output_connector = SimpleNamespace(prepare_output=lambda *args: pending)
+    runner.kv_connector = SimpleNamespace(post_forward=lambda *args, **kwargs: None, finalize_step=Mock())
+    runner.postprocess_sampled = Mock()
+    runner._draft_workspace_lane = 0
+    runner.num_speculative_steps = int(speculative)
+    runner.draft_tokens_handler = SimpleNamespace(set_draft_tokens=Mock())
+    runner.execute_model_state = SimpleNamespace(
+        input_batch=batch,
+        attn_metadata=None,
+        slot_mappings_by_layer=None,
+        hidden_states=torch.zeros((1, 1)),
+        aux_hidden_states=None,
+        dp_sync_state=None,
+        finished_req_ids=set(),
+        ec_connector_output=None,
+        cudagraph_stats=None,
+        num_spec_tokens_to_schedule=int(speculative),
+    )
+
+    def propose(*args, **kwargs):
+        if fault_phase == "draft":
+            comm.fault = 7
+        return torch.zeros((1, 1), dtype=torch.int64)
+
+    runner.speculator = SimpleNamespace(supports_mm_inputs=False, propose=propose) if speculative else None
+    output = runner.sample_tokens(None)
+    if fault_phase == "target" or (speculative and fault_phase == "draft"):
+        with pytest.raises(RuntimeError, match="TP PCIe pull all-reduce failed"):
+            output.get_output()
+        assert output.model_runner_output.sampled_token_ids is None
+        pending.process_output.assert_not_called()
+    else:
+        assert output.get_output().sampled_token_ids == [[7]]
+
+
 @pytest.mark.parametrize("num_pending", [1, 2])
 def test_finished_request_teardown_waits_for_pending_output(num_pending):
     """Terminal cleanup waits for every outstanding output, not just the first."""

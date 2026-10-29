@@ -23,6 +23,7 @@
   #include <cuda_bf16.h>
   #include <cuda_fp16.h>
   #include <torch/csrc/stable/accelerator.h>
+  #include <torch/csrc/stable/library.h>
   #include <torch/headeronly/core/ScalarType.h>
 
   #include <cmath>
@@ -198,13 +199,12 @@ template <int Keys>
 __device__ __forceinline__ void decode_keys(const Args& a, Smem<Keys>& sm,
                                             int first, int warp, int lane) {
   constexpr int PER = Keys / WARPS;
-  constexpr int per = PER;
   uint4 raw[PER];
   uint8_t scale[PER];
   #pragma unroll
   for (int i = 0; i < PER; ++i) {
-    const int key = warp * per + i;
-    const int slot = i < per ? sm.slots[key] : -1;
+    const int key = warp * PER + i;
+    const int slot = sm.slots[key];
     const bool swa = first + key < a.swa_width;
     const uint8_t* rec = (swa ? a.swa : a.idx) + sm.offsets[key];
     raw[i] = make_uint4(0, 0, 0, 0);
@@ -223,8 +223,7 @@ __device__ __forceinline__ void decode_keys(const Args& a, Smem<Keys>& sm,
   }
   #pragma unroll
   for (int i = 0; i < PER; ++i) {
-    if (i >= per) break;
-    const int key = warp * per + i;
+    const int key = warp * PER + i;
     uint32_t o[8];
     if (first + key < a.swa_width) {
       const float s = e8m0(scale[i]);
@@ -605,6 +604,19 @@ void dsv41_sparse_decode_sm120(
       launch_decode<80>(a, rows, device);
       break;
   }
+}
+
+STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
+  ops.def(
+      "dsv41_sparse_decode_sm120(Tensor q, Tensor! out, Tensor swa_cache, "
+      "int swa_page_size, Tensor swa_indices, Tensor swa_lengths, "
+      "Tensor? indexed_cache, int indexed_page_size, Tensor? indexed_indices, "
+      "Tensor? indexed_lengths, Tensor? indexed_page_table, Tensor attn_sink, "
+      "float sm_scale, Tensor! partial, Tensor! stats) -> ()");
+}
+
+STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
+  ops.impl("dsv41_sparse_decode_sm120", TORCH_BOX(&dsv41_sparse_decode_sm120));
 }
 
 #endif
