@@ -297,8 +297,12 @@ __global__ void host_collective(const __grid_constant__ Params p,
   }
   __syncthreads();
   if (!bad) {
-    host_publish_payload(input + begin, host_payload(p, p.rank, epoch) + begin,
-                         bytes);
+    // The sharded owner reads its own input from VRAM. Only its reduced result
+    // needs a host copy; nonowners publish the inputs that it actually reads.
+    if (!sharded || p.rank != owner) {
+      host_publish_payload(input + begin,
+                           host_payload(p, p.rank, epoch) + begin, bytes);
+    }
     __syncthreads();
     if (threadIdx.x == 0) {
       bad = read_state(p.state + kStateError) != 0;
