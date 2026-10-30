@@ -458,6 +458,93 @@ def test_deepseek_v41_mhc_fused_post_pre_delayed(num_tokens, hidden_size, carrie
 
 
 @pytest.mark.skipif(not HAS_TILELANG_MHC, reason="TileLang MHC support required")
+@pytest.mark.parametrize(
+    "num_tokens,carried,fused_norm,capture_aux",
+    [
+        (33, False, False, False),
+        (33, True, True, True),
+        (127, False, True, True),
+        (127, True, False, True),
+        (128, True, False, False),
+        (128, False, True, False),
+        (129, True, True, False),
+        (2048, True, True, True),
+        (2049, True, True, True),
+    ],
+)
+def test_mhc_sm120_projection_boundaries_graph(num_tokens, carried, fused_norm, capture_aux):
+    """Source FP32 intermediates and delayed outputs survive changed-input replay."""
+    from aphrodite.model_executor.kernels.mhc.sm120 import mhc_warp_partials_sm120
+    from aphrodite.utils.deep_gemm import is_deep_gemm_supported
+
+    if DEVICE != "cuda" or torch.cuda.get_device_capability() != (12, 0) or is_deep_gemm_supported():
+        pytest.skip("SM120 TileLang projection required")
+    set_random_seed(0)
+    hidden_size, hc_mult = 5120, 4
+    x = torch.randn(num_tokens, hidden_size, dtype=torch.bfloat16, device=DEVICE)
+    residual = torch.randn(num_tokens, hc_mult, hidden_size, dtype=torch.bfloat16, device=DEVICE)
+    post_mix = torch.rand(num_tokens, hc_mult, 1, device=DEVICE)
+    comb_mix = torch.rand(num_tokens, hc_mult, hc_mult, device=DEVICE)
+    fn = torch.randn(24, hc_mult * hidden_size, device=DEVICE) * 0.02
+    scale = torch.tensor([0.5, 0.25, 1.0], device=DEVICE)
+    base = torch.randn(24, device=DEVICE)
+    pre_mix = torch.rand(num_tokens, hc_mult, device=DEVICE) if carried else None
+    weight = torch.ones(hidden_size, dtype=torch.bfloat16, device=DEVICE) if fused_norm else None
+    mix_args = (fn, scale, base, 1e-20, 1e-6, 1e-6, 2.0, 20)
+
+    def run():
+        return torch.ops.aphrodite.mhc_fused_post_pre_delayed_tilelang(
+            x, residual, post_mix, comb_mix, *mix_args, pre_mix, weight, 1e-6, capture_aux
+        )
+
+    run()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        captured = run()
+    for step in range(3):
+        if step == 1:
+            x.normal_()
+            residual.normal_()
+            fn.normal_(std=0.02)
+            post_mix.uniform_()
+            comb_mix.uniform_()
+            if pre_mix is not None:
+                pre_mix.uniform_()
+        elif step == 2:
+            x.zero_()
+            residual.zero_()
+            if pre_mix is not None:
+                pre_mix.zero_()
+        graph.replay()
+        residual_ref = mhc_post_tilelang(x, residual, post_mix, comb_mix)
+        expected = mhc_pre_delayed_tilelang(residual_ref, *mix_args, pre_mix=pre_mix, norm_weight=weight)
+        for actual, reference in zip(captured[:5], (residual_ref, *expected), strict=True):
+            torch.testing.assert_close(actual, reference, atol=0, rtol=0)
+        if capture_aux:
+            torch.testing.assert_close(captured[5], residual_ref.mean(dim=1), atol=0, rtol=0)
+        else:
+            assert captured[5].shape == (0, hidden_size)
+        if num_tokens > 2048:
+            continue
+
+        source = torch.empty(1, num_tokens, 24, device=DEVICE)
+        square = torch.empty(1, num_tokens, device=DEVICE)
+        flat = residual_ref.flatten(1)
+        _HC_PRENORM_GEMM_TILELANG_KERNEL(flat, fn, source, square, 20480, 1)
+        warps = 32 if num_tokens < 128 else 16
+        partial = torch.empty(warps, num_tokens, 24, device=DEVICE)
+        partial_square = torch.empty(warps, num_tokens, device=DEVICE)
+        mhc_warp_partials_sm120(flat, fn, partial, partial_square, source_threads=warps * 32)
+        reconstructed = torch.zeros_like(source[0])
+        reconstructed_square = torch.zeros_like(square[0])
+        for warp in range(warps):
+            reconstructed.add_(partial[warp])
+            reconstructed_square.add_(partial_square[warp])
+        torch.testing.assert_close(reconstructed, source[0], atol=0, rtol=0)
+        torch.testing.assert_close(reconstructed_square, square[0], atol=0, rtol=0)
+
+
+@pytest.mark.skipif(not HAS_TILELANG_MHC, reason="TileLang MHC support required")
 @pytest.mark.parametrize("carried", [False, True])
 @pytest.mark.parametrize("capture_aux", [False, True])
 def test_mhc_fused_post_pre_delayed_custom_op_supports_compile(carried, capture_aux):

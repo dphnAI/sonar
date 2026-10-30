@@ -112,6 +112,7 @@ def test_fused_engram_post_wkv_matches_reference(
     module.eps = eps
     module.clamp_value = clamp_value
     module.use_sequence_parallel = use_sequence_parallel
+    module._sm120_small_gather = False
     module.embed_tokens = torch.nn.Identity()
     # `forward` reads rows staged by `prepare_embeddings`, so inject kv there.
     module.embed_tokens.tp_size = module.embed_tokens.n_hash_cols = 1
@@ -134,6 +135,97 @@ def test_fused_engram_post_wkv_matches_reference(
     assert actual.shape == hidden_states.shape
     assert actual.dtype == hidden_states.dtype
     torch.testing.assert_close(actual, expected, rtol=1e-2, atol=1e-2)
+
+
+@pytest.mark.skipif(not current_platform.is_cuda(), reason="CUDA required")
+@pytest.mark.parametrize(
+    ("num_tokens", "num_valid_tokens", "use_mask"),
+    [(1, 1, False), (8, 7, True), (64, 56, False)],
+)
+@torch.inference_mode()
+def test_sm120_engram_striped_packets_preserve_masked_rows_and_graph_updates(num_tokens, num_valid_tokens, use_mask):
+    if not current_platform.is_device_capability(120):
+        pytest.skip("SM120 required")
+    from aphrodite.models.deepseek_v41.common.ops.engram_sm120 import register_sm120_engram_ops
+
+    register_sm120_engram_ops()
+
+    torch.manual_seed(41)
+    hidden = torch.empty((num_tokens, 4, 5120), dtype=torch.bfloat16, device="cuda")
+    kv = torch.empty((num_tokens, 25600), dtype=torch.bfloat16, device="cuda")
+    q_weight = torch.randn((4, 5120), dtype=torch.bfloat16, device="cuda")
+    k_weight = torch.randn_like(q_weight)
+    token_mask = torch.ones(num_tokens, dtype=torch.bool, device="cuda") if use_mask else None
+    projections = [torch.empty((num_tokens, 6400), dtype=torch.bfloat16, device="cuda") for _ in range(4)]
+    packet_storage = torch.full((4 * num_tokens + 2, 2624), 0xA5, dtype=torch.uint8, device="cuda")
+    gathered = packet_storage[1:-1]
+    packets = gathered.view(4, num_tokens, 2624)
+    output_storage = torch.full((num_tokens + 2, 4, 5120), 17, dtype=torch.bfloat16, device="cuda")
+    output = output_storage[1:-1]
+
+    def update(step):
+        hidden.normal_()
+        kv.normal_()
+        valid = torch.arange(num_tokens, device="cuda") < num_valid_tokens
+        if token_mask is not None:
+            token_mask.copy_((torch.arange(num_tokens, device="cuda") + step) % 2 == 0)
+            valid &= token_mask
+        # Only unwritten suffix rows are unreadable; masked live rows stay finite.
+        kv[num_valid_tokens:] = torch.nan
+        bands = kv.view(num_tokens, 25, 1024)
+        for rank, projection in enumerate(projections):
+            projection.copy_(bands[:, :, rank * 256 : (rank + 1) * 256].reshape(num_tokens, 6400))
+        return valid
+
+    def run():
+        for rank, projection in enumerate(projections):
+            torch.ops._C.sm120_engram_pack(
+                hidden, projection, q_weight, k_weight, packets[rank], rank, num_valid_tokens
+            )
+        torch.ops._C.sm120_engram_finish(hidden, gathered, token_mask, output, num_valid_tokens, 1e-20, 1e-6)
+
+    update(0)
+    # Dynamo must trace both native mutations through the feature-local fakes.
+    torch.compile(run, backend="eager", fullgraph=True)()
+    torch.cuda.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        run()
+    for step in range(3):
+        valid = update(step)
+        graph.replay()
+        expected_kv = kv.clone()
+        expected_kv[num_valid_tokens:] = 0
+        expected = _reference_engram_post_wkv(hidden, expected_kv, q_weight, k_weight, valid, 1e-20, 1e-6, 0)
+        torch.testing.assert_close(output, expected, rtol=1e-2, atol=1e-2)
+        original = torch.empty_like(hidden)
+        engram_ops._fused_engram_post_wkv_kernel[(num_tokens * 4,)](
+            hidden,
+            kv,
+            q_weight,
+            k_weight,
+            token_mask if token_mask is not None else hidden,
+            original,
+            num_valid_tokens,
+            *hidden.stride(),
+            *kv.stride(),
+            *q_weight.stride(),
+            *k_weight.stride(),
+            token_mask.stride(0) if token_mask is not None else 0,
+            *original.stride(),
+            1e-20,
+            1e-6,
+            DIM=5120,
+            HC_MULT=4,
+            BLOCK_SIZE=8192,
+            HAS_MASK=token_mask is not None,
+            num_warps=8,
+        )
+        torch.testing.assert_close(output, original, rtol=0, atol=0)
+        assert torch.equal(output[~valid], hidden[~valid])
+        assert bool((packet_storage[[0, -1]] == 0xA5).all())
+        assert bool((output_storage[[0, -1]] == 17).all())
+    graph.reset()
 
 
 def _hash_state(use_slot_cache: bool) -> NgramHashState:

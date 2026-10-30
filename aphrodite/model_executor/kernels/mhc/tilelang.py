@@ -253,9 +253,10 @@ def mhc_fused_post_pre_delayed_tilelang(
     """Run one mHC post block followed by the next delayed mHC pre block.
 
     Within the fused kernel's token range the post mapping is folded into the
-    pre-norm GEMM, so the updated residual streams feed the projection from
-    registers instead of a second pass over global memory. Above it this runs
-    the same post kernel and split-k GEMM as the unfused pair.
+    pre-norm GEMM. Above it the source post kernel is retained. On SM120,
+    H=5120/hc=4 and 33..2048 tokens, the TileLang projection exposes its FP32
+    source warp sums to the unchanged delayed epilogue; all other cases retain
+    the original projection dispatch.
 
     Args:
         x: BF16 sublayer output of shape (tokens, hidden_size).
@@ -364,15 +365,33 @@ def mhc_fused_post_pre_delayed_tilelang(
             hc_mult,
             hidden_size,
         )
-        # The delayed epilogue is compiled per bucketed split count, so the
-        # projection has to use the same bucket rather than the raw estimate.
+        # Warp splits preserve the source lane recurrence and serial warp sum.
         use_deep_gemm = is_deep_gemm_supported()
-        n_splits = compute_mhc_pre_num_splits(input_size, num_tokens) if use_deep_gemm else 1
+        use_warp_partials = (
+            not use_deep_gemm
+            and 32 < num_tokens <= 2048
+            and hidden_size == 5120
+            and hc_mult == 4
+            and fn.is_contiguous()
+            and residual.device.type == "cuda"
+            and torch.cuda.get_device_capability(residual.device) == (12, 0)
+        )
+        if use_warp_partials:
+            # Match the original projection's thread count and summation order.
+            n_splits = 32 if num_tokens < 128 else 16
+        elif use_deep_gemm:
+            n_splits = compute_mhc_pre_num_splits(input_size, num_tokens)
+        else:
+            n_splits = 1
         mixes = torch.empty(n_splits, num_tokens, mix_size, dtype=torch.float32, device=residual.device)
         sqrsum = torch.empty(n_splits, num_tokens, dtype=torch.float32, device=residual.device)
         residual_cur_2d = residual_cur.view(num_tokens, input_size)
         if use_deep_gemm:
             tf32_hc_prenorm_gemm(residual_cur_2d, fn, mixes, sqrsum, n_splits)
+        elif use_warp_partials:
+            from aphrodite.model_executor.kernels.mhc.sm120 import mhc_warp_partials_sm120
+
+            mhc_warp_partials_sm120(residual_cur_2d, fn, mixes, sqrsum, source_threads=n_splits * 32)
         else:
             _HC_PRENORM_GEMM_TILELANG_KERNEL(
                 residual_cur_2d,

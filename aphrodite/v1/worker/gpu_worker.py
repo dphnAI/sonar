@@ -102,6 +102,11 @@ from aphrodite.v1.outputs import (
     ModelRunnerOutput,
 )
 from aphrodite.v1.utils import compute_iteration_details, report_usage_stats
+from aphrodite.v1.worker.b12x_utils import (
+    capture_b12x_model,
+    prepare_b12x_weights,
+    profile_b12x_memory,
+)
 from aphrodite.v1.worker.sentinel.gpu_worker_sentinel import WorkerSentinel
 from aphrodite.v1.worker.startup_plan import (
     maybe_apply_startup_plan,
@@ -235,6 +240,7 @@ class Worker(WorkerBase):
         validate_worker_profiler_config(self.profiler_config)
 
         self.use_v2_model_runner = aphrodite_config.use_v2_model_runner
+        self._b12x_session = None
 
         # Device handles of the previous step's PP intermediate-tensor send.
         self._pp_send_work: list[Handle] = []
@@ -476,6 +482,13 @@ class Worker(WorkerBase):
                 self.local_rank,
                 current_platform.dist_backend,
             )
+            pcie_pull_comm = getattr(get_tp_group().device_communicator, "pcie_pull_ar_comm", None)
+            self._pcie_pull_comm = pcie_pull_comm
+            if pcie_pull_comm is not None:
+                pcie_pull_comm.initialize(
+                    self.aphrodite_config,
+                    use_v2_model_runner=self.use_v2_model_runner,
+                )
 
             if self.use_v2_model_runner:
                 logger.info_once("Using V2 Model Runner")
@@ -580,6 +593,8 @@ class Worker(WorkerBase):
         # valid when requests arrive.
         set_torch_threads_for_runtime()
 
+        prepare_b12x_weights(self)
+
     def update_config(self, overrides: dict[str, Any]) -> None:
         """Apply config overrides to the worker, its model runner and the
         shared AphroditeConfig."""
@@ -618,7 +633,7 @@ class Worker(WorkerBase):
             # still need a profile run which compiles the model for
             # max_num_batched_tokens
             with set_current_aphrodite_config(self.aphrodite_config):
-                self.model_runner.profile_run(randomize_inputs=self.randomize_dummy_inputs)
+                profile_b12x_memory(self)
 
             msg = (
                 f"Initial free memory {format_gib(self.init_snapshot.free_memory)} "
@@ -656,7 +671,7 @@ class Worker(WorkerBase):
             self._scoped_allocator_max_split(max_split_size_mb=20),
             set_current_aphrodite_config(self.aphrodite_config),
         ):
-            self.model_runner.profile_run(randomize_inputs=self.randomize_dummy_inputs)
+            profile_b12x_memory(self)
 
         # Profile CUDA graph memory if graphs will be captured.
         # ROCm is included: #44825 moved the profiler to
@@ -667,7 +682,7 @@ class Worker(WorkerBase):
         if (
             current_platform.is_cuda_alike() or current_platform.is_xpu()
         ) and self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
-            cudagraph_memory_estimate = self.model_runner.profile_cudagraph_memory()
+            cudagraph_memory_estimate = profile_b12x_memory(self, cudagraphs=True)
 
         # Respect the opt-in flag as originally designed.
         cudagraph_memory_estimate_applied = (
@@ -817,6 +832,10 @@ class Worker(WorkerBase):
         self.cache_config.hash_block_size = kv_cache_config.hash_block_size
         self.cache_config.cache_hit_alignment_tokens = kv_cache_config.cache_hit_alignment_tokens
 
+        from aphrodite.model_executor.warmup.b12x_prepare import prepare_b12x_state
+
+        prepare_b12x_state(self, kv_cache_config)
+
         # Init kv cache connector here, because it requires
         # `kv_cache_config`.
         # NOTE(Kuntai): This need to be done before `initialize_kv_cache`,
@@ -846,6 +865,11 @@ class Worker(WorkerBase):
         # allocator and are not discarded during sleep/wake cycles.
         if kv_cache_config.needs_kv_cache_zeroing and hasattr(self.model_runner, "_init_kv_zero_meta"):
             self.model_runner._init_kv_zero_meta()
+
+        from aphrodite.model_executor.warmup.b12x_prepare import run_b12x_preparation
+
+        # Rebind final storage through the selection cache, not warmup-only defaults.
+        run_b12x_preparation(self, stage="bind")
 
     @instrument(span_name="Warmup (GPU)")
     def compile_or_warm_up_model(self) -> CompilationTimes:
@@ -907,7 +931,7 @@ class Worker(WorkerBase):
         cuda_graph_memory_bytes = 0
         if not self.model_config.enforce_eager:
             with self._get_cudagraph_capture_context():
-                cuda_graph_memory_bytes = self.model_runner.capture_model()
+                cuda_graph_memory_bytes = capture_b12x_model(self)
 
         # Compare actual vs estimated CUDA graph memory (if we did profiling)
         if hasattr(self, "cudagraph_memory_estimate") and self.cudagraph_memory_estimate > 0:
@@ -1004,6 +1028,10 @@ class Worker(WorkerBase):
             )
 
             trigger_inductor_lazy_init(self.device)
+
+        pcie_pull_comm = getattr(self, "_pcie_pull_comm", None)
+        if pcie_pull_comm is not None:
+            pcie_pull_comm.validate_startup()
 
         # All warmup is done — start monitoring for unexpected JIT
         # compilations that would cause latency spikes during inference.
@@ -1482,7 +1510,6 @@ class Worker(WorkerBase):
 
     def shutdown(self) -> None:
         gc.unfreeze()
-
         # has_kv_transfer_group can be None during interpreter shutdown.
         if ensure_kv_transfer_shutdown is not None:
             ensure_kv_transfer_shutdown()
@@ -1500,6 +1527,17 @@ class Worker(WorkerBase):
         # can be reclaimed when running in-process
         if model_runner := getattr(self, "model_runner", None):
             model_runner.shutdown()
+        if session := getattr(self, "_b12x_session", None):
+            # Prepared plans can retain cache bindings; close only after the
+            # model runner has dropped its graphs and cache aliases.
+            session.close()
+            self._b12x_session = None
+        pcie_pull_comm = getattr(self, "_pcie_pull_comm", None)
+        if pcie_pull_comm is not None:
+            try:
+                pcie_pull_comm.destroy()
+            except Exception:
+                logger.exception("Could not retire the PCIe pull workspace; retaining it until process exit")
 
         # Release kept-alive cumem pools while the pluggable allocator wrappers
         # and callbacks are still alive, so MemPool teardown is not deferred to

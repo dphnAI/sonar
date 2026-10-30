@@ -65,6 +65,14 @@ Confirm that the selected parser matches the model family. Test one known
 request without sampling. Disable automatic tool choice to separate parser
 behavior from model output.
 
+## Incorrect output on SM120 sparse-attention models
+
+Short requests can pass while longer requests produce incorrect text. Older
+SM120 sparse-indexer code did not account for a KV-cache view's offset in shared
+storage when it read quantization scales. Use a Sonar build with the shared-KV
+scale-offset correction, then restart every model worker to recapture CUDA graphs.
+Changing sampling settings or memory utilization does not correct this error.
+
 ## Output is slow
 
 Separate time to first token from inter-token latency. Long time to first token

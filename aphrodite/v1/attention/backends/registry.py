@@ -81,6 +81,7 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     )
     ROCM_FLASHMLA_SPARSE_DSV41 = "aphrodite.models.deepseek_v41.amd.rocm.DeepseekV41ROCMAiterMLASparseBackend"
     FLASHMLA_MEGA_ATTN_DSV41 = "aphrodite.models.deepseek_v41.sparse_mla.FlashMLAMegaAttnBackend"
+    B12X_DSV41 = "aphrodite.models.deepseek_v41.sm120.sparse_mla.DeepseekV41B12xBackend"
     B12X = "aphrodite.v1.attention.backends.b12x.B12xPagedAttentionBackend"
     FLASH_ATTN_MLA = "aphrodite.v1.attention.backends.mla.flashattn_mla.FlashAttnMLABackend"
     FLASH_ATTN_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.flashattn_mla_sparse.FlashAttnMLASparseBackend"

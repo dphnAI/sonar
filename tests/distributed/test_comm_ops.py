@@ -488,6 +488,7 @@ def test_flashinfer_all_reduce_precedes_nccl(monkeypatch: pytest.MonkeyPatch) ->
     fi_ar_comm.should_use_fi_ar.return_value = True
     fi_ar_comm.all_reduce.return_value = output
     communicator = CudaCommunicator.__new__(CudaCommunicator)
+    communicator.pcie_pull_ar_comm = None
     communicator.fi_ar_comm = fi_ar_comm
     communicator.fi_pcie_ipc_ar_comm = None
     communicator.pynccl_comm = Mock(world_size=8)

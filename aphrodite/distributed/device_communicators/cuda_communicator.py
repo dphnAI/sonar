@@ -3,6 +3,7 @@
 
 
 import torch
+import torch.distributed as dist
 from torch.distributed import ProcessGroup
 
 import aphrodite.envs as envs
@@ -53,8 +54,40 @@ class CudaCommunicator(DeviceCommunicatorBase):
             global_world_size,
             use_all2all=use_all2all,
         )
+        is_tp_group = unique_name.split(":")[0] == "tp"
+        use_pcie_pull_allreduce = False
+        if is_tp_group:
+            # Every rank participates, even when its local selector is false.
+            # Otherwise a mismatched environment can strand only some ranks
+            # inside the backend's collective initialization.
+            selectors = (
+                envs.APHRODITE_ALLREDUCE_USE_PCIE_PULL,
+                envs.APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC,
+            )
+            transport = None
+            transport_error = None
+            if selectors[0]:
+                try:
+                    transport = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+                except ValueError as exc:
+                    transport_error = str(exc)
+            selection = (*selectors, transport, transport_error)
+            gathered_selectors = [selection] * self.world_size
+            dist.all_gather_object(gathered_selectors, selection, group=self.cpu_group)
+            if any(entry[:2] != selectors for entry in gathered_selectors):
+                raise ValueError("TP ranks must agree on PCIe all-reduce backend selectors")
+            transport_errors = [
+                f"rank {rank}: {entry[3]}" for rank, entry in enumerate(gathered_selectors) if entry[3] is not None
+            ]
+            if transport_errors:
+                raise ValueError("TP PCIe all-reduce transport configuration failed: " + "; ".join(transport_errors))
+            if any(entry[2] != transport for entry in gathered_selectors):
+                raise ValueError("TP ranks must agree on APHRODITE_ALLREDUCE_PCIE_TRANSPORT")
+            if all(selectors):
+                raise ValueError("PCIE_PULL and FLASHINFER_PCIE_IPC all-reduce cannot both be selected")
+            use_pcie_pull_allreduce = selectors[0]
         # Match the group name exactly so ETP does not enable TP-only backends.
-        if unique_name.split(":")[0] != "tp":
+        if not is_tp_group:
             # custom allreduce or torch symm mem can be used only by tp
             use_custom_allreduce = False
             use_torch_symm_mem = False
@@ -82,6 +115,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.use_torch_symm_mem = use_torch_symm_mem
         self.use_flashinfer_allreduce = use_flashinfer_allreduce
         self.use_flashinfer_pcie_ipc_allreduce = use_flashinfer_pcie_ipc_allreduce
+        self.use_pcie_pull_allreduce = use_pcie_pull_allreduce
         self.use_aiter_allreduce = use_aiter_allreduce
 
         # lazy import to avoid documentation build error
@@ -93,6 +127,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
         )
         from aphrodite.distributed.device_communicators.flashinfer_pcie_ipc_all_reduce import (  # noqa: E501
             FlashInferPcieIpcAllReduce,
+        )
+        from aphrodite.distributed.device_communicators.pcie_pull_all_reduce import (
+            PciePullAllReduce,
         )
         from aphrodite.distributed.device_communicators.pynccl import PyNcclCommunicator
         from aphrodite.distributed.device_communicators.quick_all_reduce import (
@@ -114,6 +151,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         self.symm_mem_comm: SymmMemCommunicator | None = None
         self.fi_ar_comm: FlashInferAllReduce | None = None
         self.fi_pcie_ipc_ar_comm: FlashInferPcieIpcAllReduce | None = None
+        self.pcie_pull_ar_comm: PciePullAllReduce | None = None
         self.aiter_ar_comm: AiterCustomAllreduce | None = None
         self.use_aiter_ag_rs: bool = False
 
@@ -123,6 +161,12 @@ class CudaCommunicator(DeviceCommunicatorBase):
 
         if use_torch_symm_mem and current_platform.is_cuda():
             self.symm_mem_comm = SymmMemCommunicator(
+                group=self.cpu_group,
+                device=self.device,
+            )
+
+        if self.use_pcie_pull_allreduce:
+            self.pcie_pull_ar_comm = PciePullAllReduce(
                 group=self.cpu_group,
                 device=self.device,
             )
@@ -268,6 +312,7 @@ class CudaCommunicator(DeviceCommunicatorBase):
         depends on the input tensor.
         """
         all_potential_ar_backends = [
+            "PCIE_PULL",
             "FLASHINFER_PCIE_IPC",
             "FLASHINFER",
             "NCCL_SYMM_MEM",
@@ -278,6 +323,8 @@ class CudaCommunicator(DeviceCommunicatorBase):
             "PYNCCL",
         ]
         enabled_ar_backends: list[str] = []
+        if self.pcie_pull_ar_comm is not None:
+            enabled_ar_backends.append("PCIE_PULL (initialization required)")
         if self.fi_pcie_ipc_ar_comm is not None and not self.fi_pcie_ipc_ar_comm.disabled:
             enabled_ar_backends.append("FLASHINFER_PCIE_IPC")
         if self.fi_ar_comm is not None and not self.fi_ar_comm.disabled:
@@ -322,6 +369,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
         )
 
     def all_reduce(self, input_):
+        pcie_pull_ar_comm = self.pcie_pull_ar_comm
+        if pcie_pull_ar_comm is not None and pcie_pull_ar_comm.should_use(input_):
+            return pcie_pull_ar_comm.all_reduce(input_)
         fi_ar_comm = self.fi_ar_comm
         use_fi_ar = fi_ar_comm is not None and not fi_ar_comm.disabled and fi_ar_comm.should_use_fi_ar(input_)
 
@@ -410,6 +460,11 @@ class CudaCommunicator(DeviceCommunicatorBase):
         # uses dim=0 with tp-aligned (uniform) shards.
         if dim < 0:
             dim += input_.dim()
+        pcie_pull_ar_comm = self.pcie_pull_ar_comm
+        if pcie_pull_ar_comm is not None and pcie_pull_ar_comm.should_use_gather(input_):
+            input_size = input_.size()
+            output = pcie_pull_ar_comm.all_gather(input_).reshape((self.world_size,) + input_size).movedim(0, dim)
+            return output.reshape(input_size[:dim] + (self.world_size * input_size[dim],) + input_size[dim + 1 :])
         # On ROCm, the base-class all_gather (all_gather_into_tensor) is faster
         # than pynccl-based paths for TP forward passes.
         if current_platform.is_rocm():
@@ -701,6 +756,9 @@ class CudaCommunicator(DeviceCommunicatorBase):
             raise ValueError("No PyNCCL communicator found")
 
     def destroy(self):
+        if self.pcie_pull_ar_comm is not None:
+            self.pcie_pull_ar_comm.destroy()
+            self.pcie_pull_ar_comm = None
         if self.pynccl_comm is not None:
             self.pynccl_comm.destroy()
             self.pynccl_comm = None

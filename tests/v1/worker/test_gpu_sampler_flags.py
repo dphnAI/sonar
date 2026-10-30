@@ -103,6 +103,43 @@ def test_custom_processor_add_request_gates_pipeline_flag(admitted: bool):
     assert sampler.needs_logits_processing[3] == admitted
 
 
+@pytest.mark.parametrize(
+    ("sampling_params", "expected"),
+    [
+        pytest.param(SamplingParams(temperature=0.7), True, id="temperature"),
+        pytest.param(SamplingParams(), False, id="defaults"),
+        pytest.param(SamplingParams(temperature=0.0), False, id="greedy"),
+        pytest.param(SamplingParams(temperature=0.7, top_p=0.9), False, id="temperature-top-p"),
+        pytest.param(SamplingParams(temperature=0.7, top_k=10), False, id="temperature-top-k"),
+        pytest.param(SamplingParams(temperature=0.7, min_p=0.1), False, id="temperature-min-p"),
+        pytest.param(SamplingParams(temperature=0.7, frequency_penalty=0.1), False, id="temperature-penalty"),
+        pytest.param(SamplingParams(temperature=0.7, logit_bias={1: 1.0}), False, id="temperature-logit-bias"),
+        pytest.param(SamplingParams(temperature=0.7, thinking_token_budget=3), False, id="temperature-budget"),
+    ],
+)
+def test_temperature_only_processing_excludes_other_processing(sampling_params: SamplingParams, expected: bool):
+    """Only a bare temperature may skip full-vocab logits processing."""
+    sampler = _make_sampler()
+    sampler.add_request(3, sampling_params=sampling_params)
+
+    assert sampler.temperature_only_processing[3] == expected
+
+
+def test_temperature_only_processing_excludes_custom_processor():
+    sampler = _make_sampler(custom_logits_processors=[_GateProcessor(True)])
+    sampler.add_request(3, SamplingParams(temperature=0.7))
+
+    assert not sampler.temperature_only_processing[3]
+
+
+def test_temperature_only_processing_is_overwritten_when_slot_is_reused():
+    sampler = _make_sampler()
+    sampler.add_request(3, SamplingParams(temperature=0.7))
+    sampler.add_request(3, SamplingParams(temperature=0.7, top_p=0.9))
+
+    assert not sampler.temperature_only_processing[3]
+
+
 def test_has_topp_only_rows():
     """A row is top-p-only when it has top-p and no effective top-k; top_k
     of 0 (the default) or at least the logits width disables top-k."""

@@ -46,7 +46,7 @@ from aphrodite.model_executor.model_loader.weight_cache.protocol import (
 from aphrodite.model_executor.model_loader.weight_cache.utils import (
     is_draft_model_cacheable,
 )
-from aphrodite.model_executor.utils import weights_already_processed
+from aphrodite.model_executor.utils import weight_cache_model_construction, weights_already_processed
 from aphrodite.tracing import instrument
 from aphrodite.utils.torch_utils import set_default_torch_dtype
 
@@ -234,7 +234,7 @@ class IpcModelLoader(BaseModelLoader):
             target_device.index if target_device.index is not None else torch.accelerator.current_device_index()
         )
         with set_default_torch_dtype(model_config.dtype):
-            with torch.device("meta"):
+            with torch.device("meta"), weight_cache_model_construction():
                 model = initialize_model(
                     aphrodite_config=aphrodite_config,
                     model_config=model_config,

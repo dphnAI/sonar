@@ -117,6 +117,7 @@ from aphrodite.model_executor.model_loader.weight_cache.utils import (
     format_daemon_role,
     is_draft_model_cacheable,
 )
+from aphrodite.model_executor.utils import weight_cache_model_construction
 from aphrodite.model_executor.warmup.kernel_warmup import flashinfer_autotune
 from aphrodite.platforms import current_platform
 from aphrodite.utils.flashinfer import has_flashinfer
@@ -318,7 +319,7 @@ class WeightCacheDaemon:
         # engine's worker init.
         init_workspace_manager(target_device)
         with set_default_torch_dtype(model_config.dtype):
-            with target_device:
+            with target_device, weight_cache_model_construction():
                 model = loader.create_model(aphrodite_config, model_config)
             check_ipc_quant_support(model)
             loader.load_weights(model, model_config)

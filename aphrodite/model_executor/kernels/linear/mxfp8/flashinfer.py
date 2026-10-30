@@ -21,6 +21,7 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils import flashinfer as aphrodite_flashinfer
 from aphrodite.utils.flashinfer import has_flashinfer, has_flashinfer_cutedsl
 
+from ._padding import pad_mxfp8_columns
 from .Mxfp8LinearKernel import Mxfp8LinearKernel, Mxfp8LinearLayerConfig
 
 
@@ -118,21 +119,35 @@ class FlashInferCutlassMxfp8LinearKernel(Mxfp8LinearKernel):
 
 
 class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
-    """MXFP8 W8A8 GEMM via FlashInfer CuTe-DSL (SM100/SM103)."""
+    """MXFP8 W8A8 GEMM via FlashInfer CuTe-DSL (SM100/SM103/SM120)."""
 
     supports_pre_processed_weights = True
 
     @classmethod
     def is_supported(cls, compute_capability: int | None = None) -> tuple[bool, str | None]:
-        if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
-            return False, "requires sm_100/sm_103 (Blackwell)"
+        if not (
+            current_platform.is_cuda()
+            and (current_platform.is_device_capability_family(100) or current_platform.is_device_capability_family(120))
+        ):
+            return False, "requires sm_100/sm_103/sm_120 (Blackwell)"
         if not has_flashinfer_cutedsl():
             return False, "requires FlashInfer CuTe-DSL module"
+        if (
+            current_platform.is_device_capability_family(120)
+            and not aphrodite_flashinfer.has_flashinfer_b12x_mxfp8_gemm()
+        ):
+            return False, "requires FlashInfer's SM120 MXFP8 CuTe-DSL backend"
         return True, None
 
     @classmethod
     def can_implement(cls, c: Mxfp8LinearLayerConfig) -> tuple[bool, str | None]:
-        return _check_mm_mxfp8_shape(c.weight_shape)
+        supported, reason = _check_mm_mxfp8_shape(c.weight_shape)
+        if not supported:
+            return False, reason
+        N, _ = c.weight_shape
+        if current_platform.is_device_capability_family(120) and N % 128 != 0:
+            return False, f"SM120 MXFP8 CuTe-DSL requires N divisible by 128, got N={N}."
+        return True, None
 
     def input_quant_key(self) -> QuantKey:
         # Activations use FlashInfer's F8_128x4 swizzled scale layout.
@@ -145,6 +160,9 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
         scale_k = K // MXFP8_BLOCK_SIZE
         weight_scale_2d = layer.weight_scale.data[:N, :scale_k].contiguous()
         weight_scale_swizzled = swizzle_mxfp8_scale(weight_scale_2d, M=N, K=K)
+        if current_platform.is_device_capability_family(120):
+            padded_k = (K + 127) // 128 * 128
+            weight, weight_scale_swizzled = pad_mxfp8_columns(weight, weight_scale_swizzled, padded_k)
 
         # Store weight column-major [K, N] as mm_mxfp8 expects for operand B.
         layer.weight = Parameter(weight.contiguous().t(), requires_grad=False)
@@ -159,6 +177,7 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
         weight = layer.weight  # [K, N], column-major
         weight_scale = layer.weight_scale
         K, N = weight.shape
+        is_sm120 = current_platform.is_device_capability_family(120)
 
         qa = as_quantized_activation(x, self.input_quant_key())
         if qa is not None:
@@ -167,7 +186,11 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
         else:
             assert isinstance(x, torch.Tensor)
             out_dtype, input_shape = x.dtype, x.shape
-            input_mxfp8, input_scale = mxfp8_e4m3_quantize(x.view(-1, K), is_sf_swizzled_layout=True)
+            input_mxfp8, input_scale = mxfp8_e4m3_quantize(
+                x.view(-1, self.config.weight_shape[1]), is_sf_swizzled_layout=True
+            )
+        if is_sm120:
+            input_mxfp8, input_scale = pad_mxfp8_columns(input_mxfp8, input_scale, K, sanitize_scales=qa is not None)
 
         output = aphrodite_flashinfer.mm_mxfp8(
             input_mxfp8,
@@ -175,7 +198,7 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
             input_scale,
             weight_scale,
             out_dtype=out_dtype,
-            backend="cute-dsl",
+            backend="b12x" if is_sm120 else "cute-dsl",
         )
 
         if bias is not None:

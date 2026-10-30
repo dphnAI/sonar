@@ -48,6 +48,22 @@ def _compile_warmup_units(
     return warmed
 
 
+def warmup_b12x_model(
+    model: torch.nn.Module,
+    token_counts: tuple[int, ...],
+    output_dtype: torch.dtype,
+) -> None:
+    if not (current_platform.is_cuda() and current_platform.is_device_capability_family(120)):
+        return
+    units = _collect_warmup_units(model, token_counts, output_dtype)
+    for name, count in _compile_warmup_units(units).items():
+        logger.info_once(
+            "Warmed up %d b12x %s kernel signature(s).",
+            count,
+            name,
+        )
+
+
 def b12x_warmup(worker: "Worker", cudagraph_capture_sizes: list[int]) -> None:
     if not current_platform.is_cuda():
         return
@@ -76,14 +92,4 @@ def b12x_warmup(worker: "Worker", cudagraph_capture_sizes: list[int]) -> None:
         max_tokens=max_tokens,
         cudagraph_capture_sizes=serving_sizes,
     )
-    units = _collect_warmup_units(
-        worker.get_model(),
-        token_counts,
-        output_dtype,
-    )
-    for name, count in _compile_warmup_units(units).items():
-        logger.info_once(
-            "Warmed up %d b12x %s kernel signature(s).",
-            count,
-            name,
-        )
+    warmup_b12x_model(worker.get_model(), token_counts, output_dtype)

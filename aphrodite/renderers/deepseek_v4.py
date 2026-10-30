@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-
 from aphrodite.config import AphroditeConfig
 from aphrodite.renderers.chat_utils import (
     ChatCompletionMessageParam,

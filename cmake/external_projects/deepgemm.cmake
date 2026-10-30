@@ -34,12 +34,15 @@ else()
   # Mega MoE, plus swiglustep for BF16/FP8/NVFP4 Mega MoE.
   # Uses the PyTorch 2.11 stable ABI and CPython 3.10 limited API.
   set(_DEEPGEMM_UPSTREAM_TAG "a7a927731b109fdfec770df7c2a5be5d7e2216b5")
+  set(_deepgemm_patch "${CMAKE_CURRENT_LIST_DIR}/patches/deepgemm-sm120-paged128.patch")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_deepgemm_patch}")
+  file(SHA256 "${_deepgemm_patch}" _deepgemm_patch_hash)
 
   set(_deepgemm_fc_root "${FETCHCONTENT_BASE_DIR}")
   if(NOT _deepgemm_fc_root)
     set(_deepgemm_fc_root "${CMAKE_BINARY_DIR}/_deps")
   endif()
-  string(SHA256 _deepgemm_cache_key "${_DEEPGEMM_UPSTREAM_TAG}")
+  string(SHA256 _deepgemm_cache_key "${_DEEPGEMM_UPSTREAM_TAG}:${_deepgemm_patch_hash}")
   string(SUBSTRING "${_deepgemm_cache_key}" 0 12 _deepgemm_cache_key)
   set(_deepgemm_src "${_deepgemm_fc_root}/deepgemm-${_deepgemm_cache_key}-src")
   set(_deepgemm_bin "${_deepgemm_fc_root}/deepgemm-${_deepgemm_cache_key}-build")
@@ -59,6 +62,19 @@ else()
       GIT_SUBMODULES "third-party/cutlass" "third-party/deep_jit"
       GIT_PROGRESS TRUE
     )
+  endif()
+  # Patch only the fetched tree; an explicit local source stays caller-owned.
+  find_package(Git REQUIRED QUIET)
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_deepgemm_patch}"
+    WORKING_DIRECTORY "${deepgemm_SOURCE_DIR}"
+    RESULT_VARIABLE _deepgemm_patch_applied
+    OUTPUT_QUIET ERROR_QUIET)
+  if(NOT _deepgemm_patch_applied EQUAL 0)
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" apply "${_deepgemm_patch}"
+      WORKING_DIRECTORY "${deepgemm_SOURCE_DIR}"
+      COMMAND_ERROR_IS_FATAL ANY)
   endif()
   message(STATUS "DeepGEMM is available at ${deepgemm_SOURCE_DIR}")
 endif()

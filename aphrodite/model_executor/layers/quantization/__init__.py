@@ -38,6 +38,7 @@ QuantizationMethods = Literal[
     "mxfp4",
     "gpt_oss_mxfp4",
     "deepseek_v4_fp8",
+    "deepseek_v41_fp8",
     "online",
     # Below are online quant shorthand names (see aphrodite.config.quantization).
     # Listed here as strings to avoid a circular import; kept in sync with
@@ -112,6 +113,13 @@ def register_quantization_config(quantization: str):
 def get_quantization_config(quantization: str) -> type[QuantizationConfig]:
     if quantization not in QUANTIZATION_METHODS:
         raise ValueError(f"Invalid quantization method: {quantization}")
+
+    if quantization == "deepseek_v41_fp8":
+        if quantization in _CUSTOMIZED_METHOD_TO_QUANT_CONFIG:
+            return _CUSTOMIZED_METHOD_TO_QUANT_CONFIG[quantization]
+        from aphrodite.models.deepseek_v41.sm120.quant_config import DeepseekV41FP8Config as NativeDeepseekV41FP8Config
+
+        return NativeDeepseekV41FP8Config
 
     # lazy import to avoid triggering `torch.compile` too early
     from aphrodite.config.quantization import _ONLINE_SHORTHANDS

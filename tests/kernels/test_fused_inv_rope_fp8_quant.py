@@ -870,6 +870,93 @@ def test_einsum_end_to_end(num_tokens, num_heads, n_groups):
     assert z_diff < 0.01, f"Einsum output diff too large: {z_diff:.6f} (expected < 0.01)"
 
 
+@pytest.mark.skipif(not current_platform.is_device_capability_family(120), reason="Requires SM120")
+@pytest.mark.parametrize("tokens,group_major", [(2, True), (48, False), (64, True)])
+@torch.inference_mode()
+def test_sm120_bf16_grouped_wo_a_graph(tokens, group_major):
+    from aphrodite.models.deepseek_v4.nvidia.ops._sm120_bf16_bmm import bf16_grouped_bmm
+
+    torch.manual_seed(91)
+    groups, rank, width = 2, 1024, 4096
+    a = torch.randn(
+        (groups, tokens, width) if group_major else (tokens, groups, width),
+        dtype=torch.bfloat16,
+        device="cuda",
+    )
+    if group_major:
+        a = a.transpose(0, 1)
+    weight = torch.randn((groups, rank, width), dtype=torch.bfloat16, device="cuda")
+    out = torch.empty((tokens, groups, rank), dtype=torch.bfloat16, device="cuda")
+    bf16_grouped_bmm(a, weight, out)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        bf16_grouped_bmm(a, weight, out)
+    for source in (a.clone(), torch.randn_like(a) * 0.125, torch.zeros_like(a)):
+        a.copy_(source)
+        expected = torch.einsum("mgk,gnk->mgn", a.double(), weight.double()).to(torch.bfloat16)
+        bf16_grouped_bmm(a, weight, out)
+        eager = out.clone()
+        graph.replay()
+        torch.cuda.synchronize()
+        error = (out.float() - expected.float()).norm() / expected.float().norm().clamp_min(1e-8)
+        assert error.item() < 5e-4
+        torch.testing.assert_close(out, eager, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not current_platform.is_device_capability_family(120), reason="Requires SM120")
+@pytest.mark.parametrize("tokens", [1, 2, 32, 33, 64, 65])
+@torch.inference_mode()
+def test_sm120_bf16_o_proj_boundaries_graph(tokens):
+    from aphrodite.models.deepseek_v4.nvidia.ops.o_proj import deep_gemm_fp8_o_proj
+
+    torch.manual_seed(91)
+    groups, heads_per_group, rank = 2, 8, 64
+    o = torch.randn(tokens, groups * heads_per_group, HEAD_DIM, device="cuda", dtype=torch.bfloat16)
+    positions = torch.arange(tokens, device="cuda")
+    cache = make_cos_sin_cache(2 * tokens)
+    wo_a = torch.nn.Module()
+    wo_a.register_buffer(
+        "weight", torch.randn(groups, rank, heads_per_group * HEAD_DIM, device="cuda", dtype=torch.bfloat16)
+    )
+    wo_b = torch.nn.Identity()
+
+    def execute():
+        return deep_gemm_fp8_o_proj(
+            o,
+            positions,
+            cache,
+            wo_a,
+            wo_b,
+            n_groups=groups,
+            heads_per_group=heads_per_group,
+            nope_dim=NOPE_DIM,
+            rope_dim=ROPE_DIM,
+            o_lora_rank=rank,
+            einsum_recipe=(1, 1, QUANT_GROUP_SIZE),
+            tma_aligned_scales=False,
+        )
+
+    execute()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        captured = execute()
+    for step in range(3):
+        if step == 1:
+            o.normal_()
+            positions.add_(tokens)
+            wo_a.weight.normal_()
+        elif step == 2:
+            o.zero_()
+        rotated, _ = fused_inv_rope_fp8_quant(o, positions, cache, groups, heads_per_group, quantize=False)
+        expected = torch.bmm(rotated.transpose(0, 1), wo_a.weight.transpose(1, 2)).transpose(0, 1).flatten(1)
+        eager = execute()
+        graph.replay()
+        torch.cuda.synchronize()
+        error = (captured.float() - expected.float()).norm() / expected.float().norm().clamp_min(1e-8)
+        assert error.item() < 5e-4
+        torch.testing.assert_close(captured, eager, rtol=0, atol=0)
+
+
 @pytest.mark.parametrize("num_tokens", [1, 32, 256])
 @torch.inference_mode()
 def test_with_real_deepseek_v4_rope(num_tokens, default_aphrodite_config):

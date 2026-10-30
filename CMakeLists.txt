@@ -470,7 +470,10 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
 
   if(APHRODITE_GPU_LANG STREQUAL "CUDA")
     list(APPEND APHRODITE_STABLE_EXT_SRC
+      "csrc/collectives/pcie_pull_all_reduce.cu"
       "csrc/fused_qknorm_rope_cache_kernel.cu")
+    set_property(SOURCE "csrc/collectives/pcie_pull_all_reduce.cu" APPEND PROPERTY
+      COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--fmad=false>")
   endif()
 
   if(APHRODITE_GPU_LANG STREQUAL "CUDA" AND
@@ -637,6 +640,50 @@ if(APHRODITE_GPU_LANG STREQUAL "CUDA" OR APHRODITE_GPU_LANG STREQUAL "HIP")
       SRCS "${MINIMAX_M3_FUSED_SRC}"
       CUDA_ARCHS "${MINIMAX_M3_FUSED_ARCHS}")
     list(APPEND APHRODITE_STABLE_EXT_SRC "${MINIMAX_M3_FUSED_SRC}")
+
+    set(SM120_ENGRAM_ARCHS)
+    if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.8)
+      foreach(_ARCH ${CUDA_ARCHS})
+        string(REGEX REPLACE "\\+PTX$" "" _SM120_ENGRAM_ARCH "${_ARCH}")
+        if(_SM120_ENGRAM_ARCH MATCHES "^12\\.0a?$" OR
+           (_SM120_ENGRAM_ARCH STREQUAL "12.0f" AND
+            CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 13.0))
+          list(APPEND SM120_ENGRAM_ARCHS "${_ARCH}")
+        endif()
+      endforeach()
+    endif()
+    if(SM120_ENGRAM_ARCHS)
+      set(SM120_ENGRAM_SRC "csrc/engram/engram_sm120.cu")
+      set_gencode_flags_for_srcs(
+        SRCS "${SM120_ENGRAM_SRC}"
+        CUDA_ARCHS "${SM120_ENGRAM_ARCHS}")
+      set_property(SOURCE ${SM120_ENGRAM_SRC} APPEND PROPERTY COMPILE_OPTIONS
+        "$<$<COMPILE_LANGUAGE:CUDA>:--ftz=false;--prec-div=true;--prec-sqrt=true>")
+      set_property(SOURCE "${SM120_ENGRAM_SRC}"
+        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_ENGRAM=1)
+      list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_ENGRAM_SRC}")
+    endif()
+
+    # DeepSeek-V4.1 SM120 decode kernels: the sparse MLA decode (E2M1 converts)
+    # and the fused b12x W4A8 decode MoE (block-scaled QMMA) need the SM120
+    # family-specific target (12.0f, or 12.0a before CUDA 13).
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
+      cuda_archs_loose_intersection(SM120_FAMILY_ARCHS "12.0f" "${CUDA_ARCHS}")
+    else()
+      cuda_archs_loose_intersection(SM120_FAMILY_ARCHS "12.0a" "${CUDA_ARCHS}")
+    endif()
+    if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 12.8 AND SM120_FAMILY_ARCHS)
+      set(SM120_SPARSE_DECODE_SRC "csrc/attention/mla/dsv41_sparse_decode_sm120.cu")
+      set(SM120_MOE_FUSED_SRC "csrc/moe/b12x_moe_fused_sm120.cu")
+      set_gencode_flags_for_srcs(
+        SRCS "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}"
+        CUDA_ARCHS "${SM120_FAMILY_ARCHS}")
+      set_property(SOURCE "${SM120_SPARSE_DECODE_SRC}"
+        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_SPARSE_DECODE=1)
+      set_property(SOURCE "${SM120_MOE_FUSED_SRC}"
+        APPEND PROPERTY COMPILE_DEFINITIONS APHRODITE_ENABLE_SM120_MOE_FUSED=1)
+      list(APPEND APHRODITE_STABLE_EXT_SRC "${SM120_SPARSE_DECODE_SRC}" "${SM120_MOE_FUSED_SRC}")
+    endif()
 
     #
     # Swordfish kernels: w4a16 GEMM for the Blackwell sm100 family

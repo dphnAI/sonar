@@ -210,10 +210,17 @@ __device__ __noinline__ void histogram_2048_topk(
     reg_bins[nitems++] = b1;
     reg_bins[nitems++] = b2;
     reg_bins[nitems++] = b3;
-    atomicAdd(&histo[b0], 1);
-    atomicAdd(&histo[b1], 1);
-    atomicAdd(&histo[b2], 1);
-    atomicAdd(&histo[b3], 1);
+    // Predicated vector tails are not real -inf candidates.
+    if (base + 3 < seq_len) {
+      atomicAdd(&histo[b0], 1);
+      atomicAdd(&histo[b1], 1);
+      atomicAdd(&histo[b2], 1);
+      atomicAdd(&histo[b3], 1);
+    } else {
+      atomicAdd(&histo[b0], 1);
+      if (base + 1 < seq_len) atomicAdd(&histo[b1], 1);
+      if (base + 2 < seq_len) atomicAdd(&histo[b2], 1);
+    }
   }
   __syncthreads();
 
@@ -265,8 +272,9 @@ __device__ __noinline__ void histogram_2048_topk(
         const int elem_idx = base_idx + sub;
         uint32_t bin = 0;
         if (vec_valid) bin = reg_bins[item++];
-        const bool is_above = vec_valid && (bin > uthr);
-        const bool is_equal = vec_valid && (bin == uthr);
+        const bool elem_valid = vec_valid && elem_idx < seq_len;
+        const bool is_above = elem_valid && (bin > uthr);
+        const bool is_equal = elem_valid && (bin == uthr);
 
         const uint32_t above_mask = __ballot_sync(0xffffffff, is_above);
         if (above_mask) {

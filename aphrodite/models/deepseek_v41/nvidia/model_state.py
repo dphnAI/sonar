@@ -259,7 +259,8 @@ class DeepseekV41ModelState(DefaultModelState):
         if self.decoder_replay_layers is not None:
             params = new_req_data.sampling_params
             self._keeps_rows_np[req_index] = (
-                params is not None and params.prompt_logprobs is not None
+                params is not None
+                and (params.prompt_logprobs is not None or params.prompt_logprob_token_ids is not None)
             ) or self.aphrodite_config.aux_output_config.enable_return_routed_experts
 
     def prepare_inputs(self, input_batch: InputBatch, req_states: RequestState) -> dict[str, torch.Tensor | None]:

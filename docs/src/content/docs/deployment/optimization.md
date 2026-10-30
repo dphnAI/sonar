@@ -191,6 +191,189 @@ checkpoint on the target GPU.
 Compare output quality with the unquantized checkpoint. Weight-only formats can
 affect model quality even when the serving interface is unchanged.
 
+### FP4 MoE on SM120 GPUs
+
+On SM120 GPUs, use `--moe-backend b12x` for supported FP4 MoE checkpoints.
+B12x is included in `flashinfer-python`. Do not install the archived standalone
+`b12x` package. If it is already installed, remove it and restore the bundled
+provider in the same environment as Sonar:
+
+```bash
+uv pip uninstall b12x
+uv pip install --reinstall --no-deps 'flashinfer-python==0.7.2'
+```
+
+B12x supports tensor parallelism, not expert parallelism. Do not combine it with
+`--enable-expert-parallel`.
+
+MXFP4 uses MXFP8 activations by default. Set
+`APHRODITE_B12X_MOE_FP4_FORCE_A16=1` to use 16-bit activations instead.
+This changes activation precision. Compare output quality and performance on
+your workload before you use it in production.
+
+By default, for DeepSeek-V4.1 on SM120, Sonar uses native FP8 sparse indexers from the bundled
+DeepGEMM, including 128-row KV-cache pages. If an external DeepGEMM package lacks
+the required APIs or SM120 headers, Sonar uses the Triton indexer instead.
+`APHRODITE_USE_DEEP_GEMM=0` forces that fallback; it does not select the MoE backend.
+General DeepGEMM GEMMs remain disabled on SM120.
+
+### Native DeepSeek-V4.1 backend on SM120
+
+Set `APHRODITE_DSV41_SM120_NATIVE=1` and pass
+`--attention-backend B12X_DSV41` when you launch DeepSeek-V4.1 to select the
+experimental native B12x backend. With DSpark, also set
+`"attention_backend": "B12X_DSV41"` in `--speculative-config`.
+
+This path uses packed compressed KV caches, native sparse attention, fused
+output projections, and native Engram lookup. It retains Sonar's MoE scheduling.
+
+Decoder row compaction preserves all prompt rows for both `prompt_logprobs`
+and fixed-token `prompt_logprob_token_ids` scoring, including fixed-token
+requests without ordinary prompt logprobs. Ordinary generation still uses
+the bounded decoder window.
+
+For BF16 query chunks, including prefill, the backend fuses query/KV RMSNorm
+with MXFP8 query quantization and the KV rotary embedding. The query
+projection and optional indexer reuse the quantized query with their
+original prepared GEMMs. The kernel preserves BF16 normalization rounding
+and keeps KV in BF16.
+
+With 16 local query heads, target-model prefill decodes each packed K=V tile
+once into shared memory for both QK and PV, mapping indexed pages during the
+gather. It retains BF16 attention arithmetic and the native 64-candidate
+tile and reduction order. Programs compile during preparation and reuse
+caller-owned output/LSE storage across live batch sizes. Other head counts
+and draft-model prefill retain the provider route.
+
+Native clustered decode specializes its shared-memory allocation to the
+actual candidate width. The eight-way partition and ordered merge are
+unchanged; smaller SWA-only partitions no longer reserve indexed-key storage.
+
+The native indexer can split prefill query rows across tensor-parallel ranks
+and all-gather the selected indices before attention. Set
+`--attention-config '{"indexer_tp_shard_min_rows":2048}'` to enable it for
+chunks of at least 2048 rows; the default threshold is 65536. Request/page
+metadata retains its global row offsets, including mixed prefill/decode
+batches and uneven row splits. Pure decode and CUDA-graph capture retain
+their existing path. The candidate-producing layer stays replicated to
+avoid gathering its much wider candidate buffer.
+The score arithmetic and production top-k policy are unchanged. The existing
+top-k kernel resolves exact boundary ties by thread arrival order, so even
+repeated unsharded launches can select different tied indices. Do not assume
+bit-identical selected indices or final model outputs from row sharding.
+
+The native backend also applies an identity-only missing-argument check to
+the verified CuTe argument binder. Its original membership check invokes
+tensor equality on a private sentinel, adding exception-handling overhead
+to eager launches. The compatibility fix changes no kernel arguments or
+GPU arithmetic. It checks the complete binder implementation before replacing
+it; unknown implementations stay unchanged and produce a warning.
+
+For mHC boundaries of up to 64 tokens, the backend computes the coefficients
+for the next boundary on a separate CUDA stream while attention or the MoE
+layer runs. The residual mix, the input collapse, and its RMSNorm stay on the
+critical path. Results match the fused B12x kernels bit for bit.
+
+DSpark projects the draft layers' context keys and values together, with one
+input quantization. Drafting combines the Markov-logit addition, sampling, and
+proposal-cache write when their layouts match. Sampling preserves the existing
+dtype rounding, per-request seeds, and noise.
+
+With tensor parallelism, drafting and verification sample on each rank's
+vocabulary shard. Only a few values per row cross GPUs, instead of
+full-vocabulary logits. A step falls back to gathered logits when any request
+uses top-k, top-p, min-p, logits processors such as penalties or logit bias,
+logprobs, or structured outputs. These optimizations require no additional
+flags.
+
+Use the bundled B12x provider described above. The archived standalone package
+is not supported.
+
+Do not combine this path with pipeline parallelism, context parallelism, dual
+batch overlap, or LoRA. The existing backend remains the default. Remove the
+environment variable and the B12x attention-backend overrides to return to it.
+
+#### Implementation boundaries
+
+Native model policy and preparation live in
+`aphrodite/models/deepseek_v41/sm120/`; B12x worker lifecycle adapters live in
+`aphrodite/v1/worker/b12x_utils.py`. V4.1 message ordering belongs to its
+renderer, not the shared V4 renderer. Keep shared configuration and worker
+changes limited to dispatch and lifecycle hooks when syncing upstream.
+
+CUDA implementations and their operator registrations are colocated under
+`csrc/attention/mla/`, `csrc/moe/`, `csrc/engram/`, and `csrc/collectives/`.
+Engram fake implementations are registered by its feature module after the
+native operators load, without adding model-specific registrations to global
+operator modules.
+
+B12x weight preparation preserves checkpoint-native `[gate; up]` ordering for
+both W4A8 and W4A16; the declared `w31` layout controls provider packing.
+Do not pre-swap those rows. The fused W4A8 decode kernel admits hidden sizes
+divisible by 512 in the range 512–8192; other shapes retain provider kernels.
+
+### Experimental checked PCIe collectives
+
+Set `APHRODITE_ALLREDUCE_USE_PCIE_PULL=1` to select the experimental paired
+transport. Initial support targets the native DeepSeek-V4.1 backend on four
+SM120 GPUs in one node. The default `paired` transport requires CUDA peer reads
+and writes between all selected GPU pairs without crossing a NUMA system link.
+
+This path requires the V2 model runner, BF16 activations, and a model hidden
+size of 5120. A speculative draft must use the same TP4 group. Keep adaptive
+verification disabled. Do not combine it with pipeline, context, data, or
+expert parallelism, dual batch overlap, LoRA, sleep mode, or KV offloading.
+Unsupported configurations fail during startup.
+
+The paired kernel handles contiguous two-dimensional tensors with 1–8 rows and
+a width of 5120 or 6144. Other shapes retain their existing collective backend.
+The reduction adds operands in rank order in FP32, then rounds once to BF16.
+This uses a different rounding contract from BF16 NCCL. Do not assume that
+the modes are numerically interchangeable.
+
+The same backend also all-gathers contiguous tensors of up to 16 KiB per rank,
+such as the per-row packets of vocabulary-parallel sampling. A gather copies
+bytes, so its results are identical to NCCL. Larger all-gathers retain their
+existing backend.
+
+The engine checks a collective completion snapshot before it releases each
+step's tokens or logprobs. With speculation, that snapshot includes both target
+and draft collectives. Token copies overlap draft proposal, but output waits
+for the final snapshot. A protocol failure stops the engine; it does not switch
+the affected collective to NCCL or retry it. Restart the engine after such a
+failure.
+
+This option is disabled by default. Compare output quality and latency with
+the option disabled before you use it in a deployment.
+
+#### Host-memory transport without P2P
+
+Set `APHRODITE_ALLREDUCE_PCIE_TRANSPORT=host` together with
+`APHRODITE_ALLREDUCE_USE_PCIE_PULL=1` to use shared, pinned host memory instead
+of peer VRAM. This transport requires neither GPU peer access nor a CPU
+progress thread. It does not impose the paired transport's same-NUMA
+restriction; the TP4, native SM120, and model-runner restrictions above still
+apply.
+
+The host kernel handles contiguous BF16 tensors with 1–64 rows and width 5120,
+and contiguous all-gathers of up to 1024 bytes per rank. Other shapes retain
+their existing collective backend. Reduction rounding and the checked output,
+fault, and graph-lifetime contracts are the same as the paired transport.
+Small reductions read each peer's input directly. From 16 rows, each 16 KiB
+lane has one rank reduce its inputs and publish the result for the other ranks.
+This reduces host-memory traffic without a CPU reduction worker.
+
+All workers must share a writable local `/dev/shm` namespace and support CUDA
+registration of mapped host memory. GPU placement and host-memory locality
+affect performance; benchmark the actual deployment, especially across NUMA
+domains. Testing with P2P disabled on server GPUs does not establish performance
+on workstation or Max-Q hardware.
+
+For a strictly non-P2P comparison, also disable other custom, FlashInfer, and
+symmetric-memory collective backends. `NCCL_P2P_DISABLE=1` and
+`NCCL_NVLS_ENABLE=0` constrain NCCL, not those other backends. Verify NCCL's
+transport logs rather than assuming its fallback uses host memory.
+
 ## Choose parallelism
 
 Tensor parallelism splits model layers across GPUs and reduces weight memory on

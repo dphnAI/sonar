@@ -181,3 +181,34 @@ def test_persistent_tensor_preserves_contents_and_rejects_changes() -> None:
     assert manager.get_persistent("locks", (8,), torch.int32) is first
     with pytest.raises(AssertionError, match="was not allocated during warmup"):
         manager.get_persistent("new", (8,), torch.int32)
+
+
+def test_stream_scratch_does_not_alias_default_scratch_or_other_lanes() -> None:
+    manager = workspace.WorkspaceManager(torch.device("cpu"), num_lanes=2)
+    spec = ((64,), torch.float32)
+    written: list[tuple[int, int, int]] = []
+    for lane in range(2):
+        with workspace.use_workspace_lane(lane):
+            for stream_id in (7, 11):
+                (scratch,) = manager.get_stream_simultaneous(stream_id, spec)
+                value = len(written) + 1
+                scratch.fill_(value)
+                written.append((lane, stream_id, value))
+            (default_scratch,) = manager.get_simultaneous(spec)
+            default_scratch.zero_()
+    manager.lock()
+    for lane, stream_id, value in written:
+        with workspace.use_workspace_lane(lane):
+            (scratch,) = manager.get_stream_simultaneous(stream_id, spec)
+            assert torch.all(scratch == value)
+
+
+def test_stream_scratch_allows_smaller_views_but_cannot_grow_after_lock() -> None:
+    manager = workspace.WorkspaceManager(torch.device("cpu"))
+    (reserved,) = manager.get_stream_simultaneous(7, ((64,), torch.float32))
+    reserved.fill_(3)
+    manager.lock()
+    (smaller,) = manager.get_stream_simultaneous(7, ((32,), torch.float32))
+    assert torch.all(smaller == 3)
+    with pytest.raises(AssertionError, match="Workspace is locked"):
+        manager.get_stream_simultaneous(7, ((128,), torch.float32))

@@ -440,6 +440,34 @@ class DeepseekV4ForCausalLMConfig(VerifyAndUpdateConfig):
                 model_config.hf_text_config.quantization_config["quant_method"] = "deepseek_v4_fp8"
 
 
+class DeepseekV41ForCausalLMConfig(DeepseekV4ForCausalLMConfig):
+    @staticmethod
+    def verify_and_update_model_config(model_config: "ModelConfig") -> None:
+        import aphrodite.envs as envs
+
+        if not envs.APHRODITE_DSV41_SM120_NATIVE:
+            DeepseekV4ForCausalLMConfig.verify_and_update_model_config(model_config)
+            return
+        from aphrodite.models.deepseek_v41.sm120.config import verify_and_update_model_config
+
+        verify_and_update_model_config(model_config)
+
+    @staticmethod
+    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+        import aphrodite.envs as envs
+        from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
+
+        backend = AttentionBackendEnum.B12X_DSV41
+        attention_config = aphrodite_config.attention_config
+        if not envs.APHRODITE_DSV41_SM120_NATIVE:
+            if attention_config.backend is backend:
+                raise ValueError("B12X_DSV41 requires APHRODITE_DSV41_SM120_NATIVE=1.")
+            return
+        from aphrodite.models.deepseek_v41.sm120.config import verify_and_update_config
+
+        verify_and_update_config(aphrodite_config)
+
+
 class KimiK3ForConditionalGenerationConfig(VerifyAndUpdateConfig):
     """Route MXFP4-checkpointed Kimi-K3 MoE experts to the MXFP4 interface.
 
@@ -1098,7 +1126,8 @@ MODELS_CONFIG_MAP: dict[str, type[VerifyAndUpdateConfig]] = {
     "D3ForSequenceClassification": D3ForSequenceClassificationConfig,
     "DeepseekV4ForCausalLM": DeepseekV4ForCausalLMConfig,
     "DeepseekV4ForConditionalGeneration": DeepseekV4ForCausalLMConfig,
-    "DeepseekV41ForCausalLM": DeepseekV4ForCausalLMConfig,
+    "DeepseekV41ForCausalLM": DeepseekV41ForCausalLMConfig,
+    "DSparkV41DraftModel": DeepseekV41ForCausalLMConfig,
     "DeepseekV32ForCausalLM": DeepseekV32ForCausalLM,
     "DiffusionGemmaForBlockDiffusion": DiffusionGemmaModelForBlockDiffusionConfig,  # noqa: E501
     "EmbeddingGemma2Model": EmbeddingGemma2ModelConfig,

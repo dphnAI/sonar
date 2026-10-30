@@ -929,7 +929,9 @@ def _supports_native_decode(next_n: int) -> bool:
     """
     if not (current_platform.is_cuda() and has_deep_gemm()):
         return next_n in (1, 2)
-    if current_platform.is_device_capability_family(100):
+    if current_platform.is_device_capability_family(100) or (
+        current_platform.is_device_capability_family(120) and not use_sm120_dsa_indexer()
+    ):
         return True
     if current_platform.is_device_capability_family(90):
         return native_next_n_supported(next_n)
@@ -1361,16 +1363,14 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             requires_padding = min_decode_len != max_decode_len
             if use_native and next_n > 1:
                 assert self.decode_seq_lens_buffer.dim() == 1
-                # (B, max_decode_len): token j attends to
-                # L - max_decode_len + j + 1 KV tokens.
+                # Pack real queries first, then repeat the final bound so native
+                # schedulers still see a nondecreasing row with a valid last bound.
                 seq_lens_buffer = self.decode_seq_lens_buffer[: num_decodes * max_decode_len].view(
                     num_decodes, max_decode_len
                 )
-                # Clamp at 0: padding requests have seq_len == 0, which would
-                # otherwise make token 0 negative (next_n=2 gives 0-2+1+0 = -1).
-                # Downstream kernels read these as uint32, turning -1 into ~4e9.
-                seq_lens_buffer[:] = (
-                    seq_lens.unsqueeze(1) - max_decode_len + 1 + self.offsets_buffer[:max_decode_len]
+                seq_lens_buffer[:] = torch.minimum(
+                    seq_lens.unsqueeze(1) - decode_lens.unsqueeze(1) + 1 + self.offsets_buffer[:max_decode_len],
+                    seq_lens.unsqueeze(1),
                 ).clamp_(min=0)
                 seq_lens = seq_lens_buffer
             return seq_lens, block_table, decode_lens, num_decodes, requires_padding
@@ -1833,7 +1833,11 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
                 )
             # DeepGEMM is required for the paged MQA logits on CUDA devices
             schedule_metadata = self.scheduler_metadata_buffer
-            if current_platform.is_cuda() and has_deep_gemm() and not (self.use_sm120_dsa or self.use_sm89_dsa):
+            if (
+                current_platform.is_cuda()
+                and has_deep_gemm()
+                and not (use_sm120_dsa_indexer(self.kv_cache_spec.num_states) or self.use_sm89_dsa)
+            ):
                 metadata = get_paged_mqa_logits_metadata(
                     seq_lens,
                     self.kv_cache_spec.num_states,
@@ -1915,7 +1919,11 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
             decode.seq_lens.view(-1).copy_(metadata.seq_lens)
         decode.decode_lens.fill_(1)
 
-        if current_platform.is_cuda() and has_deep_gemm():
+        if (
+            current_platform.is_cuda()
+            and has_deep_gemm()
+            and not (use_sm120_dsa_indexer(self.kv_cache_spec.num_states) or use_sm89_dsa())
+        ):
             schedule_metadata = get_paged_mqa_logits_metadata(
                 decode.seq_lens,
                 self.kv_cache_spec.num_states,

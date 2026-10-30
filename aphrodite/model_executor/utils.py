@@ -12,6 +12,26 @@ import torch
 from aphrodite.utils.torch_utils import is_torch_equal_or_newer
 
 _weights_pre_processed: ContextVar[bool] = ContextVar("weights_pre_processed", default=False)
+_weight_cache_model_construction: ContextVar[bool] = ContextVar("weight_cache_model_construction", default=False)
+
+
+@contextmanager
+def weight_cache_model_construction():
+    """Keep cache producers and consumers on the canonical parameter layout.
+
+    Cache keys do not distinguish same-shaped row permutations. This must
+    cover construction; ``weights_already_processed`` only covers post-load
+    transforms after the IPC client has already created its modules.
+    """
+    token = _weight_cache_model_construction.set(True)
+    try:
+        yield
+    finally:
+        _weight_cache_model_construction.reset(token)
+
+
+def is_weight_cache_model_construction() -> bool:
+    return _weight_cache_model_construction.get()
 
 
 @contextmanager

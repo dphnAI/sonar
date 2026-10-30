@@ -27,6 +27,7 @@ from typing import Any
 
 import torch
 
+import aphrodite.envs as envs
 from aphrodite.config import AphroditeConfig
 from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.logger import init_logger
@@ -99,7 +100,38 @@ class DSparkSpeculator(DFlashSpeculator):
             # The acceptance estimator is not needed when a trained confidence head
             # is available.
             self.use_acceptance_estimator = False
+        self._maybe_enable_vocab_parallel_draft(model)
         return model
+
+    def _maybe_enable_vocab_parallel_draft(self, model: torch.nn.Module) -> None:
+        """Sample on this rank's vocab shard when the fused path would run.
+
+        Batch-sharded sampling verifies different requests per rank, so the
+        shard exchanges would not line up across ranks there. Configurations
+        whose verification always needs full-vocab logits keep the full cache.
+        """
+        get_shard = getattr(model, "draft_vocab_shard", None)
+        if (
+            self.draft_logits is None
+            or get_shard is None
+            or getattr(model, "sample_draft_markov_vocab_parallel", None) is None
+            or self._d2t_scatter_index is not None
+            or self.draft_watermarker is not None
+            or self.use_acceptance_estimator
+            or self._draft_topk is not None
+            or self.aphrodite_config.parallel_config.enable_batch_sharded_sampling
+            or self.enable_adaptive_verification
+            or self.speculative_config.rejection_sample_method == "synthetic"
+            or self.aphrodite_config.watermark_config is not None
+            or self.aphrodite_config.model_config.return_sampling_mask
+            or envs.APHRODITE_COMPUTE_NANS_IN_LOGITS
+        ):
+            return
+        shard = get_shard()
+        if shard is None:
+            return
+        self.draft_vocab_shard = shard
+        self.allocate_draft_logits(shard.size)
 
     def _sample_logits(
         self,
@@ -107,7 +139,49 @@ class DSparkSpeculator(DFlashSpeculator):
         idx_map: torch.Tensor,
         sample_pos: torch.Tensor,
         step: int,
+        *,
+        bias: torch.Tensor | None = None,
+        markov_embed: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if self.draft_vocab_shard is not None:
+            # Shard-local logits and cache; the model projects the Markov bias
+            # for its own columns. Ids come back global.
+            assert markov_embed is not None
+            return self.model.sample_draft_markov_vocab_parallel(
+                logits,
+                markov_embed,
+                idx_map,
+                self.temperature,
+                self.seeds,
+                sample_pos - 1,
+                self.draft_logits,
+                self._step_cols[step],
+                self.draft_vocab_shard,
+                use_fp64=self.use_fp64_gumbel,
+            )
+        if bias is not None:
+            fused_sample = getattr(self.model, "sample_draft_with_bias", None)
+            if (
+                fused_sample is not None
+                and self.draft_logits is not None
+                and self._d2t_scatter_index is None
+                and self.draft_watermarker is None
+                and self.acceptance_estimator is None
+            ):
+                sampled = fused_sample(
+                    logits,
+                    bias,
+                    idx_map,
+                    self.temperature,
+                    self.seeds,
+                    sample_pos - 1,
+                    self.draft_logits,
+                    self._step_cols[step],
+                    use_fp64=self.use_fp64_gumbel,
+                )
+                if sampled is not None:
+                    return sampled
+            logits = logits + bias
         self._maybe_predict_acceptance(logits, idx_map, self._step_cols[step])
         if self.draft_logits is None:
             draft_ids = logits.argmax(dim=-1)
@@ -148,7 +222,12 @@ class DSparkSpeculator(DFlashSpeculator):
         # Per-(req, position) head hidden, ordered (req, step).
         sample_hidden = head_hidden[self.sample_indices[:num_sample]]
         # Draft-vocab logits; sampled ids are remapped to target vocab below.
-        base_logits = self.model.compute_draft_logits(sample_hidden)
+        # With a vocab shard: this rank's columns only.
+        shard = self.draft_vocab_shard
+        if shard is None:
+            base_logits = self.model.compute_draft_logits(sample_hidden)
+        else:
+            base_logits = self.model.compute_draft_logits_local(sample_hidden)
         vocab_size = base_logits.shape[-1]
         base_logits = base_logits.view(num_reqs, n_spec, vocab_size)
 
@@ -165,9 +244,10 @@ class DSparkSpeculator(DFlashSpeculator):
             markov_embed = self.model.markov_embed(prev)
             if self.use_confidence_head:
                 confidence_markov_embeds.append(markov_embed)
-            bias = self.model.markov_bias(markov_embed)
-            logits_i = base_logits[:, i] + bias
-            draft_sampled_i = self._sample_logits(logits_i, idx_map[:, i], sample_pos[:, i], i)
+            bias = None if shard is not None else self.model.markov_bias(markov_embed)
+            draft_sampled_i = self._sample_logits(
+                base_logits[:, i], idx_map[:, i], sample_pos[:, i], i, bias=bias, markov_embed=markov_embed
+            )
             self.draft_tokens[:num_reqs, i] = draft_sampled_i
             prev = draft_sampled_i
 

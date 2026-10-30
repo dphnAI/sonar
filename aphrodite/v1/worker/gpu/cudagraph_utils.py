@@ -53,10 +53,12 @@ from aphrodite.v1.worker.gpu.input_batch import (
 from aphrodite.v1.worker.gpu.model_states.interface import ModelState
 from aphrodite.v1.worker.ubatch_utils import check_ubatch_thresholds, get_num_ubatches
 from aphrodite.v1.worker.utils import AttentionGroup, clear_layer_kv_caches
+from aphrodite.v1.worker.workspace import collect_cuda_graph_capture_resources
 
 if TYPE_CHECKING:
     from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner
     from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
+    from aphrodite.v1.worker.gpu.spec_decode.speculator import BaseSpeculator
     from aphrodite.v1.worker.gpu.ubatch_utils import UBatchRunner
 
 logger = init_logger(__name__)
@@ -169,9 +171,11 @@ class CudaGraphManager:
         self._lora_dispatch_map, self._max_lora_case = self._build_lora_dispatch_map()
 
         self.graphs: dict[BatchExecutionDescriptor, torch.cuda.CUDAGraph] = {}
+        self.graph_capture_resources: dict[BatchExecutionDescriptor, list[Any]] = {}
         self.pool = current_platform.get_global_graph_pool() if cudagraph_mode else None
 
         self._graphs_captured = False
+        self.synchronize_warmup = False
 
         # Profiling hooks, set only by profile_cudagraph_memory() below: cap
         # FULL-mode capture at the N largest descriptors and record each
@@ -374,6 +378,7 @@ class CudaGraphManager:
         self._graphs_captured = False
         if self.breakable_cg_runner is not None:
             BreakableCUDAGraphWrapper.clear_all_graphs()
+        self.graph_capture_resources.clear()
 
     def needs_capture(self) -> bool:
         return len(self._capture_descs) > 0
@@ -427,51 +432,79 @@ class CudaGraphManager:
 
                     # Warmup
                     forward_fn(CUDAGraphMode.NONE)
-
-                    # Capture
-                    logger.debug(
-                        "CG Capture: mode=%s, batch_desc=%s",
-                        desc.cg_mode.name,
-                        desc,
-                    )
-                    if desc.cg_mode == CUDAGraphMode.PIECEWISE and not self.use_breakable_cg:
-                        forward_fn(CUDAGraphMode.PIECEWISE)
-                    else:
-                        # Capture with fresh attention state.
-                        forward_fn = create_forward_fn(desc, warmup=False)
-                        if desc.cg_mode == CUDAGraphMode.PIECEWISE:
+                    # Auxiliary-stream warmup work must finish before a graph
+                    # records waits on those streams.
+                    if self.synchronize_warmup:
+                        torch.accelerator.synchronize()
+                    with collect_cuda_graph_capture_resources() as resources:
+                        # Inputs and opaque-op allocations must outlive every
+                        # device pointer recorded by this descriptor's graphs.
+                        # Capture
+                        logger.debug(
+                            "CG Capture: mode=%s, batch_desc=%s",
+                            desc.cg_mode.name,
+                            desc,
+                        )
+                        if desc.cg_mode == CUDAGraphMode.PIECEWISE and not self.use_breakable_cg:
                             forward_fn(CUDAGraphMode.PIECEWISE)
-                            continue
-                        assert desc not in self.graphs, f"Graph already captured for {desc}"
-                        graph = torch.cuda.CUDAGraph()
-                        # Sync offloader's copy stream before capture.
-                        # Ensure any pre-capture prefetches from offloader are complete.
-                        get_offloader().sync_prev_onload()
-                        if self._capture_mem_samples is not None:
-                            torch.accelerator.synchronize()
-                            free_before = torch.accelerator.get_memory_info()[0]
-                        with (
-                            capture_pool(self.pool, self.aphrodite_config) as pool,
-                            torch.cuda.graph(graph, pool, stream=self._capture_stream(desc)),
-                        ):
-                            forward_fn(CUDAGraphMode.NONE)
-                            # Join offloader's copy stream after forward to avoid
-                            # unjoined stream error. The last layer's start_prefetch
-                            # forks copy_stream, but wait_prefetch only happens in
-                            # the next forward pass.
-                            get_offloader().join_after_forward()
-                        if self._capture_mem_samples is not None:
-                            torch.accelerator.synchronize()
-                            free_after = torch.accelerator.get_memory_info()[0]
-                            self._capture_mem_samples.append(free_before - free_after)
-                        self.graphs[desc] = graph
-                        compilation_counter.num_cudagraph_captured += 1
+                        else:
+                            # Capture with fresh attention state.
+                            forward_fn = create_forward_fn(desc, warmup=False)
+                            if desc.cg_mode == CUDAGraphMode.PIECEWISE:
+                                forward_fn(CUDAGraphMode.PIECEWISE)
+                                self.graph_capture_resources[desc] = resources
+                                continue
+                            assert desc not in self.graphs, f"Graph already captured for {desc}"
+                            graph = torch.cuda.CUDAGraph()
+                            # Sync offloader's copy stream before capture.
+                            # Ensure any pre-capture prefetches from offloader are complete.
+                            get_offloader().sync_prev_onload()
+                            if self._capture_mem_samples is not None:
+                                torch.accelerator.synchronize()
+                                free_before = torch.accelerator.get_memory_info()[0]
+                            with (
+                                capture_pool(self.pool, self.aphrodite_config) as pool,
+                                torch.cuda.graph(graph, pool, stream=self._capture_stream(desc)),
+                            ):
+                                forward_fn(CUDAGraphMode.NONE)
+                                # Join offloader's copy stream after forward to avoid
+                                # unjoined stream error. The last layer's start_prefetch
+                                # forks copy_stream, but wait_prefetch only happens in
+                                # the next forward pass.
+                                get_offloader().join_after_forward()
+                            if self._capture_mem_samples is not None:
+                                torch.accelerator.synchronize()
+                                free_after = torch.accelerator.get_memory_info()[0]
+                                self._capture_mem_samples.append(free_before - free_after)
+                            self.graphs[desc] = graph
+                            compilation_counter.num_cudagraph_captured += 1
+                        self.graph_capture_resources[desc] = resources
 
         self._graphs_captured = True
+
+    def planned_token_counts(self) -> list[int]:
+        """Token counts used by whole-batch graphs and their token-split microbatches."""
+        return sorted(
+            {
+                count
+                for descs in self._capture_descs.values()
+                for desc in descs
+                for count in (
+                    desc.num_tokens,
+                    desc.num_tokens // desc.num_ubatches,
+                    desc.num_tokens - (desc.num_tokens // desc.num_ubatches) * (desc.num_ubatches - 1),
+                )
+            }
+        )
 
     def captured_token_counts(self) -> list[int]:
         """Sorted token counts with a captured graph, ignoring LoRA variants."""
         return sorted({desc.num_tokens for desc in self.graphs if desc.num_active_loras == 0})
+
+    def clear(self) -> None:
+        """Destroy graphs before releasing their device-pointer owners."""
+        self.release_graphs()
+        self.breakable_cg_runner = None
 
     def dispatch(
         self,
@@ -679,6 +712,9 @@ class ModelCudaGraphManager(CudaGraphManager):
                 max_query_len=desc.max_query_len or desc.uniform_token_count,
                 pcp_manager=pcp_manager,
             )
+            finalize_inputs = getattr(model_state, "finalize_cudagraph_inputs", None)
+            if finalize_inputs is not None:
+                finalize_inputs(model_inputs, desc.cg_mode)
 
             # Capture with dummy rows marked as padding.
             input_buffers.is_padding.fill_(True)
@@ -838,6 +874,13 @@ def prepare_inputs_to_capture(
     return AttentionState(attn_metadata, slot_mappings_by_layer)
 
 
+def get_speculator_cudagraph_managers(speculator: "BaseSpeculator | None") -> dict[str, CudaGraphManager]:
+    """Return the graph owners used for draft warmup, profiling and teardown."""
+    if speculator is None:
+        return {}
+    return {name: value for name, value in vars(speculator).items() if isinstance(value, CudaGraphManager)}
+
+
 # ---------------------------------------------------------------------------
 # CUDA graph memory profiling
 # ---------------------------------------------------------------------------
@@ -850,7 +893,7 @@ _MIN_PER_GRAPH_BYTES = 1 << 20
 
 
 @torch.inference_mode()
-def profile_cudagraph_memory(runner: "GPUModelRunner") -> int:
+def profile_cudagraph_memory(runner: "GPUModelRunner", prepare_profile_state: Callable[[], None] | None = None) -> int:
     """Estimate the GPU memory needed for CUDA graph capture.
 
     Called during memory profiling, *before* the real KV cache is allocated,
@@ -889,6 +932,8 @@ def profile_cudagraph_memory(runner: "GPUModelRunner") -> int:
     try:
         with set_current_aphrodite_config(runner.aphrodite_config):
             _init_minimal_kv_cache_for_profiling(runner)
+            if prepare_profile_state is not None:
+                prepare_profile_state()
 
         manager = runner.cudagraph_manager
         assert manager is not None
@@ -913,9 +958,7 @@ def profile_cudagraph_memory(runner: "GPUModelRunner") -> int:
                 original_pools[id(wrapper)] = wrapper.graph_pool
                 wrapper.graph_pool = throwaway_pool
             if speculator is not None:
-                spec_manager_names = [
-                    name for name, value in vars(speculator).items() if isinstance(value, CudaGraphManager)
-                ]
+                spec_manager_names = list(get_speculator_cudagraph_managers(speculator))
             manager._max_full_descs_to_capture = _FULL_GRAPH_PROFILING_SAMPLES
             mem_samples: list[int] = []
             manager._capture_mem_samples = mem_samples
@@ -947,9 +990,11 @@ def profile_cudagraph_memory(runner: "GPUModelRunner") -> int:
             # Drop local references before teardown detaches the runner's
             # manager and flushes the allocator.
             del manager
-            _teardown_profiling_state(runner)
     finally:
-        platform_cls._global_graph_pool = saved_global_pool
+        try:
+            _teardown_profiling_state(runner)
+        finally:
+            platform_cls._global_graph_pool = saved_global_pool
 
 
 def _extrapolate_full_graph_memory(mem_samples: list[int], total_graphs: int) -> int:
@@ -963,7 +1008,7 @@ def _extrapolate_full_graph_memory(mem_samples: list[int], total_graphs: int) ->
     return first_capture + (total_graphs - 1) * per_graph
 
 
-def _init_minimal_kv_cache_for_profiling(runner: "GPUModelRunner") -> None:
+def _init_minimal_kv_cache_for_profiling(runner: "GPUModelRunner", *, num_blocks: int | None = None) -> None:
     """Allocate the smallest KV cache that still lets every graph be captured."""
     from aphrodite.v1.core.kv_cache_config_builder import get_kv_cache_config_builder
     from aphrodite.v1.core.kv_cache_planning import get_kv_cache_groups_from_builder
@@ -972,7 +1017,7 @@ def _init_minimal_kv_cache_for_profiling(runner: "GPUModelRunner") -> None:
     builder = get_kv_cache_config_builder(runner.aphrodite_config)
     kv_cache_groups = get_kv_cache_groups_from_builder(builder, runner.aphrodite_config, kv_cache_spec)
     # At least one block per sequence is required to capture the graphs.
-    min_blocks = min(runner.max_num_reqs, runner.compilation_config.max_cudagraph_capture_size) or 1
+    min_blocks = num_blocks or min(runner.max_num_reqs, runner.compilation_config.max_cudagraph_capture_size) or 1
     minimal_config = builder.get_kv_cache_config_from_groups(
         runner.aphrodite_config, kv_cache_groups, num_blocks=min_blocks
     )
@@ -1002,6 +1047,16 @@ def _teardown_profiling_state(runner: "GPUModelRunner") -> None:
     if hasattr(runner, "kv_cache_config"):
         del runner.kv_cache_config
     # Dropping the manager releases the profiling graphs and throwaway pool.
+    if runner.cudagraph_manager is not None:
+        runner.cudagraph_manager.clear()
+    if getattr(runner.model, "supports_b12x_native_preparation", False):
+        speculator = getattr(runner, "speculator", None)
+        if speculator is not None:
+            for name, manager in get_speculator_cudagraph_managers(speculator).items():
+                manager.clear()
+                setattr(speculator, name, None)
+            if hasattr(speculator, "attn_groups"):
+                speculator.attn_groups.clear()
     runner.cudagraph_manager = None
     # Release encoder graphs captured during profiling; the real
     # capture_model() re-captures them.
@@ -1013,6 +1068,9 @@ def _teardown_profiling_state(runner: "GPUModelRunner") -> None:
     if (model := getattr(runner, "model", None)) is not None:
         layers = itertools.chain(layers, model.modules())
     clear_layer_kv_caches(layers)
+    draft = runner.get_draft_model()
+    if draft is not None:
+        clear_layer_kv_caches(draft.modules())
     release_hisparse_profiling_cache(runner.compilation_config.static_forward_context)
     runner.cache_config.num_gpu_blocks = None
     runner.maybe_remove_all_loras(runner.lora_config)

@@ -699,12 +699,12 @@ class WorkerProc:
             # Have the worker close parent end of this worker's pipes too
             "inherited_fds": inherited_fds if inherited_fds is not None else [],
         }
-        # Run EngineCore busy loop in background process.
+        # Native B12x starts CPU-only compiler children; the death pipe owns worker lifetime.
         proc = context.Process(
             target=WorkerProc.worker_main,
             kwargs=process_kwargs,
             name=f"AphroditeWorker-{rank}",
-            daemon=True,
+            daemon=aphrodite_config.model_config.quantization != "deepseek_v41_fp8",
         )
 
         # Apply NUMA binding if configured

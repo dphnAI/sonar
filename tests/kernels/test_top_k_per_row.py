@@ -917,6 +917,54 @@ def test_persistent_topk_sampled_graph(rows: int, top_k: int, distribution: str)
         )
 
 
+@pytest.mark.skipif(not _has_device_capability(80), reason="Requires SM80+")
+@torch.inference_mode()
+def test_persistent_topk_partial_vector_infinity_ties_graph() -> None:
+    top_k, rows, width = 512, 4, 1028
+    lengths = torch.tensor([513, 514, 515, 516], dtype=torch.int32, device="cuda")
+    logits = torch.empty((rows, width), dtype=torch.float32, device="cuda")
+    indices = torch.empty((rows, top_k), dtype=torch.int32, device="cuda")
+    workspace = torch.empty(RADIX_TOPK_WORKSPACE_SIZE, dtype=torch.uint8, device="cuda")
+    positions = torch.arange(width, device="cuda")
+    slots = torch.arange(top_k, device="cuda")
+
+    def update(bounds: list[int]) -> None:
+        lengths.copy_(torch.tensor(bounds, dtype=lengths.dtype, device="cuda"))
+        logits.fill_(-float("inf"))
+        logits.masked_fill_(positions[None] >= lengths[:, None], float("inf"))
+        for row, length in enumerate(bounds):
+            if length:
+                logits[row, length - 1] = 0
+
+    def run() -> None:
+        torch.ops._C.persistent_topk(logits, lengths.view(2, 2), indices, workspace, top_k, width)
+
+    update([513, 514, 515, 516])
+    run()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        run()
+    for bounds in ([513, 514, 515, 516], [0, 512, 1025, 515], [516, 515, 514, 513]):
+        update(bounds)
+        original = logits.clone()
+        indices.fill_(-2)
+        graph.replay()
+        valid = slots[None] < lengths.clamp(max=top_k)[:, None]
+        assert torch.all(indices[~valid] == -1)
+        assert torch.all(((indices >= 0) & (indices < lengths[:, None])) == valid)
+        ordered = indices.sort(dim=1).values
+        assert torch.all((ordered[:, 1:] != ordered[:, :-1]) | (ordered[:, 1:] == -1))
+        selected = logits.gather(1, indices.clamp_min(0).long()).masked_fill(~valid, -float("inf"))
+        expected = logits.masked_fill(positions[None] >= lengths[:, None], -float("inf"))
+        torch.testing.assert_close(
+            selected.sort(dim=1, descending=True).values,
+            expected.topk(top_k, dim=1).values,
+            atol=0,
+            rtol=0,
+        )
+        assert torch.equal(logits, original)
+
+
 def run_large_context_topk_test(
     batch_size: int,
     seq_lens: list[int],

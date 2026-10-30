@@ -1,0 +1,151 @@
+diff --git a/csrc/apis/attention.hpp b/csrc/apis/attention.hpp
+index 3284128..1fd6bbf 100644
+--- a/csrc/apis/attention.hpp
++++ b/csrc/apis/attention.hpp
+@@ -163,7 +163,7 @@ static torch::stable::Tensor get_paged_mqa_logits_metadata(const torch::stable::
+     // Dispatch implementation. SM100 supports varlen requests only (one token per row, requests given by `indices`)
+     const auto arch_major = jit->device.get_arch_major();
+     if (arch_major == 12) {
+-        DG_HOST_ASSERT(block_kv == 32 or block_kv == 64);
++        DG_HOST_ASSERT(block_kv == 32 or block_kv == 64 or block_kv == 128);
+         DG_HOST_ASSERT(not is_varlen or (next_n == 1 and indices.value().dim() == 1 and
+                                          indices.value().size(0) == batch_size and
+                                          indices.value().is_contiguous() and
+@@ -225,7 +225,8 @@ static torch::stable::Tensor fp8_fp4_paged_mqa_logits(const std::tuple<torch::st
+     const auto [num_kv_blocks, block_kv, num_heads_kv, head_dim_with_sf] = get_shape<4>(fused_kv_cache);
+     DG_HOST_ASSERT((arch_major == 10 and (block_kv == 32 or block_kv == 64 or block_kv == 128)) or
+                    (arch_major == 9 and (block_kv == 32 or block_kv == 64)) or
+-                   (arch_major == 12 and (block_kv == 32 or block_kv == 64)));
++                   (arch_major == 12 and (block_kv == 32 or block_kv == 64 or
++                                         (not is_fp4 and block_kv == 128))));
+     const int kv_head_dim = is_fp4 ? head_dim / 2 : head_dim;
+     const int sf_bytes = static_cast<int>(is_mx_sf ? sizeof(int) : sizeof(float));
+     DG_HOST_ASSERT(num_heads_kv == 1 and head_dim_with_sf == kv_head_dim + sf_bytes);
+diff --git a/csrc/apis/config.hpp b/csrc/apis/config.hpp
+index fccbe4a..b962a5e 100644
+--- a/csrc/apis/config.hpp
++++ b/csrc/apis/config.hpp
+@@ -34,6 +34,9 @@ static void set_pdl(const bool& new_enable_pdl) {
+ static bool get_pdl() {
+     return *jit->default_launch_options.enable_pdl;
+ }
++static int64_t get_sm120_fp8_paged_mqa_max_page_size() {
++    return 128;
++}
+ static void use_deterministic_algorithms(const bool enabled) {
+     heuristics_runtime->use_deterministic_algorithms(enabled);
+ }
+@@ -55,6 +58,7 @@ STABLE_TORCH_LIBRARY_FRAGMENT(deep_gemm, m) {
+     m.def("get_tc_util() -> int");
+     m.def("set_pdl(bool new_enable_pdl) -> ()");
+     m.def("get_pdl() -> bool");
++    m.def("get_sm120_fp8_paged_mqa_max_page_size() -> int");
+     m.def("use_deterministic_algorithms(bool enabled) -> ()");
+     m.def("set_ignore_compile_dims(bool new_value) -> ()");
+     m.def("set_block_size_multiple_of(int[] new_value) -> ()");
+@@ -69,6 +73,7 @@ STABLE_TORCH_LIBRARY_IMPL(deep_gemm, CompositeExplicitAutograd, m) {
+     m.impl("get_tc_util", TORCH_BOX(&deep_gemm::config::get_tc_util));
+     m.impl("set_pdl", TORCH_BOX(&deep_gemm::config::set_pdl));
+     m.impl("get_pdl", TORCH_BOX(&deep_gemm::config::get_pdl));
++    m.impl("get_sm120_fp8_paged_mqa_max_page_size", TORCH_BOX(&deep_gemm::config::get_sm120_fp8_paged_mqa_max_page_size));
+     m.impl("use_deterministic_algorithms", TORCH_BOX(&deep_gemm::config::use_deterministic_algorithms));
+     m.impl("set_ignore_compile_dims", TORCH_BOX(&deep_gemm::config::set_ignore_compile_dims));
+     m.impl("set_block_size_multiple_of", TORCH_BOX(&deep_gemm::config::set_block_size_multiple_of));
+diff --git a/csrc/jit_kernels/impls/sm120_mqa_logits.hpp b/csrc/jit_kernels/impls/sm120_mqa_logits.hpp
+index 2001281..52f3e68 100644
+--- a/csrc/jit_kernels/impls/sm120_mqa_logits.hpp
++++ b/csrc/jit_kernels/impls/sm120_mqa_logits.hpp
+@@ -482,14 +482,18 @@ static void sm120_fp8_paged_mqa_logits(
+     constexpr int num_tma_threads = 128;
+     constexpr int num_math_threads = 256;
+     constexpr int num_q_stages = 2;
++    // Match device BLOCK_KV: a 128-row physical page is two 64-row
++    // compute tiles. TMA boxes and per-group SMEM must use the compute size,
++    // while global dimensions/strides retain the original physical page.
++    const int compute_block_kv = std::min(block_kv, 64);
+     // Four 32-row KV groups exceed the 99 KiB SMEM budget with three
+     // stages at 64 heads and paired queries. Keep the 64-row path unchanged.
+     const int num_kv_stages =
+         (block_kv == 32 and num_heads == 64 and (is_varlen or next_n >= 2)) ? 2 : 3;
+-    const int num_groups = split_kv / block_kv;
++    const int num_groups = split_kv / compute_block_kv;
+     const int next_n_atom = (is_varlen or next_n >= 2) ? 2 : 1;
+     DG_HOST_ASSERT(jit->device.get_arch_major() == 12);
+-    DG_HOST_ASSERT(block_kv == 32 or block_kv == 64);
++    DG_HOST_ASSERT(block_kv == 32 or block_kv == 64 or block_kv == 128);
+     DG_HOST_ASSERT(split_kv == 128 and logits_stride % split_kv == 0);
+ 
+     const auto tensor_map_q = make_tma_2d_desc(
+@@ -498,10 +502,10 @@ static void sm120_fp8_paged_mqa_logits(
+         head_dim);
+     const auto tensor_map_kv = make_tma_3d_desc(
+         kv_cache, head_dim, block_kv, num_kv_blocks,
+-        head_dim, block_kv, 1, static_cast<int>(kv_cache.stride(1)),
++        head_dim, compute_block_kv, 1, static_cast<int>(kv_cache.stride(1)),
+         static_cast<int>(kv_cache.stride(0)), head_dim);
+     const auto tensor_map_kv_scales = make_tma_2d_desc(
+-        kv_cache_scales, block_kv, num_kv_blocks, block_kv, 1,
++        kv_cache_scales, block_kv, num_kv_blocks, compute_block_kv, 1,
+         static_cast<int>(kv_cache_scales.stride(0)), 0);
+     const auto tensor_map_weights = make_tma_2d_desc(
+         weights, num_heads, batch_size * next_n, num_heads, next_n_atom,
+@@ -518,9 +522,9 @@ static void sm120_fp8_paged_mqa_logits(
+                         aligned_smem_weight_size_per_stage) +
+         align(num_q_stages * 8 * 2, swizzle_alignment);
+     const int smem_kv_size_per_stage =
+-        block_kv * head_dim * static_cast<int>(kv_cache.element_size());
++        compute_block_kv * head_dim * static_cast<int>(kv_cache.element_size());
+     const int aligned_smem_kv_scale_size_per_stage = align(
+-        block_kv * static_cast<int>(kv_cache_scales.element_size()),
++        compute_block_kv * static_cast<int>(kv_cache_scales.element_size()),
+         swizzle_alignment);
+     const int smem_kv_pipe_size =
+         num_kv_stages * (smem_kv_size_per_stage +
+diff --git a/deep_gemm/_C.py b/deep_gemm/_C.py
+index 5dcdd82..9829230 100644
+--- a/deep_gemm/_C.py
++++ b/deep_gemm/_C.py
+@@ -60,6 +60,7 @@ set_tc_util = _torch_ops.set_tc_util
+ get_tc_util = _torch_ops.get_tc_util
+ set_pdl = _torch_ops.set_pdl
+ get_pdl = _torch_ops.get_pdl
++get_sm120_fp8_paged_mqa_max_page_size = _torch_ops.get_sm120_fp8_paged_mqa_max_page_size
+ set_ignore_compile_dims = _torch_ops.set_ignore_compile_dims
+ get_mk_alignment_for_contiguous_layout = _torch_ops.get_mk_alignment_for_contiguous_layout
+ get_theoretical_mk_alignment_for_contiguous_layout = _torch_ops.get_theoretical_mk_alignment_for_contiguous_layout
+@@ -738,6 +739,7 @@ _PUBLIC_API = [
+     'set_num_sms', 'get_num_sms',
+     'set_tc_util', 'get_tc_util',
+     'set_pdl', 'get_pdl',
++    'get_sm120_fp8_paged_mqa_max_page_size',
+     'use_deterministic_algorithms',
+     'set_ignore_compile_dims',
+     'set_block_size_multiple_of',
+diff --git a/deep_gemm/__init__.py b/deep_gemm/__init__.py
+index d2dace0..135bdb4 100644
+--- a/deep_gemm/__init__.py
++++ b/deep_gemm/__init__.py
+@@ -24,6 +24,7 @@ from ._C import (
+     set_block_size_multiple_of,
+     set_pdl,
+     get_pdl,
++    get_sm120_fp8_paged_mqa_max_page_size,
+     use_deterministic_algorithms,
+ )
+ 
+diff --git a/deep_gemm/include/deep_gemm/impls/sm120_fp8_paged_mqa_logits.cuh b/deep_gemm/include/deep_gemm/impls/sm120_fp8_paged_mqa_logits.cuh
+index bc77307..bd67536 100644
+--- a/deep_gemm/include/deep_gemm/impls/sm120_fp8_paged_mqa_logits.cuh
++++ b/deep_gemm/include/deep_gemm/impls/sm120_fp8_paged_mqa_logits.cuh
+@@ -49,8 +49,9 @@ void sm120_fp8_paged_mqa_logits(const uint32_t batch_size,
+     static constexpr uint32_t kKSteps = kHeadDim / MMA_K;
+     static constexpr uint32_t kNTilesPerQ = kNumHeads / MMA_N;
+ 
+-    // A 32-row page needs a 32-row compute tile: BLOCK_KV=64 would straddle two
+-    // non-contiguous physical pages. Mirrors the FP4 sibling kernel.
++    // A 32-row tile cannot straddle non-contiguous physical pages. Larger
++    // pages use 64-row tiles; TMA boxes and per-group SMEM must match this
++    // compute size, not PAGE_KV. A 128-row page uses offsets 0 and 64.
+     static constexpr uint32_t BLOCK_KV = PAGE_KV < 64 ? PAGE_KV : 64;
+     DG_STATIC_ASSERT(PAGE_KV == 32 or PAGE_KV == 64 or PAGE_KV == 128 or PAGE_KV == 256, "Unsupported FP8 page size");
+ 

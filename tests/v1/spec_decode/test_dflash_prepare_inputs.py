@@ -102,6 +102,7 @@ def _run_prepare(
         max_num_tokens=max_num_tokens,
         max_model_len=128,
         sample_from_anchor=True,
+        num_cached_tokens=torch.zeros(max_num_reqs, dtype=torch.int32, device=device),
     )
     with (
         patch(
@@ -182,7 +183,13 @@ def test_prepare_dflash_inputs_excludes_rejected_context_suffix_with_dcp():
 
     assert out.context_positions[:4].tolist() == [10, 11, 0, 0]
     assert out.context_slot_mapping[:4].tolist() == [28, 29, PAD_SLOT_ID, PAD_SLOT_ID]
-    assert out.query_slot_mapping[:3].tolist() == [PAD_SLOT_ID, PAD_SLOT_ID, 30]
+    # Query positions must follow the accepted prefix, not the rejected suffix.
+    # DCP attention handles query K/V separately from cached context; its query
+    # cache-write policy is covered by test_dflash_dcp_slot_mapping.py.
+    assert out.input_buffers.input_ids[:3].cpu().tolist() == [99, 123, 123]
+    assert out.input_buffers.positions[:3].cpu().tolist() == [12, 13, 14]
+    assert out.input_buffers.seq_lens[0].item() == 15
+    assert out.sample_pos[:3].tolist() == [13, 14, 15]
 
 
 def test_prepare_dflash_inputs_never_writes_the_null_block():

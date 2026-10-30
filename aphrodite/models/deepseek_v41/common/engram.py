@@ -67,6 +67,10 @@ from aphrodite.model_executor.layers.linear import ColumnParallelLinear
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import kMxfp8Dynamic
 from aphrodite.model_executor.utils import set_weight_attrs
+from aphrodite.models.deepseek_v41.common.ops.engram_sm120 import (
+    create_sm120_engram_wkv,
+    sm120_engram_post,
+)
 from aphrodite.models.deepseek_v41.common.ops.query_quant import (
     can_fuse_query_quant,
     mxfp8_scale_bytes,
@@ -1455,15 +1459,30 @@ class Engram(nn.Module):
         n_hash_cols = (layout.max_ngram_size - 1) * layout.n_heads
         # Without sequence parallelism every TP rank holds every token, so
         # shard the output columns instead of replicating the projection.
-        self.wkv = ColumnParallelLinear(
+        striped_wkv = create_sm120_engram_wkv(
             n_hash_cols * layout.head_dim,
-            self.dim * (self.hc_mult + 1),
-            bias=False,
-            gather_output=True,
-            quant_config=quant_config,
-            return_bias=False,
-            prefix=f"{prefix}.wkv",
-            disable_tp=use_sequence_parallel,
+            self.dim,
+            self.hc_mult,
+            self.eps,
+            self.clamp_value,
+            use_sequence_parallel,
+            quant_config,
+            f"{prefix}.wkv",
+        )
+        self._sm120_small_gather = striped_wkv is not None
+        self.wkv = (
+            striped_wkv
+            if striped_wkv is not None
+            else ColumnParallelLinear(
+                n_hash_cols * layout.head_dim,
+                self.dim * (self.hc_mult + 1),
+                bias=False,
+                gather_output=True,
+                quant_config=quant_config,
+                return_bias=False,
+                prefix=f"{prefix}.wkv",
+                disable_tp=use_sequence_parallel,
+            )
         )
         self.q_weight = nn.Parameter(
             torch.empty(self.hc_mult, self.dim, dtype=torch.bfloat16),
@@ -1583,12 +1602,25 @@ class Engram(nn.Module):
         """hidden_states: [T, hc_mult, dim]; hash_ids: [T, n_hash_cols] (all
         tokens, pre sequence-parallel shard); token_mask: [T], False shuts
         the gate so those positions pass through untouched."""
-        if self._batch is not None:
+        if self._sm120_small_gather and hash_ids.shape[0] == 0:
+            kv = torch.empty((0, 6400), dtype=torch.bfloat16, device=hidden_states.device)
+        elif self._batch is not None:
             kv = self.wkv(self._batch.wkv_input(self, hash_ids.shape[0]))
         else:
             kv = self.wkv(self.embed(hash_ids).flatten(-2))
         num_kv_tokens = hash_ids.shape[0]
         assert token_mask is None or token_mask.shape == (num_kv_tokens,)
+        if self._sm120_small_gather:
+            return sm120_engram_post(
+                hidden_states,
+                kv,
+                self.q_weight,
+                self.k_weight,
+                token_mask,
+                num_kv_tokens,
+                self.eps,
+                self.clamp_value,
+            )
         if self.use_sequence_parallel:
             tp_size = get_tensor_model_parallel_world_size()
             tp_rank = get_tensor_model_parallel_rank()

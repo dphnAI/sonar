@@ -649,6 +649,7 @@ class GroupCoordinator:
         # so we don't abstract it into the base class
         maybe_ca_context = nullcontext()
         maybe_fi_pcie_ipc_context: AbstractContextManager[Any] = nullcontext()
+        maybe_pcie_pull_context: AbstractContextManager[Any] = nullcontext()
         maybe_aiter_ar_context = nullcontext()
         from aphrodite.distributed.device_communicators.cuda_communicator import (
             CudaCommunicator,
@@ -669,6 +670,9 @@ class GroupCoordinator:
                 fi_pcie_ipc_ar_comm = self.device_communicator.fi_pcie_ipc_ar_comm
                 if fi_pcie_ipc_ar_comm is not None:
                     maybe_fi_pcie_ipc_context = fi_pcie_ipc_ar_comm.capture()
+                pcie_pull_comm = self.device_communicator.pcie_pull_ar_comm
+                if pcie_pull_comm is not None:
+                    maybe_pcie_pull_context = pcie_pull_comm.capture(stream=stream)
 
             # Capture each group's own comm. A global lookup would double-capture
             aiter_ar_comm = getattr(self.device_communicator, "aiter_ar_comm", None)
@@ -682,6 +686,7 @@ class GroupCoordinator:
             stream.wait_stream(curr_stream)
 
         with (
+            maybe_pcie_pull_context,
             torch.cuda.stream(stream),
             maybe_ca_context,
             maybe_fi_pcie_ipc_context,

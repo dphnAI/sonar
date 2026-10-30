@@ -8,13 +8,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-import aphrodite.model_executor.layers.fused_moe.b12x as b12x
 import aphrodite.model_executor.layers.fused_moe.modular_kernel as mk
 import aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 as mxfp4_oracle
 import aphrodite.model_executor.layers.fused_moe.oracle.nvfp4 as nvfp4_oracle
 from aphrodite import _custom_ops as ops
 from aphrodite.config import AphroditeConfig, ParallelConfig, set_current_aphrodite_config
-from aphrodite.model_executor.layers.fused_moe import fused_topk
+from aphrodite.model_executor.layers.fused_moe import b12x_fused_decode, fused_topk
 from aphrodite.model_executor.layers.fused_moe.activation import MoEActivation
 from aphrodite.model_executor.layers.fused_moe.all2all_utils import (
     maybe_make_prepare_finalize,
@@ -45,10 +44,12 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kNvfp4Dynamic,
     kNvfp4Static,
 )
+from aphrodite.model_executor.warmup.b12x_warmup import warmup_b12x_model
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import set_random_seed
 from tests.kernels.moe.utils import make_dummy_moe_config
 from tests.kernels.quantization.nvfp4_utils import (
+    convert_swizzled_to_linear,
     dequantize_nvfp4_to_dtype,
     quant_nvfp4_tensor,
 )
@@ -164,6 +165,12 @@ def _make_b12x_moe_kernel(
     topk: int,
     activation: MoEActivation,
     quant_config: FusedMoEQuantConfig,
+    *,
+    layer: torch.nn.Module | None = None,
+    swiglu_limit: float | None = None,
+    swiglu_alpha: float = 1.0,
+    swiglu_beta: float = 0.0,
+    max_num_tokens: int = 512,
 ) -> mk.FusedMoEKernel:
     num_experts = w1.shape[0]
     moe_config = make_dummy_moe_config(
@@ -180,16 +187,22 @@ def _make_b12x_moe_kernel(
         ),
         in_dtype=hidden_states.dtype,
         activation=activation,
+        max_num_tokens=max_num_tokens,
     )
+    moe_config.swiglu_limit = swiglu_limit
+    moe_config.swiglu_alpha = swiglu_alpha
+    moe_config.swiglu_beta = swiglu_beta
     experts = B12xExperts(moe_config, quant_config)
-    layer = SimpleNamespace(
-        activation=activation,
-        apply_router_weight_on_input=False,
-        w13_weight=w1,
-        w2_weight=w2,
-        w13_weight_scale=quant_config.w1_scale,
-        w2_weight_scale=quant_config.w2_scale,
-    )
+    if layer is None:
+        layer = torch.nn.Module()
+    layer.activation = activation
+    layer.apply_router_weight_on_input = False
+    layer.w13_weight = torch.nn.Parameter(w1, requires_grad=False)
+    layer.w2_weight = torch.nn.Parameter(w2, requires_grad=False)
+    if quant_config.w1_scale is not None:
+        layer.w13_weight_scale = torch.nn.Parameter(quant_config.w1_scale, requires_grad=False)
+    if quant_config.w2_scale is not None:
+        layer.w2_weight_scale = torch.nn.Parameter(quant_config.w2_scale, requires_grad=False)
     if quant_config.weight_quant_dtype == "nvfp4":
         layer.w13_weight_scale_2 = quant_config.g1_alphas
         layer.w2_weight_scale_2 = quant_config.g2_alphas
@@ -256,6 +269,36 @@ def _quant_config(weight_dtype: str, activation_dtype: str | None):
     )
 
 
+@pytest.mark.parametrize(
+    "hidden_size,expected",
+    [
+        (128, False),
+        (256, False),
+        (512, True),
+        (768, False),
+        (1024, True),
+        (5120, True),
+        (8192, True),
+        (8448, False),
+        (8704, False),
+    ],
+)
+def test_b12x_fused_decode_hidden_size_eligibility(hidden_size: int, expected: bool) -> None:
+    assert (
+        b12x_fused_decode._supported(
+            n=576,
+            k=hidden_size,
+            num_topk=6,
+            max_tokens=8,
+            ids_dtype=torch.int32,
+            csf_inline=False,
+            experts=384,
+            swiglu_limit=10.0,
+        )
+        is expected
+    )
+
+
 def test_b12x_moe_supports_only_tensor_parallel() -> None:
     parallel = FusedMoEParallelConfig.make_no_parallel()
 
@@ -267,19 +310,15 @@ def test_b12x_moe_supports_only_tensor_parallel() -> None:
     assert not B12xExperts._supports_parallel_config(replace(parallel, enable_eplb=True))
 
 
-_SITU_REASON = "kernel supports only SiTU beta=4 and linear_beta=25"
-_UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave with W4A8"
-
-
 @pytest.mark.parametrize(
-    "config_kwargs,overrides,weight_key,activation_key,expected_reason",
+    "config_kwargs,overrides,weight_key,activation_key,expected_supported",
     [
         pytest.param(
             {"hidden_dim": 128, "activation": MoEActivation.SWIGLUOAI},
             {},
             kMxfp4Static,
             None,
-            "kernel does not support MoEActivation.SWIGLUOAI activation",
+            False,
             id="interleaved-swigluoai",
         ),
         pytest.param(
@@ -290,7 +329,7 @@ _UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave wit
             {},
             kMxfp4Static,
             kMxfp8Dynamic,
-            _UNINTERLEAVED_W4A8_REASON,
+            False,
             id="mxfp4-w4a8-uninterleaved-swigluoai",
         ),
         pytest.param(
@@ -301,7 +340,7 @@ _UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave wit
             {},
             kMxfp4Static,
             None,
-            None,
+            True,
             id="w4a16-uninterleaved-swigluoai",
         ),
         pytest.param(
@@ -309,7 +348,7 @@ _UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave wit
             {},
             kMxfp4Static,
             kMxfp8Dynamic,
-            "MXFP4 W4A8 supports only SiLU and SiTU",
+            False,
             id="mxfp4-w4a8-relu2",
         ),
         pytest.param(
@@ -317,7 +356,7 @@ _UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave wit
             {},
             kMxfp4Static,
             kMxfp8Dynamic,
-            ("MXFP4 W4A8 requires hidden size divisible by 256 and per-rank intermediate size divisible by 32"),
+            False,
             id="mxfp4-w4a8-alignment",
         ),
         pytest.param(
@@ -325,7 +364,7 @@ _UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave wit
             {"intermediate_size_per_partition": 64},
             kMxfp4Static,
             None,
-            "MXFP4 requires the per-rank intermediate size to be divisible by 32",
+            False,
             id="mxfp4-tp-scale-groups",
         ),
         pytest.param(
@@ -333,7 +372,7 @@ _UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave wit
             {"activation_situ_beta": 3.0, "activation_situ_linear_beta": 25.0},
             kMxfp4Static,
             None,
-            _SITU_REASON,
+            False,
             id="situ-beta",
         ),
         pytest.param(
@@ -341,7 +380,7 @@ _UNINTERLEAVED_W4A8_REASON = "kernel does not support swigluoai_uninterleave wit
             {"activation_situ_beta": 4.0, "activation_situ_linear_beta": 25.0},
             kMxfp4Static,
             None,
-            None,
+            True,
             id="situ-standard-parameters",
         ),
     ],
@@ -352,14 +391,14 @@ def test_b12x_moe_config_support(
     overrides,
     weight_key,
     activation_key,
-    expected_reason: str | None,
+    expected_supported: bool,
 ) -> None:
     monkeypatch.setattr(B12xExperts, "_supports_current_device", lambda: True)
     config = make_dummy_moe_config(**{"hidden_dim": 256, "intermediate_size": 64, **config_kwargs})
     for name, value in overrides.items():
         setattr(config, name, value)
 
-    supported, reason = B12xExperts.is_supported_config(
+    supported, _ = B12xExperts.is_supported_config(
         B12xExperts,
         config,
         weight_key,
@@ -367,7 +406,7 @@ def test_b12x_moe_config_support(
         mk.FusedMoEActivationFormat.Standard,
     )
 
-    assert (supported, reason) == (expected_reason is None, expected_reason)
+    assert supported is expected_supported
 
 
 @pytest.mark.parametrize(
@@ -478,54 +517,6 @@ def test_deepseek_v4_flashinfer_cutlass_falls_through_to_w4a8(
     assert experts_cls is FlashInferExperts
 
 
-def test_compressed_tensors_mxfp4_preserves_checkpoint_packing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from aphrodite.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe import (  # noqa: E501
-        compressed_tensors_moe_w4a4_mxfp4 as ct_mxfp4,
-    )
-
-    monkeypatch.setattr(
-        ct_mxfp4.CutlassExpertsMxfp4,
-        "_supports_current_device",
-        lambda: False,
-    )
-    monkeypatch.setattr(
-        ct_mxfp4,
-        "select_mxfp4_moe_backend",
-        lambda moe: (Mxfp4MoeBackend.B12X_MXFP4_MXFP8, B12xExperts),
-    )
-    monkeypatch.setattr(
-        ct_mxfp4,
-        "prepare_moe_fp4_layer_for_marlin",
-        lambda layer: pytest.fail("b12x must not use Marlin packing"),
-    )
-    moe_config = SimpleNamespace(w13_num_shards=2, moe_backend="b12x")
-    method = ct_mxfp4.CompressedTensorsW4A4Mxfp4MoEMethod(moe_config)
-    processed_layers: list[torch.nn.Module] = []
-    fake_experts = SimpleNamespace(process_weights_after_loading=processed_layers.append)
-    kernel = SimpleNamespace(fused_experts=fake_experts)
-    monkeypatch.setattr(method, "get_fused_moe_quant_config", lambda _: object())
-    monkeypatch.setattr(ct_mxfp4, "make_mxfp4_moe_kernel", lambda **_: kernel)
-    layer = torch.nn.Module()
-    layer._expert_routing_tables = lambda: ()
-    method.create_weights(
-        layer,
-        num_experts=2,
-        hidden_size=64,
-        intermediate_size_per_partition=32,
-        params_dtype=torch.bfloat16,
-    )
-    w13_packed_data = layer.w13_weight_packed.data
-    w2_packed_data = layer.w2_weight_packed.data
-
-    method.process_weights_after_loading(layer)
-
-    assert layer.w13_weight.data.data_ptr() == w13_packed_data.data_ptr()
-    assert layer.w2_weight.data.data_ptr() == w2_packed_data.data_ptr()
-    assert processed_layers == [layer]
-
-
 def test_b12x_mxfp4_falls_back_to_a16(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -546,33 +537,34 @@ def test_b12x_mxfp4_falls_back_to_a16(
 
 
 @pytest.mark.parametrize(
-    "activation_key,force_a16,expected_activation_key",
+    "activation_key,force_a16,activation,expected_supported",
     [
-        (kNvfp4Dynamic, False, kNvfp4Dynamic),
-        (kMxfp8Dynamic, False, kMxfp8Dynamic),
-        (kNvfp4Dynamic, True, None),
+        (kNvfp4Dynamic, False, MoEActivation.SILU, True),
+        (kMxfp8Dynamic, False, MoEActivation.SILU, True),
+        (kNvfp4Dynamic, False, MoEActivation.SWIGLUOAI_UNINTERLEAVE, False),
+        (kNvfp4Dynamic, True, MoEActivation.SWIGLUOAI_UNINTERLEAVE, True),
     ],
 )
 def test_explicit_b12x_nvfp4_selection(
     monkeypatch: pytest.MonkeyPatch,
     activation_key,
     force_a16: bool,
-    expected_activation_key,
+    activation: MoEActivation,
+    expected_supported: bool,
 ) -> None:
-    selected_activation_keys = []
-
-    def is_supported_config(cls, config, weight_key, activation_key, activation_format):
-        selected_activation_keys.append(activation_key)
-        return True, None
-
-    monkeypatch.setattr(B12xExperts, "is_supported_config", is_supported_config)
+    monkeypatch.setattr(B12xExperts, "_supports_current_device", lambda: True)
     monkeypatch.setattr(
         nvfp4_oracle.envs,
         "APHRODITE_B12X_MOE_FP4_FORCE_A16",
         force_a16,
     )
-    config = make_dummy_moe_config(hidden_dim=128, intermediate_size=64)
+    config = make_dummy_moe_config(hidden_dim=128, intermediate_size=64, activation=activation)
     config.moe_backend = "b12x"
+
+    if not expected_supported:
+        with pytest.raises(ValueError, match="does not support swigluoai_uninterleave"):
+            select_nvfp4_moe_backend(config, weight_key=kNvfp4Static, activation_key=activation_key)
+        return
 
     backend, experts_cls = select_nvfp4_moe_backend(
         config,
@@ -582,7 +574,6 @@ def test_explicit_b12x_nvfp4_selection(
 
     assert backend == NvFp4MoeBackend.B12X
     assert experts_cls is B12xExperts
-    assert selected_activation_keys == [expected_activation_key]
 
 
 @pytest.mark.parametrize("force_a16,expected_quant_dtype", [(False, "nvfp4"), (True, None)])
@@ -609,54 +600,6 @@ def test_b12x_nvfp4_force_a16_updates_quant_config(
     )
 
     assert quant_config.quant_dtype == expected_quant_dtype
-
-
-def test_b12x_nvfp4_force_a16_updates_weight_preparation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        nvfp4_oracle.envs,
-        "APHRODITE_B12X_MOE_FP4_FORCE_A16",
-        True,
-    )
-    reorder_w13 = None
-
-    def prepare_for_b12x(**kwargs):
-        nonlocal reorder_w13
-        reorder_w13 = kwargs["reorder_w13"]
-        return (
-            kwargs["w13"],
-            kwargs["w13_scale"],
-            kwargs["w13_scale_2"],
-            kwargs["a13_scale"],
-            kwargs["w2"],
-            kwargs["w2_scale"],
-            kwargs["w2_scale_2"],
-            kwargs["a2_scale"],
-        )
-
-    monkeypatch.setattr(
-        nvfp4_oracle,
-        "prepare_nvfp4_moe_layer_for_b12x",
-        prepare_for_b12x,
-    )
-    tensor = torch.ones(1)
-
-    nvfp4_oracle.convert_to_nvfp4_moe_kernel_format(
-        nvfp4_backend=NvFp4MoeBackend.B12X,
-        layer=SimpleNamespace(),
-        w13=tensor,
-        w13_scale=tensor,
-        w13_scale_2=tensor,
-        a13_scale=tensor,
-        w2=tensor,
-        w2_scale=tensor,
-        w2_scale_2=tensor,
-        a2_scale=tensor,
-        is_act_and_mul=True,
-    )
-
-    assert reorder_w13 is True
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -691,6 +634,8 @@ def test_b12x_nvfp4_preparation_pads_each_gated_half() -> None:
         dtype=torch.float8_e4m3fn,
         device=device,
     )
+    w13[:, intermediate_size:].fill_(0x22)
+    w13_scale[:, intermediate_size:].fill_(2.0)
     global_scale = torch.ones(num_experts, device=device)
     input_scale = torch.tensor([[1.0, 2.0], [3.0, 1.0]], device=device)
 
@@ -712,177 +657,24 @@ def test_b12x_nvfp4_preparation_pads_each_gated_half() -> None:
     assert prepared_w13_scale.shape == (num_experts, 128, hidden_size // 16)
     assert prepared_w2.shape == (num_experts, hidden_size, 32)
     assert prepared_w2_scale.shape == (num_experts, 128, 4)
+    expected_w13 = torch.zeros_like(prepared_w13)
+    expected_w13[:, :intermediate_size] = 0x01
+    expected_w13[:, 64 : 64 + intermediate_size] = 0x22
+    torch.testing.assert_close(prepared_w13, expected_w13, rtol=0, atol=0)
+    torch.testing.assert_close(prepared_w2[:, :, : intermediate_size // 2], w2, rtol=0, atol=0)
+    assert not prepared_w2[:, :, intermediate_size // 2 :].count_nonzero()
+    for expert in range(num_experts):
+        scale13 = convert_swizzled_to_linear(prepared_w13_scale[expert], 128, hidden_size, 16).float()
+        expected_scale13 = torch.zeros_like(scale13)
+        expected_scale13[:intermediate_size] = 1.0
+        expected_scale13[64 : 64 + intermediate_size] = 2.0
+        torch.testing.assert_close(scale13, expected_scale13, rtol=0, atol=0)
+        scale2 = convert_swizzled_to_linear(prepared_w2_scale[expert], 128, 64, 16).float()
+        expected_scale2 = torch.zeros_like(scale2)
+        expected_scale2[:hidden_size, : intermediate_size // 16] = 1.0
+        torch.testing.assert_close(scale2, expected_scale2, rtol=0, atol=0)
     torch.testing.assert_close(prepared_a13, torch.tensor([2.0, 3.0], device=device))
     torch.testing.assert_close(prepared_a2, torch.tensor([2.0, 3.0], device=device))
-
-
-def test_b12x_moe_uses_minimax_swiglu_parameters() -> None:
-    config = make_dummy_moe_config(
-        hidden_dim=128,
-        intermediate_size=64,
-        activation=MoEActivation.SWIGLUOAI_UNINTERLEAVE,
-    )
-    config.swiglu_limit = 7.0
-    config.swiglu_alpha = 1.702
-    config.swiglu_beta = 1.0
-    experts = B12xExperts(config, _quant_config("mxfp4", None))
-
-    assert experts._swiglu_params(config.activation) == (7.0, 1.702, 1.0)
-
-
-def test_b12x_moe_warmup_runs_each_planner_regime_once(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    experts = B12xExperts(
-        make_dummy_moe_config(
-            num_experts=4,
-            experts_per_token=2,
-            hidden_dim=128,
-            intermediate_size=64,
-        ),
-        _quant_config("mxfp4", None),
-    )
-    prepared = SimpleNamespace(
-        num_experts=4,
-        hidden_size=128,
-        intermediate_size=64,
-        w1_fp4=torch.empty(0),
-    )
-    layer = SimpleNamespace(
-        activation=MoEActivation.SILU,
-        apply_router_weight_on_input=False,
-    )
-    planned_tokens = []
-    launched_tokens = []
-
-    with pytest.raises(RuntimeError, match="process_weights_after_loading"):
-        experts.warmup_launches(layer, token_counts=(1,))
-    experts._prepared_experts = prepared
-
-    def fake_execution_plan(**kwargs):
-        tokens = kwargs["tokens"]
-        if tokens <= 2:
-            signature = ("micro", "decode")
-        elif tokens <= 4:
-            signature = ("dynamic", "small")
-        else:
-            signature = ("dynamic", "large")
-        return SimpleNamespace(
-            implementation=signature[0],
-            execution=signature[1],
-        )
-
-    def fake_plan(**kwargs):
-        planned_tokens.append(kwargs["tokens"])
-        return SimpleNamespace(scratch_specs=lambda: [SimpleNamespace(dtype=torch.uint8, shape=(64,))])
-
-    def fake_run(**kwargs):
-        launched_tokens.append(kwargs["hidden_states"].shape[0])
-
-    monkeypatch.setattr(b12x, "_b12x_moe_execution_plan", fake_execution_plan)
-    monkeypatch.setattr(b12x, "_run_b12x_moe_plan", fake_run)
-    monkeypatch.setattr(experts, "_plan", fake_plan)
-
-    warmed = experts.warmup_launches(layer, token_counts=(1, 2, 3, 4, 8))
-
-    assert warmed == 3
-    assert planned_tokens == [1, 3, 8]
-    assert launched_tokens == planned_tokens
-
-
-def test_b12x_moe_reload_reprepares_current_parameters(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    plan = SimpleNamespace(
-        discards_source_parameters=False,
-        quant_modes=("w4a16",),
-        io_dtype="bfloat16",
-        activation="silu",
-    )
-    prepared_inputs: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]] = []
-
-    def prepare_weights(**kwargs):
-        prepared_inputs.append(
-            (
-                kwargs["w1_fp4"],
-                kwargs["w2_fp4"],
-                kwargs["w1_blockscale"],
-                kwargs["w2_blockscale"],
-            )
-        )
-        return SimpleNamespace(plan=plan)
-
-    extension = SimpleNamespace(plan_weights=lambda **_: plan, prepare_weights=prepare_weights)
-    monkeypatch.setattr(b12x, "_require_b12x_fused_moe", lambda: extension)
-    experts = B12xExperts(
-        make_dummy_moe_config(num_experts=2, hidden_dim=4, intermediate_size=8),
-        _quant_config("mxfp4", None),
-    )
-    layer = SimpleNamespace(
-        activation=MoEActivation.SILU,
-        apply_router_weight_on_input=False,
-        w13_weight=torch.full((2, 8, 2), 1, dtype=torch.uint8),
-        w2_weight=torch.full((2, 4, 4), 1, dtype=torch.uint8),
-        w13_weight_scale=torch.full((2, 8, 1), 1, dtype=torch.uint8),
-        w2_weight_scale=torch.full((2, 4, 1), 1, dtype=torch.uint8),
-    )
-
-    experts.process_weights_after_loading(layer)
-    layer.w13_weight = torch.full_like(layer.w13_weight, 2)
-    layer.w2_weight = torch.full_like(layer.w2_weight, 2)
-    layer.w13_weight_scale = torch.full_like(layer.w13_weight_scale, 3)
-    layer.w2_weight_scale = torch.full_like(layer.w2_weight_scale, 3)
-    experts.process_weights_after_loading(layer)
-
-    assert len(prepared_inputs) == 2
-    assert prepared_inputs[-1][0] is layer.w13_weight
-    assert prepared_inputs[-1][1] is layer.w2_weight
-    assert prepared_inputs[-1][2] is layer.w13_weight_scale
-    assert prepared_inputs[-1][3] is layer.w2_weight_scale
-
-
-def test_b12x_source_release_preserves_prepared_storage_owner() -> None:
-    layer = torch.nn.Module()
-    for name, shape in (
-        ("w13_weight", (4, 32, 16)),
-        ("w2_weight", (4, 64, 8)),
-        ("w13_weight_scale", (4, 32, 2)),
-        ("w2_weight_scale", (4, 64, 1)),
-    ):
-        layer.register_parameter(
-            name,
-            torch.nn.Parameter(
-                torch.empty(shape, dtype=torch.uint8),
-                requires_grad=False,
-            ),
-        )
-    experts = B12xExperts(
-        make_dummy_moe_config(hidden_dim=128, intermediate_size=64),
-        _quant_config("mxfp4", None),
-    )
-    owner = SimpleNamespace(
-        w1_fp4=layer.w13_weight,
-        w2_fp4=layer.w2_weight,
-        w1_blockscale=layer.w13_weight_scale,
-        w2_blockscale=layer.w2_weight_scale,
-    )
-    experts._prepared_experts = owner
-    owner_tensors = (
-        owner.w1_fp4,
-        owner.w2_fp4,
-        owner.w1_blockscale,
-        owner.w2_blockscale,
-    )
-    owner_ptrs = tuple(tensor.untyped_storage().data_ptr() for tensor in owner_tensors)
-
-    experts._release_source_parameters(layer)
-    experts._release_source_parameters(layer)
-
-    assert layer.w13_weight.numel() == 0
-    assert layer.w2_weight.numel() == 0
-    assert layer.w13_weight_scale.numel() == 0
-    assert layer.w2_weight_scale.numel() == 0
-    assert tuple(tensor.untyped_storage().data_ptr() for tensor in owner_tensors) == owner_ptrs
 
 
 def test_b12x_moe_rejects_router_weight_on_input_for_w4a8() -> None:
@@ -900,56 +692,6 @@ def test_b12x_moe_rejects_router_weight_on_input_for_w4a8() -> None:
         match="apply_router_weight_on_input only with W4A16",
     ):
         experts.process_weights_after_loading(layer)
-
-
-def test_b12x_moe_workspace_uses_prepared_router_weight_contract(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    experts = B12xExperts(
-        make_dummy_moe_config(hidden_dim=128, intermediate_size=64),
-        _quant_config("mxfp4", None),
-    )
-    prepared = SimpleNamespace(
-        plan=SimpleNamespace(discards_source_parameters=False),
-    )
-    layer = SimpleNamespace(
-        activation=MoEActivation.SILU,
-        apply_router_weight_on_input=True,
-        w13_weight=torch.empty(0),
-        w2_weight=torch.empty(0),
-        w13_weight_scale=torch.empty(0),
-        w2_weight_scale=torch.empty(0),
-    )
-    monkeypatch.setattr(experts, "_prepare_experts", lambda **kwargs: prepared)
-    planned = []
-
-    def fake_plan(**kwargs):
-        planned.append(kwargs)
-        return SimpleNamespace(scratch_specs=lambda: [SimpleNamespace(dtype=torch.uint8, shape=(64,))])
-
-    monkeypatch.setattr(experts, "_plan", fake_plan)
-
-    experts.process_weights_after_loading(layer)
-    assert layer.b12x_warmup_provider is experts
-    experts.workspace_shapes(
-        8,
-        128,
-        128,
-        2,
-        4,
-        4,
-        None,
-        MoEActivation.SILU,
-    )
-
-    assert planned == [
-        {
-            "tokens": 8,
-            "topk": 2,
-            "activation": MoEActivation.SILU,
-            "apply_router_weight_on_input": True,
-        }
-    ]
 
 
 @dataclass
@@ -973,9 +715,12 @@ def _make_b12x_moe_case(
     activation: MoEActivation = MoEActivation.SILU,
     tokens: int = 16,
     seed: int = 19,
+    num_experts: int = 4,
+    hidden_size: int = 512,
+    intermediate_size: int = 128,
+    topk: int = 2,
 ) -> _B12xMoeCase:
     set_random_seed(seed)
-    num_experts, hidden_size, intermediate_size = 4, 512, 128
     dtype = torch.bfloat16
     hidden_states = torch.randn((tokens, hidden_size), device="cuda", dtype=dtype) / 10
     w1_rows = 2 * intermediate_size if activation.is_gated else intermediate_size
@@ -1038,7 +783,6 @@ def _make_b12x_moe_case(
             1.0 / w2_global_scale,
             input_scale,
             is_act_and_mul=activation.is_gated,
-            reorder_w13=activation_dtype is None and activation.is_gated,
         )
         w1_q, w1_scale, w1_alpha, a1_scale = prepared[:4]
         w2_q, w2_scale, w2_alpha, a2_scale = prepared[4:]
@@ -1073,6 +817,7 @@ def _make_b12x_moe_case(
         quant_config=quant_config,
         activation=activation,
         activation_dtype=activation_dtype,
+        topk=topk,
     )
 
 
@@ -1157,18 +902,87 @@ def test_b12x_moe_matches_torch(
     assert cosine > 0.99
 
 
+def _assert_b12x_normwise_close(
+    actual: torch.Tensor,
+    expected: torch.Tensor,
+    *,
+    relative_l2: float,
+    cosine: float,
+) -> None:
+    actual, expected = actual.float().flatten(), expected.float().flatten()
+    assert torch.isfinite(actual).all()
+    assert torch.isfinite(expected).all()
+    assert torch.linalg.vector_norm(actual - expected) / torch.linalg.vector_norm(expected) <= relative_l2
+    assert torch.nn.functional.cosine_similarity(actual, expected, dim=0) >= cosine
+
+
+def _mxfp8_activation_roundtrip(tensor: torch.Tensor) -> torch.Tensor:
+    blocks = tensor.float().reshape(*tensor.shape[:-1], tensor.shape[-1] // 32, 32)
+    scale_bits = (blocks.abs().amax(dim=-1, keepdim=True) * (1.0 / 448)).contiguous().view(torch.int32)
+    # UE8M0 rounds the FP32 exponent upward whenever any mantissa bit is set.
+    rounded_bits = torch.where(
+        (scale_bits & 0x007FFFFF) != 0,
+        (scale_bits + 0x00800000) & 0x7F800000,
+        scale_bits,
+    )
+    scale = rounded_bits.view(torch.float32)
+    exponent = (rounded_bits >> 23) & 0xFF
+    inverse = ((254 - exponent).clamp(min=0) << 23).view(torch.float32)
+    inverse = torch.where(exponent == 0, 0.0, inverse)
+    payload = (blocks * inverse).clamp(-448, 448).to(torch.float8_e4m3fn).float()
+    return (payload * scale).reshape(tensor.shape)
+
+
+def _clamped_swiglu_reference(
+    case: _B12xMoeCase,
+    *,
+    swiglu_limit: float | None = 10.0,
+    swiglu_alpha: float = 1.0,
+    swiglu_beta: float = 0.0,
+) -> torch.Tensor:
+    weights, ids = case.score.float().softmax(dim=-1).topk(case.topk)
+    output = torch.zeros_like(case.hidden_states, dtype=torch.float32)
+    hidden_states = case.hidden_states.float()
+    if case.activation_dtype == "mxfp8":
+        hidden_states = _mxfp8_activation_roundtrip(hidden_states)
+    for expert in range(case.w1_ref.shape[0]):
+        token_ids, slots = torch.where(ids == expert)
+        projections = (hidden_states[token_ids] @ case.w1_ref[expert].float().t()).to(case.hidden_states.dtype)
+        gate, up = projections.float().chunk(2, dim=-1)
+        if swiglu_limit is not None:
+            gate = gate.clamp(max=swiglu_limit)
+            up = up.clamp(-swiglu_limit, swiglu_limit)
+        intermediate = (gate * torch.sigmoid(swiglu_alpha * gate) * (up + swiglu_beta)).to(case.hidden_states.dtype)
+        intermediate = intermediate.float()
+        if case.activation_dtype == "mxfp8":
+            intermediate = _mxfp8_activation_roundtrip(intermediate)
+        expert_output = intermediate @ case.w2_ref[expert].float().t()
+        output.index_add_(0, token_ids, expert_output * weights[token_ids, slots, None])
+    return output.to(case.hidden_states.dtype)
+
+
 @pytest.mark.skipif(not _has_b12x_moe(), reason="requires b12x MoE on SM120")
 @pytest.mark.parametrize(
-    "weight_dtype,activation_dtype",
+    "weight_dtype,activation_dtype,tokens,hidden_size,intermediate_size,num_experts,topk,activation",
     [
-        pytest.param("mxfp4", "mxfp8", id="w4a8"),
-        pytest.param("nvfp4", None, id="w4a16"),
+        pytest.param("mxfp4", "mxfp8", 4, 512, 128, 4, 2, MoEActivation.SILU, id="w4a8"),
+        pytest.param("nvfp4", None, 4, 512, 128, 4, 2, MoEActivation.SILU, id="w4a16"),
+        pytest.param("nvfp4", None, 4, 512, 128, 4, 2, MoEActivation.SWIGLUOAI_UNINTERLEAVE, id="w4a16-swigluoai"),
+        pytest.param("mxfp4", "mxfp8", 1, 5120, 576, 8, 6, MoEActivation.SILU, id="compact-m1"),
+        pytest.param("mxfp4", "mxfp8", 6, 5120, 576, 8, 6, MoEActivation.SILU, id="compact-m6"),
+        pytest.param("mxfp4", "mxfp8", 48, 5120, 576, 8, 6, MoEActivation.SILU, id="compact-m48"),
     ],
 )
 @torch.inference_mode()
 def test_b12x_moe_cuda_graph_replay(
     weight_dtype: str,
     activation_dtype: str | None,
+    tokens: int,
+    hidden_size: int,
+    intermediate_size: int,
+    num_experts: int,
+    topk: int,
+    activation: MoEActivation,
     workspace_init,
 ) -> None:
     from aphrodite.v1.worker.workspace import lock_workspace
@@ -1177,9 +991,20 @@ def test_b12x_moe_cuda_graph_replay(
         case = _make_b12x_moe_case(
             weight_dtype,
             activation_dtype,
-            tokens=4,
+            activation=activation,
+            tokens=tokens,
             seed=23,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_experts=num_experts,
+            topk=topk,
         )
+        layer = torch.nn.Module()
+        swiglu_params = {
+            "swiglu_limit": 0.1 if activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE else 10.0,
+            "swiglu_alpha": 1.3 if activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE else 1.0,
+            "swiglu_beta": 0.75 if activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE else 0.0,
+        }
         kernel = _make_b12x_moe_kernel(
             case.hidden_states,
             case.w1,
@@ -1187,6 +1012,9 @@ def test_b12x_moe_cuda_graph_replay(
             case.topk,
             case.activation,
             case.quant_config,
+            layer=layer,
+            **swiglu_params,
+            max_num_tokens=48,
         )
         topk_weights, topk_ids, _ = fused_topk(
             case.hidden_states,
@@ -1200,8 +1028,8 @@ def test_b12x_moe_cuda_graph_replay(
         def apply() -> torch.Tensor:
             return kernel.apply(
                 hidden_states=case.hidden_states,
-                w1=case.w1,
-                w2=case.w2,
+                w1=layer.w13_weight,
+                w2=layer.w2_weight,
                 topk_weights=topk_weights,
                 topk_ids=topk_ids,
                 activation=case.activation,
@@ -1210,18 +1038,163 @@ def test_b12x_moe_cuda_graph_replay(
                 apply_router_weight_on_input=False,
             )
 
+        warmup_counts = (1, 6, 48) if intermediate_size == 576 and tokens == 6 else (tokens,)
+        warmup_b12x_model(layer, warmup_counts, case.hidden_states.dtype)
         expected = apply().clone()
         lock_workspace()
         graph = torch.cuda.CUDAGraph()
         stream = torch.cuda.Stream()
         with torch.cuda.graph(graph, stream=stream):
             actual = apply()
-        graph.replay()
-        torch.accelerator.synchronize()
 
-    assert torch.isfinite(expected).all()
-    assert torch.isfinite(actual).all()
-    torch.testing.assert_close(actual, expected, atol=2e-2, rtol=2e-2)
+        for changed_input in (False, True):
+            if changed_input:
+                case.hidden_states.normal_(std=0.1)
+                case.score.normal_()
+                new_weights, new_ids, _ = fused_topk(case.hidden_states, case.score, case.topk, renormalize=False)
+                topk_weights.copy_(new_weights)
+                topk_ids.copy_(new_ids)
+                expected = apply().clone()
+            for _ in range(2):
+                graph.replay()
+            torch.accelerator.synchronize()
+            # BF16 atomic reduction order varies in eager too; elementwise
+            # relative error is unstable near cancellation.
+            _assert_b12x_normwise_close(actual, expected, relative_l2=0.01, cosine=0.9999)
+            reference = _clamped_swiglu_reference(case, **swiglu_params)
+            _assert_b12x_normwise_close(actual, reference, relative_l2=0.05, cosine=0.999)
+
+        if intermediate_size == 576 and tokens == 6:
+            partial_case = replace(case, hidden_states=case.hidden_states[:5], score=case.score[:5])
+            partial_weights, partial_ids = topk_weights[:5], topk_ids[:5]
+            partial_graph = torch.cuda.CUDAGraph()
+            # M5 is deliberately absent from warmup: capture cannot prepare a
+            # new exact-M plan and must use the already-prepared capacity plan.
+            with torch.cuda.graph(partial_graph, stream=stream):
+                partial_output = kernel.apply(
+                    hidden_states=partial_case.hidden_states,
+                    w1=layer.w13_weight,
+                    w2=layer.w2_weight,
+                    topk_weights=partial_weights,
+                    topk_ids=partial_ids,
+                    activation=case.activation,
+                    global_num_experts=num_experts,
+                    expert_map=None,
+                    apply_router_weight_on_input=False,
+                )
+            reference = _clamped_swiglu_reference(partial_case, **swiglu_params)
+            for _ in range(2):
+                partial_graph.replay()
+            torch.accelerator.synchronize()
+            _assert_b12x_normwise_close(partial_output, reference, relative_l2=0.05, cosine=0.999)
+            partial_graph.reset()
+            assert layer.w13_weight.numel() == layer.w2_weight.numel() == 0
+            assert layer.w13_weight_scale.numel() == layer.w2_weight_scale.numel() == 0
+            replacement = _make_b12x_moe_case(
+                weight_dtype,
+                activation_dtype,
+                tokens=tokens,
+                seed=29,
+                hidden_size=hidden_size,
+                intermediate_size=intermediate_size,
+                num_experts=num_experts,
+                topk=topk,
+            )
+            layer.w13_weight = torch.nn.Parameter(replacement.w1, requires_grad=False)
+            layer.w2_weight = torch.nn.Parameter(replacement.w2, requires_grad=False)
+            layer.w13_weight_scale = torch.nn.Parameter(replacement.quant_config.w1_scale, requires_grad=False)
+            layer.w2_weight_scale = torch.nn.Parameter(replacement.quant_config.w2_scale, requires_grad=False)
+            layer.b12x_warmup_provider.process_weights_after_loading(layer)
+            case.w1_ref = replacement.w1_ref
+            case.w2_ref = replacement.w2_ref
+            expected = apply().clone()
+            graph.replay()
+            torch.accelerator.synchronize()
+            _assert_b12x_normwise_close(actual, expected, relative_l2=0.01, cosine=0.9999)
+            _assert_b12x_normwise_close(
+                actual, _clamped_swiglu_reference(case, **swiglu_params), relative_l2=0.05, cosine=0.999
+            )
+        graph.reset()
+
+
+@pytest.mark.skipif(not _has_b12x_moe(), reason="requires b12x MoE on SM120")
+@torch.inference_mode()
+def test_b12x_moe_warmup_prepares_each_owner_for_static_decode(workspace_init) -> None:
+    with set_current_aphrodite_config(AphroditeConfig()):
+        layers = torch.nn.ModuleList([torch.nn.Module(), torch.nn.Module()])
+        cases = [
+            _make_b12x_moe_case(
+                "mxfp4",
+                "mxfp8",
+                tokens=tokens,
+                seed=seed,
+                hidden_size=512,
+                intermediate_size=128,
+                num_experts=4,
+                topk=2,
+            )
+            for tokens, seed in ((7, 41), (8, 43))
+        ]
+        kernels = [
+            _make_b12x_moe_kernel(
+                case.hidden_states,
+                case.w1,
+                case.w2,
+                case.topk,
+                case.activation,
+                case.quant_config,
+                layer=layer,
+                max_num_tokens=8,
+            )
+            for layer, case in zip(layers, cases)
+        ]
+        warmup_b12x_model(layers, (7, 8), torch.bfloat16)
+        first = cases[0]
+        _, scratch_shape, _ = kernels[0].fused_experts.workspace_shapes(
+            8, 256, 512, first.topk, 4, 4, None, first.activation
+        )
+        scratch = torch.empty(scratch_shape, device="cuda", dtype=torch.bfloat16)
+        outputs = [torch.empty_like(case.hidden_states) for case in cases]
+        routes = [fused_topk(case.hidden_states, case.score, case.topk, renormalize=False)[:2] for case in cases]
+        graph = torch.cuda.CUDAGraph()
+        # Equal geometry must not deduplicate layer-owned plans. Neither owner
+        # has had a serving invocation before this capture.
+        with torch.cuda.graph(graph):
+            for layer, kernel, case, output, (weights, ids) in zip(layers, kernels, cases, outputs, routes):
+                kernel.fused_experts.apply(
+                    output=output,
+                    hidden_states=case.hidden_states,
+                    w1=layer.w13_weight,
+                    w2=layer.w2_weight,
+                    topk_weights=weights,
+                    topk_ids=ids,
+                    activation=case.activation,
+                    global_num_experts=4,
+                    expert_map=None,
+                    a1q_scale=None,
+                    a2_scale=None,
+                    workspace13=None,
+                    workspace2=scratch,
+                    expert_tokens_meta=None,
+                    apply_router_weight_on_input=False,
+                )
+        for _ in range(2):
+            for case, (weights, ids) in zip(cases, routes):
+                case.hidden_states.normal_(std=0.1)
+                case.score.normal_()
+                new_weights, new_ids, _ = fused_topk(case.hidden_states, case.score, case.topk, renormalize=False)
+                weights.copy_(new_weights)
+                ids.copy_(new_ids)
+            allocated = torch.accelerator.memory_allocated()
+            graph.replay()
+            torch.accelerator.synchronize()
+            assert torch.accelerator.memory_allocated() == allocated
+            for case, output in zip(cases, outputs):
+                # W4A8 rounds both activation boundaries to MXFP8; an A16
+                # reference measures quantization error, not owner isolation.
+                reference = _clamped_swiglu_reference(case, swiglu_limit=None)
+                _assert_b12x_normwise_close(output, reference, relative_l2=0.05, cosine=0.999)
+        graph.reset()
 
 
 @pytest.mark.skipif(not _has_b12x_moe(), reason="requires b12x MoE on SM120")

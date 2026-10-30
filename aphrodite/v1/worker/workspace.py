@@ -8,7 +8,7 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from contextvars import ContextVar
 from itertools import accumulate
 from math import prod
-from typing import TypeVar, cast
+from typing import Any, TypeVar, cast
 
 import torch
 
@@ -32,6 +32,9 @@ _GiB = 1024**3
 # Global workspace manager instance
 _manager: "WorkspaceManager | None" = None
 _workspace_lane: ContextVar[int] = ContextVar("aphrodite_workspace_lane", default=0)
+_cuda_graph_capture_resources: ContextVar[list[Any] | None] = ContextVar(
+    "aphrodite_cuda_graph_capture_resources", default=None
+)
 
 
 @contextmanager
@@ -44,6 +47,26 @@ def use_workspace_lane(lane: int) -> Iterator[None]:
         yield
     finally:
         _workspace_lane.reset(token)
+
+
+@contextmanager
+def collect_cuda_graph_capture_resources() -> Iterator[list[Any]]:
+    """Collect allocation owners; the graph manager retains this list per graph."""
+    resources: list[Any] = []
+    token = _cuda_graph_capture_resources.set(resources)
+    try:
+        yield resources
+    finally:
+        _cuda_graph_capture_resources.reset(token)
+
+
+def retain_cuda_graph_capture_resource(resource: Any) -> bool:
+    """Keep a device-pointer owner alive exactly as long as its captured graph."""
+    resources = _cuda_graph_capture_resources.get()
+    if resources is None:
+        return False
+    resources.append(resource)
+    return True
 
 
 class WorkspaceManager:
@@ -161,6 +184,64 @@ class WorkspaceManager:
                 f"dtype={workspace.dtype}; requested shape={shape}, dtype={dtype}."
             )
         return workspace
+
+    def get_stream_simultaneous(
+        self, stream_id: int, *shapes_and_dtypes: tuple[tuple[int, ...], torch.dtype]
+    ) -> list[torch.Tensor]:
+        """Borrow one reusable arena per stream and lane, separate from default scratch."""
+        actual_bytes = [_compute_bytes(shape, dtype) for shape, dtype in shapes_and_dtypes]
+        aligned_bytes = [round_up(size, 256) for size in actual_bytes]
+        required_bytes = sum(aligned_bytes)
+        resources = self._persistent_resources[self._get_workspace_id()]
+        key = ("workspace_stream_arena", stream_id)
+        storage = cast(torch.Tensor | None, resources.get(key))
+        if storage is None or storage.numel() < required_bytes:
+            if self._locked:
+                raise AssertionError("Workspace is locked; reserve stream scratch during preparation.")
+            if self._device.type == "cuda":
+                if torch.cuda.is_current_stream_capturing():
+                    raise RuntimeError("Cannot grow stream workspace during CUDA graph capture")
+                if storage is not None:
+                    torch.accelerator.synchronize(self._device)
+            with self._alloc_context():
+                storage = torch.empty((required_bytes,), dtype=torch.uint8, device=self._device)
+            resources[key] = storage
+        offsets = list(accumulate([0] + aligned_bytes[:-1]))
+        return [
+            storage[offset : offset + size].view(dtype).reshape(shape)
+            for offset, size, (shape, dtype) in zip(offsets, actual_bytes, shapes_and_dtypes)
+        ]
+
+    def reserve_by_lane(self) -> None:
+        """Cover every microbatch without aliasing target and draft scratch."""
+        lane_bytes = [
+            max(
+                map(
+                    self._workspace_size_bytes,
+                    self._current_workspaces[lane :: self._num_lanes],
+                ),
+                default=0,
+            )
+            for lane in range(self._num_lanes)
+        ]
+        self._reserve_slots(lane_bytes * self._num_ubatches)
+
+    def _reserve_slots(self, sizes: list[int]) -> None:
+        for lane in range(self._num_lanes):
+            with use_workspace_lane(lane):
+                for ubatch in range(self._num_ubatches):
+                    workspace_id = ubatch * self._num_lanes + lane
+                    size = sizes[workspace_id]
+                    if self._workspace_size_bytes(self._current_workspaces[workspace_id]) >= size:
+                        continue
+                    if self._locked or (self._device.type == "cuda" and torch.cuda.is_current_stream_capturing()):
+                        raise RuntimeError("Cannot grow workspace during execution or capture")
+                    self._current_workspaces[workspace_id] = None
+                    torch.accelerator.empty_cache()
+                    with self._alloc_context():
+                        self._current_workspaces[workspace_id] = torch.empty(
+                            (size,), dtype=torch.uint8, device=self._device
+                        )
 
     def get_simultaneous(self, *shapes_and_dtypes: tuple[tuple[int, ...], torch.dtype]) -> list[torch.Tensor]:
         """Get multiple workspace tensors simultaneously from a single allocation.

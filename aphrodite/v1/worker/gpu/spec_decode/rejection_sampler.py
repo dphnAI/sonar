@@ -21,8 +21,10 @@ from aphrodite.v1.worker.gpu.sample.logprob import compute_topk_scores
 from aphrodite.v1.worker.gpu.sample.output import SamplerOutput, SamplingMaskTensors
 from aphrodite.v1.worker.gpu.sample.sampler import Sampler
 from aphrodite.v1.worker.gpu.sample.states import NO_LOGPROBS
+from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
 from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     rejection_sample,
+    rejection_sample_vocab_parallel,
 )
 
 # Cap on the FP32 target-logits buffer materialized by apply_sampling_params.
@@ -450,4 +452,91 @@ class RejectionSampler:
             num_sampled=num_sampled,
             num_rejected=num_rejected,
             sampling_mask_tensors=sampling_mask_tensors,
+        )
+
+    def supports_vocab_parallel(self, input_batch: InputBatch) -> bool:
+        """Whether this batch can verify on vocab shards without full logits.
+
+        Only target logits whose sole processing is temperature qualify: no
+        min-p, top-k, top-p, logits processors, logprobs, masks, NaN counting,
+        watermarking, synthetic rates or adaptive verification. The decision
+        uses only host state that is identical on every TP rank.
+        """
+        if (
+            self.watermark_key is not None
+            or self.synthetic_conditional_rates is not None
+            or self.enable_adaptive_verification
+            or self.sampler.compute_nans
+            or self.sampler.return_sampling_mask
+        ):
+            return False
+        idx_mapping_np = input_batch.idx_mapping_np
+        sampler = self.sampler
+        if np.any(
+            sampler.needs_logits_processing[idx_mapping_np] & ~sampler.temperature_only_processing[idx_mapping_np]
+        ):
+            return False
+        return self.sampler.get_logprobs_dims(idx_mapping_np) is None
+
+    def sample_vocab_parallel(
+        self,
+        local_logits: torch.Tensor,
+        input_batch: InputBatch,
+        draft_logits: torch.Tensor | None,
+        shard: VocabShard,
+    ) -> SamplerOutput:
+        """Verify drafts from this rank's vocab shard of the target logits.
+
+        `local_logits` is [num_logits, shard.size] and `draft_logits`, when
+        present, is this rank's [max_num_reqs, steps, shard.size] cache.
+        Requires `supports_vocab_parallel(input_batch)`.
+        """
+        draft_sampled, pos = gather_draft_sampled(
+            input_batch.input_ids,
+            input_batch.positions,
+            input_batch.logits_indices,
+            input_batch.expanded_idx_mapping,
+            input_batch.expanded_local_pos,
+            self.sampler.req_states.prefill_len.gpu,
+        )
+        sampling_states = self.sampler.sampling_states
+        all_greedy = bool(np.all(sampling_states.temperature.np[input_batch.idx_mapping_np] == 0.0))
+        if np.any(self.sampler.needs_logits_processing[input_batch.idx_mapping_np]):
+            # Temperature is elementwise, so scaling the shard matches
+            # apply_sampling_params on the full row: FP32 copy, then divide.
+            local_logits = torch.empty_like(local_logits, dtype=torch.float32).copy_(local_logits)
+            sampling_states.apply_temperature(
+                local_logits, input_batch.expanded_idx_mapping, input_batch.idx_mapping_np
+            )
+        sampled, num_sampled = rejection_sample_vocab_parallel(
+            local_logits,
+            draft_logits,
+            draft_sampled,
+            input_batch.cu_num_logits,
+            pos,
+            input_batch.idx_mapping,
+            input_batch.expanded_idx_mapping,
+            input_batch.expanded_local_pos,
+            sampling_states.temperature.gpu,
+            sampling_states.seeds.gpu,
+            self.num_speculative_steps,
+            shard,
+            use_fp64=self.sampler.use_fp64_gumbel,
+            use_block_verification=self.use_block_verification,
+            all_greedy=all_greedy,
+        )
+        num_sampled, num_rejected = get_num_sampled_and_rejected(
+            num_sampled,
+            input_batch.seq_lens,
+            input_batch.cu_num_logits,
+            input_batch.idx_mapping,
+            self.sampler.req_states.prefill_len.gpu,
+        )
+        return SamplerOutput(
+            sampled_token_ids=sampled,
+            logprobs_tensors=None,
+            num_nans=None,
+            num_sampled=num_sampled,
+            num_rejected=num_rejected,
+            sampling_mask_tensors=None,
         )

@@ -154,11 +154,24 @@ def deep_gemm_fp8_o_proj(
         )
     else:
         grouped_weight = wo_a.weight.view(n_groups, o_lora_rank, -1)
-        torch.bmm(
-            o_proj_input.transpose(0, 1),
-            grouped_weight.transpose(1, 2),
-            out=z.transpose(0, 1),
-        )
+        tokens = o_proj_input.shape[0]
+        if (
+            current_platform.is_device_capability_family(120)
+            and 1 < tokens <= 64
+            and o_proj_input.dtype == grouped_weight.dtype == torch.bfloat16
+            and grouped_weight.is_contiguous()
+            and o_lora_rank % 64 == 0
+            and grouped_weight.shape[2] % (2048 if tokens > 32 else 1024) == 0
+        ):
+            from ._sm120_bf16_bmm import bf16_grouped_bmm
+
+            bf16_grouped_bmm(o_proj_input, grouped_weight, z)
+        else:
+            torch.bmm(
+                o_proj_input.transpose(0, 1),
+                grouped_weight.transpose(1, 2),
+                out=z.transpose(0, 1),
+            )
     return wo_b(z.flatten(1))
 
 

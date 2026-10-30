@@ -60,6 +60,18 @@ def _create_aphrodite_config() -> MagicMock:
     return aphrodite_config
 
 
+@pytest.mark.parametrize(
+    "num_tokens,num_ubatches,expected",
+    [(15, 2, [7, 8, 15]), (17, 3, [5, 7, 17]), (16, 1, [16])],
+)
+def test_warmup_token_counts_include_uneven_microbatches(num_tokens, num_ubatches, expected):
+    manager = gpu_cudagraph_utils.CudaGraphManager.__new__(gpu_cudagraph_utils.CudaGraphManager)
+    manager._capture_descs = {
+        CUDAGraphMode.FULL: [BatchExecutionDescriptor(CUDAGraphMode.FULL, num_tokens, None, num_ubatches=num_ubatches)]
+    }
+    assert manager.planned_token_counts() == expected
+
+
 def test_full_capture_sets_graph_pool_id_before_cuda_graph(monkeypatch):
     """FULL capture must set graph_pool_id before entering torch.cuda.graph().
 
@@ -68,6 +80,8 @@ def test_full_capture_sets_graph_pool_id_before_cuda_graph(monkeypatch):
     AssertionError: graph_pool_id is not set under graph capture
     """
     graph_pool = object()
+    capture_stream = object()
+    monkeypatch.setattr(gpu_cudagraph_utils, "current_stream", lambda: capture_stream)
     monkeypatch.setattr(
         gpu_cudagraph_utils,
         "get_pp_group",
@@ -99,7 +113,7 @@ def test_full_capture_sets_graph_pool_id_before_cuda_graph(monkeypatch):
 
     @contextmanager
     def fake_graph_capture(*args, **kwargs):
-        yield SimpleNamespace(stream=MagicMock())
+        yield SimpleNamespace(stream=capture_stream)
 
     fake_offloader = MagicMock()
 

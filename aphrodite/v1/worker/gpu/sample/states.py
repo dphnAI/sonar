@@ -66,6 +66,12 @@ class SamplingStates:
 
         return temperature != 0.0 and (temperature != 1.0 or min_p != 0.0 or top_k != self.vocab_size or top_p != 1.0)
 
+    def uses_filters(self, req_idx: int) -> bool:
+        """Whether min-p, top-k or top-p reshape this request's distribution."""
+        return bool(
+            self.min_p.np[req_idx] != 0.0 or self.top_k.np[req_idx] != self.vocab_size or self.top_p.np[req_idx] != 1.0
+        )
+
     def apply_staged_writes(self) -> None:
         self.temperature.copy_to_uva()
         self.top_p.copy_to_uva()

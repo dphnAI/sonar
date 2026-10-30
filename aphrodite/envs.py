@@ -196,6 +196,7 @@ if TYPE_CHECKING:
     APHRODITE_HUMMING_USE_F16_ACCUM: bool = False
     APHRODITE_HUMMING_MOE_GEMM_TYPE: Literal["indexed", "grouped", "auto"] | None = None
     APHRODITE_B12X_MOE_FP4_FORCE_A16: bool = False
+    APHRODITE_DSV41_SM120_NATIVE: bool = False
     APHRODITE_DEEPEPLL_NVFP4_DISPATCH: bool = False
     APHRODITE_V1_USE_OUTLINES_CACHE: bool = False
     APHRODITE_TPU_USING_PATHWAYS: bool = False
@@ -273,6 +274,8 @@ if TYPE_CHECKING:
     APHRODITE_ALLREDUCE_USE_SYMM_MEM: bool = True
     APHRODITE_ALLREDUCE_USE_FLASHINFER: bool = True
     APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC: bool = False
+    APHRODITE_ALLREDUCE_USE_PCIE_PULL: bool = False
+    APHRODITE_ALLREDUCE_PCIE_TRANSPORT: Literal["paired", "host"] = "paired"
     APHRODITE_TUNED_CONFIG_FOLDER: str | None = None
     APHRODITE_ENABLE_STARTUP_PLAN: bool = False
     APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS: set[str] = set()
@@ -1496,6 +1499,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Force b12x FP4 MoE to use BF16 activations.
     "APHRODITE_B12X_MOE_FP4_FORCE_A16": lambda: bool(int(os.getenv("APHRODITE_B12X_MOE_FP4_FORCE_A16", "0"))),
+    "APHRODITE_DSV41_SM120_NATIVE": lambda: bool(int(os.getenv("APHRODITE_DSV41_SM120_NATIVE", "0"))),
     # Allow use of FlashInfer MxInt4 MoE kernels for fused moe ops.
     "APHRODITE_USE_FLASHINFER_MOE_INT4": lambda: bool(int(os.getenv("APHRODITE_USE_FLASHINFER_MOE_INT4", "0"))),
     # Control the cache sized used by the xgrammar compiler. The default
@@ -1724,6 +1728,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # integration is being qualified.
     "APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC": lambda: bool(
         int(os.getenv("APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC", "0"))
+    ),
+    # Use the fixed-order, single-lane SM120 TP4 staged PCIe pull backend.
+    "APHRODITE_ALLREDUCE_USE_PCIE_PULL": lambda: bool(int(os.getenv("APHRODITE_ALLREDUCE_USE_PCIE_PULL", "0"))),
+    # Host staging uses shared CPU DRAM and does not require GPU peer access.
+    "APHRODITE_ALLREDUCE_PCIE_TRANSPORT": env_with_choices(
+        "APHRODITE_ALLREDUCE_PCIE_TRANSPORT", "paired", ["paired", "host"]
     ),
     # Experimental: use this to enable MCP tool calling for non harmony models
     "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT": lambda: bool(
