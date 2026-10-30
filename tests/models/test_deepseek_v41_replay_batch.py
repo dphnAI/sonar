@@ -21,6 +21,7 @@ from aphrodite.model_executor.layers.fused_moe.routed_experts_capturer import (
 )
 from aphrodite.models.deepseek_v41.decoder_replay_layers import DecoderReplayLayers
 from aphrodite.models.deepseek_v41.nvidia.model_state import DeepseekV41ModelState
+from aphrodite.sampling_params import SamplingParams
 from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
 from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
 from aphrodite.v1.worker.gpu.model_states.default import DefaultModelState
@@ -201,10 +202,14 @@ def test_replay_batch_keeps_device_decode_boundaries(state):
     assert build.batch.query_start_loc.tolist() == [0, 1, 4, 4 + WINDOW]
 
 
-def test_prompt_logprobs_requests_keep_their_rows(state):
-    """Every prompt row of a prompt-logprobs request is read, so it never
-    trims; the other prefills still do."""
-    state._keeps_rows_np[1] = True
+@pytest.mark.parametrize("fixed_token_ids", [False, True])
+def test_prompt_logprobs_requests_keep_their_rows(state, fixed_token_ids):
+    """Every scored prompt row survives, while other prefills still trim."""
+    params = SamplingParams(
+        prompt_logprobs=None if fixed_token_ids else 0,
+        prompt_logprob_token_ids=np.ones((299, 1), dtype=np.int32) if fixed_token_ids else None,
+    )
+    state.add_request(1, SimpleNamespace(req_id="scoring", replay_start=0, sampling_params=params))
     batch = _input_batch([1, 300, 300], [500, 300, 300], PREFILLING)
     replay, build = _prepare(state, batch, CUDAGraphMode.NONE)
     assert replay is not None
@@ -221,7 +226,7 @@ def test_aux_output_requests_keep_every_routing_row(state, cg_mode):
             index,
             SimpleNamespace(
                 replay_start=0,
-                sampling_params=SimpleNamespace(prompt_logprobs=None),
+                sampling_params=SamplingParams(),
             ),
         )
     batch = _input_batch(QUERY_LENS, SEQ_LENS, PREFILLING)

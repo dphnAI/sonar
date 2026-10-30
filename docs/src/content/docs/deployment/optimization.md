@@ -227,6 +227,11 @@ experimental native B12x backend. With DSpark, also set
 This path uses packed compressed KV caches, native sparse attention, fused
 output projections, and native Engram lookup. It retains Sonar's MoE scheduling.
 
+Decoder row compaction preserves all prompt rows for both `prompt_logprobs`
+and fixed-token `prompt_logprob_token_ids` scoring, including fixed-token
+requests without ordinary prompt logprobs. Ordinary generation still uses
+the bounded decoder window.
+
 For BF16 query chunks, including prefill, the backend fuses query/KV RMSNorm
 with MXFP8 query quantization and the KV rotary embedding. The query
 projection and optional indexer reuse the quantized query with their

@@ -105,7 +105,9 @@ class DeepseekV41ModelState(SonarDeepseekV41ModelState):
     def add_request(self, req_index: int, new_req_data: NewRequestData) -> None:
         super().add_request(req_index, new_req_data)
         sampling = new_req_data.sampling_params
-        if sampling is not None and sampling.prompt_logprobs is not None:
+        if sampling is not None and (
+            sampling.prompt_logprobs is not None or sampling.prompt_logprob_token_ids is not None
+        ):
             self._ced_prompt_logprobs.add(new_req_data.req_id)
         else:
             self._ced_prompt_logprobs.discard(new_req_data.req_id)
