@@ -25,7 +25,7 @@ def _host_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
     import aphrodite._custom_ops  # noqa: F401
 
     ops = torch.ops._C_pcie_pull
-    capacity = 32 * 5120
+    capacity = 64 * 5120
     slab_bytes = ops.buffer_size(capacity, 1, 3)
     total_bytes = tp_size * slab_bytes
     paths = [""]
@@ -50,11 +50,23 @@ def _host_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
         [alias + peer * slab_bytes for peer in range(tp_size)], state, rank, capacity, 1, 512, 2_000_000_000, 3
     )
     # The stream must remain usable beyond the old 32-bit packet-tag boundary.
-    state[0].fill_((1 << 32) - 4)
+    initial_epoch = (1 << 32) - 4
+    state[0].fill_(initial_epoch)
     stream = torch.cuda.Stream(device=device)
     stream.wait_stream(torch.cuda.current_stream(device))
     packets = []
-    for kind, size in (("reduce", 1), ("gather", 7), ("reduce", 8), ("gather", 16), ("reduce", 32)):
+    # Cross the direct/sharded boundary in both directions and change lane
+    # counts across repeated graphs; gathers keep their direct lane geometry.
+    for kind, size in (
+        ("reduce", 1),
+        ("gather", 7),
+        ("reduce", 8),
+        ("reduce", 16),
+        ("gather", 16),
+        ("reduce", 32),
+        ("reduce", 64),
+        ("gather", 1024),
+    ):
         shape = (size, 5120) if kind == "reduce" else (size,)
         dtype = torch.bfloat16 if kind == "reduce" else torch.uint8
         source = torch.empty(shape, dtype=dtype, device=device)
@@ -71,6 +83,8 @@ def _host_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
                     ops.all_reduce(handle, source, target)
                 else:
                     ops.all_gather(handle, source, target)
+                # CLOSE is a real all-rank protocol operation, not a local
+                # status query; every data operation must pass its own gate.
                 ops.close_step(handle, snapshot)
     dist.barrier()
     ops.bind_stream(handle)
@@ -86,10 +100,11 @@ def _host_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
         if nonce == 6:
             # A live native context must keep its registration usable after a
             # rejected premature release, not merely throw an exception.
-            with pytest.raises(RuntimeError):
+            with pytest.raises(RuntimeError, match="still has live native contexts"):
                 ops.unregister_host_buffer(address)
         graph.replay()
         torch.accelerator.synchronize(device)
+        assert state[0].item() > 1 << 32
         for kind, source, target, snapshot in packets:
             assert snapshot.item() == 0
             peers = [inputs(source, peer, nonce) for peer in range(tp_size)]
@@ -101,6 +116,8 @@ def _host_worker(monkeypatch, tp_size, pp_size, rank, distributed_init_port):
             else:
                 reference = torch.cat(peers)
             assert torch.equal(target.cpu(), reference)
+    # Release captured work and drain every peer before retiring the native
+    # owners, then unregister before dropping any mapping or descriptor.
     graph.reset()
     torch.accelerator.synchronize(device)
     dist.barrier()

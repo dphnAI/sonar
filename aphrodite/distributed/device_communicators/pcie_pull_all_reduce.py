@@ -70,7 +70,7 @@ class PciePullAllReduce:
         self.world_size = dist.get_world_size(group)
         self.transport = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
         if self.transport == "host":
-            self.MAX_ROWS = 32
+            self.MAX_ROWS = 64
             self.WIDTHS = (self.HIDDEN_SIZE,)
             self.CAPACITY = self.MAX_ROWS * self.HIDDEN_SIZE
             self.TRANSPORT = 3

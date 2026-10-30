@@ -350,10 +350,13 @@ progress thread. It does not impose the paired transport's same-NUMA
 restriction; the TP4, native SM120, and model-runner restrictions above still
 apply.
 
-The host kernel handles contiguous BF16 tensors with 1–32 rows and width 5120,
+The host kernel handles contiguous BF16 tensors with 1–64 rows and width 5120,
 and contiguous all-gathers of up to 1024 bytes per rank. Other shapes retain
 their existing collective backend. Reduction rounding and the checked output,
 fault, and graph-lifetime contracts are the same as the paired transport.
+Small reductions read each peer's input directly. From 16 rows, each 16 KiB
+lane has one rank reduce its inputs and publish the result for the other ranks.
+This reduces host-memory traffic without a CPU reduction worker.
 
 All workers must share a writable local `/dev/shm` namespace and support CUDA
 registration of mapped host memory. GPU placement and host-memory locality

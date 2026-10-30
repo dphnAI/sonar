@@ -31,6 +31,8 @@ constexpr uint64_t kGatherBytes = 16384;
 constexpr uint64_t kGatherCells = kGatherBytes / 4 + 1;
 constexpr uint64_t kGatherBankBytes = 2 * kRanks * kGatherCells * 8;
 constexpr uint64_t kHostLaneBytes = 64 * 1024;
+constexpr uint64_t kHostShardedLaneBytes = 16 * 1024;
+constexpr uint64_t kHostShardedThresholdBytes = 16 * 5120 * 2;
 constexpr uint64_t kHostGatherBytes = 1024;
 constexpr int64_t kHostTransport = 3;
 
@@ -51,6 +53,14 @@ enum Kind : Word {
   kHostReduce = 4,
   kHostGather = 5,
 };
+
+// Launch geometry and device payload boundaries must change together.
+__host__ __device__ constexpr uint64_t host_lane_bytes(uint64_t total,
+                                                       Word kind) {
+  return kind == kHostReduce && total >= kHostShardedThresholdBytes
+             ? kHostShardedLaneBytes
+             : kHostLaneBytes;
+}
 
 // Fixed eight-word device-state layout shared with the Python owner.
 enum StateWord : int {
@@ -80,13 +90,14 @@ struct alignas(kLine) Fault {
 };
 static_assert(sizeof(Ready) == kLine && sizeof(Fault) == kLine);
 
-// Only this slab's rank writes its lane controls and raw payload. Both the
-// descriptor and full-width epoch belong to a parity; no host-memory RMWs.
+// Only this slab's rank writes its lane controls and raw payload. Input-ready,
+// reduced-ready and the descriptor belong to a parity; no host-memory RMWs.
 struct alignas(kLine) HostLane {
   Word epoch[2];
   // The CUDA grid limit bounds bytes below 2^47, leaving room for the kind.
   Word descriptor[2];
-  unsigned char padding[kLine - 4 * sizeof(Word)];
+  Word reduced_ready[2];
+  unsigned char padding[kLine - 6 * sizeof(Word)];
 };
 static_assert(sizeof(HostLane) == kLine);
 static_assert(kHostGather < 8);
@@ -116,8 +127,10 @@ Layout layout(int64_t capacity, int64_t blocks, int64_t transport) {
     const uint64_t reduction_bytes = 2 * static_cast<uint64_t>(capacity);
     const uint64_t payload_bytes =
         reduction_bytes < kHostGatherBytes ? kHostGatherBytes : reduction_bytes;
+    // Reserve controls at the smallest lane size, including lanes inactive in
+    // direct operations. A 64*5120-element host owner needs 40 such controls.
     const uint64_t lanes =
-        (payload_bytes + kHostLaneBytes - 1) / kHostLaneBytes;
+        (payload_bytes + kHostShardedLaneBytes - 1) / kHostShardedLaneBytes;
     STD_TORCH_CHECK(lanes <= std::numeric_limits<int>::max(),
                     "PCIe host capacity exceeds the CUDA lane grid limit");
     const uint64_t fault_offset = kReadyBankBytes;
@@ -1140,12 +1153,19 @@ void all_reduce(int64_t handle, const torch::stable::Tensor& input,
   reject_workspace_alias(ctx, destination, count * 2);
   if (ctx.transport == kHostTransport) {
     const uint64_t bytes = count * 2;
+    const uint64_t lane_bytes = host_lane_bytes(bytes, kHostReduce);
     const unsigned lanes =
-        static_cast<unsigned>((bytes + kHostLaneBytes - 1) / kHostLaneBytes);
+        static_cast<unsigned>((bytes + lane_bytes - 1) / lane_bytes);
     const unsigned threads = bytes <= 128 ? 32 : 512;
-    host_collective<<<lanes, threads, 0, stream>>>(
-        ctx.params, static_cast<const unsigned char*>(source),
-        static_cast<unsigned char*>(destination), bytes, kHostReduce);
+    if (lane_bytes == kHostShardedLaneBytes) {
+      host_collective<true><<<lanes, threads, 0, stream>>>(
+          ctx.params, static_cast<const unsigned char*>(source),
+          static_cast<unsigned char*>(destination), bytes, kHostReduce);
+    } else {
+      host_collective<false><<<lanes, threads, 0, stream>>>(
+          ctx.params, static_cast<const unsigned char*>(source),
+          static_cast<unsigned char*>(destination), bytes, kHostReduce);
+    }
     STD_CUDA_CHECK(cudaGetLastError());
     return;
   }
@@ -1192,7 +1212,7 @@ void all_gather(int64_t handle, const torch::stable::Tensor& input,
   reject_workspace_alias(ctx, destination, kRanks * bytes);
   if (ctx.transport == kHostTransport) {
     const unsigned threads = bytes <= 128 ? 32 : 512;
-    host_collective<<<1, threads, 0, stream>>>(
+    host_collective<false><<<1, threads, 0, stream>>>(
         ctx.params, static_cast<const unsigned char*>(source),
         static_cast<unsigned char*>(destination), bytes, kHostGather);
     STD_CUDA_CHECK(cudaGetLastError());

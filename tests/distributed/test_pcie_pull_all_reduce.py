@@ -92,7 +92,9 @@ def _dispatcher(monkeypatch, comm):
         ("paired", 9, 5120, torch.bfloat16, False),
         ("host", 1, 5120, torch.bfloat16, True),
         ("host", 32, 5120, torch.bfloat16, True),
-        ("host", 33, 5120, torch.bfloat16, False),
+        ("host", 33, 5120, torch.bfloat16, True),
+        ("host", 64, 5120, torch.bfloat16, True),
+        ("host", 65, 5120, torch.bfloat16, False),
         ("host", 1, 6144, torch.bfloat16, False),
         ("host", 1, 5120, torch.float16, False),
     ],
@@ -209,7 +211,7 @@ def _config():
             prefetch=SimpleNamespace(offload_group_size=0),
         ),
         speculative_config=None,
-        compilation_config=SimpleNamespace(cudagraph_capture_sizes=[1, 8, 32], cudagraph_mode="FULL"),
+        compilation_config=SimpleNamespace(cudagraph_capture_sizes=[1, 8, 16, 32, 64], cudagraph_mode="FULL"),
     )
     for field in (
         "lora_config",
@@ -248,8 +250,9 @@ class _ColdNative:
         self.fail_registration_retained = False
         self.fail_unregister = False
 
-    def buffer_size(self, *args):
-        return 65536
+    def buffer_size(self, capacity, blocks, transport):
+        # Size-dependent stand-in for controls and two BF16 payload parities.
+        return 65536 + 2 * capacity * 2
 
     def register_host_buffer(self, address, length):
         assert ctypes.string_at(address, length) == bytes(length)
@@ -264,7 +267,7 @@ class _ColdNative:
             raise RuntimeError("CUDA host unregister failed")
         self.registrations.remove(address)
 
-    def init(self, peers, state, rank, *args):
+    def init(self, peers, state, rank, capacity, blocks, threads, timeout_ns, transport):
         if rank == self.fail_init_rank:
             raise RuntimeError("native initialization rejected")
         self.contexts[rank + 1] = peers[0]
@@ -339,6 +342,9 @@ def test_host_cold_setup_shares_payload_and_retires_without_ipc(host_cluster):
     assert _run(comms, lambda comm: comm.initialize(_config(), use_v2_model_runner=True)) == [None] * 4
     mappings = [comm._host_mapping for comm in comms]
     descriptors = [comm._host_fd for comm in comms]
+    slab_bytes = native.buffer_size(64 * 5120, 1, 3)
+    assert all(len(mapping) == 4 * slab_bytes for mapping in mappings)
+    assert all(os.fstat(descriptor).st_size == 4 * slab_bytes for descriptor in descriptors)
     for rank, comm in enumerate(comms):
         ctypes.c_uint64.from_address(comm._local_ptr).value = rank + 11
     for comm in comms:
