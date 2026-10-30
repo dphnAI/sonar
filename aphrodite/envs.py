@@ -275,6 +275,7 @@ if TYPE_CHECKING:
     APHRODITE_ALLREDUCE_USE_FLASHINFER: bool = True
     APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC: bool = False
     APHRODITE_ALLREDUCE_USE_PCIE_PULL: bool = False
+    APHRODITE_ALLREDUCE_PCIE_TRANSPORT: Literal["paired", "host"] = "paired"
     APHRODITE_TUNED_CONFIG_FOLDER: str | None = None
     APHRODITE_ENABLE_STARTUP_PLAN: bool = False
     APHRODITE_GPT_OSS_SYSTEM_TOOL_MCP_LABELS: set[str] = set()
@@ -1730,6 +1731,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Use the fixed-order, single-lane SM120 TP4 staged PCIe pull backend.
     "APHRODITE_ALLREDUCE_USE_PCIE_PULL": lambda: bool(int(os.getenv("APHRODITE_ALLREDUCE_USE_PCIE_PULL", "0"))),
+    # Host staging uses shared CPU DRAM and does not require GPU peer access.
+    "APHRODITE_ALLREDUCE_PCIE_TRANSPORT": env_with_choices(
+        "APHRODITE_ALLREDUCE_PCIE_TRANSPORT", "paired", ["paired", "host"]
+    ),
     # Experimental: use this to enable MCP tool calling for non harmony models
     "APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT": lambda: bool(
         int(os.getenv("APHRODITE_USE_EXPERIMENTAL_PARSER_CONTEXT", "0"))

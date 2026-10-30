@@ -13,7 +13,9 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <vector>
+#include <unistd.h>
 
 namespace aphrodite::pcie_pull {
 using Word = unsigned long long;
@@ -28,6 +30,11 @@ constexpr unsigned kPairedTileBytes = 16384;
 constexpr uint64_t kGatherBytes = 16384;
 constexpr uint64_t kGatherCells = kGatherBytes / 4 + 1;
 constexpr uint64_t kGatherBankBytes = 2 * kRanks * kGatherCells * 8;
+constexpr uint64_t kHostLaneBytes = 64 * 1024;
+constexpr uint64_t kHostShardedLaneBytes = 16 * 1024;
+constexpr uint64_t kHostShardedThresholdBytes = 16 * 5120 * 2;
+constexpr uint64_t kHostGatherBytes = 1024;
+constexpr int64_t kHostTransport = 3;
 
 enum Error : Word {
   kReadyTimeout = 1,
@@ -39,7 +46,21 @@ enum Error : Word {
   kUnsupportedDevice = 7,
 };
 enum Stage : Word { kPublish = 1, kReady = 2, kConsume = 3, kComplete = 4 };
-enum Kind : Word { kClose = 1, kPairedR1 = 2, kPairedR2 = 3 };
+enum Kind : Word {
+  kClose = 1,
+  kPairedR1 = 2,
+  kPairedR2 = 3,
+  kHostReduce = 4,
+  kHostGather = 5,
+};
+
+// Launch geometry and device payload boundaries must change together.
+__host__ __device__ constexpr uint64_t host_lane_bytes(uint64_t total,
+                                                       Word kind) {
+  return kind == kHostReduce && total >= kHostShardedThresholdBytes
+             ? kHostShardedLaneBytes
+             : kHostLaneBytes;
+}
 
 // Fixed eight-word device-state layout shared with the Python owner.
 enum StateWord : int {
@@ -69,6 +90,18 @@ struct alignas(kLine) Fault {
 };
 static_assert(sizeof(Ready) == kLine && sizeof(Fault) == kLine);
 
+// Only this slab's rank writes its lane controls and raw payload. Input-ready,
+// reduced-ready and the descriptor belong to a parity; no host-memory RMWs.
+struct alignas(kLine) HostLane {
+  Word epoch[2];
+  // The CUDA grid limit bounds bytes below 2^47, leaving room for the kind.
+  Word descriptor[2];
+  Word reduced_ready[2];
+  unsigned char padding[kLine - 6 * sizeof(Word)];
+};
+static_assert(sizeof(HostLane) == kLine);
+static_assert(kHostGather < 8);
+
 struct Layout {
   uint64_t payload_offset;
   uint64_t slot_stride;
@@ -81,11 +114,36 @@ struct Layout {
 
 Layout layout(int64_t capacity, int64_t blocks, int64_t transport) {
   STD_TORCH_CHECK(capacity > 0, "PCIe pull capacity must be positive");
-  STD_TORCH_CHECK(transport == 2,
-                  "PCIe transport must be paired single-CTA (2)");
+  STD_TORCH_CHECK(transport == 2 || transport == kHostTransport,
+                  "PCIe transport must be paired (2) or host (3)");
   const uint64_t limit = std::numeric_limits<int64_t>::max();
-  STD_TORCH_CHECK(blocks == 1,
-                  "PCIe paired single-CTA transport requires blocks=1");
+  STD_TORCH_CHECK(blocks == 1, "PCIe transport requires blocks=1");
+  if (transport == kHostTransport) {
+    // Capacity keeps the existing BF16-element ABI. 64KiB alignment gives each
+    // rank independent CPU pages on both 4KiB and 64KiB-page hosts.
+    STD_TORCH_CHECK(
+        static_cast<uint64_t>(capacity) <= (limit - 8 * kHostLaneBytes) / 8,
+        "PCIe host allocation size overflows int64");
+    const uint64_t reduction_bytes = 2 * static_cast<uint64_t>(capacity);
+    const uint64_t payload_bytes =
+        reduction_bytes < kHostGatherBytes ? kHostGatherBytes : reduction_bytes;
+    // Reserve controls at the smallest lane size, including lanes inactive in
+    // direct operations. A 64*5120-element host owner needs 40 such controls.
+    const uint64_t lanes =
+        (payload_bytes + kHostShardedLaneBytes - 1) / kHostShardedLaneBytes;
+    STD_TORCH_CHECK(lanes <= std::numeric_limits<int>::max(),
+                    "PCIe host capacity exceeds the CUDA lane grid limit");
+    const uint64_t fault_offset = kReadyBankBytes;
+    const uint64_t controls = fault_offset + kRanks * kLine;
+    const uint64_t payload_offset =
+        (controls + lanes * sizeof(HostLane) + kSlotAlignment - 1) &
+        ~(kSlotAlignment - 1);
+    const uint64_t stride =
+        (payload_bytes + kSlotAlignment - 1) & ~(kSlotAlignment - 1);
+    const uint64_t bytes = (payload_offset + 2 * stride + kHostLaneBytes - 1) &
+                           ~(kHostLaneBytes - 1);
+    return {payload_offset, stride, bytes, fault_offset, 0, 0, controls};
+  }
   // R1, R2 and CLOSE each have two parity banks of four origin cells.
   // Fault records follow these banks; gather cells follow the payload slots.
   const uint64_t fault_offset = 3 * kReadyBankBytes;
@@ -131,7 +189,21 @@ struct Context {
   int device;
   int threads;
   cudaStream_t stream;
+  int transport;
+  uintptr_t host_registration;
+  const Fault* host_faults;
 };
+
+// Cold ownership bookkeeping only. The Python owner retains the mmap and graph
+// leases; these references additionally forbid unregistering a live Context.
+struct HostRegistration {
+  uintptr_t host;
+  uintptr_t mapped;
+  uint64_t bytes;
+  uint64_t contexts;
+};
+std::mutex host_registrations_mutex;
+std::vector<HostRegistration> host_registrations;
 
 __device__ __forceinline__ Word read_state(const Word* address) {
   Word value;
@@ -804,6 +876,8 @@ __global__ void pull_reduce(const __grid_constant__ Params p, Word* snapshot) {
   }
 }
 
+#include "pcie_pull_host.cuh"
+
 int64_t buffer_size(int64_t capacity, int64_t max_blocks, int64_t transport) {
   return static_cast<int64_t>(layout(capacity, max_blocks, transport).bytes);
 }
@@ -830,6 +904,76 @@ void require_outside_capture(cudaStream_t stream) {
 
 bool overlaps(uintptr_t a, uint64_t a_bytes, uintptr_t b, uint64_t b_bytes);
 
+int64_t register_host_buffer(int64_t host_address, int64_t bytes) {
+  const long page_bytes = sysconf(_SC_PAGESIZE);
+  STD_TORCH_CHECK(
+      page_bytes > 0 && host_address > 0 && bytes > 0 &&
+          static_cast<uint64_t>(host_address) % page_bytes == 0 &&
+          static_cast<uint64_t>(bytes) % page_bytes == 0 &&
+          static_cast<uint64_t>(bytes) <=
+              std::numeric_limits<uintptr_t>::max() -
+                  static_cast<uintptr_t>(host_address),
+      "PCIe host registration requires a nonempty page-aligned CPU range");
+  int device;
+  STD_CUDA_CHECK(cudaGetDevice(&device));
+  require_outside_capture(get_current_cuda_stream(device));
+  int can_map = 0;
+  STD_CUDA_CHECK(
+      cudaDeviceGetAttribute(&can_map, cudaDevAttrCanMapHostMemory, device));
+  STD_TORCH_CHECK(can_map, "PCIe host transport requires mapped host memory");
+  std::lock_guard<std::mutex> lock(host_registrations_mutex);
+  const auto begin = static_cast<uintptr_t>(host_address);
+  for (const auto& registration : host_registrations) {
+    STD_TORCH_CHECK(
+        !overlaps(begin, bytes, registration.host, registration.bytes),
+        "PCIe host registration overlaps an existing registered buffer");
+  }
+  // Allocate bookkeeping before pinning so host allocation failure cannot
+  // leave an unowned CUDA registration behind.
+  host_registrations.reserve(host_registrations.size() + 1);
+  void* host = reinterpret_cast<void*>(begin);
+  STD_CUDA_CHECK(
+      cudaHostRegister(host, static_cast<size_t>(bytes),
+                       cudaHostRegisterMapped | cudaHostRegisterPortable));
+  void* mapped = nullptr;
+  const cudaError_t mapping_status = cudaHostGetDevicePointer(&mapped, host, 0);
+  if (mapping_status != cudaSuccess) {
+    const cudaError_t cleanup_status = cudaHostUnregister(host);
+    if (cleanup_status != cudaSuccess) {
+      // Registration ownership has transferred even though activation failed.
+      // The exact marker tells Python's setup rollback to retain the mmap and
+      // retry unregister; its native record also prevents overlapping reuse.
+      host_registrations.push_back({begin, 0, static_cast<uint64_t>(bytes), 0});
+      STD_TORCH_CHECK(
+          false, "PCIE_HOST_REGISTRATION_RETAINED: cudaHostGetDevicePointer: ",
+          cudaGetErrorString(mapping_status),
+          "; cudaHostUnregister: ", cudaGetErrorString(cleanup_status));
+    }
+    STD_CUDA_CHECK(mapping_status);
+  }
+  host_registrations.push_back({begin, reinterpret_cast<uintptr_t>(mapped),
+                                static_cast<uint64_t>(bytes), 0});
+  return reinterpret_cast<int64_t>(mapped);
+}
+
+void unregister_host_buffer(int64_t host_address) {
+  STD_TORCH_CHECK(host_address > 0, "Cannot unregister a null CPU mapping");
+  int device;
+  STD_CUDA_CHECK(cudaGetDevice(&device));
+  require_outside_capture(get_current_cuda_stream(device));
+  std::lock_guard<std::mutex> lock(host_registrations_mutex);
+  for (auto it = host_registrations.begin(); it != host_registrations.end();
+       ++it) {
+    if (it->host != static_cast<uintptr_t>(host_address)) continue;
+    STD_TORCH_CHECK(it->contexts == 0,
+                    "PCIe host buffer still has live native contexts");
+    STD_CUDA_CHECK(cudaHostUnregister(reinterpret_cast<void*>(it->host)));
+    host_registrations.erase(it);
+    return;
+  }
+  STD_TORCH_CHECK(false, "PCIe host buffer is not registered by this owner");
+}
+
 int64_t init(const std::vector<int64_t>& peer_ptrs,
              torch::stable::Tensor& state, int64_t rank, int64_t capacity,
              int64_t blocks, int64_t threads, int64_t timeout_ns,
@@ -853,6 +997,29 @@ int64_t init(const std::vector<int64_t>& peer_ptrs,
   STD_CUDA_CHECK(cudaGetDeviceProperties(&properties, device));
   STD_TORCH_CHECK(properties.major == 12 && properties.minor == 0,
                   "PCIe pull currently requires SM120");
+  std::unique_lock<std::mutex> host_lock(host_registrations_mutex,
+                                         std::defer_lock);
+  HostRegistration* registration = nullptr;
+  if (transport == kHostTransport) {
+    STD_TORCH_CHECK(properties.canMapHostMemory,
+                    "PCIe host transport requires mapped host memory");
+    host_lock.lock();
+    for (auto& candidate : host_registrations) {
+      if (candidate.mapped == static_cast<uintptr_t>(peer_ptrs[0])) {
+        registration = &candidate;
+        break;
+      }
+    }
+    STD_TORCH_CHECK(
+        registration != nullptr && sizes.bytes <= registration->bytes / kRanks,
+        "PCIe host slabs must fit one buffer registered by this owner");
+    unsigned flags = 0;
+    STD_CUDA_CHECK(
+        cudaHostGetFlags(&flags, reinterpret_cast<void*>(registration->host)));
+    STD_TORCH_CHECK(
+        flags == (cudaHostRegisterMapped | cudaHostRegisterPortable),
+        "PCIe host buffer must be registered mapped and portable");
+  }
   const auto state_begin = reinterpret_cast<uintptr_t>(state.const_data_ptr());
   for (int r = 0; r < kRanks; ++r) {
     STD_TORCH_CHECK(
@@ -869,30 +1036,51 @@ int64_t init(const std::vector<int64_t>& peer_ptrs,
     cudaPointerAttributes attributes;
     STD_CUDA_CHECK(
         cudaPointerGetAttributes(&attributes, reinterpret_cast<void*>(begin)));
-    STD_TORCH_CHECK(attributes.type == cudaMemoryTypeDevice,
-                    "PCIe pull slabs must be CUDA device allocations");
-    if (r == rank) {
-      STD_TORCH_CHECK(attributes.device == device,
-                      "PCIe pull local slab must belong to the state device");
+    if (transport == kHostTransport) {
+      STD_TORCH_CHECK(
+          begin == registration->mapped + r * sizes.bytes &&
+              attributes.type == cudaMemoryTypeHost &&
+              attributes.devicePointer == reinterpret_cast<void*>(begin),
+          "PCIe host slabs must be consecutive registered CPU-memory aliases");
+      cudaPointerAttributes end_attributes;
+      STD_CUDA_CHECK(cudaPointerGetAttributes(
+          &end_attributes, reinterpret_cast<void*>(begin + sizes.bytes - 1)));
+      STD_TORCH_CHECK(
+          end_attributes.type == cudaMemoryTypeHost &&
+              end_attributes.devicePointer ==
+                  reinterpret_cast<void*>(begin + sizes.bytes - 1),
+          "PCIe host slab extends beyond this device's registered CPU aliases");
+    } else {
+      STD_TORCH_CHECK(attributes.type == cudaMemoryTypeDevice,
+                      "PCIe pull slabs must be CUDA device allocations");
+      if (r == rank) {
+        STD_TORCH_CHECK(attributes.device == device,
+                        "PCIe pull local slab must belong to the state device");
+      }
     }
   }
-  CUdeviceptr allocation_base = 0;
-  size_t allocation_bytes = 0;
-  const CUresult range_status =
-      cuMemGetAddressRange(&allocation_base, &allocation_bytes,
-                           static_cast<CUdeviceptr>(peer_ptrs[rank]));
-  STD_TORCH_CHECK(
-      range_status == CUDA_SUCCESS &&
-          allocation_base == static_cast<CUdeviceptr>(peer_ptrs[rank]) &&
-          allocation_bytes >= sizes.bytes,
-      "PCIe pull local allocation does not cover the selected layout");
+  if (transport != kHostTransport) {
+    CUdeviceptr allocation_base = 0;
+    size_t allocation_bytes = 0;
+    const CUresult range_status =
+        cuMemGetAddressRange(&allocation_base, &allocation_bytes,
+                             static_cast<CUdeviceptr>(peer_ptrs[rank]));
+    STD_TORCH_CHECK(
+        range_status == CUDA_SUCCESS &&
+            allocation_base == static_cast<CUdeviceptr>(peer_ptrs[rank]) &&
+            allocation_bytes >= sizes.bytes,
+        "PCIe pull local allocation does not cover the selected layout");
+  }
   auto ctx = std::make_unique<Context>(Context{{},
                                                state,
                                                static_cast<uint64_t>(capacity),
                                                sizes.bytes,
                                                device,
                                                static_cast<int>(threads),
-                                               stream});
+                                               stream,
+                                               static_cast<int>(transport),
+                                               0,
+                                               nullptr});
   for (int r = 0; r < kRanks; ++r) {
     ctx->params.slabs[r] = reinterpret_cast<char*>(peer_ptrs[r]);
   }
@@ -906,6 +1094,12 @@ int64_t init(const std::vector<int64_t>& peer_ptrs,
   ctx->params.rank = static_cast<int>(rank);
   initialize_state<<<1, 1, 0, stream>>>(ctx->params.state, timeout_ns);
   STD_CUDA_CHECK(cudaGetLastError());
+  if (registration != nullptr) {
+    ctx->host_registration = registration->host;
+    ctx->host_faults = reinterpret_cast<const Fault*>(
+        registration->host + rank * sizes.bytes + sizes.fault_offset);
+    ++registration->contexts;
+  }
   return reinterpret_cast<int64_t>(ctx.release());
 }
 
@@ -957,6 +1151,24 @@ void all_reduce(int64_t handle, const torch::stable::Tensor& input,
       "PCIe pull preserves input: overlapping input/output is forbidden");
   reject_workspace_alias(ctx, source, count * 2);
   reject_workspace_alias(ctx, destination, count * 2);
+  if (ctx.transport == kHostTransport) {
+    const uint64_t bytes = count * 2;
+    const uint64_t lane_bytes = host_lane_bytes(bytes, kHostReduce);
+    const unsigned lanes =
+        static_cast<unsigned>((bytes + lane_bytes - 1) / lane_bytes);
+    const unsigned threads = bytes <= 128 ? 32 : 512;
+    if (lane_bytes == kHostShardedLaneBytes) {
+      host_collective<true><<<lanes, threads, 0, stream>>>(
+          ctx.params, static_cast<const unsigned char*>(source),
+          static_cast<unsigned char*>(destination), bytes, kHostReduce);
+    } else {
+      host_collective<false><<<lanes, threads, 0, stream>>>(
+          ctx.params, static_cast<const unsigned char*>(source),
+          static_cast<unsigned char*>(destination), bytes, kHostReduce);
+    }
+    STD_CUDA_CHECK(cudaGetLastError());
+    return;
+  }
   STD_TORCH_CHECK(count % 8 == 0,
                   "PCIe paired single-CTA count must be divisible by 8");
   paired_single<<<1, ctx.threads, 0, stream>>>(
@@ -985,8 +1197,11 @@ void all_gather(int64_t handle, const torch::stable::Tensor& input,
           output.numel() == kRanks * input.numel(),
       "PCIe gather output must be a contiguous local stack of four inputs");
   const uint64_t bytes = input.numel() * input.element_size();
-  STD_TORCH_CHECK(bytes > 0 && bytes <= kGatherBytes,
-                  "PCIe gather payload is empty or exceeds the gather cells");
+  const uint64_t limit =
+      ctx.transport == kHostTransport ? kHostGatherBytes : kGatherBytes;
+  STD_TORCH_CHECK(
+      bytes > 0 && bytes <= limit,
+      "PCIe gather payload is empty or exceeds the transport limit");
   const void* source = input.const_data_ptr();
   void* destination = output.mutable_data_ptr();
   STD_TORCH_CHECK(
@@ -995,6 +1210,14 @@ void all_gather(int64_t handle, const torch::stable::Tensor& input,
       "PCIe gather input and output must not overlap");
   reject_workspace_alias(ctx, source, bytes);
   reject_workspace_alias(ctx, destination, kRanks * bytes);
+  if (ctx.transport == kHostTransport) {
+    const unsigned threads = bytes <= 128 ? 32 : 512;
+    host_collective<false><<<1, threads, 0, stream>>>(
+        ctx.params, static_cast<const unsigned char*>(source),
+        static_cast<unsigned char*>(destination), bytes, kHostGather);
+    STD_CUDA_CHECK(cudaGetLastError());
+    return;
+  }
   gather_small<<<1, ctx.threads, 0, stream>>>(
       ctx.params, static_cast<const unsigned char*>(source),
       static_cast<unsigned char*>(destination), bytes);
@@ -1045,14 +1268,24 @@ int64_t local_status(int64_t handle) {
   STD_CUDA_CHECK(cudaMemcpyAsync(values + kRanks + 2,
                                  ctx.params.state + kStatePublishTicket,
                                  sizeof(Word), cudaMemcpyDeviceToHost, stream));
-  const auto* faults = reinterpret_cast<const Fault*>(
-      ctx.params.slabs[ctx.params.rank] + ctx.params.fault_offset);
-  for (int peer = 0; peer < kRanks; ++peer) {
-    STD_CUDA_CHECK(cudaMemcpyAsync(values + peer + 1, &faults[peer].code,
-                                   sizeof(Word), cudaMemcpyDeviceToHost,
-                                   stream));
+  if (ctx.transport != kHostTransport) {
+    const auto* faults = reinterpret_cast<const Fault*>(
+        ctx.params.slabs[ctx.params.rank] + ctx.params.fault_offset);
+    for (int peer = 0; peer < kRanks; ++peer) {
+      STD_CUDA_CHECK(cudaMemcpyAsync(values + peer + 1, &faults[peer].code,
+                                     sizeof(Word), cudaMemcpyDeviceToHost,
+                                     stream));
+    }
   }
   STD_CUDA_CHECK(cudaStreamSynchronize(stream));
+  if (ctx.transport == kHostTransport) {
+    // The mapped alias is not a device allocation. After the cold stream
+    // drain, acquire the CPU addresses directly instead of issuing an invalid
+    // DeviceToHost copy. Peer system-release fault publications pair here.
+    for (int peer = 0; peer < kRanks; ++peer)
+      values[peer + 1] =
+          __atomic_load_n(&ctx.host_faults[peer].code, __ATOMIC_ACQUIRE);
+  }
   if (values[kRanks + 1] || values[kRanks + 2]) return kDirtyCompletion;
   for (int i = 0; i <= kRanks; ++i) {
     if (values[i] != 0) return static_cast<int64_t>(values[i]);
@@ -1060,7 +1293,30 @@ int64_t local_status(int64_t handle) {
   return 0;
 }
 
-void dispose(int64_t handle) { delete reinterpret_cast<Context*>(handle); }
+void dispose(int64_t handle) {
+  if (handle == 0) return;
+  auto* ctx = reinterpret_cast<Context*>(handle);
+  if (ctx->transport == kHostTransport) {
+    const torch::stable::accelerator::DeviceGuard guard(ctx->device);
+    require_outside_capture(get_current_cuda_stream(ctx->device));
+    require_outside_capture(ctx->stream);
+    // A failed drain must retain both Context and registered pages. Python
+    // additionally owns all captured graph leases and collective retirement.
+    STD_CUDA_CHECK(cudaStreamSynchronize(ctx->stream));
+    std::lock_guard<std::mutex> lock(host_registrations_mutex);
+    bool found = false;
+    for (auto& registration : host_registrations) {
+      if (registration.host != ctx->host_registration) continue;
+      STD_TORCH_CHECK(registration.contexts != 0,
+                      "PCIe host registration reference count is invalid");
+      --registration.contexts;
+      found = true;
+      break;
+    }
+    STD_TORCH_CHECK(found, "PCIe host context lost its registration");
+  }
+  delete ctx;
+}
 
 void close_ipc_handle(int64_t pointer) {
   STD_TORCH_CHECK(pointer != 0, "Cannot close a null CUDA IPC mapping");
@@ -1083,6 +1339,8 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C_pcie_pull, ops) {
   ops.def("local_status(int handle) -> int");
   ops.def("dispose(int handle) -> ()");
   ops.def("close_ipc_handle(int pointer) -> ()");
+  ops.def("register_host_buffer(int host_address, int bytes) -> int");
+  ops.def("unregister_host_buffer(int host_address) -> ()");
 }
 
 STABLE_TORCH_LIBRARY_IMPL(_C_pcie_pull, CUDA, ops) {
@@ -1094,6 +1352,10 @@ STABLE_TORCH_LIBRARY_IMPL(_C_pcie_pull, CUDA, ops) {
 
 STABLE_TORCH_LIBRARY_IMPL(_C_pcie_pull, CompositeExplicitAutograd, ops) {
   ops.impl("buffer_size", TORCH_BOX(&aphrodite::pcie_pull::buffer_size));
+  ops.impl("register_host_buffer",
+           TORCH_BOX(&aphrodite::pcie_pull::register_host_buffer));
+  ops.impl("unregister_host_buffer",
+           TORCH_BOX(&aphrodite::pcie_pull::unregister_host_buffer));
   ops.impl("bind_stream", TORCH_BOX(&aphrodite::pcie_pull::bind_stream));
   ops.impl("local_status", TORCH_BOX(&aphrodite::pcie_pull::local_status));
   ops.impl("dispose", TORCH_BOX(&aphrodite::pcie_pull::dispose));

@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Single-lane, fixed-order TP4 paired all-reduce using CUDA IPC slabs."""
+"""Fixed-order SM120 TP4 collectives over paired GPU or mapped host slabs."""
 
+import ctypes
 import gc
+import mmap
+import os
+import tempfile
 import threading
 import time
 import weakref
@@ -28,8 +32,8 @@ if TYPE_CHECKING:
 
 logger = init_logger(__name__)
 
-# A failed or uncoordinated shutdown must not return live IPC/state storage to
-# an allocator. Only process exit may reclaim these sessions.
+# A failed or uncoordinated shutdown must not reclaim live GPU/host storage.
+# Only process exit may reclaim these sessions.
 _UNRETIRED_WORKSPACES: list["PciePullAllReduce"] = []
 
 
@@ -48,7 +52,7 @@ class PciePullAllReduce:
     """
 
     MAX_ROWS = 8
-    WIDTHS = (5120, 6144)
+    WIDTHS: tuple[int, ...] = (5120, 6144)
     CAPACITY = MAX_ROWS * 6144
     BLOCKS = 1
     THREADS = 512
@@ -64,11 +68,23 @@ class PciePullAllReduce:
         self.device = torch.device(device)
         self.rank = dist.get_rank(group)
         self.world_size = dist.get_world_size(group)
+        self.transport = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+        if self.transport == "host":
+            self.MAX_ROWS = 64
+            self.WIDTHS = (self.HIDDEN_SIZE,)
+            self.CAPACITY = self.MAX_ROWS * self.HIDDEN_SIZE
+            self.TRANSPORT = 3
+            self.GATHER_BYTES = 1024
         self.disabled = True
         self._ptr = 0
         self._local_ptr = 0
         self._peer_ptrs: list[int] = [0] * self.world_size
         self._ipc_handles: list[Any] = []
+        self._host_fd: int | None = None
+        self._host_path: str | None = None
+        self._host_mapping: mmap.mmap | None = None
+        self._host_address = 0
+        self._host_registered = False
         self._state: torch.Tensor | None = None
         self._native: Any = None
         self._failed = False
@@ -100,7 +116,7 @@ class PciePullAllReduce:
         if any(entry[0] != phase for entry in entries):
             errors.append("ranks entered different lifecycle phases")
         if errors:
-            raise RuntimeError(f"PCIe paired all-reduce {phase} failed: " + "; ".join(errors))
+            raise RuntimeError(f"PCIe {self.transport} all-reduce {phase} failed: " + "; ".join(errors))
         return [entry[2] for entry in entries]
 
     def _stage(self, phase: str, operation):
@@ -166,7 +182,7 @@ class PciePullAllReduce:
         if model.dtype != torch.bfloat16 or model.get_hidden_size() != self.HIDDEN_SIZE:
             errors.append("the initial model invariant is BF16 with hidden_size=5120")
         if envs.APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC:
-            errors.append("FlashInfer PCIe IPC and PCIe paired all-reduce cannot both be selected")
+            errors.append(f"FlashInfer PCIe IPC and PCIe {self.transport} all-reduce cannot both be selected")
 
         speculative = config.speculative_config
         draft_manifest: tuple[Any, ...] | None = None
@@ -194,9 +210,9 @@ class PciePullAllReduce:
             raise ValueError("; ".join(errors))
         capability = current_platform.get_device_capability(self.device.index)
         if capability is None or capability.to_int() != 120:
-            raise ValueError("PCIe paired all-reduce is supported only on SM120")
+            raise ValueError(f"PCIe {self.transport} all-reduce is supported only on SM120")
         self._native = torch.ops._C_pcie_pull
-        for name in (
+        native_ops: tuple[str, ...] = (
             "buffer_size",
             "init",
             "all_reduce",
@@ -205,8 +221,11 @@ class PciePullAllReduce:
             "bind_stream",
             "local_status",
             "dispose",
-            "close_ipc_handle",
-        ):
+        )
+        native_ops += (
+            ("register_host_buffer", "unregister_host_buffer") if self.transport == "host" else ("close_ipc_handle",)
+        )
+        for name in native_ops:
             if not hasattr(self._native, name):
                 raise RuntimeError(f"native operator _C_pcie_pull.{name} is unavailable")
         physical_id = current_platform.visible_device_id_to_physical_device_id(self.device.index)
@@ -252,6 +271,8 @@ class PciePullAllReduce:
             if len(set(uuids)) != 4:
                 raise ValueError("each TP rank must own a different physical GPU")
             topology = []
+            if self.transport == "host":
+                return (uuids, ())
             for source, handle in enumerate(handles):
                 for target, peer_handle in enumerate(handles):
                     if source == target:
@@ -268,46 +289,104 @@ class PciePullAllReduce:
         finally:
             pynvml.nvmlShutdown()
 
+    def _allocate_host_workspace(self) -> None:
+        slab_bytes = self._native.buffer_size(self.CAPACITY, self.BLOCKS, self.TRANSPORT)
+        total_bytes = self.world_size * slab_bytes
+
+        def create_file():
+            if self.rank != 0:
+                return None
+            self._host_fd, self._host_path = tempfile.mkstemp(prefix="aphrodite-pcie-host-", dir="/dev/shm")
+            os.ftruncate(self._host_fd, total_bytes)
+            stat = os.fstat(self._host_fd)
+            return (self._host_path, stat.st_dev, stat.st_ino, stat.st_size)
+
+        allocation = self._stage("host allocation", create_file)[0]
+        path, device, inode, length = allocation
+
+        def map_file():
+            if self._host_fd is None:
+                self._host_fd = os.open(path, os.O_RDWR)
+            stat = os.fstat(self._host_fd)
+            if (stat.st_dev, stat.st_ino, stat.st_size) != (device, inode, total_bytes) or length != total_bytes:
+                raise ValueError("TP ranks must map the same complete host workspace in a shared file namespace")
+            # Reserve only this rank's pages on its CPU/NUMA placement. Fail
+            # collectively on tmpfs exhaustion instead of taking mmap SIGBUS.
+            os.posix_fallocate(self._host_fd, self.rank * slab_bytes, slab_bytes)
+            self._host_mapping = mmap.mmap(
+                self._host_fd, total_bytes, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ | mmap.PROT_WRITE
+            )
+            self._host_address = ctypes.addressof(ctypes.c_ubyte.from_buffer(self._host_mapping))
+            ctypes.memset(self._host_address + self.rank * slab_bytes, 0, slab_bytes)
+            self._state = torch.empty(8, dtype=torch.int64, device=self.device)
+
+        self._stage("host mapping and first touch", map_file)
+
+        def register():
+            # All mappings are open and all slabs are zero before any GPU can
+            # access them. Keep the inode through our descriptors, not a stale
+            # tmpfs name if a fault later requires process-lifetime retention.
+            if self._host_path is not None:
+                os.unlink(self._host_path)
+                self._host_path = None
+            try:
+                mapped_base = self._native.register_host_buffer(self._host_address, total_bytes)
+            except Exception as exc:
+                # A failed CUDA mapping may itself fail to unregister. Native
+                # retains that registration so coordinated rollback can retry;
+                # if retry fails, the complete mmap must remain pinned.
+                if "PCIE_HOST_REGISTRATION_RETAINED" in str(exc):
+                    self._host_registered = True
+                raise
+            self._host_registered = True
+            self._peer_ptrs = [mapped_base + peer * slab_bytes for peer in range(self.world_size)]
+            self._local_ptr = self._peer_ptrs[self.rank]
+
+        self._stage("host registration", register)
+
     def initialize(self, config: "AphroditeConfig", *, use_v2_model_runner: bool) -> None:
         """Collectively allocate the fixed workspace before GPU memory profiling."""
         if dist.get_backend(self.group) != dist.Backend.GLOO:
-            raise ValueError("PCIe paired all-reduce requires a CPU Gloo process group")
+            raise ValueError(f"PCIe {self.transport} all-reduce requires a CPU Gloo process group")
         with self._lock, gpu_sync_allowed():
 
             def manifest():
                 if self._initialization_attempted or self._destroyed:
-                    raise RuntimeError("a PCIe paired workspace cannot be initialized twice or revived")
+                    raise RuntimeError(f"a PCIe {self.transport} workspace cannot be initialized twice or revived")
                 return self._manifest(config, use_v2_model_runner)
 
             manifests = self._stage("configuration", manifest)
             self._initialization_attempted = True
             if any(entry["policy"] != manifests[0]["policy"] for entry in manifests):
-                raise ValueError("PCIe paired all-reduce setup/admission policy differs between TP ranks")
+                raise ValueError(f"PCIe {self.transport} all-reduce setup/admission policy differs between TP ranks")
             same_node = self._stage("node locality", lambda: all(in_the_same_node_as(self.group, source_rank=0)))
             if not all(same_node):
-                raise ValueError("PCIe paired all-reduce requires every TP rank on the same node")
+                raise ValueError(f"PCIe {self.transport} all-reduce requires every TP rank on the same node")
             physical_ids = [entry["physical_id"] for entry in manifests]
             topologies = self._stage("topology", lambda: self._topology(physical_ids))
             if any(topology != topologies[0] for topology in topologies):
-                raise ValueError("PCIe paired all-reduce topology differs between TP ranks")
+                raise ValueError(f"PCIe {self.transport} all-reduce topology differs between TP ranks")
             with torch.accelerator.device_index(self.device.index):
                 try:
+                    if self.transport == "host":
+                        self._allocate_host_workspace()
+                    else:
 
-                    def allocate():
-                        size = self._native.buffer_size(self.CAPACITY, self.BLOCKS, self.TRANSPORT)
-                        self._state = torch.empty(8, dtype=torch.int64, device=self.device)
-                        self._local_ptr, handle = ops.allocate_shared_buffer_and_handle(size)
-                        self._peer_ptrs[self.rank] = self._local_ptr
-                        return handle
+                        def allocate():
+                            size = self._native.buffer_size(self.CAPACITY, self.BLOCKS, self.TRANSPORT)
+                            self._state = torch.empty(8, dtype=torch.int64, device=self.device)
+                            self._local_ptr, handle = ops.allocate_shared_buffer_and_handle(size)
+                            self._peer_ptrs[self.rank] = self._local_ptr
+                            return handle
 
-                    self._ipc_handles = self._stage("allocation", allocate)
+                        self._ipc_handles = self._stage("allocation", allocate)
 
-                    def open_peers():
-                        for peer, handle in enumerate(self._ipc_handles):
-                            if peer != self.rank:
-                                self._peer_ptrs[peer] = ops.open_mem_handle(handle)
+                        def open_peers():
+                            for peer, handle in enumerate(self._ipc_handles):
+                                if peer != self.rank:
+                                    self._peer_ptrs[peer] = ops.open_mem_handle(handle)
 
-                    self._stage("IPC import", open_peers)
+                        self._stage("IPC import", open_peers)
 
                     def initialize_native():
                         self._bound_stream = current_stream()
@@ -328,18 +407,21 @@ class PciePullAllReduce:
                     self._stage("native initialization", initialize_native)
                 except BaseException:
                     self._failed = True
-                    # No dispatch has been enabled. Coordinated rollback is safe
-                    # only after every imported mapping has been closed.
+                    # No dispatch has been enabled. Release mappings only after
+                    # collective confirmation that no native owner can use them.
                     try:
                         self._release_resources()
                     except Exception:
                         self._pin()
-                        logger.exception("PCIe paired initialization rollback could not retire all peer mappings")
+                        logger.exception(
+                            "PCIe %s initialization rollback could not retire all mappings", self.transport
+                        )
                     raise
             self.disabled = False
             logger.info_once(
-                "Initialized PCIE_PULL paired all-reduce: TP4, BF16, hidden_size=%d, "
+                "Initialized PCIE_PULL %s all-reduce: TP4, BF16, hidden_size=%d, "
                 "capacity=%d elements, blocks=%d, threads=%d.",
+                self.transport,
                 self.HIDDEN_SIZE,
                 self.CAPACITY,
                 self.BLOCKS,
@@ -348,13 +430,13 @@ class PciePullAllReduce:
 
     def _drain_bound_stream(self) -> None:
         if self._bound_stream is None:
-            raise RuntimeError("PCIe paired communicator has no bound stream")
+            raise RuntimeError(f"PCIe {self.transport} communicator has no bound stream")
         drained = torch.cuda.Event()
         drained.record(self._bound_stream)
         deadline = time.monotonic() + 3 * self.TIMEOUT_NS / 1_000_000_000 + 0.5
         while not drained.query():
             if time.monotonic() >= deadline:
-                raise RuntimeError("PCIe paired lane did not quiesce; retaining its workspace")
+                raise RuntimeError(f"PCIe {self.transport} lane did not quiesce; retaining its workspace")
             time.sleep(0.001)
 
     def validate_startup(self) -> None:
@@ -362,12 +444,12 @@ class PciePullAllReduce:
 
             def status():
                 if self._bound_stream != current_stream():
-                    raise RuntimeError("PCIe paired startup requires the bound main stream")
+                    raise RuntimeError(f"PCIe {self.transport} startup requires the bound main stream")
                 self._drain_bound_stream()
                 with current_platform.stream(self._bound_stream):
                     code = self._native.local_status(self._ptr)
                 if code:
-                    raise RuntimeError(f"PCIe paired warmup failed with code {code}")
+                    raise RuntimeError(f"PCIe {self.transport} warmup failed with code {code}")
 
             self._stage("startup-status", status)
 
@@ -400,10 +482,10 @@ class PciePullAllReduce:
         if not self._lock.acquire(blocking=False):
             self._failed = True
             self._pin()
-            raise RuntimeError("concurrent PCIe paired communicator use is unsupported")
+            raise RuntimeError(f"concurrent PCIe {self.transport} communicator use is unsupported")
         try:
             if not self.initialized or self._failed:
-                raise RuntimeError("PCIe paired communicator is uninitialized or terminally failed")
+                raise RuntimeError(f"PCIe {self.transport} communicator is uninitialized or terminally failed")
             yield
         except BaseException:
             if self._ptr:
@@ -418,12 +500,14 @@ class PciePullAllReduce:
             return
         lease = self._capture_lease
         if lease is None or not retain_cuda_graph_capture_resource(lease):
-            raise RuntimeError("PCIe paired capture requires the TP capture context and graph resource-owner hook")
+            raise RuntimeError(
+                f"PCIe {self.transport} capture requires the TP capture context and graph resource-owner hook"
+            )
 
     def all_reduce(self, inp: torch.Tensor) -> torch.Tensor:
         with self._execution():
             if not self.should_use(inp):
-                raise ValueError("tensor does not satisfy the rank-agreed PCIe paired admission policy")
+                raise ValueError(f"tensor does not satisfy the rank-agreed PCIe {self.transport} admission policy")
             self._retain_graph_owner()
             out = torch.empty_like(inp)
             self._native.all_reduce(self._ptr, inp, out)
@@ -448,7 +532,9 @@ class PciePullAllReduce:
         """
         with self._execution():
             if current_platform.is_current_stream_capturing():
-                raise RuntimeError("the per-output PCIe paired close snapshot must be allocated outside CUDA capture")
+                raise RuntimeError(
+                    f"the per-output PCIe {self.transport} close snapshot must be allocated outside CUDA capture"
+                )
             snapshot = torch.empty(1, dtype=torch.int64, device=self.device)
             self._native.close_step(self._ptr, snapshot)
             return snapshot
@@ -469,9 +555,9 @@ class PciePullAllReduce:
 
             def preflight():
                 if self._capturing:
-                    raise RuntimeError("nested PCIe paired capture contexts are unsupported")
+                    raise RuntimeError(f"nested PCIe {self.transport} capture contexts are unsupported")
                 if main_stream != self._bound_stream:
-                    raise RuntimeError("PCIe paired capture must begin on the bound main stream")
+                    raise RuntimeError(f"PCIe {self.transport} capture must begin on the bound main stream")
                 torch.accelerator.synchronize(self.device)
 
             self._stage("capture drain", preflight)
@@ -504,6 +590,10 @@ class PciePullAllReduce:
             self._pinned = True
 
     def _release_resources(self) -> None:
+        if self.transport == "host":
+            self._release_host_resources()
+            return
+
         def close_imports():
             for peer, pointer in enumerate(self._peer_ptrs):
                 if peer != self.rank and pointer:
@@ -526,9 +616,42 @@ class PciePullAllReduce:
         self.disabled = True
         self._destroyed = True
 
+    def _release_host_resources(self) -> None:
+        def dispose():
+            if self._ptr:
+                self._native.dispose(self._ptr)
+                self._ptr = 0
+
+        # Unlike IPC, every rank owns a registration of the whole allocation.
+        # No registration may be removed until every native owner has retired.
+        self._stage("host native disposal", dispose)
+
+        def unregister():
+            if self._host_registered:
+                self._native.unregister_host_buffer(self._host_address)
+                self._host_registered = False
+
+        self._stage("host unregister", unregister)
+        self._barrier()
+        if self._host_mapping is not None:
+            self._host_mapping.close()
+            self._host_mapping = None
+            self._host_address = 0
+        if self._host_fd is not None:
+            os.close(self._host_fd)
+            self._host_fd = None
+        if self._host_path is not None:
+            os.unlink(self._host_path)
+            self._host_path = None
+        self._local_ptr = 0
+        self._peer_ptrs = [0] * self.world_size
+        self._state = None
+        self.disabled = True
+        self._destroyed = True
+
     def destroy(self) -> None:
         """Retire a healthy session collectively; retain poisoned sessions."""
-        if self._destroyed or not (self._ptr or self._local_ptr):
+        if self._destroyed or not (self._ptr or self._local_ptr or self._host_fd is not None):
             return
         if self._failed or self._pinned:
             self._pin()
@@ -545,7 +668,9 @@ class PciePullAllReduce:
                     self._failed = True
                     self._pin()
                     logger.warning(
-                        "Retaining terminal PCIe paired workspace with status %d until process exit.", status
+                        "Retaining terminal PCIe %s workspace with status %d until process exit.",
+                        self.transport,
+                        status,
                     )
                     return
 
@@ -554,7 +679,9 @@ class PciePullAllReduce:
                     if self._capturing or self._graph_leases:
                         raise RuntimeError("release every target/draft CUDA graph before communicator destruction")
                     if self._failed:
-                        raise RuntimeError("a failed PCIe paired workspace must be retained until process exit")
+                        raise RuntimeError(
+                            f"a failed PCIe {self.transport} workspace must be retained until process exit"
+                        )
                     return 0
 
                 self._stage("retirement", retire)
@@ -565,7 +692,7 @@ class PciePullAllReduce:
                 raise
 
     def __del__(self) -> None:
-        # Never issue collectives, cudaFree, or cudaIpcCloseMemHandle here. In
-        # particular, imported pointers are not cudaMalloc-owned allocations.
-        if getattr(self, "_local_ptr", 0):
+        # Never issue collectives or release GPU-visible storage here. Graphs
+        # and peer kernels can still hold references after Python drops its own.
+        if getattr(self, "_local_ptr", 0) or getattr(self, "_host_fd", None) is not None:
             self._pin()

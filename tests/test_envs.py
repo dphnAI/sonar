@@ -96,6 +96,18 @@ def test_p2p_resource_limit_defaults_and_override(
     assert envs.APHRODITE_P2P_IDLE_TIMEOUT_S == 60
 
 
+def test_pcie_transport_defaults_and_choices(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", raising=False)
+    assert envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT == "paired"
+
+    monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", "host")
+    assert envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT == "host"
+
+    monkeypatch.setenv("APHRODITE_ALLREDUCE_PCIE_TRANSPORT", "automatic")
+    with pytest.raises(ValueError, match="APHRODITE_ALLREDUCE_PCIE_TRANSPORT"):
+        _ = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+
+
 def test_getattr_with_cache(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("APHRODITE_HOST_IP", "1.1.1.1")
     monkeypatch.setenv("APHRODITE_PORT", "1234")

@@ -64,10 +64,25 @@ class CudaCommunicator(DeviceCommunicatorBase):
                 envs.APHRODITE_ALLREDUCE_USE_PCIE_PULL,
                 envs.APHRODITE_ALLREDUCE_USE_FLASHINFER_PCIE_IPC,
             )
-            gathered_selectors = [None] * self.world_size
-            dist.all_gather_object(gathered_selectors, selectors, group=self.cpu_group)
-            if any(selection != selectors for selection in gathered_selectors):
+            transport = None
+            transport_error = None
+            if selectors[0]:
+                try:
+                    transport = envs.APHRODITE_ALLREDUCE_PCIE_TRANSPORT
+                except ValueError as exc:
+                    transport_error = str(exc)
+            selection = (*selectors, transport, transport_error)
+            gathered_selectors = [selection] * self.world_size
+            dist.all_gather_object(gathered_selectors, selection, group=self.cpu_group)
+            if any(entry[:2] != selectors for entry in gathered_selectors):
                 raise ValueError("TP ranks must agree on PCIe all-reduce backend selectors")
+            transport_errors = [
+                f"rank {rank}: {entry[3]}" for rank, entry in enumerate(gathered_selectors) if entry[3] is not None
+            ]
+            if transport_errors:
+                raise ValueError("TP PCIe all-reduce transport configuration failed: " + "; ".join(transport_errors))
+            if any(entry[2] != transport for entry in gathered_selectors):
+                raise ValueError("TP ranks must agree on APHRODITE_ALLREDUCE_PCIE_TRANSPORT")
             if all(selectors):
                 raise ValueError("PCIE_PULL and FLASHINFER_PCIE_IPC all-reduce cannot both be selected")
             use_pcie_pull_allreduce = selectors[0]
