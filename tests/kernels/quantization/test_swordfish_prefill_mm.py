@@ -22,8 +22,8 @@ from tests.kernels.utils import opcheck
 
 if not current_platform.is_cuda():
     pytest.skip(reason="swordfish requires CUDA", allow_module_level=True)
-if not current_platform.has_device_capability(100):
-    pytest.skip(reason="swordfish requires sm100 family", allow_module_level=True)
+if not (current_platform.is_device_capability_family(100) or current_platform.is_device_capability_family(110)):
+    pytest.skip(reason="swordfish requires compute capability 10.x or 11.x", allow_module_level=True)
 
 DEVICE = "cuda"
 QT = scalar_types.uint4b8

@@ -128,6 +128,7 @@ MoEBackend = Literal[
     "b12x",
     "flashinfer_moe_ep_mega_deep_gemm",
     "marlin",
+    "swordfish",
     "humming",
     "triton_unfused",
     "aiter",
@@ -319,6 +320,8 @@ class KernelConfig:
       MXFP4 checkpoint verbatim (Blackwell, requires expert parallel;
       DeepSeek-V4 only)
     - "marlin": Use Marlin kernels (weight-only quantization)
+    - "swordfish": Use Swordfish W4A16/W8A16 kernels for symmetric GPTQ and
+      compressed-tensors experts (compute capability 10.x/11.x)
     - "humming": Use Humming Mixed Precision kernels
     - "triton_unfused": Use Triton unfused MoE kernels
     - "aiter": Use AMD AITer kernels (ROCm only)
