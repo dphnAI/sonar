@@ -31,6 +31,33 @@ Use `presence_penalty` and `frequency_penalty` for OpenAI-style penalties.
 `repetition_penalty` applies a multiplicative penalty. DRY targets repeated
 sequences and has separate controls in `SamplingParams`.
 
+The OpenAI-compatible `/v1/completions` and `/v1/chat/completions` endpoints
+accept the same extra sampler fields as `SamplingParams`, such as
+`dry_multiplier`, `xtc_probability`, `top_a`, `tfs`, `nsigma`, `skew`,
+`smoothing_factor`, `dynatemp_min`/`dynatemp_max` and `mirostat_mode`.
+
+## Suppress phrases
+
+`banned_strings` keeps whole phrases out of the output. When generated text
+starts to spell a banned phrase, Sonar rewinds to the phrase start and samples
+again without the token that began it. Matching is case-insensitive unless
+`banned_strings_case_sensitive` is true. Pass both through `aphrodite_xargs`:
+
+```json
+{"prompt": "The capital of France is", "aphrodite_xargs": {"banned_strings": ["Paris"]}}
+```
+
+The server must run the phrase scheduler; otherwise the request is rejected
+with HTTP 400:
+
+```bash
+aphrodite serve MODEL --scheduler-cls aphrodite.v1.phrase_guard.scheduler.PhraseScheduler
+```
+
+Phrase suppression requires plain-text generation with a fast Hugging Face
+tokenizer. It cannot be combined with text `stop` strings (use
+`stop_token_ids`), structured output, or Mirostat.
+
 ## Stop generation
 
 Set `max_tokens` for every request. Add text stops or token ID stops when the

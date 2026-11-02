@@ -144,10 +144,17 @@ class InputProcessor:
                 from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
                 from aphrodite.v1.phrase_guard.scheduler import PhraseScheduler
 
-                PhraseRetryProcessor.validate_params(params)
                 if not issubclass(self.aphrodite_config.scheduler_config.get_scheduler_cls(), PhraseScheduler):
-                    raise ValueError("banned_strings requires PhraseScheduler")
-                PhraseRetryProcessor.validate_runtime(self.aphrodite_config, self.tokenizer)
+                    raise AphroditeValidationError(
+                        "banned_strings requires starting the server with "
+                        "--scheduler-cls aphrodite.v1.phrase_guard.scheduler.PhraseScheduler",
+                        parameter="banned_strings",
+                    )
+                try:
+                    PhraseRetryProcessor.validate_params(params)
+                    PhraseRetryProcessor.validate_runtime(self.aphrodite_config, self.tokenizer)
+                except ValueError as error:
+                    raise AphroditeValidationError(str(error), parameter="banned_strings") from error
             supported_generation_tasks = [task for task in supported_tasks if task in GENERATION_TASKS]
             if not supported_generation_tasks:
                 raise AphroditeValidationError("This model does not support generation")
@@ -508,9 +515,12 @@ class InputProcessor:
         if sampling_params is not None and "banned_strings" in (sampling_params.extra_args or {}):
             from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
 
-            PhraseRetryProcessor.validate_input(
-                resumable, bool(mm_features) or encoder_input is not None, prompt_embeds
-            )
+            try:
+                PhraseRetryProcessor.validate_input(
+                    resumable, bool(mm_features) or encoder_input is not None, prompt_embeds
+                )
+            except ValueError as error:
+                raise AphroditeValidationError(str(error), parameter="banned_strings") from error
 
         return EngineCoreRequest(
             request_id=request_id,
