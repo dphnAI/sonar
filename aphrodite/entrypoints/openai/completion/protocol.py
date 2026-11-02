@@ -3,7 +3,6 @@
 
 # Adapted from
 # https://github.com/lm-sys/FastChat/blob/168ccc29d3f7edc50823016105c024fe2282732a/fastchat/protocol/openai_api_protocol.py
-import json
 import time
 from typing import Annotated, Any, Literal
 
@@ -23,6 +22,7 @@ from aphrodite.entrypoints.generate.base.protocol import (
     validate_structural_tag_response_format,
     validate_structured_outputs_structural_tag,
 )
+from aphrodite.entrypoints.openai.extended_sampling import ExtendedSamplingRequest
 from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
 from aphrodite.exceptions import AphroditeValidationError
 from aphrodite.logger import init_logger
@@ -47,29 +47,7 @@ _INT64_MIN = -(2**63)
 _INT64_MAX = 2**63 - 1
 
 
-def _coerce_stringified_str_list(
-    data: Any,
-    field_name: str,
-) -> Any:
-    if not isinstance(data, dict):
-        return data
-
-    value = data.get(field_name)
-    if not isinstance(value, str):
-        return data
-
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
-        return data
-
-    if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
-        data[field_name] = parsed
-
-    return data
-
-
-class CompletionRequest(OpenAIBaseModel):
+class CompletionRequest(ExtendedSamplingRequest):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/completions/create
     model: str | None = None
@@ -127,34 +105,6 @@ class CompletionRequest(OpenAIBaseModel):
         ),
     )
     bad_words: list[str] = Field(default_factory=list)
-    # Aphrodite extra sampler params
-    top_a: float | None = 0.0
-    tfs: float | None = 1.0
-    eta_cutoff: float | None = 0.0
-    epsilon_cutoff: float | None = 0.0
-    typical_p: float | None = 1.0
-    smoothing_factor: float | None = 0.0
-    smoothing_curve: float | None = 1.0
-    no_repeat_ngram_size: int | None = 0
-    temperature_last: bool | None = False
-    xtc_threshold: float | None = 0.1
-    xtc_probability: float | None = 0.0
-    dry_multiplier: float | None = 0.0
-    dry_base: float | None = 1.75
-    dry_allowed_length: int | None = 2
-    dry_sequence_breakers: list[str] | None = Field(default=None)
-    dry_range: int | None = 0
-    dry_max_ngram: int | None = 12
-    dry_max_occurrences: int | None = 8
-    dry_early_exit_match_len: int | None = 8
-    dynatemp_min: float | None = 0.0
-    dynatemp_max: float | None = 0.0
-    dynatemp_exponent: float | None = 1.0
-    nsigma: float | None = 0.0
-    skew: float | None = 0.0
-    mirostat_mode: int | None = 0
-    mirostat_tau: float | None = 0.0
-    mirostat_eta: float | None = 0.0
     # --8<-- [end:completion-sampling-params]
 
     # --8<-- [start:completion-extra-params]
@@ -452,45 +402,13 @@ class CompletionRequest(OpenAIBaseModel):
             logit_bias=self.logit_bias,
             allowed_token_ids=self.allowed_token_ids,
             bad_words=self.bad_words,
-            # Aphrodite extra sampler params
-            no_repeat_ngram_size=self.no_repeat_ngram_size,
-            dynatemp_min=self.dynatemp_min,
-            dynatemp_max=self.dynatemp_max,
-            dynatemp_exponent=self.dynatemp_exponent,
-            temperature_last=self.temperature_last,
-            top_a=self.top_a,
-            tfs=self.tfs,
-            eta_cutoff=self.eta_cutoff,
-            epsilon_cutoff=self.epsilon_cutoff,
-            typical_p=self.typical_p,
-            smoothing_factor=self.smoothing_factor,
-            smoothing_curve=self.smoothing_curve,
-            xtc_threshold=self.xtc_threshold,
-            xtc_probability=self.xtc_probability,
-            dry_multiplier=self.dry_multiplier,
-            dry_base=self.dry_base,
-            dry_allowed_length=self.dry_allowed_length,
-            dry_sequence_breakers=self.dry_sequence_breakers,
-            dry_range=self.dry_range,
-            dry_max_ngram=self.dry_max_ngram,
-            dry_max_occurrences=self.dry_max_occurrences,
-            dry_early_exit_match_len=self.dry_early_exit_match_len,
-            nsigma=self.nsigma,
-            skew=self.skew,
-            mirostat_mode=self.mirostat_mode,
-            mirostat_tau=self.mirostat_tau,
-            mirostat_eta=self.mirostat_eta,
+            **self.extended_sampling_kwargs(),
             extra_args=extra_args or None,
             skip_clone=True,  # Created fresh per request, safe to skip clone
             repetition_detection=self.repetition_detection,
             thinking_token_budget=self.thinking_token_budget,
             routed_experts_prompt_start=self.routed_experts_prompt_start,
         )
-
-    @model_validator(mode="before")
-    @classmethod
-    def coerce_stringified_dry_sequence_breakers(cls, data):
-        return _coerce_stringified_str_list(data, "dry_sequence_breakers")
 
     @model_validator(mode="before")
     @classmethod

@@ -36,6 +36,7 @@ from aphrodite.entrypoints.generate.base.protocol import (
     validate_structural_tag_response_format,
     validate_structured_outputs_structural_tag,
 )
+from aphrodite.entrypoints.openai.extended_sampling import ExtendedSamplingRequest
 from aphrodite.entrypoints.serve.engine.protocol import OpenAIBaseModel, UsageInfo
 from aphrodite.exceptions import AphroditeValidationError
 from aphrodite.logger import init_logger
@@ -229,7 +230,7 @@ class ChatCompletionNamedToolChoiceParam(OpenAIBaseModel):
     type: Literal["function"] = "function"
 
 
-class ChatCompletionRequest(OpenAIBaseModel):
+class ChatCompletionRequest(ExtendedSamplingRequest):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/chat/create
     messages: list[ChatCompletionMessageParam]
@@ -776,6 +777,7 @@ class ChatCompletionRequest(OpenAIBaseModel):
             bad_words=self.bad_words,
             thinking_token_budget=self.thinking_token_budget,
             allowed_token_ids=self.allowed_token_ids,
+            **self.extended_sampling_kwargs(),
             extra_args=extra_args or None,
             skip_clone=True,  # Created fresh per request, safe to skip clone
             repetition_detection=self.repetition_detection,
@@ -1077,7 +1079,7 @@ class ChatCompletionRequest(OpenAIBaseModel):
         return data
 
 
-class BatchChatCompletionRequest(OpenAIBaseModel):
+class BatchChatCompletionRequest(ExtendedSamplingRequest):
     """Request model for the /v1/chat/completions/batch endpoint.
 
     Accepts the same fields as ChatCompletionRequest except that ``messages``
