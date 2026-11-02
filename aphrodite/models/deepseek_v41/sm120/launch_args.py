@@ -7,7 +7,6 @@ launching eager kernels. Identity is the required test; tensor equality can
 raise internal C++ exceptions. Keep every other argument-binding rule unchanged.
 """
 
-import ast
 import hashlib
 import inspect
 import textwrap
@@ -20,7 +19,8 @@ from cutlass.base_dsl.diagnostics import DiagId
 from aphrodite.logger import init_logger
 
 logger = init_logger(__name__)
-_SUPPORTED_BINDER = "ced87f332007db7fcacccd1e3f93d1ff2dd621b247958e74a81eb0eb07d7c130"
+# SHA-256 of the dedented source. ast.dump() output differs across Python versions.
+_SUPPORTED_BINDER = "000043872b85530dbb0a4eb8949ef15dca66c12a81ad4c8f40f1a89351169470"
 
 
 @cache
@@ -32,11 +32,11 @@ def install_identity_argument_check() -> None:
     if original is _get_rectified_args:
         return
     try:
-        tree = ast.parse(textwrap.dedent(inspect.getsource(original)))
+        source = textwrap.dedent(inspect.getsource(original))
     except (OSError, TypeError):
         logger.warning_once("Cannot identify CuTe argument binder; leaving it unchanged.")
         return
-    digest = hashlib.sha256(ast.dump(tree.body[0], include_attributes=False).encode()).hexdigest()
+    digest = hashlib.sha256(source.encode()).hexdigest()
     if digest != _SUPPORTED_BINDER:
         logger.warning_once("CuTe argument binder changed; leaving it unchanged.")
         return
