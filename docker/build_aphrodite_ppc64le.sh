@@ -42,6 +42,7 @@ TORCH_VERSION=${TORCH_VERSION:-$(grep -E '^torch==.+==\s*"ppc64le"' requirements
 TORCH_VERSION=${TORCH_VERSION:-2.14.0}
 
 # Parse version parts
+# shellcheck disable=SC2034 # parsed for completeness alongside minor/patch
 TORCH_MAJOR=$(echo "${TORCH_VERSION}" | cut -d. -f1)
 TORCH_MINOR=$(echo "${TORCH_VERSION}" | cut -d. -f2)
 TORCH_PATCH=$(echo "${TORCH_VERSION}" | cut -d. -f3 | cut -d+ -f1)

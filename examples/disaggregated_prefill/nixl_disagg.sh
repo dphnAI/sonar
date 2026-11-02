@@ -169,6 +169,7 @@ show_logs() {
 }
 
 # Wait for user interrupt
+# shellcheck disable=SC2064 # PIDs are known now; expand at trap definition
 trap "echo ''; echo 'Stopping services...'; kill $PREFILL_PID $DECODE_PID $PROXY_PID 2>/dev/null; exit 0" INT TERM
 
 # Start showing logs

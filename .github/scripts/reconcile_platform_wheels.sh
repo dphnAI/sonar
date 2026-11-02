@@ -38,6 +38,7 @@ build_with_current_rust_helper() (
   local helper backup_dir
   local -a helpers=(tools/build_rust.py tools/use_existing_torch.py)
   backup_dir="$(mktemp -d)"
+  # shellcheck disable=SC2329 # invoked via trap EXIT
   restore_build_helpers() {
     local status=$?
     for helper in "${helpers[@]}"; do

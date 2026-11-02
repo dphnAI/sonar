@@ -7,11 +7,10 @@ on files that have been changed. It groups files into different mypy calls
 based on their directory to avoid import following issues.
 
 Usage:
-    python tools/pre_commit/mypy.py <ci> <python_version> <changed_files...>
+    python tools/pre_commit/mypy.py <python_version> <changed_files...>
 
 Args:
-    ci: "1" if running in CI, "0" otherwise.
-    python_version: Python version to use (e.g., "3.10") or "local" to use
+    python_version: Python version to use (e.g., "3.11") or "local" to use
         the local Python version.
     changed_files: List of changed files to check.
 
@@ -22,39 +21,93 @@ import sys
 
 import regex as re
 
-# After fixing errors resulting from changing follow_imports
-# from "skip" to "silent", remove its directory from SEPARATE_GROUPS.
-SEPARATE_GROUPS = [
-    "tests",
-    # v0 related
-    "aphrodite/lora",
+# Paths verified clean under follow_imports="silent". Matched before
+# SEPARATE_GROUPS, so these files join the default group and are checked at the
+# stricter setting even while a parent directory remains in SEPARATE_GROUPS.
+#
+# Fixing a directory means moving it from SEPARATE_GROUPS to here. Without that
+# move the fixes are not enforced because "tests" claims every file below it.
+SILENT_GROUPS = [
+    "tests/benchmarks",
+    "tests/compile/correctness_e2e",
+    "tests/compile/fullgraph",
+    "tests/compile/fusions_e2e",
+    "tests/compile/passes",
+    "tests/config",
+    "tests/entrypoints/anthropic",
+    "tests/entrypoints/generate",
+    "tests/entrypoints/llm",
+    "tests/entrypoints/multimodal",
+    "tests/entrypoints/openai",
+    "tests/entrypoints/pooling",
+    "tests/entrypoints/rl",
+    "tests/entrypoints/serve",
+    "tests/entrypoints/speech_to_text",
+    "tests/entrypoints/tool_parsers",
+    "tests/entrypoints/unit_tests",
+    "tests/entrypoints/common",
+    "tests/kernels",
+    "tests/lora",
+    "tests/model_executor",
+    "tests/models/deepseek_v32",
+    "tests/models/glm5next",
+    "tests/models/inkling",
+    "tests/models/kimi_k3",
+    "tests/models/language",
+    "tests/models/multimodal",
+    "tests/models/minimax_m3",
+    "tests/models/quantization",
+    "tests/models/qwen4_exp",
+    "tests/models/step5",
+    "tests/models/test_initialization.py",
+    "tests/models/transformers",
+    "tests/multimodal",
+    "tests/parser",
+    "tests/plugins/bge_m3_sparse_plugin",
+    "tests/plugins/prithvi_io_processor_plugin",
+    "tests/plugins/aphrodite_add_dummy_platform",
+    "tests/plugins/aphrodite_add_dummy_stat_logger",
+    "tests/plugins_tests",
+    "tests/quantization",
+    "tests/reasoning",
+    "tests/renderers",
+    "tests/samplers",
+    "tests/spec_decode",
+    "tests/tokenizers_",
+    "tests/tool_parsers",
+    "tests/tool_use",
+    "tests/transformers_utils",
+    "tests/utils_",
+    "tests/v1/attention",
+    "tests/v1/cudagraph",
+    "tests/v1/determinism",
+    "tests/v1/distributed",
+    "tests/v1/e2e",
+    "tests/v1/ec_connector",
+    "tests/v1/executor",
+    "tests/v1/kv_offload",
+    "tests/v1/logits_processors",
+    "tests/v1/metrics",
+    "tests/v1/sample",
+    "tests/v1/shutdown",
+    "tests/v1/simple_kv_offload",
+    "tests/v1/spec_decode",
+    "tests/v1/streaming_input",
+    "tests/v1/structured_output",
+    "tests/v1/worker",
 ]
 
-EXCLUDE = [
-    "aphrodite/third_party",
-    "aphrodite/vllm_flash_attn",
-    "aphrodite/benchmarks",
-    r"aphrodite/model_executor/models/[aA]",
-    r"aphrodite/model_executor/models/[bB]",
-    r"aphrodite/model_executor/models/[cC]",
-    r"aphrodite/model_executor/models/[dD]",
-    r"aphrodite/model_executor/models/[eE]",
-    r"aphrodite/model_executor/models/[fF]",
-    r"aphrodite/model_executor/models/[gG]",
-    r"aphrodite/model_executor/models/[hH]",
-    r"aphrodite/model_executor/models/[iI]",
-    r"aphrodite/model_executor/models/[jJ]",
-    r"aphrodite/model_executor/models/[kK]",
-    r"aphrodite/model_executor/models/[nN]",
-    r"aphrodite/model_executor/models/[oO]",
-    r"aphrodite/model_executor/models/[qQ]",
-    r"aphrodite/model_executor/models/[rR]",
-    r"aphrodite/model_executor/models/[sS]",
-    r"aphrodite/model_executor/models/transformers",
-    r"aphrodite/model_executor/models/[uU]",
-    r"aphrodite/model_executor/models/[vV]",
-    r"aphrodite/model_executor/models/[wW]",
-    r"aphrodite/model_executor/models/[zZ]",
+# After fixing errors resulting from changing follow_imports
+# from "skip" to "silent", move its directory to SILENT_GROUPS.
+SEPARATE_GROUPS = [
+    "tests",
+    "tests/compile",
+    "tests/distributed",
+    "tests/models",
+    "tests/v1",
+    "tests/v1/core",
+    "tests/v1/engine",
+    "tests/v1/kv_connector",
 ]
 
 
@@ -68,20 +121,24 @@ def group_files(changed_files: list[str]) -> dict[str, list[str]]:
         A dictionary mapping file group names to lists of changed files.
 
     """
-    exclude_pattern = re.compile(f"^{'|'.join(EXCLUDE)}.*")
+    silent_pattern = re.compile(f"^({'|'.join(SILENT_GROUPS)}).*")
     file_groups: dict[str, list[str]] = {"": []}
     file_groups.update({k: [] for k in SEPARATE_GROUPS})
+    # Longest path first so a sub-directory is not shadowed by its parent
+    separate_groups = sorted(SEPARATE_GROUPS, key=len, reverse=True)
     for changed_file in changed_files:
-        # Skip files which should be ignored completely
-        if exclude_pattern.match(changed_file):
+        # Already-fixed paths go in the default group, which runs at the
+        # stricter follow_imports setting from pyproject.toml
+        if silent_pattern.match(changed_file):
+            file_groups[""].append(changed_file)
             continue
         # Group files by mypy call
-        for directory in SEPARATE_GROUPS:
+        for directory in separate_groups:
             if re.match(f"^{directory}.*", changed_file):
                 file_groups[directory].append(changed_file)
                 break
         else:
-            if changed_file.startswith("aphrodite/"):
+            if changed_file.startswith(("aphrodite/", "tests/")):
                 file_groups[""].append(changed_file)
     return file_groups
 
@@ -116,16 +173,15 @@ def mypy(
 
 
 def main():
-    # sys.argv[1] is retained for CLI compatibility with CI/local mode.
-    python_version = sys.argv[2]
-    file_groups = group_files(sys.argv[3:])
+    python_version = sys.argv[1]
+    file_groups = group_files(sys.argv[2:])
 
     if python_version == "local":
         python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
 
     returncode = 0
     for file_group, changed_files in file_groups.items():
-        follow_imports = "skip"
+        follow_imports = None if file_group == "" else "skip"
         if changed_files:
             returncode |= mypy(changed_files, python_version, follow_imports, file_group)
     return returncode
