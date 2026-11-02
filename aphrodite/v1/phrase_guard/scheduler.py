@@ -50,9 +50,10 @@ class RequestGuard:
         self.reset_decoder()
 
     def reset_decoder(self):
-        self.decoder = IncrementalDetokenizer.from_new_request(self.tokenizer, self.request)
-        if not isinstance(self.decoder, FastIncrementalDetokenizer):
+        decoder = IncrementalDetokenizer.from_new_request(self.tokenizer, self.request)
+        if not isinstance(decoder, FastIncrementalDetokenizer):
             raise ValueError("Experimental banned_strings requires a fast Hugging Face tokenizer")
+        self.decoder = decoder
         for token in self.request.output_token_ids:
             self.decode(token)
 
@@ -141,9 +142,9 @@ class PhraseScheduler(AsyncScheduler):
         )
         if rewinds:
             if self.use_v2_model_runner:
-                for request in output.scheduled_new_reqs:
-                    if request.req_id in rewinds:
-                        request.sampling_params = rewinds[request.req_id][1]
+                for new_req in output.scheduled_new_reqs:
+                    if new_req.req_id in rewinds:
+                        new_req.sampling_params = rewinds[new_req.req_id][1]
             else:
                 output = PhraseSchedulerOutput(
                     **{f.name: getattr(output, f.name) for f in fields(SchedulerOutput)}, phrase_rewinds=rewinds
@@ -238,7 +239,10 @@ class PhraseScheduler(AsyncScheduler):
             request.drop_stale_output = True
         del request._output_token_ids[position:]
         del request._all_token_ids[request.num_prompt_tokens + position :]
-        del request.block_hashes[request.num_tokens // self.hash_block_size :]
+        # A block hash also covers the lookahead tokens after its block, so keep
+        # only hashes whose lookahead survived the rewind.
+        num_hashed_tokens = max(0, request.num_tokens - self.num_hash_lookahead_tokens)
+        del request.block_hashes[num_hashed_tokens // self.hash_block_size :]
         params = request.sampling_params.clone()
         if self.use_v2_model_runner:
             # Original prompt probabilities are already buffered or published.
@@ -281,12 +285,12 @@ class PhraseScheduler(AsyncScheduler):
         )
         for batch in outputs.values():
             for output in batch.outputs:
-                if guard := guards.get(output.request_id):
-                    output.new_logprobs = guard.output_logprobs
-                    output.new_prompt_logprobs_tensors = guard.prompt_logprobs
-                    guard.prompt_logprobs = None
-                    output.prompt_token_id_logprobs = guard.prompt_token_id_logprobs
-                    guard.prompt_token_id_logprobs = None
+                if output_guard := guards.get(output.request_id):
+                    output.new_logprobs = output_guard.output_logprobs
+                    output.new_prompt_logprobs_tensors = output_guard.prompt_logprobs
+                    output_guard.prompt_logprobs = None
+                    output.prompt_token_id_logprobs = output_guard.prompt_token_id_logprobs
+                    output_guard.prompt_token_id_logprobs = None
         for guard in guards.values():
             guard.step_logprobs = None
         return outputs

@@ -6,12 +6,12 @@ import argparse
 import uvloop
 
 from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.launchers.cli_args import (
+from aphrodite.entrypoints.common.cli_args import (
     make_arg_parser,
     validate_parsed_serve_args,
 )
+from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
 from aphrodite.entrypoints.launchers.render.entry import run_launch_fastapi
-from aphrodite.entrypoints.serve.utils.api_utils import APHRODITE_SUBCMD_PARSER_EPILOG
 from aphrodite.logger import init_logger
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 

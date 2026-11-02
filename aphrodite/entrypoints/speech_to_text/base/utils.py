@@ -32,7 +32,7 @@ async def read_upload_with_limit(
         The file content as ``bytes``.
 
     Raises:
-        APHRODITEValidationError: If the file exceeds the configured size limit.
+        AphroditeValidationError: If the file exceeds the configured size limit.
 
     """
     if max_size_mb is None:

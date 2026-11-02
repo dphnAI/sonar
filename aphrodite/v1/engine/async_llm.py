@@ -30,6 +30,8 @@ from aphrodite.entrypoints.serve.elastic_ep.middleware import (
 from aphrodite.exceptions import (
     AphroditeClientError,
     AphroditeValidationError,
+    EngineFaultedError,
+    GenerationError,
     GracefulHTTPError,
     MaxQueuedTokensError,
     ProfilerAlreadyActiveError,
@@ -52,7 +54,7 @@ from aphrodite.transformers_utils.config import maybe_register_config_serialize_
 from aphrodite.usage.usage_lib import UsageContext
 from aphrodite.utils.async_utils import cancel_task_threadsafe
 from aphrodite.utils.collection_utils import as_list
-from aphrodite.v1.engine import EngineCoreRequest, PauseMode
+from aphrodite.v1.engine import CheckpointState, EngineCoreRequest, PauseMode
 from aphrodite.v1.engine.admission_control import SharedAdmissionStats
 from aphrodite.v1.engine.core_client import EngineCoreClient
 from aphrodite.v1.engine.exceptions import EngineDeadError, EngineGenerateError
@@ -335,10 +337,23 @@ class AsyncLLM(EngineClient):
             request_id: Request id, used for logging only.
 
         Raises:
+            EngineFaultedError: If the engine has faulted and is awaiting
+                FT recovery.
             QueueOverflowError: If ``max_num_queued_reqs`` would be exceeded.
             MaxQueuedTokensError: If ``max_num_queued_tokens`` would be exceeded.
 
         """
+        if (
+            self.aphrodite_config.parallel_config.enable_fault_tolerance
+            and self.engine_core.engine_status.get("status") != "healthy"
+        ):
+            logger.info(
+                "Engine %s - rejecting request %s.",
+                self.engine_core.engine_status.get("status"),
+                request_id,
+            )
+            raise EngineFaultedError()
+
         max_num_reqs = self.scheduler_config.max_num_queued_reqs
         if max_num_reqs is not None:
             current_requests = (
@@ -784,7 +799,10 @@ class AsyncLLM(EngineClient):
             raise
 
         # Request validation error or admission control rejection.
-        except (AphroditeClientError, GracefulHTTPError) as e:
+        except (AphroditeClientError, GracefulHTTPError, GenerationError) as e:
+            if q is not None:
+                # E.g. a paused engine rejected one child: reclaim its n>1 siblings.
+                await self.abort(q.request_id, internal=True)
             if self.log_requests:
                 logger.info("Request %s failed (bad request): %s.", request_id, e)
             raise
@@ -848,6 +866,14 @@ class AsyncLLM(EngineClient):
                     for start in range(0, num_outputs, chunk_size):
                         end = start + chunk_size
                         outputs_slice = engine_core_outputs[start:end]
+                        if mm_processor_cache is not None:
+                            missing_hashes = [
+                                mm_hash for eco in outputs_slice for mm_hash in eco.mm_cache_miss_hashes or ()
+                            ]
+                            # Mark before publishing errors so even queued
+                            # renders invalidate before their next cache lookup.
+                            renderer.queue_mm_cache_invalidations(missing_hashes)
+
                         # 2) Process EngineCoreOutputs.
                         processed_outputs = output_processor.process_outputs(
                             outputs_slice,
@@ -857,16 +883,6 @@ class AsyncLLM(EngineClient):
                         )
                         # NOTE: RequestOutputs are pushed to their queues.
                         assert not processed_outputs.request_outputs
-
-                        # 2b) Recover from P0/P1 cache drift: the engine flags hashes
-                        # it couldn't find (mm_cache_miss_hashes); drop them from the
-                        # P0 shadow so the client's retry resends the data and
-                        # repopulates P1. Hot-path no-op (field is None otherwise).
-                        if mm_processor_cache is not None:
-                            for eco in outputs_slice:
-                                if eco.mm_cache_miss_hashes:
-                                    for mm_hash in eco.mm_cache_miss_hashes:
-                                        mm_processor_cache.invalidate(mm_hash)
 
                         # Allow other asyncio tasks to run between chunks
                         if end < num_outputs:
@@ -944,8 +960,9 @@ class AsyncLLM(EngineClient):
         """Pause generation to allow model weight updates.
 
         All mode handling (abort / wait / keep) and cache clearing is done
-        in the engine. New generation/encoding requests will not be scheduled
-        until resume is called.
+        in the engine. In ``abort`` and ``wait`` mode, new requests are rejected
+        with ``RetryableRequestError`` from when the pause starts until
+        :meth:`resume_generation`; ``keep`` accepts and queues them.
 
         Args:
             mode: How to handle in-flight requests:
@@ -960,7 +977,7 @@ class AsyncLLM(EngineClient):
         """
         if clear_cache:
             await self.renderer.clear_mm_cache_async()
-        await self.engine_core.pause_scheduler_async(mode=mode, clear_cache=clear_cache)
+        await self.engine_core.pause_generation_async(mode=mode, clear_cache=clear_cache)
         # Small sleep to help ensure that final outputs from any in-flight requests are
         # returned prior to this method returning. These outputs come out of the engine
         # prior to the wait-for-idle completion event, but involve additional async
@@ -1042,7 +1059,7 @@ class AsyncLLM(EngineClient):
             raise
 
         # Request validation error or admission control rejection.
-        except (AphroditeClientError, GracefulHTTPError):
+        except (AphroditeClientError, GracefulHTTPError, GenerationError):
             if self.log_requests:
                 logger.info("Request %s failed (bad request).", request_id)
             raise
@@ -1085,6 +1102,7 @@ class AsyncLLM(EngineClient):
         *,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict[str, Any] | None = None,
     ) -> None:
         async with self._profile_lock:
             if self._profile_session_guard_enabled and self._profile_session_active:
@@ -1102,6 +1120,7 @@ class AsyncLLM(EngineClient):
                     profile_prefix,
                     delay_iterations,
                     max_iterations,
+                    profiler_kwargs=profiler_kwargs,
                 )
             except Exception:
                 self._profile_session_active = False
@@ -1158,11 +1177,18 @@ class AsyncLLM(EngineClient):
 
         return fully_awake
 
-    async def checkpoint_prepare(self) -> None:
-        await self.collective_rpc("checkpoint_prepare")
+    async def checkpoint_prepare(self, mode: PauseMode = "wait") -> str | None:
+        refusal = await self.engine_core.checkpoint_prepare_async(mode)
+        if refusal is None:
+            # Preparing resets the engine's multimodal cache.
+            await self.renderer.clear_mm_cache_async()
+        return refusal
 
     async def checkpoint_restore(self) -> None:
-        await self.collective_rpc("checkpoint_restore")
+        await self.engine_core.checkpoint_restore_async()
+
+    async def checkpoint_state(self) -> tuple[CheckpointState, str | None]:
+        return await self.engine_core.checkpoint_state_async()
 
     async def is_sleeping(self) -> bool:
         return await self.engine_core.is_sleeping_async()
@@ -1195,6 +1221,18 @@ class AsyncLLM(EngineClient):
     ):
         """Perform a collective RPC call to the given path."""
         return await self.engine_core.collective_rpc_async(method, timeout, args, kwargs)
+
+    async def dphn_prove(self, request_id: str, nonce: str, output_token_ids: list[int]) -> list[dict[str, Any]]:
+        """Sample weights on every worker of every engine managed by this instance."""
+        if self.aphrodite_config.dphn_network_config is None:
+            raise RuntimeError("DPHN weight receipts are not enabled")
+        return await self.engine_core.dphn_prove_async(request_id, nonce, output_token_ids)
+
+    async def dphn_snapshot(self, output_dir: str) -> list[dict[str, Any]]:
+        """Export runtime-weight snapshots from every managed engine and worker."""
+        if self.aphrodite_config.dphn_network_config is None:
+            raise RuntimeError("DPHN weight receipts are not enabled")
+        return await self.engine_core.dphn_snapshot_async(output_dir)
 
     async def wait_for_requests_to_drain(self, drain_timeout: int = 300):
         """Wait for all requests to be drained."""

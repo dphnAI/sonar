@@ -20,6 +20,7 @@ from aphrodite.utils.async_utils import collect_from_async_generator
 from .utils import (
     BeamSearchSequence,
     create_sort_beams_key_function,
+    get_beam_search_eos_token_ids,
 )
 
 
@@ -37,6 +38,7 @@ class BeamSearchOnlineMixin(ABC):
         lora_request: LoRARequest | None = None,
         trace_headers: Mapping[str, str] | None = None,
         session_id: str | None = None,
+        priority: int = 0,
     ) -> AsyncGenerator[RequestOutput, None]:
         beam_width = params.beam_width
         max_tokens = params.max_tokens
@@ -47,8 +49,6 @@ class BeamSearchOnlineMixin(ABC):
         self.engine_client.input_processor.resolve_watermarking(params)
 
         tokenizer = self.renderer.get_tokenizer()
-        eos_token_id = tokenizer.eos_token_id
-        sort_beams_key = create_sort_beams_key_function(eos_token_id, length_penalty)
 
         if prompt["type"] == "embeds":
             raise NotImplementedError("Embedding prompt not supported for beam search")
@@ -70,6 +70,11 @@ class BeamSearchOnlineMixin(ABC):
         )
         params.configure_logprobs(sampling_params, self.engine_client.input_processor.aphrodite_config)
         allowed = set(params.allowed_token_ids) if params.allowed_token_ids else None
+        eos_token_ids = get_beam_search_eos_token_ids(
+            self.engine_client.input_processor.generation_config_fields,
+            tokenizer.eos_token_id,
+        )
+        sort_beams_key = create_sort_beams_key_function(length_penalty)
         all_beams = [
             BeamSearchSequence(
                 orig_prompt=prompt,
@@ -98,6 +103,7 @@ class BeamSearchOnlineMixin(ABC):
                             lora_request=lora_request_item,
                             trace_headers=trace_headers,
                             session_id=session_id,
+                            priority=priority,
                         )
                     )
                 )
@@ -153,17 +159,17 @@ class BeamSearchOnlineMixin(ABC):
                             score.rank = None
                     for token_id, logprob_obj in logprobs.items():
                         candidate_logprob = current_beam.cum_logprob + logprob_obj.logprob
-                        if token_id == eos_token_id and not ignore_eos:
+                        if token_id in eos_token_ids and not ignore_eos:
                             completed.append(
                                 BeamSearchSequence(
                                     orig_prompt=prompt,
-                                    tokens=current_beam.tokens + [eos_token_id]
+                                    tokens=current_beam.tokens + [token_id]
                                     if include_stop_str_in_output
                                     else current_beam.tokens,
                                     logprobs=current_beam.logprobs + [logprobs],
                                     cum_logprob=candidate_logprob,
                                     finish_reason="stop",
-                                    stop_reason=eos_token_id,
+                                    stop_reason=token_id,
                                 )
                             )
                         else:
@@ -213,7 +219,7 @@ class BeamSearchOnlineMixin(ABC):
         best_beams = sorted_completed[:beam_width]
 
         for beam in best_beams:
-            if beam.tokens[-1] == eos_token_id and not ignore_eos:
+            if beam.tokens[-1] in eos_token_ids and not ignore_eos:
                 # Skip the eos token in the text.
                 tokens = beam.tokens[tokenized_length:-1]
             else:

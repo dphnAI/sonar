@@ -10,6 +10,7 @@ import pytest
 import torch
 
 from aphrodite.v1.worker.gpu.sample.vocab_parallel import VocabShard
+from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
 from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import (
     VocabParallelRejection,
     rejection_sample,
@@ -38,6 +39,15 @@ _DRAFT_LENS = (4, 0, 1, 2, 3, 4, 4, 1, 4, 3, 2, 4)
 _PLACEHOLDERS = ((5, 3), (6, 1), (8, 0))
 # Softmax-invariant logit shifts used to measure near-ties.
 _SHIFTS = (0.3, -0.7, 1.9)
+
+
+def _draft_logits_cache(values: torch.Tensor | None) -> DraftLogitsCache | None:
+    """Wrap a full-vocab draft logits tensor for rejection_sample."""
+    if values is None:
+        return None
+    cache = DraftLogitsCache(1, 1, 1, dtype=values.dtype, fill=0.0, device=values.device)
+    cache.values = values
+    return cache
 
 
 def _make_inputs(
@@ -201,7 +211,7 @@ def _near_ties(
         shifted = dict(inputs, target_logits=inputs["target_logits"] + shift)
         output = rejection_sample(
             **shifted,
-            draft_logits=None if draft_logits is None else draft_logits + shift,
+            draft_logits_cache=_draft_logits_cache(None if draft_logits is None else draft_logits + shift),
             num_speculative_steps=NUM_SPECULATIVE_STEPS,
             **kwargs,
         )
@@ -218,7 +228,7 @@ def _check_against_full_vocab(
 ) -> None:
     expected = rejection_sample(
         **inputs,
-        draft_logits=draft_logits,
+        draft_logits_cache=_draft_logits_cache(draft_logits),
         num_speculative_steps=NUM_SPECULATIVE_STEPS,
         **kwargs,
     )
@@ -309,7 +319,7 @@ def test_entry_point_exchanges(
     )
     expected = rejection_sample(
         **inputs,
-        draft_logits=draft_logits,
+        draft_logits_cache=_draft_logits_cache(draft_logits),
         num_speculative_steps=NUM_SPECULATIVE_STEPS,
         use_block_verification=use_block_verification,
     )

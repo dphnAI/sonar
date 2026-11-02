@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 
+from aphrodite.config import get_current_aphrodite_config
 from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonImpl,
 )
@@ -41,6 +42,11 @@ class FlashInferMLASparseSM120Impl(SparseMLACommonImpl[FlashInferMLASparseMetada
     can_return_lse_for_decode = True
     supports_dcp = True
     lse_base_on_e = False
+
+    def get_fp8_ds_mla_row_bytes(self) -> int:
+        if self.kv_lora_rank == 512 and self.qk_rope_head_dim == 0:
+            return 528
+        return super().get_fp8_ds_mla_row_bytes()
 
     def __init__(
         self,
@@ -86,8 +92,6 @@ class FlashInferMLASparseSM120Impl(SparseMLACommonImpl[FlashInferMLASparseMetada
             topk_indices_buffer=topk_indices_buffer,
             **mla_args,
         )
-        from aphrodite.config import get_current_aphrodite_config
-
         aphrodite_config = get_current_aphrodite_config()
         model_type = None
         if aphrodite_config.model_config is not None:

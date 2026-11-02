@@ -252,7 +252,7 @@ def quantization_reference() -> str:
 def server_arguments() -> str:
     from aphrodite.config import get_attr_docs
     from aphrodite.engine import arg_utils
-    from aphrodite.entrypoints.launchers.cli_args import (
+    from aphrodite.entrypoints.common.cli_args import (
         BaseFrontendArgs,
         create_parser_for_docs,
     )

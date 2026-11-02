@@ -8,6 +8,7 @@ import os
 import queue
 import traceback
 from functools import lru_cache
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Literal
 from unittest.mock import patch
@@ -57,6 +58,7 @@ def _make_quick_allreduce(
     )
 
     qar = QuickAllReduce.__new__(QuickAllReduce)
+    qar._flydsl_int4 = None
     qar.disabled = disabled
     qar.world_size = world_size
     qar.use_fp16_kernels = use_fp16_kernels
@@ -308,6 +310,8 @@ def _log_prompt_summaries() -> None:
 def _get_model_path() -> str:
     try:
         path = hf_api().snapshot_download(repo_id=MODEL_NAME, local_files_only=True)
+        if not any(Path(path).glob("*.safetensors")):
+            raise FileNotFoundError(f"no weights in cached snapshot: {path}")
         _log(f"using cached model snapshot: {path}")
         return path
     except Exception:
@@ -674,6 +678,7 @@ def test_quick_allreduce_rocm_arch_available(gcn_arch_name, expected):
     from aphrodite.distributed.device_communicators.quick_all_reduce import QuickAllReduce
 
     qar = QuickAllReduce.__new__(QuickAllReduce)
+    qar._flydsl_int4 = None
     qar.disabled = True
 
     with (
@@ -693,6 +698,7 @@ def test_quick_allreduce_rocm_arch_available_handles_probe_failure():
     from aphrodite.distributed.device_communicators.quick_all_reduce import QuickAllReduce
 
     qar = QuickAllReduce.__new__(QuickAllReduce)
+    qar._flydsl_int4 = None
     qar.disabled = True
 
     with (

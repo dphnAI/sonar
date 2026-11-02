@@ -53,7 +53,7 @@ def test_models_with_multiple_audios(
     aphrodite_prompt = _get_prompt(audio_assets, MULTI_AUDIO_PROMPT)
     run_multi_audio_test(
         aphrodite_runner,
-        [(aphrodite_prompt, [a.audio_and_sample_rate for a in audio_assets])],  # type: ignore[list-item]
+        [(aphrodite_prompt, [a.audio_and_sample_rate for a in audio_assets])],
         MODEL_NAME,
         dtype=dtype,
         max_tokens=max_tokens,

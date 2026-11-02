@@ -7,8 +7,10 @@ import numpy as np
 import pytest
 import torch
 
+from aphrodite.platforms import current_platform
+
 pytest.importorskip("triton")
-if not torch.cuda.is_available():
+if not (current_platform.is_cuda_alike() or current_platform.is_xpu()):
     pytest.skip(
         "CUDA required for Model Runner V2 thinking budget tests",
         allow_module_level=True,
@@ -20,7 +22,7 @@ from aphrodite.v1.worker.gpu.sample.sampler import Sampler
 from aphrodite.v1.worker.gpu.sample.thinking_budget import ThinkingBudgetState
 from aphrodite.v1.worker.gpu.states import RequestState
 
-DEVICE = torch.device("cuda")
+DEVICE = torch.device(current_platform.device_type)
 START = 90
 END = 91
 END_A = 92

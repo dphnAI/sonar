@@ -16,7 +16,10 @@ from aphrodite.distributed import (
 )
 from aphrodite.model_executor.layers.activation import SiluAndMul
 from aphrodite.model_executor.layers.attention import Attention
-from aphrodite.model_executor.layers.fused_moe import FusedMoEFactory
+from aphrodite.model_executor.layers.fused_moe import (
+    FusedMoEFactory,
+    fused_moe_make_expert_params_mapping,
+)
 from aphrodite.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     QKVParallelLinear,
@@ -132,6 +135,7 @@ class CohereMoeAttention(nn.Module):
         self.max_position_embeddings = getattr(config, "model_max_length", None) or getattr(
             config, "max_position_embeddings", 8192
         )
+        assert isinstance(self.max_position_embeddings, int)
         self.qkv_proj = QKVParallelLinear(
             self.hidden_size,
             self.head_dim,
@@ -219,6 +223,7 @@ class CohereMoe(nn.Module):
             prefix=f"{prefix}.gate",
         )
 
+        self.shared_experts: CohereMoeMLP | None
         if hasattr(config, "num_shared_experts") and config.num_shared_experts > 0:
             self.shared_experts = CohereMoeMLP(
                 config=config,
@@ -411,7 +416,7 @@ class CohereMoeForCausalLM(nn.Module, SupportsPP, SupportsQuant):
             ("gate_up_proj", "up_proj", 1),
         ]
 
-        expert_params_mapping = FusedMoEFactory.make_expert_params_mapping(
+        expert_params_mapping = fused_moe_make_expert_params_mapping(
             self,
             ckpt_gate_proj_name="gate_proj",
             ckpt_down_proj_name="down_proj",
@@ -419,18 +424,13 @@ class CohereMoeForCausalLM(nn.Module, SupportsPP, SupportsQuant):
             num_experts=self.config.num_experts,
         )
 
+        if self.quant_config is not None:
+            weights = self.quant_config.get_cache_scale_mapper().apply(weights)
+
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
         for name, loaded_weight in weights:
             if "rotary_emb.inv_freq" in name:
-                continue
-
-            if self.quant_config is not None and (scale_name := self.quant_config.get_cache_scale(name)):
-                param = params_dict[scale_name]
-                weight_loader = getattr(param, "weight_loader", default_weight_loader)
-                loaded_weight = loaded_weight if loaded_weight.dim() == 0 else loaded_weight[0]
-                weight_loader(param, loaded_weight)
-                loaded_params.add(scale_name)
                 continue
 
             for param_name, shard_name, shard_id in stacked_params_mapping:
@@ -474,9 +474,10 @@ class CohereMoeForCausalLM(nn.Module, SupportsPP, SupportsQuant):
                         continue
                     if is_pp_missing_parameter(name, self):
                         continue
-                    name = maybe_remap_kv_scale_name(name, params_dict)
-                    if name is None:
+                    remapped_name = maybe_remap_kv_scale_name(name, params_dict)
+                    if remapped_name is None:
                         continue
+                    name = remapped_name
                     param = params_dict[name]
                     weight_loader = getattr(param, "weight_loader", default_weight_loader)
                     weight_loader(param, loaded_weight)

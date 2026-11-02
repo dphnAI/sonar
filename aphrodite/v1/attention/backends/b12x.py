@@ -26,7 +26,6 @@ from aphrodite.utils.math_utils import cdiv
 from aphrodite.utils.torch_utils import (
     canonicalize_singleton_dim_strides,
     get_dtype_size,
-    is_quantized_kv_cache,
 )
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
@@ -39,7 +38,12 @@ from aphrodite.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVCacheLayout, KVCacheSpec
+from aphrodite.v1.kv_cache_interface import (
+    AttentionSpec,
+    KVCacheLayout,
+    KVCacheSpec,
+    is_quantized_kv_cache,
+)
 from aphrodite.v1.worker.workspace import current_workspace_manager
 
 logger = init_logger(__name__)

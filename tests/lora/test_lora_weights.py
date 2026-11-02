@@ -47,8 +47,11 @@ def test_moe_packing_uses_stored_scaling(packer, stacked: bool):
 
 def test_non_gated_moe_keeps_w3_unscaled():
     packed = PackedLoRALayerWeights.pack_moe(moe_loras(RSLORA_SCALING), "experts", is_non_gated_moe=True)
-    assert packed.scaling[:2] == pytest.approx([RSLORA_SCALING] * 2)
-    assert packed.scaling[2] == 1.0
+    # PackedLoRALayerWeights stores one scaling per packed projection but
+    # inherits the base class's float annotation.
+    scaling = packed.scaling
+    assert scaling[:2] == pytest.approx([RSLORA_SCALING] * 2)  # type: ignore[index]
+    assert scaling[2] == 1.0  # type: ignore[index]
 
 
 @pytest.mark.parametrize(

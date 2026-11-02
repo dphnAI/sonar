@@ -5,6 +5,7 @@ mod structural_tag;
 
 use std::sync::Arc;
 
+use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 use winnow::ascii::multispace0 as ws0;
 use winnow::combinator::{alt, delimited, eof, repeat, seq, terminated};
 use winnow::prelude::*;
@@ -181,7 +182,7 @@ impl HyToolParser {
 impl ToolParser for HyToolParser {
     // Suffix discovery belongs to the unified HY parser so its reasoning and
     // tool delimiters always use the same tokenizer-derived value.
-    fn create(_tools: &[Tool]) -> Result<Box<dyn ToolParser>>
+    fn create(_tools: &[Tool], _tokenizer: DynTokenizer) -> Result<Box<dyn ToolParser>>
     where
         Self: Sized + 'static,
     {
@@ -194,8 +195,8 @@ impl ToolParser for HyToolParser {
         Some(&self.structural_tag_builder)
     }
 
-    fn parse_into(&mut self, chunk: &str, output: &mut ToolParserOutput) -> Result<()> {
-        self.buffer.push_str(chunk);
+    fn parse_into(&mut self, chunk: DecodedText, output: &mut ToolParserOutput) -> Result<()> {
+        self.buffer.push_str(&chunk.text);
 
         while let Some((event, consumed_len)) = parse_buffered_event(&self.buffer, |input| {
             parse_next_hy_event(input, &mut self.mode, &self.markers, self.dialect)
@@ -385,6 +386,7 @@ fn ignored_rest_event(input: &mut HyInput<'_>) -> ModalResult<HyEvent> {
 
 #[cfg(test)]
 mod tests {
+    use aphrodite_tokenizer::DecodedText;
     use expect_test::expect;
     use serde_json::{Value, json};
     use thiserror_ext::AsReport;
@@ -691,7 +693,9 @@ mod tests {
 
         parser
             .parse_into(
-                "<tool_calls><tool_call>get_weather<tool_sep><arg_key>city</arg_key><arg_value>Bei",
+                DecodedText::unattributed(
+                    "<tool_calls><tool_call>get_weather<tool_sep><arg_key>city</arg_key><arg_value>Bei",
+                ),
                 &mut output,
             )
             .unwrap();

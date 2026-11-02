@@ -3,17 +3,23 @@
 
 import jinja2
 import pytest
+import torch
 from huggingface_hub.errors import GatedRepoError
 
-from aphrodite.config import ModelConfig
+from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.exceptions import AphroditeValidationError
-from aphrodite.renderers.chat_utils import load_chat_template
+from aphrodite.inputs.engine import MultiModalInput
+from aphrodite.multimodal.inputs import MultiModalKwargsItems, PlaceholderRange
+from aphrodite.renderers.chat_utils import ConversationMessage, load_chat_template
 from aphrodite.renderers.hf import (
+    HfRenderer,
+    _build_prompt_embeds_updates,
     _consolidate_system_messages,
     _convert_developer_to_system,
     _detect_content_format,
     _detect_developer_role_support,
+    _ensure_prompt_embeds_placeholder_token,
     _get_hf_base_chat_template_params,
     _template_error_reason,
     _try_extract_ast,
@@ -91,6 +97,39 @@ TEST_MESSAGES = [
     {"role": "user", "content": "What is the capital of"},
 ]
 ASSISTANT_MESSAGE_TO_CONTINUE = {"role": "assistant", "content": "The capital of"}
+
+
+def test_apply_prompt_embeds_keeps_engine_token_ids_in_vocabulary() -> None:
+    """Consume OOV sentinels without changing text IDs or embedding offsets."""
+    model = "HuggingFaceTB/SmolVLM-256M-Instruct"
+    model_config = ModelConfig(model, enable_prompt_embeds=True)
+    renderer = HfRenderer(AphroditeConfig(model_config=model_config), get_tokenizer(model))
+    try:
+        assert renderer.tokenizer is not None
+        sentinel = _ensure_prompt_embeds_placeholder_token(renderer.tokenizer)
+        vocab_size = model_config.get_vocab_size()
+        assert sentinel >= vocab_size
+        tensors = [torch.zeros(length, model_config.get_hidden_size()) for length in (2, 1)]
+        engine_input: MultiModalInput = {
+            "type": "multimodal",
+            "prompt_token_ids": [1, sentinel, sentinel, 2, sentinel, 3],
+            "mm_kwargs": MultiModalKwargsItems(),
+            "mm_hashes": {},
+            "mm_placeholders": {},
+        }
+
+        renderer._apply_prompt_embeds_to_engine_input(
+            engine_input, tensors, _build_prompt_embeds_updates(tensors, sentinel)
+        )
+
+        assert all(0 <= token_id < vocab_size for token_id in engine_input["prompt_token_ids"])
+        assert engine_input["prompt_token_ids"] == [1, 0, 0, 2, 0, 3]
+        assert engine_input["mm_placeholders"]["prompt_embeds"] == [
+            PlaceholderRange(offset=1, length=2),
+            PlaceholderRange(offset=4, length=1),
+        ]
+    finally:
+        renderer.shutdown()
 
 
 def test_load_chat_template():
@@ -421,6 +460,25 @@ def test_resolve_chat_template_kwargs_with_template_name():
             """,
             "string",
         ),
+        (
+            """
+            {% set ns = namespace(rest=messages) %}
+            {% for message in ns.rest %}
+              {% for item in message['content'] %}{{ item['type'] }}{% endfor %}
+            {% endfor %}
+            """,
+            "openai",
+        ),
+        (
+            """
+            {% set ns = namespace(rest=[]) %}
+            {% set ns.rest = messages %}
+            {% for message in ns.rest %}
+              {% for item in message['content'] %}{{ item['type'] }}{% endfor %}
+            {% endfor %}
+            """,
+            "openai",
+        ),
     ],
 )
 def test_detect_content_format(chat_template, expected_format):
@@ -584,7 +642,9 @@ def test_resolve_content_format_examples(template_path, expected_format):
         model,
         trust_remote_code=model_config.trust_remote_code,
     )
-    dummy_tokenizer.chat_template = None
+    # Clear the HF tokenizer's own template so resolution falls back to the
+    # one loaded below; ``chat_template`` is not part of ``TokenizerLike``.
+    dummy_tokenizer.chat_template = None  # type: ignore[attr-defined]
 
     chat_template = load_chat_template(EXAMPLES_DIR / template_path)
     assert isinstance(chat_template, str)
@@ -642,8 +702,10 @@ def test_get_gen_prompt(model, template, add_generation_prompt, continue_final_m
         continue_final_message=continue_final_message,
     )
 
-    # Call the function and get the result
-    result = safe_apply_chat_template(
+    # Call the function and get the result. The plain role/content request
+    # messages are already in conversation shape, which mypy cannot see
+    # through ``ChatCompletionMessageParam``.
+    result = safe_apply_chat_template(  # type: ignore[call-overload]
         model_config,
         tokenizer,
         mock_request.messages,
@@ -783,7 +845,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         return get_tokenizer("facebook/opt-125m")
 
     def test_developer_converted_to_system_for_chatml(self, model_config, tokenizer):
-        conversation = [
+        conversation: list[ConversationMessage] = [
             {"role": "developer", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello"},
         ]
@@ -800,7 +862,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         assert "<|im_start|>developer" not in result
 
     def test_developer_preserved_when_template_supports_it(self, model_config, tokenizer):
-        conversation = [
+        conversation: list[ConversationMessage] = [
             {"role": "developer", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello"},
         ]
@@ -816,7 +878,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         assert "You are a helpful assistant." in result
 
     def test_developer_does_not_crash_strict_template(self, model_config, tokenizer):
-        conversation = [
+        conversation: list[ConversationMessage] = [
             {"role": "developer", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello"},
         ]
@@ -832,7 +894,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         assert "You are a helpful assistant." in result
 
     def test_no_developer_messages_no_overhead(self, model_config, tokenizer):
-        conversation = [
+        conversation: list[ConversationMessage] = [
             {"role": "system", "content": "You are helpful."},
             {"role": "user", "content": "Hello"},
         ]
@@ -848,7 +910,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         assert "You are helpful." in result
 
     def test_developer_at_non_first_position_consolidated(self, model_config, tokenizer):
-        conversation = [
+        conversation: list[ConversationMessage] = [
             {"role": "system", "content": "You are helpful."},
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"},
@@ -869,7 +931,7 @@ class TestSafeApplyChatTemplateDeveloperRole:
         assert "What is 2+2?" in result
 
     def test_developer_only_no_prior_system(self, model_config, tokenizer):
-        conversation = [
+        conversation: list[ConversationMessage] = [
             {"role": "user", "content": "Hello"},
             {"role": "developer", "content": "Be concise."},
             {"role": "user", "content": "What is 2+2?"},
@@ -947,7 +1009,7 @@ class TestApplyChatTemplateEffortTolerant:
         return get_tokenizer("facebook/opt-125m")
 
     def test_unsupported_effort_raises_bad_request(self, model_config, tokenizer):
-        conversation = [{"role": "user", "content": "Hello"}]
+        conversation: list[ConversationMessage] = [{"role": "user", "content": "Hello"}]
         with pytest.raises(
             AphroditeValidationError,
             match="Unexpected reasoning effort high",
@@ -967,7 +1029,7 @@ class TestApplyChatTemplateEffortTolerant:
         )
 
     def test_supported_effort_accepted(self, model_config, tokenizer):
-        conversation = [{"role": "user", "content": "Hello"}]
+        conversation: list[ConversationMessage] = [{"role": "user", "content": "Hello"}]
         result = safe_apply_chat_template(
             model_config,
             tokenizer,
@@ -979,7 +1041,7 @@ class TestApplyChatTemplateEffortTolerant:
         assert result == "user: Hello\n"
 
     def test_non_effort_template_error_is_bad_request(self, model_config, tokenizer):
-        conversation = [{"role": "user", "content": "Hello"}]
+        conversation: list[ConversationMessage] = [{"role": "user", "content": "Hello"}]
         with pytest.raises(AphroditeValidationError, match="unrelated reason"):
             safe_apply_chat_template(
                 model_config,

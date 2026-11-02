@@ -5,6 +5,7 @@
 import torch
 
 from aphrodite.model_executor.layers.quantization.utils import replace_parameter
+from aphrodite.model_executor.utils import retire_parameter
 from aphrodite.platforms import CpuArchEnum, current_platform
 from aphrodite.scalar_type import scalar_types
 
@@ -97,7 +98,8 @@ class Dynamic4bitLinearKernel(MPLinearKernel):
             c.partition_weight_shape[1],
         )
         replace_parameter(layer, self.w_q_name, torch.nn.Parameter(w, requires_grad=False))
-        setattr(layer, self.w_s_name, None)
+        # Scales are packed into the weight; the loaded param keeps its data.
+        retire_parameter(layer, self.w_s_name)
 
     def apply_weights(
         self,

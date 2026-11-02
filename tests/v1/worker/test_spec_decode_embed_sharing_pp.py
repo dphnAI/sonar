@@ -7,6 +7,7 @@ import pytest
 import torch
 import torch.nn as nn
 
+from aphrodite.config import ParallelConfig
 from aphrodite.model_executor.model_loader.mtp_validation import (
     disable_mtp_completeness_check,
 )
@@ -16,6 +17,7 @@ from aphrodite.model_executor.models.utils import (
 )
 from aphrodite.platforms import current_platform
 from aphrodite.v1.worker.gpu.spec_decode.eagle import utils as eagle_utils
+from tests.v1.spec_decode.utils import fake_speculative_config
 
 VOCAB, HIDDEN = 32, 8
 
@@ -88,41 +90,38 @@ def test_mtp_style_drafter_is_left_alone_under_pp(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "method,pp_size,is_last_rank,expected",
+    "method,may_use_target_embed,pp_size,is_last_rank,expected",
     [
-        ("eagle", 2, True, True),
-        ("eagle3", 2, True, True),
-        ("dflash", 2, True, True),
-        ("dspark", 2, True, True),
-        ("eagle3", 1, True, False),
-        ("eagle3", 2, False, False),
-        ("mtp", 2, True, False),
-        (None, 2, True, False),
+        ("eagle", True, 2, True, True),
+        ("eagle3", True, 2, True, True),
+        ("dflash", True, 2, True, True),
+        ("dspark", True, 2, True, True),
+        ("eagle3", True, 1, True, False),
+        ("eagle3", True, 2, False, False),
+        # Depends on the MTP draft model (e.g. MiniMax-M3's may use it).
+        ("mtp", True, 2, True, True),
+        ("mtp", False, 2, True, False),
+        # Not a hidden-state drafter, so never reuses the target's embedding.
+        ("draft_model", True, 2, True, False),
+        (None, True, 2, True, False),
     ],
 )
-def test_target_embedding_provisioning(monkeypatch, method, pp_size, is_last_rank, expected):
+def test_target_embedding_provisioning(monkeypatch, method, may_use_target_embed, pp_size, is_last_rank, expected):
     monkeypatch.setattr(
         "aphrodite.distributed.parallel_state.get_pp_group",
         _fake_pp(pp_size, is_last_rank),
         raising=True,
     )
-    speculative_config = None if method is None else SimpleNamespace(method=method)
+    speculative_config = (
+        None
+        if method is None
+        else fake_speculative_config(
+            method=method,
+            draft_model_config=SimpleNamespace(may_use_target_embed=may_use_target_embed),
+        )
+    )
     config = SimpleNamespace(speculative_config=speculative_config)
     assert spec_decode_needs_target_embed(config) is expected
-
-
-@pytest.mark.parametrize(
-    "pp_size,is_last_rank,expected",
-    [(2, True, True), (2, False, False), (1, True, False)],
-)
-def test_mtp_target_embedding_requires_model_opt_in(monkeypatch, pp_size, is_last_rank, expected):
-    monkeypatch.setattr(
-        "aphrodite.distributed.parallel_state.get_pp_group",
-        _fake_pp(pp_size, is_last_rank),
-    )
-    config = SimpleNamespace(speculative_config=SimpleNamespace(method="mtp"))
-    assert spec_decode_needs_target_embed(config, include_mtp=True) is expected
-    assert not spec_decode_needs_target_embed(config)
 
 
 @pytest.fixture
@@ -147,9 +146,14 @@ def m3_config():
         use_v2_model_runner=True,
         load_config=SimpleNamespace(load_format="auto"),
         model_config=SimpleNamespace(hf_text_config=hf_config),
-        speculative_config=SimpleNamespace(method="mtp", draft_model_config=SimpleNamespace(hf_config=hf_config)),
+        speculative_config=fake_speculative_config(
+            method="mtp",
+            draft_model_config=SimpleNamespace(hf_config=hf_config, may_use_target_embed=True),
+        ),
+        parallel_config=ParallelConfig(),
         quant_config=None,
         cache_config=None,
+        kernel_config=SimpleNamespace(monokernel=False, moe_backend="auto"),
     )
 
 
@@ -224,30 +228,31 @@ def test_m3_preserves_legacy_embedding_sharing(monkeypatch, m3_modules, m3_confi
             ("model.embed_tokens.weight", torch.ones(VOCAB, HIDDEN)),
         ]
     )
-    assert not hasattr(draft, "has_own_embed_tokens")
+    # Not tracked, so the target's embedding is shared.
+    assert draft.has_own_embed_tokens is False
 
 
 @pytest.mark.parametrize(
-    "rank,use_v2,method,expected",
+    "rank,method,expected",
     [
-        (0, True, "mtp", True),
-        (1, True, "mtp", False),
-        (2, True, "mtp", True),
-        (2, False, "mtp", False),
-        (2, True, None, False),
+        (0, "mtp", True),
+        (1, "mtp", False),
+        (2, "mtp", True),
+        (2, None, False),
     ],
 )
-def test_m3_target_allocates_embedding_on_required_stage(
-    monkeypatch, m3_modules, m3_config, rank, use_v2, method, expected
-):
+def test_m3_target_allocates_embedding_on_required_stage(monkeypatch, m3_modules, m3_config, rank, method, expected):
     _, model = m3_modules
     pp = lambda: SimpleNamespace(world_size=3, is_first_rank=rank == 0, is_last_rank=rank == 2)
     monkeypatch.setattr(model, "get_pp_group", pp)
     monkeypatch.setattr("aphrodite.distributed.parallel_state.get_pp_group", pp)
+    monkeypatch.setattr(
+        "aphrodite.distributed.parallel_state.get_tp_group",
+        lambda: SimpleNamespace(world_size=1),
+    )
     monkeypatch.setattr(model, "VocabParallelEmbedding", lambda *_, **kw: _embed())
     monkeypatch.setattr(model, "make_layers", lambda *_, **kw: (0, 0, nn.ModuleList()))
     monkeypatch.setattr(model, "MiniMAXGemmaRMSNorm", lambda *_, **kw: nn.Identity())
-    m3_config.use_v2_model_runner = use_v2
     if method is None:
         m3_config.speculative_config = None
     target = model.MiniMaxM3Model(aphrodite_config=m3_config)
@@ -272,3 +277,63 @@ def test_m3_weight_transfer_updates_embedding_ownership(make_m3_draft, initial_e
     eagle_utils.maybe_share_target_embed(draft, draft.model, target)
     assert draft.model.embed_tokens is original
     torch.testing.assert_close(original.weight, torch.full((VOCAB, HIDDEN), 3.0))
+
+
+@pytest.fixture
+def nemotron_draft(monkeypatch, default_aphrodite_config):
+    from aphrodite.model_executor.models import nemotron_h_mtp as mtp
+
+    hf_config = SimpleNamespace(
+        vocab_size=VOCAB,
+        hidden_size=HIDDEN,
+        num_hidden_layers=1,
+        num_nextn_predict_layers=1,
+        mtp_hybrid_override_pattern="*",
+    )
+    hf_config.get_text_config = lambda: hf_config
+    config = SimpleNamespace(
+        speculative_config=SimpleNamespace(
+            draft_model_config=SimpleNamespace(hf_config=hf_config),
+        ),
+        parallel_config=SimpleNamespace(eplb_config=None),
+        cache_config=None,
+        compilation_config=SimpleNamespace(mode=0),
+    )
+    monkeypatch.setattr(mtp, "VocabParallelEmbedding", nn.Embedding)
+    monkeypatch.setattr(mtp, "get_draft_quant_config", lambda _: None)
+    monkeypatch.setattr(mtp.NemotronHMTP, "_find_quant_config", staticmethod(lambda **_: None))
+    monkeypatch.setattr(
+        mtp,
+        "NemotronHMTPAttentionDecoderLayer",
+        lambda **_: nn.Linear(1, 1, bias=False),
+    )
+    return mtp.NemotronHMTP(aphrodite_config=config)
+
+
+@pytest.mark.parametrize("prefix", ["", "language_model."])
+def test_nemotron_only_reports_loaded_mtp_weights(nemotron_draft, prefix):
+    weights = [
+        (prefix + "mtp.layers.0.weight", torch.ones(1, 1)),
+        (prefix + "backbone.embeddings.weight", torch.zeros(VOCAB, HIDDEN)),
+        (prefix + "lm_head.weight", torch.zeros(VOCAB, HIDDEN)),
+    ]
+    assert not nemotron_draft.is_unused_checkpoint_weight(weights[0][0])
+    assert all(nemotron_draft.is_unused_checkpoint_weight(k) for k, _ in weights[1:])
+    assert nemotron_draft.load_weights(weights) == {"model.layers.0.weight"}
+    assert nemotron_draft.model.embed_tokens is None
+    assert nemotron_draft.lm_head is None
+
+
+@pytest.mark.parametrize("pp_size", [1, 2])
+def test_nemotron_shares_target_embedding_and_refit(monkeypatch, nemotron_draft, pp_size):
+    """PP must preserve the target's embedding identity through a refit."""
+    monkeypatch.setattr(eagle_utils, "get_pp_group", _fake_pp(pp_size))
+    target = _inner(_embed(fill=2.0))
+    eagle_utils.maybe_share_target_embed(nemotron_draft, nemotron_draft.model, target)
+    assert nemotron_draft.model.embed_tokens is target.embed_tokens
+    with torch.no_grad():
+        target.embed_tokens.weight.fill_(3.0)
+    torch.testing.assert_close(
+        nemotron_draft.get_input_embeddings(torch.tensor([1])),
+        torch.full((1, HIDDEN), 3.0),
+    )

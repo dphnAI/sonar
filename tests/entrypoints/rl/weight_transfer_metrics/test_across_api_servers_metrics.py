@@ -8,7 +8,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from transformers import AutoModelForCausalLM
 
 from aphrodite.distributed.weight_transfer import (
-    HTTPAPHRODITEWeightSyncClient,
+    HTTPAphroditeWeightSyncClient,
     ModuleSource,
     WeightTransferTrainerFactory,
 )
@@ -55,7 +55,7 @@ def test_weight_sync_metrics_aggregate_across_api_servers(tmp_path):
         trainer = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).cuda()
         engine = WeightTransferTrainerFactory.trainer_init(
             IPCTrainerInitInfo(rank=0),
-            client=HTTPAPHRODITEWeightSyncClient(url),
+            client=HTTPAphroditeWeightSyncClient(url),
             source=ModuleSource(trainer),
         )
         for _ in range(SYNCS):

@@ -9,7 +9,9 @@
 mod unified;
 
 use aphrodite_parser::tool::test_utils::collect_stream;
-use aphrodite_parser::tool::{Tool, ToolParser};
+use aphrodite_parser::tool::{Tool, ToolParser, ToolParserOutput};
+use aphrodite_tokenizer::test_utils::TestTokenizer;
+use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 use futures::FutureExt as _;
 use openai_protocol::common::{Function as OpenAiFunction, Tool as OpenAiTool};
 use tool_parser::traits::ToolParser as ExternalToolParser;
@@ -30,9 +32,29 @@ pub(super) fn openai_tools(tools: &[Tool]) -> Vec<OpenAiTool> {
         .collect()
 }
 
+/// A tokenizer for parsers that do not resolve any tokens.
+pub(super) fn test_tokenizer() -> DynTokenizer {
+    std::sync::Arc::new(TestTokenizer::new())
+}
+
 pub(super) fn feed_parser(parser: &mut dyn ToolParser, chunks: &[&str]) -> (String, usize) {
     let result = collect_stream(parser, chunks);
     (result.normal_text(), result.calls().len())
+}
+
+/// Feed token-attributed chunks (see [`attributed_chunks`]) through a tool
+/// parser and return its normal text and call count.
+pub(super) fn feed_attributed_parser(
+    parser: &mut dyn ToolParser,
+    chunks: Vec<DecodedText>,
+) -> (String, usize) {
+    let mut output = ToolParserOutput::default();
+    for chunk in chunks {
+        parser.parse_into(chunk, &mut output).expect("chunk should parse");
+    }
+    output.append(parser.finish().expect("stream should finish"));
+    let output = output.coalesce();
+    (output.normal_text(), output.calls().len())
 }
 
 pub(super) fn feed_external_parser(

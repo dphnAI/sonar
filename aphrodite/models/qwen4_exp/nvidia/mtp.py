@@ -24,9 +24,6 @@ from aphrodite import envs
 from aphrodite.config import AphroditeConfig, replace, set_current_aphrodite_config
 from aphrodite.distributed import get_pp_group
 from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.layers.fused_moe.utils import (
-    is_model_fused_shared_expert_compatible,
-)
 from aphrodite.model_executor.layers.layernorm import GemmaRMSNorm
 from aphrodite.model_executor.layers.linear import ColumnParallelLinear
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
@@ -42,6 +39,7 @@ from aphrodite.model_executor.models.utils import (
     PPMissingLayer,
     WeightsMapper,
     get_draft_quant_config,
+    get_fused_shared_expert_layers,
     make_empty_intermediate_tensors_factory,
     maybe_fuse_shared_experts,
     maybe_prefix,
@@ -226,10 +224,10 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
                 )
                 for idx in range(self.num_mtp_layers)
             )
-        self.is_fused_shared_expert_enabled = is_model_fused_shared_expert_compatible(
-            self.layers,
+        self.fused_shared_expert_layers = get_fused_shared_expert_layers(
+            self,
             Qwen4ExpSparseMoeBlock,
-            "mlp",
+            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
         )
 
         self.pre_fc_norm_embedding = GemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -288,7 +286,9 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
         hidden_size = self.hidden_size
         prev_block_output: torch.Tensor | None = None
 
-        if get_pp_group().is_first_rank:
+        # Branch on the inputs, not the rank: the drafter is built entirely on
+        # the last PP stage, where `is_first_rank` is False.
+        if intermediate_tensors is None:
             assert hidden_states is not None
             if inputs_embeds is None:
                 assert input_ids is not None
@@ -359,7 +359,7 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         weights = maybe_fuse_shared_experts(
             weights,
-            enabled=self.is_fused_shared_expert_enabled,
+            fused_shared_expert_layers=self.fused_shared_expert_layers,
             n_routed_experts=getattr(self.config, "num_experts", 0) or 0,
             n_shared_experts=1,
             ckpt_prefix="mlp.shared_expert",

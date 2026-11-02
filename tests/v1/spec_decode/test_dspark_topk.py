@@ -16,6 +16,7 @@ from aphrodite.model_executor.layers.quantization.utils.nvfp4_emulation_utils im
 from aphrodite.model_executor.models.qwen3_dspark import DSparkMarkovHead
 from aphrodite.platforms import current_platform
 from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
+from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
 from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
 
@@ -80,7 +81,7 @@ def test_dspark_revisited_position_uses_step_seed(use_fp64):
     spec.temperature = torch.ones(batch, device=device)
     spec.seeds = torch.arange(batch, dtype=torch.int64, device=device)
     spec._step_cols = torch.arange(2, dtype=torch.int32, device=device)
-    spec.draft_logits = torch.empty(batch, 2, 2, device=device)
+    spec.draft_logits = DraftLogitsCache(batch, 2, 2, dtype=torch.float32, fill=0.0, device=device)
     logits = torch.tensor([0.7, 0.3], device=device).log().expand(batch, -1)
     mapping = torch.arange(batch, device=device)
     positions = torch.full((batch,), 22, dtype=torch.int64, device=device)
@@ -97,7 +98,7 @@ def test_dspark_revisited_position_uses_step_seed(use_fp64):
         positions - 1,
         apply_temperature=True,
         is_drafting=True,
-        logits_cache=spec.draft_logits,
+        logits_cache=spec.draft_logits.values,
         logits_cache_col=spec._step_cols[0],
         use_fp64=use_fp64,
     )

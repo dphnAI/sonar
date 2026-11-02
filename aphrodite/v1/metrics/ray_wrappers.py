@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import copy
 import time
+from typing import Self
 
 from aphrodite.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorProm
 from aphrodite.v1.metrics.loggers import PrometheusStatLogger
@@ -57,7 +58,7 @@ class RayPrometheusMetric:
 
         return {k: v if isinstance(v, str) else str(v) for k, v in labelskwargs.items()}
 
-    def labels(self, *labels, **labelskwargs) -> "RayPrometheusMetric":
+    def labels(self, *labels, **labelskwargs) -> Self:
         if self._is_labeled:
             raise ValueError("labels() cannot be called on an already-labeled metric.")
         clone = copy.copy(self)

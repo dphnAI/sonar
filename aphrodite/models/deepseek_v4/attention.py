@@ -192,6 +192,11 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         """Return whether this instance stores fp8 KV in fp8_ds_mla layout."""
         return self.use_fp8_ds_mla_layout
 
+    def _get_indexer_cls(self, aphrodite_config: AphroditeConfig) -> type["DeepseekV4Indexer"]:
+        """The indexer for this layer. A platform subclass returns one that
+        writes and scores its own index K cache layout."""
+        return DeepseekV4Indexer
+
     def __init__(
         self,
         aphrodite_config: AphroditeConfig,
@@ -301,7 +306,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             # overlap of wq_b+fused_indexer_q_rope_quant vs compressor. None on
             # ROCm, where aux_stream_list is None.
             indexer_aux_stream = aux_stream_list[2] if aux_stream_list is not None else None
-            self.indexer = DeepseekV4Indexer(
+            self.indexer = self._get_indexer_cls(aphrodite_config)(
                 aphrodite_config,
                 config=config,
                 hidden_size=self.hidden_size,
@@ -925,6 +930,17 @@ class DeepseekV4IndexerCache(torch.nn.Module, AttentionLayerBase):
 
 
 class DeepseekV4Indexer(nn.Module):
+    # The index K cache, its writer and the scoring layer; a platform subclass
+    # returns its own.
+    def _get_cache_cls(self) -> type[DeepseekV4IndexerCache]:
+        return DeepseekV4IndexerCache
+
+    def _get_compressor_cls(self) -> type[DeepseekCompressor]:
+        return DeepseekCompressor
+
+    def _get_attn_cls(self) -> type[SparseAttnIndexer]:
+        return SparseAttnIndexer
+
     def __init__(
         self,
         aphrodite_config: AphroditeConfig,
@@ -1003,14 +1019,14 @@ class DeepseekV4Indexer(nn.Module):
             # NOTE(yifan): FP8 indexer cache uses the same layout as V3.2:
             # head_dim bytes = 128 fp8 + 4 fp32 scale = 132.
             k_cache_head_dim = self.head_dim + self.head_dim // self.quant_block_size * 4
-        self.k_cache = DeepseekV4IndexerCache(
+        self.k_cache = self._get_cache_cls()(
             head_dim=k_cache_head_dim,
             dtype=torch.uint8,
             prefix=f"{prefix}.k_cache",
             cache_config=cache_config,
             compress_ratio=self.compress_ratio,
         )
-        self.compressor = DeepseekCompressor(
+        self.compressor = self._get_compressor_cls()(
             aphrodite_config=aphrodite_config,
             compress_ratio=self.compress_ratio,
             hidden_size=hidden_size,
@@ -1022,7 +1038,7 @@ class DeepseekV4Indexer(nn.Module):
             eager_scratch_pool=eager_scratch_pool,
         )
 
-        self.indexer_op = SparseAttnIndexer(
+        self.indexer_op = self._get_attn_cls()(
             self.k_cache,
             self.quant_block_size,
             self.scale_fmt,
@@ -1041,19 +1057,44 @@ class DeepseekV4Indexer(nn.Module):
         self.ln_events: list[torch.Event] = [torch.Event(), torch.Event()]
 
         if aphrodite_config.kernel_config.enable_jit_warmup:
-            from aphrodite.utils.import_utils import has_cutedsl
+            self._register_q_quant_warmup()
 
-            if not has_cutedsl() and not current_platform.is_xpu():
-                from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import (
-                    _FUSED_INDEXER_Q_ROPE_MXFP4_TRITON_KERNEL,
-                    _FUSED_INDEXER_Q_ROPE_QUANT_TRITON_KERNEL,
-                )
+    def _register_q_quant_warmup(self) -> None:
+        from aphrodite.utils.import_utils import has_cutedsl
 
-                (
-                    _FUSED_INDEXER_Q_ROPE_MXFP4_TRITON_KERNEL
-                    if self.use_fp4_kv
-                    else _FUSED_INDEXER_Q_ROPE_QUANT_TRITON_KERNEL
-                ).register_warmup()
+        if not has_cutedsl() and not current_platform.is_xpu():
+            from aphrodite.models.deepseek_v4.common.ops.fused_indexer_q import (
+                _FUSED_INDEXER_Q_ROPE_MXFP4_TRITON_KERNEL,
+                _FUSED_INDEXER_Q_ROPE_QUANT_TRITON_KERNEL,
+            )
+
+            (
+                _FUSED_INDEXER_Q_ROPE_MXFP4_TRITON_KERNEL
+                if self.use_fp4_kv
+                else _FUSED_INDEXER_Q_ROPE_QUANT_TRITON_KERNEL
+            ).register_warmup()
+
+    def _q_rope_quant(
+        self,
+        positions: torch.Tensor,
+        q: torch.Tensor,
+        rotary_emb: nn.Module,
+        indexer_weights: torch.Tensor,
+    ) -> tuple[torch.Tensor | tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        """RoPE and quantize the index Q; returns (q_quant, weights)."""
+        outputs = None
+        if self.eager_scratch_pool is not None and self.use_fp4_kv:
+            outputs = self.eager_scratch_pool.indexer_q_outputs(q.shape[0])
+        return fused_indexer_q_rope_quant(
+            positions,
+            q,
+            rotary_emb.cos_sin_cache,
+            indexer_weights,
+            self.softmax_scale,
+            self.n_head**-0.5,
+            use_fp4=self.use_fp4_kv,
+            output_buffers=outputs,
+        )
 
     def forward(
         self,
@@ -1095,19 +1136,7 @@ class DeepseekV4Indexer(nn.Module):
         def wq_b_and_q_quant():
             q = self._wq_b_proj(qr, qr_scale)
             q = q.view(-1, self.n_head, self.head_dim)
-            outputs = None
-            if self.eager_scratch_pool is not None and self.use_fp4_kv:
-                outputs = self.eager_scratch_pool.indexer_q_outputs(q.shape[0])
-            return fused_indexer_q_rope_quant(
-                positions,
-                q,
-                rotary_emb.cos_sin_cache,
-                indexer_weights,
-                self.softmax_scale,
-                self.n_head**-0.5,
-                use_fp4=self.use_fp4_kv,
-                output_buffers=outputs,
-            )
+            return self._q_rope_quant(positions, q, rotary_emb, indexer_weights)
 
         if not skip_compressor:
             # compressor returns None and writes K to the indexer KV cache; the

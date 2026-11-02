@@ -12,6 +12,7 @@ from aphrodite.v1.worker.gpu.spec_decode import init_speculator
 from aphrodite.v1.worker.gpu.spec_decode.extract_hidden_states import (
     ExtractHiddenStatesSpeculator,
 )
+from tests.v1.spec_decode.utils import fake_speculative_config
 
 
 class _RecordingModel(torch.nn.Module):
@@ -32,17 +33,19 @@ def test_init_requires_greedy_draft_sampling():
 def test_init_speculator_dispatches_extract_hidden_states(monkeypatch):
     aphrodite_config = cast(
         Any,
-        SimpleNamespace(speculative_config=SimpleNamespace(method="extract_hidden_states")),
+        SimpleNamespace(speculative_config=fake_speculative_config(method="extract_hidden_states")),
     )
     device = torch.device("cpu")
 
-    def fake_speculator(config, target_device):
-        return config, target_device
+    class FakeSpeculator(ExtractHiddenStatesSpeculator):
+        def __init__(self, config, target_device):
+            self.args = (config, target_device)
 
-    monkeypatch.setattr(spec_module, "ExtractHiddenStatesSpeculator", fake_speculator)
+    monkeypatch.setattr(spec_module, "ExtractHiddenStatesSpeculator", FakeSpeculator)
 
     speculator = init_speculator(aphrodite_config, device, cast(Any, None))
-    assert speculator == (aphrodite_config, device)
+    assert isinstance(speculator, FakeSpeculator)
+    assert speculator.args == (aphrodite_config, device)
 
 
 def test_propose_caches_hidden_states_and_returns_sampled_tokens(monkeypatch):

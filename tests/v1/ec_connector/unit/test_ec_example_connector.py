@@ -51,8 +51,16 @@ def test_metadata_preserves_repeated_item_positions():
         feature.data.get_data.return_value = {"image_grid_thw": torch.tensor([1, 2, 2])}
     items = collect_ec_item_metadata(request.mm_features, resolver)
     assert items == {
-        "A": {"metadata": {"image_grid_thw": [1, 2, 2]}, "item_indices": [0, 2]},
-        "B": {"metadata": {"image_grid_thw": [1, 2, 2]}, "item_indices": [1]},
+        "A": {
+            "modality": "image",
+            "metadata": {"image_grid_thw": [1, 2, 2]},
+            "item_indices": [0, 2],
+        },
+        "B": {
+            "modality": "image",
+            "metadata": {"image_grid_thw": [1, 2, 2]},
+            "item_indices": [1],
+        },
     }
 
 
@@ -66,7 +74,11 @@ def test_audio_metadata_survives_processor_cache_hit():
         mm_position=PlaceholderRange(offset=0, length=4, is_embed=torch.tensor([False, True, True, False])),
     )
     assert collect_ec_item_metadata([feature], resolver) == {
-        "audio": {"metadata": {"audio_num_tokens": [2]}, "item_indices": [0]}
+        "audio": {
+            "modality": "audio",
+            "metadata": {"audio_num_tokens": [2]},
+            "item_indices": [0],
+        }
     }
 
 
@@ -334,6 +346,7 @@ class TestStateManagement:
 
         # Build again should return empty metadata
         metadata2 = connector.build_connector_meta(scheduler_output)
+        assert isinstance(metadata2, ECExampleConnectorMetadata)
         assert len(metadata2.mm_datas) == 0
 
 

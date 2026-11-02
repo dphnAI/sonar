@@ -95,6 +95,7 @@ def test_amd_attn_res_matches_reference(
         0.0,
     )
 
+    assert isinstance(actual, torch.Tensor)
     torch.testing.assert_close(actual, expected, atol=8e-2, rtol=3e-2)
     torch.testing.assert_close(prefix, original_prefix, atol=0, rtol=0)
     torch.testing.assert_close(blocks, original_blocks, atol=0, rtol=0)
@@ -165,6 +166,7 @@ def test_amd_attn_res_fused_contract(
         output_eps,
     )
 
+    assert isinstance(actual, torch.Tensor)
     torch.testing.assert_close(actual, expected, atol=8e-2, rtol=3e-2)
     torch.testing.assert_close(prefix, expected_prefix, atol=0, rtol=0)
     if write_block:

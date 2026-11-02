@@ -11,7 +11,6 @@ from aphrodite.assets.base import get_aphrodite_public_assets
 from aphrodite.assets.image import VLM_IMAGES_DIR
 from aphrodite.config import ModelConfig
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
-from aphrodite.platforms import current_platform
 
 from ....conftest import IMAGE_ASSETS, AphroditeRunner, HfRunner, PromptImageInput
 from ....utils import large_gpu_test
@@ -97,15 +96,6 @@ def _run_test(
 
 
 @pytest.mark.core_model
-@pytest.mark.skipif(
-    current_platform.is_xpu(),
-    reason=(
-        "aphrodite-xpu-kernels paged_decode_default.conf is missing the "
-        "8,96,64,false,true,false tuple needed by VLM2Vec-Full at "
-        "block_size=64. Re-enable once aphrodite-xpu-kernels ships the updated "
-        "config. See github.com/vllm-project/vllm-xpu-kernels/pull/587."
-    ),
-)
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["half"])
 def test_models_text(
@@ -123,7 +113,7 @@ def test_models_text(
         hf_runner,
         aphrodite_runner,
         input_texts,
-        input_images,  # type: ignore
+        input_images,
         model,
         dtype=dtype,
     )

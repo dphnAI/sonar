@@ -41,6 +41,8 @@ from aphrodite.model_executor.kernels.linear import (
     ROCmFP8ScaledMMLinearKernel,
     RowWiseTorchFP8ScaledMMLinearKernel,
     TritonFp8BlockScaledMMKernel,
+    XPUFp8BlockScaledMMKernel,
+    XPUW8A8FP8LinearKernel,
     _KernelT,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm, RMSNormGated
@@ -93,9 +95,27 @@ ROCM_KERNEL_GROUPSHAPE_COMBINATIONS = [
     (TritonFp8BlockScaledMMKernel, GroupShape(1, 64)),
 ]
 
-KERNEL_GROUPSHAPE_COMBINATIONS = (
-    CUDA_KERNEL_GROUPSHAPE_COMBINATIONS if current_platform.is_cuda() else ROCM_KERNEL_GROUPSHAPE_COMBINATIONS
-)
+# XPU kernels
+XPU_KERNEL_GROUPSHAPE_COMBINATIONS = [
+    # XPUW8A8FP8LinearKernel: per-token weights are not supported
+    (XPUW8A8FP8LinearKernel, GroupShape.PER_TENSOR),
+    # PerTensorTorchFP8ScaledMMLinearKernel only supports per-tensor
+    (PerTensorTorchFP8ScaledMMLinearKernel, GroupShape.PER_TENSOR),
+    # ChannelWiseTorchFP8ScaledMMLinearKernel only supports per-token
+    (ChannelWiseTorchFP8ScaledMMLinearKernel, GroupShape.PER_TOKEN),
+    # Blockwise group shapes
+    (XPUFp8BlockScaledMMKernel, GroupShape(1, 128)),
+    (XPUFp8BlockScaledMMKernel, GroupShape(1, 64)),
+    (TritonFp8BlockScaledMMKernel, GroupShape(1, 128)),
+    (TritonFp8BlockScaledMMKernel, GroupShape(1, 64)),
+]
+
+if current_platform.is_cuda():
+    KERNEL_GROUPSHAPE_COMBINATIONS = CUDA_KERNEL_GROUPSHAPE_COMBINATIONS
+elif current_platform.is_xpu():
+    KERNEL_GROUPSHAPE_COMBINATIONS = XPU_KERNEL_GROUPSHAPE_COMBINATIONS
+else:
+    KERNEL_GROUPSHAPE_COMBINATIONS = ROCM_KERNEL_GROUPSHAPE_COMBINATIONS
 
 # For Aiter tests we toggle use_aiter_quant_op
 AITER_KERNEL_GROUPSHAPE_COMBINATIONS = [
@@ -321,7 +341,10 @@ def _run_fusion_test(
 @pytest.mark.parametrize("kernel_groupshape", KERNEL_GROUPSHAPE_COMBINATIONS)
 @pytest.mark.parametrize("enable_rms_norm_custom_op", [True, False])
 @pytest.mark.parametrize("enable_quant_fp8_custom_op", [True, False])
-@pytest.mark.skipif(not current_platform.is_cuda_alike(), reason="Only test on CUDA and ROCm")
+@pytest.mark.skipif(
+    not (current_platform.is_cuda_alike() or current_platform.is_xpu()),
+    reason="Only test on CUDA, ROCm and XPU",
+)
 def test_fusion_rmsnorm_quant(
     dtype,
     hidden_size,
@@ -373,7 +396,7 @@ def test_fusion_rmsnorm_quant(
         aphrodite_config.kernel_config.ir_op_priority.set_priority(),
     ):
         # Setup device before model creation
-        torch.set_default_device("cuda")
+        torch.set_default_device(current_platform.device_type)
         torch.set_default_dtype(dtype)
         torch.manual_seed(1)
 
@@ -619,6 +642,9 @@ class _MockGDNLayer:
 @pytest.mark.parametrize("eps", [1e-5, 1e-6])
 @pytest.mark.parametrize("flatten_heads", [True, False])
 @pytest.mark.parametrize("quant_fp8_op", ["-quant_fp8", "+quant_fp8"])
+# The gated norm is matched either as its native decomposition or as the
+# aphrodite.fla_rms_norm_gated custom op (ROCm's default for unquantized models).
+@pytest.mark.parametrize("rms_norm_gated_op", ["-rms_norm_gated", "+rms_norm_gated"])
 @pytest.mark.skipif(
     (not current_platform.is_rocm() or not IS_AITER_FOUND),
     reason="Only test on ROCm with aiter package installed",
@@ -631,6 +657,7 @@ def test_aiter_fusion_rmsnorm_gated_quant(
     eps: float,
     flatten_heads: bool,
     quant_fp8_op: str,
+    rms_norm_gated_op: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
     group_shape = GroupShape(1, 128)
@@ -638,7 +665,7 @@ def test_aiter_fusion_rmsnorm_gated_quant(
         model_config=ModelConfig(dtype=dtype),
         compilation_config=CompilationConfig(
             mode=CompilationMode.APHRODITE_COMPILE,
-            custom_ops=["-rms_norm", "-silu_and_mul", quant_fp8_op],
+            custom_ops=["-rms_norm", "-silu_and_mul", quant_fp8_op, rms_norm_gated_op],
             pass_config=PassConfig(fuse_norm_quant=True, eliminate_noops=True),
         ),
     )

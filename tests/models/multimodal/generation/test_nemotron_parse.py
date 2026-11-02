@@ -13,7 +13,6 @@ from tests.models.utils import check_logprobs_close
 
 from ....conftest import AphroditeRunner, HfRunner, PromptImageInput
 
-IMAGE = ImageAsset("paper-11").pil_image_ext(ext="png").convert("RGB")
 PROMPT = "</s><s><predict_bbox><predict_classes><output_markdown><predict_no_text_in_pic>"
 
 
@@ -61,6 +60,8 @@ def run_test(
     with aphrodite_runner(
         model,
         dtype=dtype,
+        max_model_len=1024,
+        enable_chunked_prefill=False,
         max_num_seqs=64,
         limit_mm_per_prompt={"image": 1},
         trust_remote_code=True,
@@ -111,11 +112,12 @@ def run_test(
 @pytest.mark.parametrize("dtype", ["bfloat16"])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_models(hf_runner, aphrodite_runner, model: str, dtype: str, num_logprobs: int) -> None:
+    image = ImageAsset("paper-11").pil_image_ext(ext="png").convert("RGB")
     run_test(
         hf_runner,
         aphrodite_runner,
         inputs=[
-            ([PROMPT] * 10, [IMAGE] * 10),
+            ([PROMPT] * 10, [image] * 10),
         ],
         model=model,
         dtype=dtype,

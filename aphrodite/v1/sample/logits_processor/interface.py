@@ -62,9 +62,9 @@ class LogitsProcessor(ABC):
     def validate_params(cls, sampling_params: SamplingParams):
         """Validate sampling params for this logits processor.
 
-        Raise ``APHRODITEValidationError`` (preferred) / ``ValueError`` (backward
+        Raise ``AphroditeValidationError`` (preferred) / ``ValueError`` (backward
         compatible) for invalid params. Bare ``ValueError`` is converted to
-        ``APHRODITEValidationError`` at the engine boundary so online serving
+        ``AphroditeValidationError`` at the engine boundary so online serving
         returns HTTP 400.
         """
         return None

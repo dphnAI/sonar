@@ -8,7 +8,7 @@ from PIL import Image
 from aphrodite.multimodal.image import convert_image_mode
 from aphrodite.tokenizers.hf import HfTokenizer
 
-from .internvl import InternVLImageProcessor, InternVLProcessor
+from .internvl import InternVLChatImageProcessor, InternVLChatProcessor
 
 
 def build_transform(input_size: int):
@@ -158,7 +158,7 @@ def image_to_pixel_values_nemotron_vl(
     return pixel_values
 
 
-class LlamaNemotronNanoVLImageProcessor(InternVLImageProcessor):
+class LlamaNemotronNanoVLImageProcessor(InternVLChatImageProcessor):
     def _images_to_pixel_values_lst(
         self,
         images: list[Image.Image],
@@ -186,7 +186,7 @@ class LlamaNemotronNanoVLImageProcessor(InternVLImageProcessor):
         ]
 
 
-class LlamaNemotronNanoVLProcessor(InternVLProcessor):
+class LlamaNemotronNanoVLProcessor(InternVLChatProcessor):
     """This model doesn't define its own HF processor,
     so we implement our own one here.
 
@@ -260,7 +260,7 @@ def build_siglip_transform(
     return T.Compose(transforms)
 
 
-class LlamaNemotronVLEmbedImageProcessor(InternVLImageProcessor):
+class LlamaNemotronVLEmbedImageProcessor(InternVLChatImageProcessor):
     def __init__(
         self,
         image_size: int,
@@ -317,7 +317,7 @@ class LlamaNemotronVLEmbedImageProcessor(InternVLImageProcessor):
         ]
 
 
-class LlamaNemotronVLEmbedProcessor(InternVLProcessor):
+class LlamaNemotronVLEmbedProcessor(InternVLChatProcessor):
     """Processor for LlamaNemotronVL embedding model.
 
     Inherits from NemotronVLProcessor and specializes it for embedding tasks:

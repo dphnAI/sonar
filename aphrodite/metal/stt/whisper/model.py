@@ -258,12 +258,12 @@ class WhisperModel(nn.Module):
         all_heads[config.n_text_layer // 2 :] = True
         self._alignment_heads = mx.array(np.asarray(all_heads.nonzero()).T)
 
-    def create_runtime_adapter(self, model_path: str) -> STTRuntimeAdapter:
+    def create_runtime_adapter(self, model_path: str, trust_remote_code: bool) -> STTRuntimeAdapter:
         """Create the model-owned runtime adapter used by the Aphrodite runner."""
         # Local import: avoid import-time cycles (adapter imports transcriber).
         from .adapter import WhisperRuntimeAdapter
 
-        return WhisperRuntimeAdapter(self, model_path)
+        return WhisperRuntimeAdapter(self, model_path, trust_remote_code)
 
     def encode(self, mel: mx.array) -> mx.array:
         """Encode audio mel spectrogram.

@@ -199,7 +199,7 @@ def test_mamba_cache_cg_padding(
     cudagraph_dispatcher = CudagraphDispatcher(aphrodite_config)
     cudagraph_dispatcher.initialize_cudagraph_keys(aphrodite_config.compilation_config.cudagraph_mode)
     if cudagraph_dispatcher.cudagraph_mode == CUDAGraphMode.NONE:
-        pytest.skip("CUDA/XPU graph is disabled.Please enable it to run this test. ")
+        pytest.skip("CUDA/XPU graph is disabled. Please enable it to run this test.")
     while len(example_prompts) == cudagraph_dispatcher.dispatch(len(example_prompts))[1].num_tokens:
         example_prompts.append(example_prompts[0])
 

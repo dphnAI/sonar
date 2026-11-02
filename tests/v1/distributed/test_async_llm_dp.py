@@ -14,6 +14,7 @@ from aphrodite import SamplingParams
 from aphrodite.config import AphroditeConfig
 from aphrodite.config.parallel import DataParallelBackend
 from aphrodite.engine.arg_utils import AsyncEngineArgs
+from aphrodite.exceptions import RetryableRequestError
 from aphrodite.inputs import PromptType
 from aphrodite.outputs import RequestOutput
 from aphrodite.platforms import current_platform
@@ -376,12 +377,23 @@ async def test_dp_pause_late_request_does_not_block_drain():
         )
         assert not await _poll_flag(engine, True, timeout=5)
 
-        # The late request was held rather than dropped: it completes on resume.
+        # The engine rejected it rather than carrying it across the boundary.
+        with pytest.raises(RetryableRequestError):
+            await asyncio.wait_for(collector.get(), timeout=60)
+        assert not engine.output_processor.has_unfinished_requests()
         await engine.resume_generation()
-        while True:
-            out = await asyncio.wait_for(collector.get(), timeout=60)
-            if out.finished:
-                break
+
+        # The rejection must not leave the next request stranded.
+        await asyncio.wait_for(
+            _consume(
+                engine.generate(
+                    request_id="after-resume",
+                    prompt=DP_PAUSE_PROMPT,
+                    sampling_params=SamplingParams(max_tokens=5),
+                )
+            ),
+            timeout=60,
+        )
 
 
 @pytest.mark.asyncio

@@ -240,6 +240,7 @@ class Attention(nn.Module, AttentionLayerBase):
         attn_backend: type[AttentionBackend] | None = None,
         head_size_v: int | None = None,
         cache_num_kv_heads: int | None = None,
+        query_pre_quantized: bool = False,
         **extra_impl_args,
     ) -> None:
         """The KV cache is stored inside this class and is accessed via
@@ -266,6 +267,11 @@ class Attention(nn.Module, AttentionLayerBase):
             kv_cache_dtype = cache_config.cache_dtype
         else:
             kv_cache_dtype = "auto"
+
+        if quant_config is not None and kv_cache_dtype == "auto":
+            checkpoint_kv_cache_dtype = quant_config.get_kv_cache_dtype(prefix)
+            if checkpoint_kv_cache_dtype is not None:
+                kv_cache_dtype = checkpoint_kv_cache_dtype
 
         # llm-compressor models declare an FP8 KV-cache scheme in their
         # checkpoint config. Honor it only when the user did not explicitly
@@ -429,6 +435,8 @@ class Attention(nn.Module, AttentionLayerBase):
                 compilation_config.static_forward_context,
             )
         self.kv_sharing_target_layer_name = kv_sharing_target_layer_name
+        # Set by models that write KV before calling attention with key=None.
+        self.kv_cache_update_bypass = False
         # Gemma4: clamp mm_prefix bidirectional ranges by the sliding window
         # (read by the Triton backend impl). Default False for all other models.
         self.mm_prefix_clamp_sliding_window = mm_prefix_clamp_sliding_window
@@ -444,7 +452,11 @@ class Attention(nn.Module, AttentionLayerBase):
         # for attn backends supporting query quantization
         self.query_quant = None
         if (
-            self.impl.supports_quant_query_input
+            # A model whose fused QK-norm/RoPE kernel already emits the
+            # quantized query (MiniMax-M3's DSpark draft) passes
+            # query_pre_quantized and skips this second quantization.
+            not query_pre_quantized
+            and self.impl.supports_quant_query_input
             and (self.kv_cache_dtype.startswith("fp8") or self.kv_cache_dtype.startswith("nvfp4"))
             and not self.kv_cache_dtype.endswith("per_token_head")
         ):
@@ -485,7 +497,7 @@ class Attention(nn.Module, AttentionLayerBase):
             assert self.kv_cache_dtype in {"fp8", "fp8_e4m3"} or (self.kv_cache_dtype.startswith("nvfp4"))
 
             # check if query quantization is supported
-            if self.impl.supports_quant_query_input:
+            if self.impl.supports_quant_query_input and query.dtype != current_platform.fp8_dtype():
                 query, _ = self.query_quant(query, self._q_scale)
 
         if output_shape is None:

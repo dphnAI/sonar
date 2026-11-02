@@ -55,7 +55,7 @@ WEIGHT_SHAPES = {
 # ---------------------------------------------------------------------------
 # Weight packing
 # ---------------------------------------------------------------------------
-def prepare_hybrid_weights(K, N, group_size, device="cuda"):
+def prepare_hybrid_weights(K, N, group_size, dtype=torch.float16, device="cuda"):
     """Create random weights for benchmarking.
 
     Returns (w_q_skinny, w_s_skinny, w_fp16, w_zp). The triton path derives
@@ -70,7 +70,7 @@ def prepare_hybrid_weights(K, N, group_size, device="cuda"):
     unpacked = torch.randint(0, 16, (N, K), dtype=torch.int32, device=device)
     w_q_skinny = pack_skinny_int4(unpacked)
     del unpacked
-    w_s_skinny = torch.randn(N, num_groups, dtype=torch.float16, device=device) * 0.01
+    w_s_skinny = torch.randn(N, num_groups, dtype=dtype, device=device) * 0.01
 
     # Per-group zero-points for asymmetric benchmarks, in the packed layout the
     # kernels read: [N//8, num_groups] int32, row n's nibble at bits 4*(n%8).
@@ -79,7 +79,7 @@ def prepare_hybrid_weights(K, N, group_size, device="cuda"):
     w_zp = torch.sum((zp_raw.view(N // 8, 8, num_groups) & 0xF) << shifts, dim=1, dtype=torch.int32).contiguous()
 
     # FP16 baseline for F.linear
-    w_fp16 = torch.randn(N, K, dtype=torch.float16, device=device) * 0.01
+    w_fp16 = torch.randn(N, K, dtype=dtype, device=device) * 0.01
 
     return w_q_skinny, w_s_skinny, w_fp16, w_zp
 
@@ -103,7 +103,7 @@ PROVIDERS = ["torch-fp16", "hybrid-w4a16", "hybrid-w4a16-zp"]
         args={},
     )
 )
-def benchmark(batch_size, provider, N, K, group_size, weights):
+def benchmark(batch_size, provider, N, K, group_size, dtype, weights):
     """Time one GEMM.
 
     ``do_bench`` rather than ``do_bench_cudagraph``: it zeroes a 256 MB buffer
@@ -113,7 +113,6 @@ def benchmark(batch_size, provider, N, K, group_size, weights):
     """
     M = batch_size
     device = "cuda"
-    dtype = torch.float16
     a = torch.randn((M, K), device=device, dtype=dtype)
 
     quantiles = [0.5, 0.2, 0.8]
@@ -179,8 +178,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--tp-sizes", nargs="+", type=int, default=[1])
     parser.add_argument("--group-size", type=int, default=128)
+    parser.add_argument("--dtype", type=str, default="float16", choices=["float16", "bfloat16"])
     parser.add_argument("--save-path", type=str, default=None)
     args = parser.parse_args()
+    dtype = getattr(torch, args.dtype)
 
     for K, N, model in prepare_shapes(args):
         group_size = args.group_size
@@ -188,7 +189,7 @@ if __name__ == "__main__":
         print(f"{model}, N={N} K={K}, group_size={group_size}")
         print(f"{'=' * 70}")
 
-        w_q_skinny, w_s_skinny, w_fp16, w_zp = prepare_hybrid_weights(K, N, group_size)
+        w_q_skinny, w_s_skinny, w_fp16, w_zp = prepare_hybrid_weights(K, N, group_size, dtype)
 
         weights = {
             "w_q_skinny": w_q_skinny,
@@ -206,6 +207,7 @@ if __name__ == "__main__":
             N=N,
             K=K,
             group_size=group_size,
+            dtype=dtype,
             weights=weights,
         )
 

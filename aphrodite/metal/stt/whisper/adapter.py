@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 class WhisperRuntimeAdapter(STTRuntimeAdapter):
     model: WhisperModel
 
-    def __init__(self, model: WhisperModel, model_path: str) -> None:
-        super().__init__(model, model_path)
+    def __init__(self, model: WhisperModel, model_path: str, trust_remote_code: bool) -> None:
+        super().__init__(model, model_path, trust_remote_code)
         self._transcriber: WhisperTranscriber | None = None
 
     @property

@@ -23,6 +23,7 @@ from aphrodite.model_executor.layers.quantization.base_config import Quantizatio
 from aphrodite.model_executor.layers.quantization.modelopt import ModelOptLinearMethod
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import kNvfp4Static
 from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
+from aphrodite.v1.worker.gpu.spec_decode.lilicorr.config import LiLiCorrSpeculatorConfig
 
 from .nemotron_h import NemotronHMLP
 from .qwen3_dflash import DFlashQwen3ForCausalLM, DFlashQwen3Model
@@ -399,6 +400,9 @@ class LiLiCorr(DFlashQwen3Model):
 
 
 class LiLiCorrForCausalLM(DFlashQwen3ForCausalLM):
+    # The speculator this is a draft model of (see SpeculativeDraftModel).
+    speculator_config_class = LiLiCorrSpeculatorConfig
+
     model_cls = LiLiCorr
 
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):

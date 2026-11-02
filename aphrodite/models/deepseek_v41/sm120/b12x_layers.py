@@ -500,7 +500,7 @@ class B12xRMSNorm(nn.Module):
         self.variance_epsilon = eps
         self.streams = streams
         self.capacity = _capacity()
-        self._plan = None
+        self._plan: Plan | None = None
         set_b12x_preparation_provider(self, self)
 
     def get_b12x_preparation_units(self, layer, workload):

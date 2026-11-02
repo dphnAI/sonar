@@ -246,6 +246,17 @@ impl BenchConfig {
             ));
         }
 
+        if args.max_concurrency == Some(0) {
+            return Err(BenchError::Config(
+                "--max-concurrency must be greater than 0".into(),
+            ));
+        }
+        if args.multi_turn_concurrency == Some(0) {
+            return Err(BenchError::Config(
+                "--multi-turn-concurrency must be greater than 0".into(),
+            ));
+        }
+
         let base_url = args.resolve_base_url();
         let api_url = args.resolve_api_url();
 
@@ -372,7 +383,7 @@ impl BenchConfig {
         let tokenizer_id = if args.skip_tokenizer_init {
             None
         } else {
-            Some(args.tokenizer.clone().or_else(|| args.model.clone()).unwrap_or_default())
+            args.tokenizer.clone().or_else(|| args.model.clone())
         };
 
         // Resolve input/output lengths
@@ -1384,6 +1395,14 @@ mod tests {
     }
 
     #[test]
+    fn test_tokenizer_id_deferred_when_model_is_unspecified() {
+        let cli = parse_args(["aphrodite-bench"]);
+        let config = BenchConfig::from_args(&cli).unwrap();
+
+        assert_eq!(config.tokenizer_id, None);
+    }
+
+    #[test]
     fn test_zero_max_model_len_fails() {
         let args = vec![
             "aphrodite-bench",
@@ -1396,6 +1415,60 @@ mod tests {
 
         assert!(BenchConfig::from_args(&cli).is_err());
     }
+
+    #[test]
+    fn test_zero_max_concurrency_fails() {
+        let args = parse_args(vec![
+            "aphrodite-bench",
+            "--model",
+            "test-model",
+            "--max-concurrency",
+            "0",
+        ]);
+        let err = BenchConfig::from_args(&args).expect_err("0 concurrency must be rejected");
+        assert!(
+            err.to_string().contains("--max-concurrency must be greater than 0"),
+            "{}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_positive_max_concurrency_passes() {
+        for value in ["1", "16"] {
+            let args = parse_args(vec![
+                "aphrodite-bench",
+                "--model",
+                "test-model",
+                "--max-concurrency",
+                value,
+            ]);
+            assert!(
+                BenchConfig::from_args(&args).is_ok(),
+                "value {value} should pass"
+            );
+        }
+    }
+
+    #[test]
+    fn test_zero_multi_turn_concurrency_fails() {
+        let args = parse_args(vec![
+            "aphrodite-bench",
+            "--model",
+            "test-model",
+            "--multi-turn",
+            "--multi-turn-concurrency",
+            "0",
+        ]);
+        let err =
+            BenchConfig::from_args(&args).expect_err("0 multi-turn concurrency must be rejected");
+        assert!(
+            err.to_string().contains("--multi-turn-concurrency must be greater than 0"),
+            "{}",
+            err
+        );
+    }
+
     #[test]
     fn test_range_ratio_parse_float() {
         let rr = RangeRatio::parse("0.2").unwrap();

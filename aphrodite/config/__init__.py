@@ -20,6 +20,7 @@ from aphrodite.config.compilation import (
 )
 from aphrodite.config.device import DeviceConfig
 from aphrodite.config.diffusion import DiffusionConfig
+from aphrodite.config.dphn import DphnNetworkConfig
 from aphrodite.config.ec_manager_config import EncoderCacheManagerConfig
 from aphrodite.config.ec_transfer import ECTransferConfig
 from aphrodite.config.engram import EngramConfig
@@ -62,6 +63,7 @@ from aphrodite.config.utils import (
     replace,
     update_config,
 )
+from aphrodite.config.watchdog_config import WatchdogConfig
 from aphrodite.config.watermarking import WatermarkConfig
 from aphrodite.config.weight_transfer import WeightTransferConfig
 
@@ -84,6 +86,8 @@ __all__ = [
     "DeviceConfig",
     # From aphrodite.config.diffusion
     "DiffusionConfig",
+    # From aphrodite.config.dphn
+    "DphnNetworkConfig",
     # From aphrodite.config.ec_manager_config
     "EncoderCacheManagerConfig",
     # From aphrodite.config.ec_transfer
@@ -153,6 +157,7 @@ __all__ = [
     "get_current_aphrodite_config_or_none",
     "set_current_aphrodite_config",
     "get_layers_from_aphrodite_config",
+    "WatchdogConfig",
     "WeightTransferConfig",
     "WatermarkConfig",
 ]

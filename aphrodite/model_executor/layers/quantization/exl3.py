@@ -6,7 +6,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 import torch
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 
 from aphrodite import _custom_ops as ops
 from aphrodite.distributed import (
@@ -395,7 +395,7 @@ class Exl3Config(QuantizationConfig):
     def maybe_update_config(
         self,
         model_name: str,
-        hf_config: PretrainedConfig | None = None,
+        hf_config: PreTrainedConfig | None = None,
         revision: str | None = None,
     ):
         del hf_config

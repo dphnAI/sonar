@@ -194,6 +194,9 @@ class DecodeBenchConnector(KVConnectorBase_V1, SupportsHMA):
     # Scheduler-side methods
     # ==============================
 
+    def get_loaded_kv_cache_group_ids(self, request: "Request") -> tuple[int, ...]:
+        return self._kv_cache_config.transfer_group_ids
+
     def get_num_new_matched_tokens(
         self,
         request: "Request",
@@ -239,6 +242,13 @@ class DecodeBenchConnectorScheduler:
         assert kv_transfer_config is not None
         self.startup_fill = kv_transfer_config.get_from_extra_config("startup_fill", False)
         self._startup_fill_group_ids = _get_startup_fill_group_ids(kv_cache_config) if self.startup_fill else set()
+        # Groups that opted out of external KV transfer (e.g. the HiSparse
+        # hot/resident tiers) are ephemeral per-request replicas rebuilt from
+        # their transferable source group after a connector load; there is
+        # nothing for this connector to fill in them.
+        self._non_transfer_group_ids = {
+            group_idx for group_idx, group in enumerate(kv_cache_config.kv_cache_groups) if not group.enable_kv_transfer
+        }
         dcp_world_size = aphrodite_config.parallel_config.decode_context_parallel_size
         self.kv_cache_groups = kv_cache_config.kv_cache_groups
         self.group_block_sizes = tuple(
@@ -314,7 +324,7 @@ class DecodeBenchConnectorScheduler:
                 strict=True,
             )
         ):
-            if group_idx in self._startup_fill_group_ids:
+            if group_idx in self._startup_fill_group_ids or group_idx in self._non_transfer_group_ids:
                 block_ids_per_group_list.append([])
                 continue
             is_circular_buffer = all(

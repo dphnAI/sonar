@@ -133,15 +133,16 @@ class CohereEagleModel(nn.Module):
 
 
 class EagleCohereForCausalLM(CohereForCausalLM):
+    # Flags checked by the speculative proposer to decide whether to share
+    # embed_tokens / lm_head with the target model. Cohere EAGLE checkpoints
+    # use tied embeddings so these weights are absent from the draft file.
+    has_own_embed_tokens = False
+    has_own_lm_head = False
+
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         nn.Module.__init__(self)
         assert aphrodite_config.speculative_config is not None
         self.config = aphrodite_config.speculative_config.draft_model_config.hf_config
-        # Flags checked by the speculative proposer to decide whether to share
-        # embed_tokens / lm_head with the target model. Cohere EAGLE checkpoints
-        # use tied embeddings so these weights are absent from the draft file.
-        self.has_own_embed_tokens = False
-        self.has_own_lm_head = False
         if self.config.tie_word_embeddings:
             self.hf_to_aphrodite_mapper = self.hf_to_aphrodite_mapper | WeightsMapper(
                 orig_to_new_prefix={"model.embed_tokens.": None}

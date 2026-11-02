@@ -254,6 +254,7 @@ def test_rms_norm_builds_aphrodite_class(cls, expected, zero_centered, default_a
     with torch.device("meta"):
         module = cls()
         fuser = get_fuser(module, RMSNormFuser)
+        assert fuser is not None
         built = fuser.fuse(module, "norm", default_aphrodite_config)
     from aphrodite.model_executor.models.transformers.fusers.rms_norm import (
         TPAwareNormMixin,
@@ -280,7 +281,9 @@ def test_pow_spelled_norm_fuses_to_equivalent_math(cls, default_aphrodite_config
     module = cls(16)
     with torch.no_grad():
         module.weight.copy_(torch.randn(16))
-    built = get_fuser(module, RMSNormFuser).fuse(module, "norm", default_aphrodite_config)
+    fuser = get_fuser(module, RMSNormFuser)
+    assert fuser is not None
+    built = fuser.fuse(module, "norm", default_aphrodite_config)
     with torch.no_grad():
         built.weight.copy_(module.weight)
     x = torch.randn(4, 16)
@@ -295,7 +298,9 @@ def test_weightless_norm_has_no_hidden_size(default_aphrodite_config):
     matching the unfused norm and Aphrodite's native `RMSNorm(hidden_size=head_dim)`.
     """
     module = WeightlessRMSNorm(72)
-    built = get_fuser(module, RMSNormFuser).fuse(module, "norm", default_aphrodite_config)
+    fuser = get_fuser(module, RMSNormFuser)
+    assert fuser is not None
+    built = fuser.fuse(module, "norm", default_aphrodite_config)
     assert built.hidden_size == 0
 
     built.tp_size = 2  # emulate TP=2 without a real process group
@@ -326,6 +331,7 @@ def test_eps_is_derived_per_instance(default_aphrodite_config):
         for eps in (1e-5, 1e-6):
             module = RMSNorm(16, eps=eps)
             fuser = get_fuser(module, RMSNormFuser)
+            assert fuser is not None
             built = fuser.fuse(module, "norm", default_aphrodite_config)
             assert built.variance_epsilon == eps
 
@@ -338,6 +344,7 @@ def test_eps_attr_is_found_by_value_not_name(cls, default_aphrodite_config):
         for eps in (1e-5, 1e-6):
             module = cls(16, eps=eps)
             fuser = get_fuser(module, RMSNormFuser)
+            assert fuser is not None
             assert fuser.eps_attr == cls.attr
             built = fuser.fuse(module, "norm", default_aphrodite_config)
             assert built.variance_epsilon == eps
@@ -350,6 +357,7 @@ def test_literal_eps_is_not_mistaken_for_an_attribute(default_aphrodite_config, 
     with caplog.at_level("DEBUG", logger=logger), torch.device("meta"):
         module = LiteralEpsRMSNorm()
         fuser = get_fuser(module, RMSNormFuser)
+        assert fuser is not None
         built = fuser.fuse(module, "norm", default_aphrodite_config)
     assert fuser.eps_attr is None
     assert built.variance_epsilon == 1e-4
@@ -363,6 +371,7 @@ def test_ambiguous_eps_attrs_are_disambiguated(default_aphrodite_config):
         module = AmbiguousEpsRMSNorm(16, eps=1e-6)
         before = dict(vars(module))
         fuser = get_fuser(module, RMSNormFuser)
+        assert fuser is not None
         assert fuser.eps_attr == "variance_epsilon"
         assert vars(module) == before
 

@@ -4,7 +4,8 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use aphrodite_llm::{RequestTimestamps, TokenUsage};
+use aphrodite_engine_core_client::protocol::output::RequestSpecDecodeMetrics;
+use aphrodite_llm::{RequestTimestamps, TokenUsage, WeightVersionSpan};
 use aphrodite_text::{DecodedLogprobs, DecodedPromptLogprobs};
 use serde::{Deserialize, Serialize};
 
@@ -237,6 +238,8 @@ pub enum ChatEvent {
         usage: ChatTokenUsage,
         /// Engine lifecycle times used by frontend response metrics.
         timestamps: RequestTimestamps,
+        /// Per-request speculative-decoding statistics emitted by the engine.
+        spec_decode_metrics: Option<RequestSpecDecodeMetrics>,
         finish_reason: FinishReason,
         /// Connector-specific KV transfer parameters for disaggregated serving.
         /// Boxed, like `ec_transfer_params`, to keep the per-token variants of
@@ -245,5 +248,7 @@ pub enum ChatEvent {
         /// Connector-specific encoder cache transfer parameters for
         /// disaggregated serving.
         ec_transfer_params: Option<Box<serde_json::Value>>,
+        /// Weight-version spans over all generated token positions.
+        weight_versions: Option<Vec<WeightVersionSpan>>,
     },
 }

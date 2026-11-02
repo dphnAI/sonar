@@ -50,7 +50,9 @@ from aphrodite.tool_parsers.glm47_moe_tool_parser import Glm47MoeModelToolParser
 from aphrodite.tool_parsers.hermes_tool_parser import Hermes2ProToolParser
 from aphrodite.tool_parsers.kimi_k2_tool_parser import KimiK2ToolParser
 from aphrodite.tool_parsers.kimi_k3_tool_parser import KimiK3ToolParser
-from aphrodite.tool_parsers.llama_tool_parser import Llama3JsonToolParser
+from aphrodite.tool_parsers.llama_json_engine_tool_parser import (
+    LlamaJsonEngineToolParser,
+)
 from aphrodite.tool_parsers.longcat_tool_parser import LongcatFlashToolParser
 from aphrodite.tool_parsers.mimo_tool_parser import MiMoToolParser
 from aphrodite.tool_parsers.minimax_m2_tool_parser import MinimaxM2ToolParser
@@ -240,7 +242,9 @@ def test_structural_tag_allows_exactly_the_prompt_tools(tool_choice: str):
             ],
         }
     )
-    prompt_names = [tool["function"]["name"] for tool in construct_tool_dicts(request.tools, tool_choice)]
+    tool_dicts = construct_tool_dicts(request.tools, tool_choice)
+    assert tool_dicts is not None
+    prompt_names = [tool["function"]["name"] for tool in tool_dicts]
 
     tag = get_model_structural_tag(
         model="hermes",
@@ -755,7 +759,7 @@ def test_glm_4_7_forced_custom_tool_uses_function_shim():
         (Glm47MoeModelToolParser, "glm_4_7"),
         (Hermes2ProToolParser, "hermes"),
         (KimiK2ToolParser, "kimi"),
-        (Llama3JsonToolParser, "llama"),
+        (LlamaJsonEngineToolParser, "llama"),
         (MinimaxM2ToolParser, "minimax"),
         (Qwen3EngineToolParser, "qwen_3_coder"),
         (Step3p5ToolParser, "qwen_3_coder"),
@@ -787,6 +791,7 @@ def test_step3p5_forced_tool_choice_round_trips_native_xml(sample_tools: list[Ch
     parser = StepParser(MagicMock(), tools=sample_tools)
     request = parser.adjust_request(request)
 
+    assert request.structured_outputs is not None
     assert request.structured_outputs.json is None
     grammar = Grammar.from_structural_tag(request.structured_outputs.structural_tag)
     # Rendered exactly as the Step-3.5/3.7 chat templates render tool calls.
@@ -797,6 +802,7 @@ def test_step3p5_forced_tool_choice_round_trips_native_xml(sample_tools: list[Ch
     _, content, tool_calls = parser.parse(output, request, enable_auto_tools=True)
 
     assert not content
+    assert tool_calls is not None
     assert [(call.name, json.loads(call.arguments)) for call in tool_calls] == [("get_weather", {"city": "Dallas"})]
 
 
@@ -819,6 +825,7 @@ def test_longcat_forced_tool_choice_round_trips_native_tags(sample_tools: list[C
     parser = LongcatParser(MagicMock(), tools=sample_tools)
     request = parser.adjust_request(request)
 
+    assert request.structured_outputs is not None
     grammar = Grammar.from_structural_tag(request.structured_outputs.structural_tag)
     # Rendered exactly as the LongCat-Flash chat template renders tool calls.
     output = '<longcat_tool_call>\n{"name": "get_weather", "arguments": {"city": "Dallas"}}\n</longcat_tool_call>'
@@ -828,6 +835,7 @@ def test_longcat_forced_tool_choice_round_trips_native_tags(sample_tools: list[C
     _, content, tool_calls = parser.parse(output, request, enable_auto_tools=True)
 
     assert not content
+    assert tool_calls is not None
     assert [(call.name, json.loads(call.arguments)) for call in tool_calls] == [("get_weather", {"city": "Dallas"})]
 
 
@@ -918,6 +926,7 @@ def test_native_format_parser_skips_json_schema_constraint_responses(
 
     out = parser.adjust_request(request)
 
+    assert isinstance(out, ResponsesRequest)
     assert out.structured_outputs is None
     assert out.text is None
 
@@ -1407,6 +1416,34 @@ def test_tool_strict_level_from_name():
         ToolStrictLevel.from_name("off")
 
 
+@pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("token_suffix", ["", ":6124c78e"])
+def test_hy_v4_preserves_whitespace_in_argument_keys(sample_tools, required, token_suffix):
+    """Argument names must match the schema exactly, including whitespace."""
+    sample_tools[0].function.parameters = {
+        "type": "object",
+        "properties": {" count ": {"type": "integer"}},
+        "required": [" count "] if required else [],
+    }
+    tag = get_model_structural_tag(
+        "hy_v4",
+        sample_tools,
+        "required",
+        reasoning=False,
+        token_suffix=token_suffix,
+    )
+    grammar = Grammar.from_structural_tag(tag)
+    call = (
+        f"<tool_calls{token_suffix}><tool_call{token_suffix}>get_weather"
+        f"<arg_key{token_suffix}> count </arg_key{token_suffix}>"
+        f"<arg_value{token_suffix}>2</arg_value{token_suffix}>"
+        f"</tool_call{token_suffix}></tool_calls{token_suffix}>"
+    )
+
+    assert _is_grammar_accept_string(grammar, call)
+    assert not _is_grammar_accept_string(grammar, call.replace(" count ", "count"))
+
+
 # ---------------------------------------------------------------------------
 # GLM-4.7 structural tag: builtin content for strict tools, shallow otherwise
 # ---------------------------------------------------------------------------
@@ -1513,6 +1550,61 @@ def test_glm47_non_strict_auto_accepts_valid_tool_calls(body: str):
 def test_glm47_non_strict_auto_rejects_invalid(body: str):
     grammar = _glm47_shallow_grammar("auto", auto=True)
     assert not _is_grammar_accept_string(grammar, body)
+
+
+def _glm47_container_tools() -> list[ChatCompletionToolsParam]:
+    return [
+        ChatCompletionToolsParam(
+            type="function",
+            function={
+                "name": "read_files",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "files": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {"path": {"type": "string"}},
+                            },
+                        },
+                        "options": {"type": "object"},
+                        "limit": {"type": ["integer", "null"]},
+                    },
+                },
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        # a Windows path copied with bare backslashes is not valid JSON
+        ("files", r'[{"path": "D:\SVILUPPO\docs\PLAN.md"}]'),
+        # an over-escaped quote leaves a JSON string open; </arg_value> still ends it
+        ("files", r'[{"path\": "docs/PLAN.md"}]'),
+        ("files", '[{"path": "docs/PLAN.md"}]'),
+        ("options", '{"recursive": true}'),
+        ("limit", "20"),
+        ("limit", "null"),
+    ],
+)
+def test_glm47_non_strict_container_values_accept_model_text(key: str, value: str):
+    grammar = _glm47_shallow_grammar("auto", _glm47_container_tools(), auto=True)
+    assert _is_grammar_accept_string(grammar, _glm47_call("read_files", _glm47_arg(key, value)))
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("limit", "twenty"),
+        ("files", "[<arg_key>x</arg_key>]"),
+    ],
+)
+def test_glm47_non_strict_container_tools_reject_invalid(key: str, value: str):
+    grammar = _glm47_shallow_grammar("auto", _glm47_container_tools(), auto=True)
+    assert not _is_grammar_accept_string(grammar, _glm47_call("read_files", _glm47_arg(key, value)))
 
 
 def test_glm47_non_strict_required_requires_at_least_one_call():
@@ -1839,6 +1931,7 @@ def test_glm47_responses_request_attaches_shallow_tag(
 
     out = parser.adjust_request(request)
 
+    assert isinstance(out, ResponsesRequest)
     assert out.structured_outputs is not None
     assert out.structured_outputs.structural_tag is not None
     assert out.text is None
@@ -2020,6 +2113,7 @@ def _tool_calling_grammar(
     from aphrodite.parser.parser_manager import ParserManager
 
     parser_cls = ParserManager.get_parser(tool_parser_name=tool_parser, enable_auto_tools=True)
+    assert parser_cls is not None
     adjusted = parser_cls(MagicMock(), tools=tools).adjust_request(request)
     structured_outputs = adjusted.structured_outputs
     if structured_outputs is None or structured_outputs.structural_tag is None:

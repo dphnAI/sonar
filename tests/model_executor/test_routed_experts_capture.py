@@ -74,7 +74,7 @@ def _capturer_with_buffer(
 class DummyRouter(BaseRouter):
     @property
     def routing_method_type(self) -> RoutingMethodType:
-        return RoutingMethodType.FUSED_TOPK
+        return RoutingMethodType.TopK
 
     def _compute_routing(self, hidden_states, router_logits, indices_type, *, input_ids=None):
         topk_ids = torch.tensor([[1, 2], [3, 4]], dtype=torch.int64)
@@ -614,15 +614,10 @@ def test_get_aux_output_connector_passes_config(monkeypatch):
     monkeypatch.setattr(aux_output_worker, "AuxOutputWorkerConnector", constructor)
     config = SimpleNamespace(scheduler_config=SimpleNamespace(max_num_batched_tokens=32))
     model = Mock()
-    kv_cache_config = Mock()
 
-    result = aux_output_worker.get_aux_output_connector(model, config, kv_cache_config)
+    result = aux_output_worker.get_aux_output_connector(model, config)
 
-    constructor.assert_called_once_with(
-        model=model,
-        kv_cache_config=kv_cache_config,
-        aphrodite_config=config,
-    )
+    constructor.assert_called_once_with(model=model, aphrodite_config=config)
     assert result is connector
 
 
@@ -647,12 +642,10 @@ def test_aux_output_worker_connector_binds_capture_on_non_output_rank(monkeypatc
         scheduler_config=SimpleNamespace(max_num_batched_tokens=32),
     )
     model = Mock()
-    connector = aux_output_worker.AuxOutputWorkerConnector(
-        aphrodite_config=config,
-        model=model,
-        kv_cache_config=SimpleNamespace(kv_cache_groups=[_full_attention_kv_group()]),
-    )
+    connector = aux_output_worker.AuxOutputWorkerConnector(aphrodite_config=config, model=model)
+    connector.initialize_output_storage(SimpleNamespace(kv_cache_groups=[_full_attention_kv_group()]))
 
+    assert connector._store is None and connector._buffer is None
     constructor.assert_called_once_with(
         max_num_batched_tokens=32,
         aphrodite_config=config,
@@ -680,7 +673,8 @@ def test_aux_output_worker_connector_default_capacity(monkeypatch):
     )
     monkeypatch.setattr(aux_output_worker, "BlockObjectStore", store_constructor)
     monkeypatch.setattr(aux_output_worker, "BackgroundBlockObjectStore", background_store_constructor)
-    monkeypatch.setattr(aux_output_worker, "RoutedExpertsBuffer", Mock())
+    buffer_constructor = Mock()
+    monkeypatch.setattr(aux_output_worker, "RoutedExpertsBuffer", buffer_constructor)
 
     config = SimpleNamespace(
         aux_output_config=SimpleNamespace(max_bytes=None),
@@ -689,16 +683,16 @@ def test_aux_output_worker_connector_default_capacity(monkeypatch):
         scheduler_config=SimpleNamespace(max_num_seqs=8, max_num_batched_tokens=32),
         max_concurrent_batches=2,
     )
-    kwargs = dict(
-        aphrodite_config=config,
-        model=Mock(),
-        kv_cache_config=SimpleNamespace(
+    connector = aux_output_worker.AuxOutputWorkerConnector(aphrodite_config=config, model=Mock())
+    store_constructor.assert_not_called()
+    buffer_constructor.assert_not_called()
+
+    connector.initialize_output_storage(
+        SimpleNamespace(
             num_blocks=10,
             kv_cache_groups=[_full_attention_kv_group(MLAAttentionSpec)],
-        ),
+        )
     )
-
-    aux_output_worker.AuxOutputWorkerConnector(**kwargs)
     assert store_constructor.call_args.kwargs["max_bytes"] == 2560
     assert store_constructor.call_args.kwargs["object_nbytes"] == 128
     assert background_store_constructor.call_args.kwargs["max_pending_batches"] == 16

@@ -31,6 +31,10 @@ from transformers.modeling_outputs import (
 )
 from transformers.utils import torch_int
 
+from aphrodite.compilation.decorators import (
+    should_torch_compile_mm_encoder,
+    support_torch_compile,
+)
 from aphrodite.config import AphroditeConfig
 from aphrodite.config.multimodal import MultiModalDummyOptions
 from aphrodite.distributed import parallel_state
@@ -613,6 +617,15 @@ class SigLIPRotaryEmbedding(nn.Module):
         return freqs
 
 
+@support_torch_compile(
+    dynamic_arg_dims={
+        "hidden_states": 1,
+        "cu_seqlens": 0,
+        "rotary_pos_emb": 0,
+    },
+    enable_if=should_torch_compile_mm_encoder,
+    is_encoder=True,
+)
 class SiglipEncoderLayer(nn.Module):
     def __init__(
         self,

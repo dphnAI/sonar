@@ -537,6 +537,7 @@ class InternS1ProForConditionalGeneration(Qwen3VLForConditionalGeneration, Inter
         multimodal_config = aphrodite_config.model_config.get_multimodal_config()
 
         self.config = config
+        self.model_config = aphrodite_config.model_config
         self.multimodal_config = multimodal_config
         self.use_data_parallel = multimodal_config.mm_encoder_tp_mode == "data"
         self._init_video_pruning(multimodal_config)

@@ -29,16 +29,17 @@ from aphrodite.config.model import (
 from aphrodite.config.quantization import QuantizationConfigArgs
 from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.entrypoints.common.offline import _O, _R, OfflineInferenceMixin
+from aphrodite.entrypoints.common.startup import log_non_default_args
 from aphrodite.entrypoints.generate.beam_search.offline import BeamSearchOfflineMixin
 from aphrodite.entrypoints.pooling.offline import PoolingOfflineMixin
 from aphrodite.entrypoints.rl.offline import RLOfflineMixin
-from aphrodite.entrypoints.serve.utils.api_utils import log_non_default_args
 from aphrodite.inputs import PromptType
 from aphrodite.logger import configure_logging_if_needed, init_logger
 from aphrodite.lora.request import LoRARequest
 from aphrodite.model_executor.layers.quantization import QuantizationMethods
 from aphrodite.outputs import PoolingRequestOutput, RequestOutput
 from aphrodite.platforms import current_platform
+from aphrodite.renderers import ChatParams
 from aphrodite.renderers.chat_utils import (
     ChatCompletionMessageParam,
     ChatTemplateContentFormatOption,
@@ -51,8 +52,6 @@ from aphrodite.utils.counter import Counter
 from aphrodite.v1.engine import PauseMode
 from aphrodite.v1.engine.llm_engine import LLMEngine
 from aphrodite.v1.sample.logits_processor import LogitsProcessor
-
-from ..renderers import ChatParams
 
 if TYPE_CHECKING:
     from aphrodite.v1.metrics.reader import Metric
@@ -783,6 +782,7 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
         *,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """Start profiling with optional per-session overrides.
 
@@ -794,12 +794,15 @@ class LLM(BeamSearchOfflineMixin, PoolingOfflineMixin, RLOfflineMixin, OfflineIn
                 profiling starts.
             max_iterations: Optional maximum number of worker iterations to profile.
                 Zero means no limit.
+            profiler_kwargs: Optional dictionary of keyword arguments to pass to
+                the underlying profiler.
 
         """
         self.llm_engine.start_profile(
             profile_prefix,
             delay_iterations=delay_iterations,
             max_iterations=max_iterations,
+            profiler_kwargs=profiler_kwargs,
         )
 
     def stop_profile(self) -> None:

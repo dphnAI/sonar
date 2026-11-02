@@ -41,7 +41,7 @@ class CPUWorker(Worker):
         # TODO: use numactl for process setup
         # TODO: optimize for `interleaved` policy
         # Bind memory node
-        allowed_memory_nodes = get_visible_memory_node()
+        allowed_memory_nodes = get_visible_memory_node(aphrodite_config.parallel_config.assigned_physical_gpu_ids)
         allowed_cpu_list = get_allowed_cpu_list()
         cpu_core = allowed_cpu_list[0]
 
@@ -71,22 +71,6 @@ class CPUWorker(Worker):
         memory_status = get_memory_node_info(memory_node)
         memory_fraction = aphrodite_config.cache_config.gpu_memory_utilization
         self.requested_cpu_memory = math.ceil(memory_status.total_memory * memory_fraction)
-        available_memory = memory_status.available_memory
-
-        if aphrodite_config.cache_config.kv_cache_memory_bytes is None and self.requested_cpu_memory > available_memory:
-            raise ValueError(
-                f"Available memory on node {cpu_core.numa_node} "
-                f"({format_gib(available_memory)}/"
-                f"{format_gib(memory_status.total_memory)} GiB) on startup "
-                f"is less than desired CPU memory utilization "
-                f"({aphrodite_config.cache_config.gpu_memory_utilization}, "
-                f"{format_gib(self.requested_cpu_memory)} GiB). "
-                "On the CPU backend, the `--gpu-memory-utilization` flag "
-                "controls the fraction of CPU memory reserved (despite its "
-                "name). To resolve: decrease `--gpu-memory-utilization` "
-                "(e.g. `--gpu-memory-utilization 0.5`) "
-                "or reduce CPU memory used by other processes."
-            )
 
         super().__init__(
             aphrodite_config,
@@ -159,13 +143,22 @@ class CPUWorker(Worker):
 
         # Construct the model runner
         if self.use_v2_model_runner:
-            from aphrodite.v1.worker.cpu.model_runner import (
-                CPUModelRunner as CPUModelRunnerV2,
-            )
+            if current_platform.uses_standalone_cpu_model_runner():
+                from aphrodite.v1.worker.cpu.standalone_model_runner import (
+                    StandaloneCPUModelRunner,
+                )
 
-            self.model_runner: CPUModelRunner = CPUModelRunnerV2(  # type: ignore
-                self.aphrodite_config, self.device
-            )
+                self.model_runner: CPUModelRunner = StandaloneCPUModelRunner(  # type: ignore
+                    self.aphrodite_config, self.device
+                )
+            else:
+                from aphrodite.v1.worker.cpu.model_runner import (
+                    CPUModelRunner as CPUModelRunnerV2,
+                )
+
+                self.model_runner = CPUModelRunnerV2(  # type: ignore
+                    self.aphrodite_config, self.device
+                )
         else:
             self.model_runner = CPUModelRunner(self.aphrodite_config, torch.device("cpu"))
 
@@ -272,6 +265,20 @@ class CPUWorker(Worker):
         # Only compile here for models without kv cache
         if len(self.model_runner.kv_caches) == 0 and self._should_warm_up_model():
             self.model_runner.warming_up_model()
+        # profile_run skips the MRV2 scheduler-driven kernels, so without this
+        # their Triton JIT lands in the first request's TTFT.
+        kernel_config = self.aphrodite_config.kernel_config
+        if self.use_v2_model_runner and kernel_config.enable_jit_warmup:
+            if current_platform.uses_standalone_cpu_model_runner():
+                from aphrodite.v1.worker.cpu.warmup import warmup_kernels
+            else:
+                from aphrodite.v1.worker.gpu.warmup import warmup_kernels
+
+            warmup_kernels(
+                self.model_runner,
+                self.execute_model,
+                self.sample_tokens,
+            )
         # Reset the seed to ensure that the random state is not affected by
         # the model initialization and profiling.
         set_random_seed(self.model_config.seed, self.parallel_config.data_parallel_index)

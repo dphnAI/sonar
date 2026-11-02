@@ -9,6 +9,7 @@ from aphrodite.config import AphroditeConfig
 from aphrodite.config.utils import replace
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.model_loader import get_model
+from aphrodite.model_executor.model_loader.utils import get_draft_load_config
 from aphrodite.tokenizers.registry import get_tokenizer
 from aphrodite.v1.spec_decode.llm_base_proposer import SpecDecodeBaseProposer
 from aphrodite.v1.spec_decode.vocab_mapping import VocabMapping
@@ -106,6 +107,7 @@ class DraftModelProposer(SpecDecodeBaseProposer):
             model = get_model(
                 aphrodite_config=draft_aphrodite_config,
                 prefix="draft_model",
+                load_config=get_draft_load_config(draft_aphrodite_config),
             )
         return model
 

@@ -200,10 +200,12 @@ def run_cutlass_moe_fp8(
         )
         expert_offsets = expert_first_token_offset[:-1]
 
-    if not per_act_token and (expert_map is not None or use_batched_format):
+    if not per_act_token:
         # this is necessary to avoid imprecise scale calculation caused by
         # random data in the unused workspace. The workspace is unused when
-        # this rank handles only partial tokens, or when it is batched .
+        # this rank handles only partial tokens, when it is batched, or when
+        # invalid routes (e.g. -1 for padding tokens) are sorted past the valid
+        # rows. The dynamic per-tensor scale of act_out reduces over every row.
         mm1_out.fill_(0)
 
     ops.cutlass_moe_mm(
@@ -851,6 +853,11 @@ def run_cutlass_moe_mxfp4(
 
     a_map = torch.empty((topk_ids.numel()), dtype=torch.int32, device=device)
     c_map = torch.empty((topk_ids.numel()), dtype=torch.int32, device=device)
+    # Below 17 experts the quant kernel uses a cheap linear offset scan; skip
+    # sorted_expert_ids to avoid extra routing writes and ID lookups.
+    sorted_expert_ids: torch.Tensor | None = None
+    if e > 16:
+        sorted_expert_ids = torch.empty_like(a_map)
 
     if apply_router_weight_on_input:
         assert num_topk == 1, "apply_router_weight_on_input is only implemented for topk=1"
@@ -868,6 +875,7 @@ def run_cutlass_moe_mxfp4(
         k,
         blockscale_offsets,
         is_gated=is_gated,
+        sorted_expert_ids=sorted_expert_ids,
     )
 
     a = ops.shuffle_rows(a, a_map)
@@ -877,6 +885,7 @@ def run_cutlass_moe_mxfp4(
         blockscale_offsets,
         e,
         num_topk,
+        sorted_expert_ids,
     )
     c1 = _resize_cache(workspace13, (m * topk, w1_n))
     c2 = _resize_cache(workspace2, (m * topk, n))
@@ -895,7 +904,12 @@ def run_cutlass_moe_mxfp4(
     del rep_a_fp4, rep_a_blockscale
     if activation == MoEActivation.SILU and (activation_config is None or activation_config.clamp_limit is None):
         int_fp4, int_blockscale = ops.silu_and_mul_mxfp4_experts_quant(
-            c1, expert_offsets, blockscale_offsets, e, num_topk
+            c1,
+            expert_offsets,
+            blockscale_offsets,
+            e,
+            num_topk,
+            sorted_expert_ids,
         )
     else:
         apply_moe_activation(
@@ -904,7 +918,14 @@ def run_cutlass_moe_mxfp4(
             c1,
             activation_config=activation_config,
         )
-        int_fp4, int_blockscale = ops.mxfp4_experts_quant(c2, expert_offsets, blockscale_offsets, e, num_topk)
+        int_fp4, int_blockscale = ops.mxfp4_experts_quant(
+            c2,
+            expert_offsets,
+            blockscale_offsets,
+            e,
+            num_topk,
+            sorted_expert_ids,
+        )
 
     ops.cutlass_mxfp4_moe_mm(
         c3,

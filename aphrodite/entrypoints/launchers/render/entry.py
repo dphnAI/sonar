@@ -123,13 +123,12 @@ async def run_launch_fastapi(
 if __name__ == "__main__":
     import uvloop
 
-    from aphrodite.entrypoints.serve.utils.api_utils import cli_env_setup
-    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
-
-    from ..cli_args import (
+    from aphrodite.entrypoints.common.cli_args import (
         make_arg_parser,
         validate_parsed_serve_args,
     )
+    from aphrodite.entrypoints.common.startup import cli_env_setup
+    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
     cli_env_setup()
     parser = FlexibleArgumentParser(

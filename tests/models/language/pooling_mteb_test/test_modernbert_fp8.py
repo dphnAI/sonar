@@ -54,6 +54,12 @@ def _assert_modernbert_online_fp8(model) -> None:
         assert isinstance(linear.quant_method, Fp8PerTensorOnlineLinearMethod), (
             f"{name} was not quantized with online FP8"
         )
+        if current_platform.is_xpu():
+            from aphrodite.model_executor.kernels.linear.scaled_mm.xpu import (
+                XPUW8A8FP8LinearKernel,
+            )
+
+            assert isinstance(linear.quant_method.fp8_linear, XPUW8A8FP8LinearKernel)
 
 
 @pytest.mark.flaky(reruns=2)
@@ -67,11 +73,15 @@ def test_modernbert_online_fp8_mteb(hf_runner, aphrodite_runner, monkeypatch) ->
     def check_online_fp8(aphrodite_model) -> None:
         aphrodite_model.apply_model(_assert_modernbert_online_fp8)
 
+    aphrodite_extra_kwargs: dict[str, object] = {"quantization": "fp8_per_tensor"}
+    if current_platform.is_xpu():
+        aphrodite_extra_kwargs["kernel_config"] = {"linear_backend": "xpu"}
+
     mteb_test_embed_models(
         hf_runner,
         aphrodite_runner,
         MODEL_INFO,
-        aphrodite_extra_kwargs={"quantization": "fp8_per_tensor"},
+        aphrodite_extra_kwargs=aphrodite_extra_kwargs,
         # Account for Online FP8 kernel variance across GPU architectures.
         atol=2e-3,
         aphrodite_model_callback=check_online_fp8,

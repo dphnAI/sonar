@@ -3,6 +3,7 @@
 """Keep the built-in BitsAndBytes loader available alongside loader plugins."""
 
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 import torch
@@ -15,6 +16,7 @@ from aphrodite.model_executor.layers.linear import (
     RowParallelLinear,
 )
 from aphrodite.model_executor.layers.quantization import get_quantization_config
+from aphrodite.model_executor.layers.quantization.bitsandbytes import BitsAndBytesConfig
 from aphrodite.model_executor.model_loader import get_model_loader
 from aphrodite.model_executor.model_loader.bitsandbytes_loader import BitsAndBytesModelLoader
 from aphrodite.model_executor.model_loader.weight_utils import get_quant_config
@@ -27,6 +29,7 @@ def test_bitsandbytes_loader_registration():
 
 def test_bitsandbytes_quantization_registration():
     config_cls = get_quantization_config("bitsandbytes")
+    assert issubclass(config_cls, BitsAndBytesConfig)
     assert config_cls.get_name() == "bitsandbytes"
 
 
@@ -76,17 +79,21 @@ def test_bitsandbytes_merged_shard_uses_packed_offsets():
 
 @pytest.mark.parametrize("loaded_size", [4, 6])
 def test_bitsandbytes_moe_packed_down_projection(loaded_size):
-    layer = SimpleNamespace(
-        quant_config=None,
-        quant_method=SimpleNamespace(),
-        _map_global_expert_id_to_local_expert_id=lambda expert_id: expert_id,
+    # Duck-typed stand-in exposing only what the BitsAndBytes path reads.
+    layer = cast(
+        RoutedExperts,
+        SimpleNamespace(
+            quant_config=None,
+            quant_method=SimpleNamespace(),
+            _map_global_expert_id_to_local_expert_id=lambda expert_id: expert_id,
+        ),
     )
     param = torch.nn.Parameter(torch.zeros(1, 4, 1, dtype=torch.uint8), requires_grad=False)
     param.use_bitsandbytes_4bit = True
     weight = torch.ones(loaded_size, 1, dtype=torch.uint8)
     if loaded_size != 4:
         with pytest.raises(ValueError, match="BitsAndBytes"):
-            RoutedExperts.weight_loader(layer, param, weight, "w2", "w2", 0)
+            RoutedExperts.weight_loader(layer, param, weight, "w2", "w2", 0, return_success=False)
     else:
-        RoutedExperts.weight_loader(layer, param, weight, "w2", "w2", 0)
+        RoutedExperts.weight_loader(layer, param, weight, "w2", "w2", 0, return_success=False)
         torch.testing.assert_close(param[0], weight)

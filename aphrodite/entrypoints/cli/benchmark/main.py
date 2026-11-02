@@ -10,7 +10,7 @@ import typing
 from aphrodite import envs
 from aphrodite.entrypoints.cli.benchmark.base import BenchmarkSubcommandBase
 from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.serve.utils.api_utils import APHRODITE_SUBCMD_PARSER_EPILOG
+from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
 from aphrodite.logger import init_logger
 
 if typing.TYPE_CHECKING:

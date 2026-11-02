@@ -14,7 +14,6 @@ from aphrodite.config import AphroditeConfig, get_current_aphrodite_config
 from aphrodite.config.cache import CacheDType
 from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
 from aphrodite.v1.attention.backend import AttentionLayer, AttentionType
 from aphrodite.v1.attention.backends.rocm_attn import (
     RocmAttentionBackend,
@@ -31,7 +30,7 @@ from aphrodite.v1.attention.ops.segmented_attention import (
 from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 if TYPE_CHECKING:
     from aphrodite.platforms.interface import DeviceCapability

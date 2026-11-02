@@ -25,6 +25,7 @@ from aphrodite.model_executor.models.transformers.base import APHRODITE_ATTN_ATT
 from aphrodite.model_executor.models.transformers.causal import CausalMixin
 from aphrodite.model_executor.models.transformers.legacy import LegacyMixin
 from aphrodite.model_executor.models.transformers.moe import MoEMixin
+from aphrodite.model_executor.models.transformers.mtp import MTPMixin
 from aphrodite.model_executor.models.transformers.multimodal import (
     MultiModalDummyInputsBuilder,
     MultiModalMixin,
@@ -130,6 +131,13 @@ class TransformersForCausalLM(CausalMixin): ...
 
 
 class TransformersMoEForCausalLM(MoEMixin, CausalMixin): ...
+
+
+# Multi-token prediction draft models
+class TransformersForMTP(MTPMixin): ...
+
+
+class TransformersMoEForMTP(MoEMixin, MTPMixin): ...
 
 
 # Multimodal models

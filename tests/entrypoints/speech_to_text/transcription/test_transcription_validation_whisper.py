@@ -88,6 +88,7 @@ async def test_basic_audio(whisper_client, mary_had_lamb):
         language="en",
         response_format="text",
         temperature=0.0,
+        extra_body={"aphrodite_xargs": json.dumps({"frontend_window": 128})},
     )
     out = json.loads(transcription)
     out_text = out["text"]

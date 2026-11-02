@@ -2707,7 +2707,7 @@ class CustomAudioDataset(CustomDataset):
             prompt = item.get("prompt", "")
             if tokenizer is None:
                 prompt_len = 1
-                new_output_len = output_len if output_len not in (None, -1) else 256
+                new_output_len = output_len if (output_len is not None and output_len != -1) else 256
                 mm_content = None
             else:
                 use_chat_template = (

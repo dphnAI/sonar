@@ -19,7 +19,6 @@ from aphrodite.config import (
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.platforms import CpuArchEnum, current_platform
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
@@ -39,8 +38,8 @@ from aphrodite.v1.attention.backends.zentorch_sdpa import (
 from aphrodite.v1.kv_cache_interface import (
     AttentionSpec,
     CrossAttentionSpec,
-    EncoderOnlyAttentionSpec,
     KVCacheLayout,
+    is_quantized_kv_cache,
 )
 
 logger = init_logger(__name__)
@@ -64,6 +63,15 @@ class CPUAttentionBackend(AttentionBackend):
     @staticmethod
     def get_supported_kernel_block_sizes(kv_cache_spec=None) -> list[int | MultipleOf]:
         return [MultipleOf(32)]
+
+    @classmethod
+    def supports_kv_cache_dtype(cls, kv_cache_dtype: "CacheDType | None") -> bool:
+        if kv_cache_dtype in (None, "auto", "bfloat16", "float16"):
+            return True
+        if kv_cache_dtype not in cls.supported_kv_cache_dtypes:
+            return False
+        # Mirrors the FP8 ISA requirement enforced in _get_attn_isa.
+        return torch.cpu._is_amx_tile_supported() or torch.cpu._is_avx512_supported()
 
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
@@ -162,7 +170,10 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
         )
         self._set_isa_to_layers(layer_names)
         self.is_cross_attention = isinstance(kv_cache_spec, CrossAttentionSpec)
-        self.is_encoder_only_attention = isinstance(kv_cache_spec, EncoderOnlyAttentionSpec)
+        attn_layers = get_layers_from_aphrodite_config(aphrodite_config, Attention, layer_names)
+        self.is_encoder_only_attention = any(
+            layer.attn_type == AttentionType.ENCODER_ONLY for layer in attn_layers.values()
+        )
 
     def _set_isa_to_layers(self, layer_names: list[str]) -> None:
         attn_layers = get_layers_from_aphrodite_config(
@@ -209,7 +220,11 @@ class CPUAttentionMetadataBuilder(AttentionMetadataBuilder[CPUAttentionMetadata]
         if is_dynamic_casual:
             dynamic_casual = common_attn_metadata.causal
 
-        causal = False if self.is_cross_attention or is_dynamic_casual else common_attn_metadata.causal
+        causal = (
+            False
+            if self.is_cross_attention or self.is_encoder_only_attention or is_dynamic_casual
+            else common_attn_metadata.causal
+        )
 
         encoder_cache_tensor = None
         if self.is_encoder_only_attention:

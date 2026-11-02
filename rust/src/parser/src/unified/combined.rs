@@ -34,9 +34,9 @@ impl CombinedParser {
         }
     }
 
-    fn parse_tool(&mut self, content: &str, output: &mut UnifiedParserOutput) -> Result<()> {
+    fn parse_tool(&mut self, content: DecodedText, output: &mut UnifiedParserOutput) -> Result<()> {
         let Some(tool) = self.tool.as_mut() else {
-            output.push_text(content);
+            output.push_text(content.text);
             return Ok(());
         };
 
@@ -130,19 +130,17 @@ impl UnifiedParser for CombinedParser {
 
     fn parse_into(&mut self, delta: DecodedText, output: &mut UnifiedParserOutput) -> Result<()> {
         let Some(reasoning) = self.reasoning.as_mut() else {
-            return self.parse_tool(&delta.text, output);
+            return self.parse_tool(delta, output);
         };
 
         let reasoning_delta = reasoning.push(delta)?;
         if let Some(reasoning) = reasoning_delta.reasoning {
             output.push_reasoning(reasoning);
         }
-        if let Some(content) = reasoning_delta.content {
-            // Content attributions stop at this boundary: the tool parser trait
-            // consumes plain text.
-            if !content.text.is_empty() {
-                self.parse_tool(&content.text, output)?;
-            }
+        if let Some(content) = reasoning_delta.content
+            && !content.text.is_empty()
+        {
+            self.parse_tool(content, output)?;
         }
         Ok(())
     }
@@ -157,7 +155,7 @@ impl UnifiedParser for CombinedParser {
             if let Some(content) = reasoning_delta.content
                 && !content.text.is_empty()
             {
-                self.parse_tool(&content.text, &mut output)?;
+                self.parse_tool(content, &mut output)?;
             }
         }
         output.append(self.flush_tool()?);
@@ -173,7 +171,7 @@ impl UnifiedParser for CombinedParser {
 mod tests {
     use std::sync::Arc;
 
-    use aphrodite_tokenizer::test_utils::TestTokenizer;
+    use aphrodite_tokenizer::test_utils::{TestTokenizer, decode_chunks};
     use aphrodite_tokenizer::{
         DecodedText, DynTokenizer, TokenAnchor, TokenAttribution, Tokenizer,
     };
@@ -203,6 +201,7 @@ mod tests {
         TestTokenizer::new()
             .with_regular_token("<think>", 256)
             .with_regular_token("</think>", 257)
+            .with_regular_token("｜DSML｜", 258)
     }
 
     fn test_tools() -> Vec<Tool> {
@@ -222,8 +221,8 @@ mod tests {
 
     fn collect(parser: &mut dyn UnifiedParser, chunks: &[&str]) -> UnifiedParserOutput {
         let mut output = UnifiedParserOutput::default();
-        for chunk in chunks {
-            parser.parse_into(DecodedText::unattributed(*chunk), &mut output).unwrap();
+        for chunk in decode_chunks(&tokenizer(), chunks) {
+            parser.parse_into(chunk, &mut output).unwrap();
         }
         output.append(parser.finish().unwrap());
         output
@@ -256,7 +255,7 @@ mod tests {
                     parallel_tool_calls: true,
                     answer: None,
                 };
-                let tool = T::create(&tools).unwrap();
+                let tool = T::create(&tools, Arc::new(tokenizer())).unwrap();
                 let expected = full_format_from_builder_for_test(
                     tool.structural_tag_builder().unwrap(),
                     &ctx,
@@ -338,7 +337,10 @@ mod tests {
     struct PreserveToolParser;
 
     impl ToolParser for PreserveToolParser {
-        fn create(_tools: &[Tool]) -> crate::tool::Result<Box<dyn ToolParser>>
+        fn create(
+            _tools: &[Tool],
+            _tokenizer: DynTokenizer,
+        ) -> crate::tool::Result<Box<dyn ToolParser>>
         where
             Self: Sized + 'static,
         {
@@ -351,10 +353,10 @@ mod tests {
 
         fn parse_into(
             &mut self,
-            chunk: &str,
+            chunk: DecodedText,
             output: &mut crate::tool::ToolParserOutput,
         ) -> crate::tool::Result<()> {
-            output.push_text(chunk);
+            output.push_text(chunk.text);
             Ok(())
         }
 
@@ -370,7 +372,10 @@ mod tests {
     struct PartialThenErrorToolParser;
 
     impl ToolParser for PartialThenErrorToolParser {
-        fn create(_tools: &[Tool]) -> crate::tool::Result<Box<dyn ToolParser>>
+        fn create(
+            _tools: &[Tool],
+            _tokenizer: DynTokenizer,
+        ) -> crate::tool::Result<Box<dyn ToolParser>>
         where
             Self: Sized + 'static,
         {
@@ -379,7 +384,7 @@ mod tests {
 
         fn parse_into(
             &mut self,
-            _chunk: &str,
+            _chunk: DecodedText,
             output: &mut crate::tool::ToolParserOutput,
         ) -> crate::tool::Result<()> {
             output.push_text("committed");
@@ -400,7 +405,7 @@ mod tests {
     #[test]
     fn combined_parser_emits_reasoning_and_text() {
         let tokenizer = Arc::new(tokenizer());
-        let reasoning = Qwen3ReasoningParser::create(tokenizer).unwrap();
+        let reasoning = Qwen3ReasoningParser::create(tokenizer.clone()).unwrap();
         let mut parser = CombinedParser::new(Some(reasoning), None);
 
         let output = collect(&mut parser, &["<think>work</think>answer"]);
@@ -408,7 +413,9 @@ mod tests {
         assert_eq!(
             output.events,
             vec![
-                UnifiedParserEvent::Reasoning(DecodedText::unattributed("work")),
+                UnifiedParserEvent::Reasoning(
+                    decode_chunks(tokenizer.as_ref(), &["work"]).remove(0)
+                ),
                 UnifiedParserEvent::Text("answer".to_string()),
             ]
         );
@@ -432,9 +439,9 @@ mod tests {
 
         let mut output = UnifiedParserOutput::default();
         for (token_id, text) in [
-            (1, "<think>"),
+            (256, "<think>"),
             (2, "reason"),
-            (3, "</think>"),
+            (257, "</think>"),
             (4, "answer"),
         ] {
             parser.parse_into(chunk(token_id, text), &mut output).unwrap();
@@ -442,7 +449,7 @@ mod tests {
         output.append(parser.finish().unwrap());
 
         // The reasoning tokens keep their attributions through the combined
-        // parser; marker tokens (1 and 3) are dropped with their spans.
+        // parser; marker tokens (256 and 257) are dropped with their spans.
         let reasoning_ids: Vec<u32> = output
             .events
             .iter()
@@ -472,7 +479,7 @@ mod tests {
 
     #[test]
     fn combined_parser_emits_tool_calls_from_visible_content() {
-        let tool = Qwen3JsonToolParser::create(&test_tools()).unwrap();
+        let tool = Qwen3JsonToolParser::create(&test_tools(), Arc::new(tokenizer())).unwrap();
         let mut parser = CombinedParser::new(None, Some(tool));
 
         let output = collect(
@@ -547,7 +554,7 @@ mod tests {
             answer: None,
         };
         let reasoning = Qwen3ReasoningParser::create(Arc::new(tokenizer())).unwrap();
-        let tool = Qwen3JsonToolParser::create(&tools).unwrap();
+        let tool = Qwen3JsonToolParser::create(&tools, Arc::new(tokenizer())).unwrap();
         let visible = tool.build_visible_format(&ctx).unwrap().unwrap();
         let mut parser = CombinedParser::new(Some(reasoning), Some(tool));
         parser.initialize(&[]).unwrap();
@@ -649,7 +656,7 @@ mod tests {
         };
         let tokenizer = Arc::new(tokenizer());
         let reasoning = Qwen3ReasoningParser::create(tokenizer.clone()).unwrap();
-        let tool = Qwen3JsonToolParser::create(&tools).unwrap();
+        let tool = Qwen3JsonToolParser::create(&tools, tokenizer.clone()).unwrap();
         let mut parser = CombinedParser::new(Some(reasoning), Some(tool));
         parser.initialize(&[]).unwrap();
         let outside = parser.build_output_grammar(&ctx).unwrap().unwrap().format;
@@ -691,7 +698,8 @@ mod tests {
 
     fn qwen3_parser(tools: &[Tool], with_tool: bool) -> CombinedParser {
         let reasoning = Qwen3ReasoningParser::create(Arc::new(tokenizer())).unwrap();
-        let tool = with_tool.then(|| Qwen3JsonToolParser::create(tools).unwrap());
+        let tool =
+            with_tool.then(|| Qwen3JsonToolParser::create(tools, Arc::new(tokenizer())).unwrap());
         let mut parser = CombinedParser::new(Some(reasoning), tool);
         parser.initialize(&[]).unwrap();
         parser
@@ -711,7 +719,7 @@ mod tests {
             ])
         };
         let required = ToolChoice::required();
-        let required_calls = Qwen3JsonToolParser::create(&tools)
+        let required_calls = Qwen3JsonToolParser::create(&tools, Arc::new(tokenizer()))
             .unwrap()
             .build_visible_format(&grammar_ctx(&tools, &required, None))
             .unwrap()
@@ -757,7 +765,10 @@ mod tests {
         let ctx = grammar_ctx(&tools, &auto, Some(&answer));
         assert!(parser.build_output_grammar(&ctx).unwrap().is_none());
 
-        let parser = CombinedParser::new(None, Some(Qwen3JsonToolParser::create(&tools).unwrap()));
+        let parser = CombinedParser::new(
+            None,
+            Some(Qwen3JsonToolParser::create(&tools, Arc::new(tokenizer())).unwrap()),
+        );
         let ctx = grammar_ctx(&tools, &none, Some(&answer));
         let alone = parser.build_output_grammar(&ctx).unwrap().unwrap();
         assert_eq!(alone, BuiltOutputGrammar::final_output_only(answer.clone()));

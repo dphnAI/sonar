@@ -17,10 +17,9 @@ from tests.tool_parsers.utils import run_tool_extraction_streaming
 
 class TestInternLM2ToolParser(ToolParserTests):
     @pytest.fixture
-    def tokenizer(self, default_tokenizer: TokenizerLike) -> TokenizerLike:
+    def tokenizer(self, default_tokenizer: TokenizerLike, monkeypatch: pytest.MonkeyPatch) -> TokenizerLike:
         """Add some internlm2 specific tokens to the default vocab."""
         tokenizer_vocab = default_tokenizer.get_vocab()
-        default_tokenizer.get_vocab = MagicMock()
         tokenizer_vocab.update(
             {
                 "<|action_start|>": 92540,
@@ -28,7 +27,7 @@ class TestInternLM2ToolParser(ToolParserTests):
                 "<|action_end|>": 92542,
             }
         )
-        default_tokenizer.get_vocab.return_value = tokenizer_vocab
+        monkeypatch.setattr(default_tokenizer, "get_vocab", MagicMock(return_value=tokenizer_vocab))
         return default_tokenizer
 
     @pytest.fixture
@@ -109,10 +108,9 @@ class TestInternLM2ToolParser(ToolParserTests):
         )
 
 
-def test_streaming_arguments_in_single_delta(default_tokenizer: TokenizerLike) -> None:
+def test_streaming_arguments_in_single_delta(default_tokenizer: TokenizerLike, monkeypatch: pytest.MonkeyPatch) -> None:
     """Arguments arriving whole in one delta must not be dropped."""
     tokenizer_vocab = default_tokenizer.get_vocab()
-    default_tokenizer.get_vocab = MagicMock()
     tokenizer_vocab.update(
         {
             "<|action_start|>": 92540,
@@ -120,7 +118,7 @@ def test_streaming_arguments_in_single_delta(default_tokenizer: TokenizerLike) -
             "<|action_end|>": 92542,
         }
     )
-    default_tokenizer.get_vocab.return_value = tokenizer_vocab
+    monkeypatch.setattr(default_tokenizer, "get_vocab", MagicMock(return_value=tokenizer_vocab))
     parser = Internlm2ToolParser(default_tokenizer)
 
     deltas = [
@@ -143,6 +141,7 @@ def test_streaming_arguments_in_single_delta(default_tokenizer: TokenizerLike) -
             request=None,
         )
         if delta_message and delta_message.tool_calls:
+            assert delta_message.tool_calls[0].function is not None
             arguments = delta_message.tool_calls[0].function.arguments
             if arguments:
                 streamed += arguments

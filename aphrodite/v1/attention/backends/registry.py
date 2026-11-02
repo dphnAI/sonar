@@ -52,6 +52,7 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     XPU_MLA_SPARSE = "aphrodite.v1.attention.backends.mla.xpu_mla_sparse.XPUMLASparseBackend"
     TORCH_SDPA = ""  # this tag is only used for ViT
     FLASHINFER = "aphrodite.v1.attention.backends.flashinfer.FlashInferBackend"
+    FLASHINFER_TS = "aphrodite.v1.attention.backends.flashinfer_ts.FlashInferTSBackend"
     TRITON_FLASHINFER = "aphrodite.v1.attention.backends.triton_flashinfer.TritonFlashInferBackend"
     FLASHINFER_MLA = "aphrodite.v1.attention.backends.mla.flashinfer_mla.FlashInferMLABackend"
     TOKENSPEED_MLA = "aphrodite.v1.attention.backends.mla.tokenspeed_mla.TokenspeedMLABackend"
@@ -90,6 +91,8 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     MINIMAX_M3_SPARSE = "aphrodite.models.minimax_m3.common.sparse_attention.MiniMaxM3SparseBackend"
     CUTLASS_MSA = "aphrodite.models.minimax_m3.nvidia.sparse_attention_msa.MiniMaxM3SparseCutlassBackend"
     TRITON_MSA = "aphrodite.models.minimax_m3.nvidia.sparse_attention_msa.MiniMaxM3SparseTritonBackend"
+    STEP5_DSA = "aphrodite.models.step5.nvidia.sparse_attention.Step5DSAAttentionBackend"
+    KIMI_K3_KV_BALANCED_MLA = "aphrodite.models.kimi_k3.nvidia.kv_balanced_mla.backend.KimiK3KvBalancedMLABackend"
     NO_ATTENTION = "aphrodite.v1.attention.backends.no_attention.NoAttentionBackend"
     FLEX_ATTENTION = "aphrodite.v1.attention.backends.flex_attention.FlexAttentionBackend"
     # HPC Attention Backend:
@@ -103,6 +106,7 @@ class AttentionBackendEnum(Enum, metaclass=_AttentionBackendEnumMeta):
     CPU_MLA = "aphrodite.v1.attention.backends.mla.cpu_mla.CPUMLABackend"
     AMX_MLA = "aphrodite.v1.attention.backends.mla.amx_mla.AMXMLABackend"
     TURBOQUANT = "aphrodite.v1.attention.backends.turboquant_attn.TurboQuantAttentionBackend"
+    ROCM_OCTAVE = "aphrodite.v1.attention.backends.rocm_octave_attn.RocmOctaveAttentionBackend"
     ULTRAQUANT = "aphrodite.v1.attention.backends.ultraquant_attn.UltraQuantAttentionBackend"
     # Placeholder for third-party/custom backends - must be registered before use
     # set to None to avoid alias with other backend, whose value is an empty string

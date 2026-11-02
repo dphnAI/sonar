@@ -88,8 +88,10 @@ class B12xPreparationCoordinator:
         self._control = None
         if len(self.world_ranks) > 1:
             group = _get_control_group(world_group)
-            sequence = getattr(group, "_b12x_sequence", 0)
-            group._b12x_sequence = sequence + 1
+            # The world group owns its control group, so it also owns the
+            # stage counter that keeps successive coordinators' keys apart.
+            sequence = getattr(world_group, "_b12x_preparation_sequence", 0)
+            world_group._b12x_preparation_sequence = sequence + 1
             import torch.distributed as dist
 
             self._control = dist.PrefixStore(f"stage-{sequence}", group.store)

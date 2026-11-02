@@ -8,6 +8,8 @@ from aphrodite.distributed.weight_transfer.base import (
     AphroditeWeightSyncClient,
     ModuleSource,
     ParamMeta,
+    Replicate,
+    Shard,
     TrainerWeightTransferEngine,
     WeightSource,
     WeightTransferEngine,
@@ -30,6 +32,8 @@ __all__ = [
     "HTTPAphroditeWeightSyncClient",
     "RayAphroditeWeightSyncClient",
     "ParamMeta",
+    "Replicate",
+    "Shard",
     "WeightSource",
     "ModuleSource",
 ]

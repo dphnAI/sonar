@@ -61,7 +61,7 @@ def test_lm_eval_accuracy_v1_engine(model):
 @pytest.mark.parametrize("model", FP8_KV_MODEL_NAMES)
 def test_lm_eval_accuracy_v1_engine_fp8_kv_cache(model):
     """Run with the V1 Engine."""
-    more_args = {"kv_cache_dtype": "fp8"}
+    more_args: dict[str, int | str] = {"kv_cache_dtype": "fp8"}
     if current_platform.is_tpu():
         # Limit compilation time for TPU V1
         more_args = {"max_model_len": 2048, "max_num_seqs": 128, "kv_cache_dtype": "fp8"}

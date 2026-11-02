@@ -1,40 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Layer provider resolution for the Transformers modeling backend.
+"""Layer resolution for the Transformers modeling backend.
 
-When ``APHRODITE_USE_HW_AGNOSTIC`` is set, layer symbols are imported from
-``aphrodite.model_executor.hw_agnostic.layers.<module>``, falling back to
-``aphrodite.model_executor.layers.<module>`` for anything not yet ported. The
-resolved source of every symbol is logged so it is clear which layers run
-hw-agnostic and which fell back to Aphrodite.
+Layers may come from the in-tree and the hw-agnostic path,
+resolved via `aphrodite.model_executor.hw_agnostic.resolve`.
 """
-
-import importlib
 
 import aphrodite.envs as envs
 from aphrodite.logger import init_logger
+from aphrodite.model_executor import hw_agnostic
 
 logger = init_logger(__name__)
 
-_HW_PKG = "aphrodite.model_executor.hw_agnostic.layers"
-_APHRODITE_PKG = "aphrodite.model_executor.layers"
-
-
-def _resolve(module: str, name: str):
-    """Return `name` from the hw-agnostic `module` when enabled and available,
-    else from Aphrodite. Logs which source was used."""
-    if envs.APHRODITE_USE_HW_AGNOSTIC:
-        try:
-            obj = getattr(importlib.import_module(f"{_HW_PKG}.{module}"), name)
-            logger.info("Using hw-agnostic layer: %s", name)
-            return obj
-        except (ImportError, AttributeError):
-            logger.warning("hw-agnostic layer %s is not available; falling back to default", name)
-    return getattr(importlib.import_module(f"{_APHRODITE_PKG}.{module}"), name)
-
-
-RMSNorm = _resolve("layernorm", "RMSNorm")
-GemmaRMSNorm = _resolve("layernorm", "GemmaRMSNorm")
+RMSNorm = hw_agnostic.resolve("layernorm", "RMSNorm")
+GemmaRMSNorm = hw_agnostic.resolve("layernorm", "GemmaRMSNorm")
 
 
 def get_act_and_mul_fn(act_fn_name: str):

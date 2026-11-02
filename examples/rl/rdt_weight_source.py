@@ -10,6 +10,8 @@ inside it so the example stays about the sync itself, alongside
 ``rdt_aphrodite_serve.py``.
 """
 
+from functools import cached_property
+
 import regex as re
 import torch
 
@@ -33,8 +35,9 @@ class CheckpointNameSource(WeightSource):
     internal layout to checkpoint names is the normal producer job.
 
     Every rank publishes the whole model: fused params are all-gathered and then
-    sliced per expert. Ownership stays uniform (no ``held_names``) -- serving
-    only the experts a rank holds is a real trainer's concern, not an example's.
+    sliced per expert. Ownership stays uniform (no ``ParamMeta.owners``) --
+    serving only the experts a rank holds is a real trainer's concern, not an
+    example's.
     """
 
     def __init__(self, module: torch.nn.Module) -> None:
@@ -58,6 +61,7 @@ class CheckpointNameSource(WeightSource):
         half = rows // 2
         return [(f"{prefix}.{e}.{proj}_proj.weight", (half, cols)) for e in range(experts) for proj in ("gate", "up")]
 
+    @cached_property
     def metadata(self) -> list[ParamMeta]:
         return [
             ParamMeta(entry_name, param.dtype, shape)
@@ -65,7 +69,7 @@ class CheckpointNameSource(WeightSource):
             for entry_name, shape in self._expand(name, param)
         ]
 
-    def __iter__(self):
+    def iter_full(self):
         for name, param in self._module.named_parameters():
             m = _FUSED_EXPERT_RE.match(name)
             if m is None:

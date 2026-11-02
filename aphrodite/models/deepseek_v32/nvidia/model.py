@@ -8,7 +8,7 @@ import torch
 
 import aphrodite.envs as envs
 from aphrodite.config import AphroditeConfig
-from aphrodite.distributed import get_pp_group
+from aphrodite.distributed import get_pp_group, tensor_model_parallel_all_reduce
 from aphrodite.forward_context import get_forward_context, is_forward_context_available
 from aphrodite.model_executor.layers.fused_embed_norm import (
     fused_embed_norm,
@@ -29,14 +29,15 @@ from aphrodite.model_executor.models.deepseek_v2 import (
     DeepseekV2MoE,
     _try_load_fp8_indexer_wk,
     get_spec_layer_idx_from_weight_name,
-    is_skip_topk_layer,
 )
 from aphrodite.model_executor.models.utils import (
     PPMissingLayer,
+    copy_pp_buffers,
     get_pp_missing_layer_names,
     is_pp_missing_parameter,
     make_empty_intermediate_tensors_factory,
     make_layers,
+    pp_topk_buffers,
 )
 from aphrodite.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
 from aphrodite.models.common.ops.sequence_parallel import (
@@ -222,24 +223,14 @@ class DeepseekV32Model(torch.nn.Module):
             ),
             prefix=f"{prefix}.layers",
         )
-        # Each PP rank owns its top-k buffer; a skip layer cannot consume
-        # indices produced only on the preceding stage.
-        if is_skip_topk_layer(config, self.start_layer):
-            raise ValueError(
-                f"Pipeline stage starting at layer {self.start_layer} begins "
-                "with a skip-topk sparse layer, which would read top-k indices "
-                "no layer on this rank has produced. Adjust the pipeline "
-                "partition so every stage starts with a full-indexer layer "
-                "(align stage boundaries with index_topk_freq / "
-                "index_topk_pattern)."
-            )
 
         if get_pp_group().is_last_rank:
             self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         else:
             self.norm = PPMissingLayer()
+        self.pp_buffers = pp_topk_buffers(config, self.topk_indices_buffer, range(config.num_hidden_layers))
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
-            ["hidden_states", "residual"], config.hidden_size
+            ["hidden_states"], config.hidden_size, self.pp_buffers
         )
 
         self.aux_hidden_state_layers = tuple[int, ...]()
@@ -273,11 +264,12 @@ class DeepseekV32Model(torch.nn.Module):
             else:
                 assert input_ids is not None
                 hidden_states = self.embed_input_ids(input_ids)
-            residual = None
         else:
             assert intermediate_tensors is not None
             hidden_states = intermediate_tensors["hidden_states"]
-            residual = intermediate_tensors["residual"]
+            copy_pp_buffers(intermediate_tensors, self.pp_buffers)
+        # Later PP stages receive the TP-reduced residual stream, like an embedding.
+        residual = None
 
         full_num_tokens = positions.shape[0]
         if self.use_sequence_parallel:
@@ -287,7 +279,6 @@ class DeepseekV32Model(torch.nn.Module):
             hidden_states = sp_shard(hidden_states)
             if attn_in is not None:
                 attn_in = sp_shard(attn_in)
-            assert residual is None, "Currently, SP is not supported with PP"
 
         aux_hidden_states = []
         for idx, layer in enumerate(
@@ -301,7 +292,14 @@ class DeepseekV32Model(torch.nn.Module):
 
         if not get_pp_group().is_last_rank:
             assert not self.use_sequence_parallel, "Currently, SP is not supported with PP"
-            return IntermediateTensors({"hidden_states": hidden_states, "residual": residual})
+            # PP send/recv needs TP-replicated tensors; reduce the partial sum.
+            hidden_states = residual + tensor_model_parallel_all_reduce(hidden_states)
+            return IntermediateTensors(
+                {
+                    "hidden_states": hidden_states,
+                    **{k: v[:full_num_tokens] for k, v in self.pp_buffers.items()},
+                }
+            )
 
         if self.use_sequence_parallel:
             hidden_states, _ = self.norm(hidden_states, residual)
@@ -343,7 +341,12 @@ class DeepseekV32Model(torch.nn.Module):
         pp_missing_layer_names = get_pp_missing_layer_names(self)
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
-        _pending_wk_fp8: dict = {}
+        # Reordering loaders (e.g. runai_streamer) can split an FP8 indexer wk
+        # weight/scale pair across load_weights() calls; keep the pending
+        # buffer on the model so pairs survive the call boundary.
+        _pending_wk_fp8 = getattr(self, "_pending_indexer_wk_fp8", None)
+        if _pending_wk_fp8 is None:
+            self._pending_indexer_wk_fp8 = _pending_wk_fp8 = {}
         for name, loaded_weight in weights:
             if "rotary_emb.inv_freq" in name:
                 continue

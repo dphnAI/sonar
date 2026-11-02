@@ -6,6 +6,7 @@ import pytest
 from aphrodite.assets.video import VideoAsset
 from aphrodite.config import AphroditeConfig, ModelConfig
 from aphrodite.multimodal.utils import encode_video_url
+from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
 from aphrodite.renderers.hf import HfRenderer
 from aphrodite.renderers.params import ChatParams
 from aphrodite.tokenizers.registry import cached_tokenizer_from_config
@@ -33,7 +34,7 @@ def _build_video_renderer() -> HfRenderer:
 
 def _get_message_hash(
     renderer: HfRenderer,
-    messages: list[dict],
+    messages: list[ChatCompletionMessageParam],
     media_io_kwargs: dict | None = None,
     mm_processor_kwargs: dict | None = None,
 ) -> str:
@@ -51,7 +52,7 @@ def _get_message_hash(
     return inputs[0]["mm_hashes"]["video"][0]
 
 
-def _video_chat_messages(client_uuid: str):
+def _video_chat_messages(client_uuid: str) -> list[ChatCompletionMessageParam]:
     return [
         {
             "role": "user",

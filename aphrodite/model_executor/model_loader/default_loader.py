@@ -13,7 +13,7 @@ import torch
 from torch import nn
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-from aphrodite.config import ModelConfig
+from aphrodite.config import ModelConfig, get_current_aphrodite_config_or_none
 from aphrodite.config.load import LoadConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
@@ -289,10 +289,13 @@ class DefaultModelLoader(BaseModelLoader):
                     self.load_config.use_tqdm_on_load,
                 )
             elif self.load_config.load_format == "instanttensor":
+                aphrodite_config = get_current_aphrodite_config_or_none()
+                engram_config = aphrodite_config.engram_config if aphrodite_config else None
                 weights_iterator = instanttensor_weights_iterator(
                     hf_weights_files,
                     self.load_config.use_tqdm_on_load,
                     local_expert_ids=self.local_expert_ids,
+                    load_engram_on_cpu=bool(engram_config and engram_config.cpu_offload),
                 )
             else:
                 if extra_config.get("enable_multithread_load"):
@@ -342,7 +345,7 @@ class DefaultModelLoader(BaseModelLoader):
         self,
         model_config: ModelConfig,
         model: nn.Module,
-    ) -> tuple[Iterable[tuple[str, torch.Tensor]], int]:
+    ) -> tuple[Generator[tuple[str, torch.Tensor], None, None], int]:
         """Get all weights and the total checkpoint size in bytes."""
         primary_weights = DefaultModelLoader.Source(
             model_config.model,
@@ -375,7 +378,7 @@ class DefaultModelLoader(BaseModelLoader):
         self,
         model_config: ModelConfig,
         model: nn.Module,
-    ) -> Iterable[tuple[str, torch.Tensor]]:
+    ) -> Generator[tuple[str, torch.Tensor], None, None]:
         """Get checkpoint weights for initial loading or in-place reloading."""
         iterator, _ = self._get_all_weights_with_size(model_config, model)
         return iterator

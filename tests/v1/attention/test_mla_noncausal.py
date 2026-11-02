@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Sonar project
 
 from types import SimpleNamespace
@@ -9,7 +10,6 @@ import torch
 from aphrodite.model_executor.layers.attention.mla_attention import (
     MLACommonMetadata,
     MLACommonMetadataBuilder,
-    QueryLenSupport,
 )
 from aphrodite.v1.attention.backend import CommonAttentionMetadata
 from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
@@ -60,7 +60,6 @@ def _builder(marked: bool = True) -> _NonCausalMLAMetadataBuilder:
     builder = object.__new__(_NonCausalMLAMetadataBuilder)
     builder.device = torch.device("cpu")
     builder.reorder_batch_threshold = 1
-    builder.query_len_support = QueryLenSupport.SINGLE_ONLY
     builder.non_causal_multi_token_decode = marked
     builder.dcp_world_size = 1
     builder.use_pcp = False

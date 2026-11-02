@@ -2,12 +2,16 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from functools import cache
-from typing import TYPE_CHECKING, NamedTuple, cast, get_args
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import torch
 
 import aphrodite.envs as envs
-from aphrodite.config.cache import CacheDType
+from aphrodite.config.cache import (
+    KV_CACHE_DTYPES,
+    CacheDType,
+    is_known_kv_cache_dtype,
+)
 from aphrodite.utils.import_utils import resolve_obj_by_qualname
 from aphrodite.v1.attention.backend import AttentionBackend, AttentionType
 from aphrodite.v1.attention.backends.registry import (
@@ -117,9 +121,8 @@ def get_attn_backend(
 ) -> type[AttentionBackend]:
     """Selects which attention backend to use and lazily imports it."""
     if kv_cache_dtype is not None:
-        valid_cache_dtypes = get_args(CacheDType)
-        assert kv_cache_dtype in valid_cache_dtypes, (
-            f"Invalid kv_cache_dtype: {kv_cache_dtype}. Valid values are: {valid_cache_dtypes}"
+        assert is_known_kv_cache_dtype(kv_cache_dtype), (
+            f"Invalid kv_cache_dtype: {kv_cache_dtype}. Valid values are: {KV_CACHE_DTYPES}"
         )
 
     from aphrodite.config import get_current_aphrodite_config

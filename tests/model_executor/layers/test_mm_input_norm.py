@@ -3,17 +3,26 @@
 
 """Tests for FusedMMInputNorm and the fused affine transform kernel."""
 
+from unittest.mock import Mock
+
 import pytest
 import torch
 
-from aphrodite.config import AphroditeConfig, CompilationConfig, set_current_aphrodite_config
+from aphrodite.config import (
+    AphroditeConfig,
+    CompilationConfig,
+    ModelConfig,
+    set_current_aphrodite_config,
+)
 from aphrodite.config.compilation import CompilationMode
+from aphrodite.config.load import LoadConfig
 from aphrodite.model_executor.layers.fusion.mm_input_norm import (
     FusedMMInputNorm,
     IdentityInputNorm,
     NormParams,
     fused_mm_input_norm_triton,
 )
+from aphrodite.model_executor.model_loader.dummy_loader import DummyModelLoader
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import HAS_TRITON
 from aphrodite.utils.torch_utils import set_random_seed
@@ -85,6 +94,22 @@ def _check_against_reference(
 # ===========================================================================
 @requires_aphrodite_config
 class TestFusedMMInputNormModule:
+    def test_dummy_loading_preserves_image_normalization(self):
+        """Dummy model weights must not overwrite processor-derived constants."""
+        norm = FusedMMInputNorm(_RGB_MEAN, _RGB_STD, _RGB_RESCALE).to(_DEVICE)
+        weight, bias = norm.weight.clone(), norm.bias.clone()
+
+        loader = DummyModelLoader(LoadConfig(load_format="dummy"))
+        loader.load_weights(norm, Mock(spec=ModelConfig))
+
+        torch.testing.assert_close(norm.weight, weight, rtol=0, atol=0)
+        torch.testing.assert_close(norm.bias, bias, rtol=0, atol=0)
+
+        pixels = torch.arange(256, dtype=torch.uint8, device=_DEVICE)
+        pixels = pixels.repeat(3).reshape(1, -1)
+        expected = _reference_input_norm(pixels, _RGB_MEAN, _RGB_STD, _RGB_RESCALE, 3, torch.float32)
+        torch.testing.assert_close(norm(pixels, torch.float32), expected)
+
     def test_matches_reference_above_cudnn_grid_limit(self):
         """num_patches above the old cuDNN batch-norm grid limit (~65535)
         used to raise CUDNN_STATUS_INTERNAL_ERROR."""

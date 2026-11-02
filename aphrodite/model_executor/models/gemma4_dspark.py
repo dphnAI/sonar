@@ -12,17 +12,24 @@ from aphrodite import _custom_ops as ops
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import AphroditeConfig, CacheConfig, get_current_aphrodite_config
 from aphrodite.model_executor.layers.layernorm import RMSNorm
-from aphrodite.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear, UnquantizedLinearMethod
+from aphrodite.model_executor.layers.linear import ColumnParallelLinear, ReplicatedLinear
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead,
     VocabParallelEmbedding,
 )
+from aphrodite.model_executor.model_loader.mtp_validation import (
+    is_mtp_completeness_check_enabled,
+)
 from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
 
 from .gemma4_mtp import Gemma4MTPAttention, Gemma4MTPDecoderLayer
-from .qwen3_dflash import DFlashQwen3Model, _dflash_layer_causal
+from .qwen3_dflash import (
+    DFlashQwen3Model,
+    _dflash_layer_causal,
+    _reads_raw_weights,
+)
 from .qwen3_dspark import (
     DSparkConfidenceHead,
     DSparkMarkovHead,
@@ -229,14 +236,12 @@ class Gemma4DSparkModel(DFlashQwen3Model):
     ) -> None:
         self._hidden_norm_weight = self.hidden_norm.weight.data
         self._context_k_projs = [a.k_proj for a in layers_attn]
-        if all(isinstance(proj.quant_method, UnquantizedLinearMethod) for proj in self._context_k_projs):
-            self._fused_k_weight: torch.Tensor | None = torch.cat([a.k_proj.weight for a in layers_attn], dim=0)
-            self._fused_k_bias: torch.Tensor | None = (
-                torch.cat([a.k_proj.bias for a in layers_attn], dim=0) if has_bias else None
-            )
-        else:
-            self._fused_k_weight = None
-            self._fused_k_bias = None
+        self._fused_k_weight: torch.Tensor | None = None
+        self._fused_k_bias: torch.Tensor | None = None
+        if _reads_raw_weights(self._context_k_projs):
+            self._fused_k_weight = torch.cat([p.weight for p in self._context_k_projs])
+            if has_bias:
+                self._fused_k_bias = torch.cat([p.bias for p in self._context_k_projs])
         self._k_norm_weights = torch.stack([a.k_norm.weight.data for a in layers_attn], dim=0).contiguous()
         # v_norm has no learnable scale; ones matching the K-norm call shape.
         self._v_norm_weights = torch.ones(
@@ -260,12 +265,9 @@ class Gemma4DSparkModel(DFlashQwen3Model):
         ops.rms_norm(normed, context_states, self._hidden_norm_weight, self._rms_norm_eps)
         if self._fused_k_weight is not None:
             all_k_flat = F.linear(normed, self._fused_k_weight, self._fused_k_bias)
-            all_k = all_k_flat.view(num_ctx, num_layers, num_kv_heads, head_dim).permute(1, 0, 2, 3).contiguous()
         else:
-            all_k = torch.stack(
-                [proj(normed)[0].view(num_ctx, num_kv_heads, head_dim) for proj in self._context_k_projs],
-                dim=0,
-            )
+            all_k_flat = torch.cat([p(normed)[0] for p in self._context_k_projs], -1)
+        all_k = all_k_flat.view(num_ctx, num_layers, num_kv_heads, head_dim).permute(1, 0, 2, 3).contiguous()
         all_v = torch.empty_like(all_k)
         ops.rms_norm(all_v, all_k, self._v_norm_weights, self._rms_norm_eps)
         return all_k, all_v
@@ -329,7 +331,6 @@ class Gemma4DSparkForCausalLM(Qwen3DSparkForCausalLM):
                     loaded.add(name)
                     if "confidence_head" in name:
                         includes_confidence_head = True
-        if not includes_confidence_head:
+        if not includes_confidence_head and is_mtp_completeness_check_enabled():
             self.model.confidence_head = None
-        self.model._build_fused_kv_buffers()
         return loaded

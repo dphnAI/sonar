@@ -21,6 +21,7 @@ from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
     unpack_cols,
 )
 from aphrodite.model_executor.parameter import BaseAphroditeParameter, permute_param_layout_
+from aphrodite.model_executor.utils import replace_parameter
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import scalar_types
 
@@ -162,12 +163,19 @@ class MarlinLinearKernel(MPLinearKernel):
                 ),
             )
         else:
-            setattr(layer, w_zp_name, marlin_make_empty(device))
+            # Marlin takes an empty zp; a loaded unused one keeps its data.
+            self._retire_unused_zp(layer)
+            self.w_zp_name = w_zp_name
+            replace_parameter(layer, w_zp_name, marlin_make_empty(device))
         self._transform_param(layer, self.w_q_name, transform_w_q)
         self._transform_param(layer, self.w_s_name, transform_w_s)
 
         if hasattr(layer, "bias") and layer.bias is not None:
-            layer.bias.data = marlin_permute_bias(marlin_pad_dim(layer.bias, size_n, padded_n))
+            replace_parameter(
+                layer,
+                "bias",
+                marlin_permute_bias(marlin_pad_dim(layer.bias, size_n, padded_n)),
+            )
 
     def apply_weights(
         self,

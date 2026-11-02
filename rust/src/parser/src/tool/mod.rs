@@ -17,6 +17,7 @@ mod minimax_m3;
 mod parameters;
 mod qwen_coder;
 mod seed_oss;
+mod step5;
 #[cfg(any(test, feature = "test-util"))]
 pub mod test_utils;
 use crate::utils;
@@ -24,6 +25,7 @@ use crate::utils;
 use std::collections::{BTreeMap, btree_map};
 use std::sync::Once;
 
+use aphrodite_tokenizer::{DecodedText, DynTokenizer};
 pub use deepseek_dsml::{DeepSeekV4ToolParser, DeepSeekV32ToolParser, DeepSeekV41ToolParser};
 pub use deepseek_json::{DeepSeekV3ToolParser, DeepSeekV31ToolParser};
 pub use error::{Result, ToolParserError};
@@ -42,6 +44,7 @@ pub use qwen_coder::Qwen3CoderToolParser;
 pub use seed_oss::SeedOssToolParser;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+pub use step5::Step5ToolParser;
 use tracing::warn;
 use xgrammar_structural_tag::ToolChoice;
 pub use xgrammar_structural_tag::builders::StructuralTagBuilder;
@@ -188,7 +191,10 @@ impl ToolParserOutput {
 /// Incremental parser that extracts tool calls from assistant output.
 pub trait ToolParser: Send {
     /// Construct a boxed parser instance for one request stream.
-    fn create(tools: &[Tool]) -> Result<Box<dyn ToolParser>>
+    ///
+    /// `tokenizer` is the model's tokenizer, for parsers that resolve the IDs of
+    /// their marker tokens.
+    fn create(tools: &[Tool], tokenizer: DynTokenizer) -> Result<Box<dyn ToolParser>>
     where
         Self: Sized + 'static;
 
@@ -269,10 +275,13 @@ pub trait ToolParser: Send {
     /// Feed one decoded text delta into the parser, appending committed output
     /// into `output`.
     ///
+    /// The delta carries the attributions of the generated tokens that produced
+    /// it. Parsers that match markers by spelling alone read only `chunk.text`.
+    ///
     /// If this returns an error, any output already appended to `output`
     /// remains committed parser output. The parser must keep its uncommitted
     /// buffer intact so callers may recover it with `reset()`.
-    fn parse_into(&mut self, chunk: &str, output: &mut ToolParserOutput) -> Result<()>;
+    fn parse_into(&mut self, chunk: DecodedText, output: &mut ToolParserOutput) -> Result<()>;
 
     /// Flush any buffered partial state at end of stream.
     ///
@@ -320,13 +329,14 @@ fn warn_answer_ignored_once() {
 #[cfg(any(test, feature = "test-util"))]
 #[easy_ext::ext(ToolParserTestExt)]
 impl<T: ToolParser + ?Sized> T {
-    /// Feed one decoded text delta and return only if the whole chunk parses.
+    /// Feed one unattributed text delta and return only if the whole chunk
+    /// parses.
     ///
     /// If parsing fails, partial committed output is discarded by this helper.
     /// Prefer `parse_into` for more fine-grained control in error recovery.
     pub fn parse_chunk(&mut self, chunk: &str) -> Result<ToolParserOutput> {
         let mut output = ToolParserOutput::default();
-        self.parse_into(chunk, &mut output)?;
+        self.parse_into(DecodedText::unattributed(chunk), &mut output)?;
         Ok(output)
     }
 

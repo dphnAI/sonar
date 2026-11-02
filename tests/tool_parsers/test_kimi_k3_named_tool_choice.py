@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 """Named tool choice for Kimi K3: allowed when the XTML structural tag is
 attached (strict tool calling), rejected otherwise."""

@@ -23,17 +23,20 @@ class Qwen3ASRTranscriber:
         model: Qwen3ASRModel,
         model_path: str | None = None,
         tokenizer: TokenizerLike | None = None,
+        trust_remote_code: bool = False,
     ) -> None:
         self.model = model
-        self.tokenizer: TokenizerLike = tokenizer if tokenizer is not None else self.load_tokenizer(model_path)
+        self.tokenizer: TokenizerLike = (
+            tokenizer if tokenizer is not None else self.load_tokenizer(model_path, trust_remote_code)
+        )
 
     @staticmethod
-    def load_tokenizer(model_path: str | None) -> TokenizerLike:
+    def load_tokenizer(model_path: str | None, trust_remote_code: bool) -> TokenizerLike:
         if not model_path:
             raise ValueError("Qwen3-ASR requires a local tokenizer model_path.")
         return cast(
             TokenizerLike,
-            AutoTokenizer.from_pretrained(model_path, trust_remote_code=True),
+            AutoTokenizer.from_pretrained(model_path, trust_remote_code=trust_remote_code),
         )
 
     def greedy_decode_tokens(

@@ -59,7 +59,6 @@ from aphrodite.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
 )
 from aphrodite.model_executor.layers.fused_moe.utils import (
-    is_model_fused_shared_expert_compatible,
     resolve_layer_fused_shared_expert,
 )
 from aphrodite.model_executor.layers.layernorm import LayerNorm, RMSNorm
@@ -96,7 +95,9 @@ from aphrodite.model_executor.model_loader.weight_utils import (
 )
 from aphrodite.model_executor.models.utils import (
     AutoWeightsLoader,
+    compute_skip_topk_layers,
     extract_layer_index,
+    get_fused_shared_expert_layers,
     sequence_parallel_chunk,
 )
 from aphrodite.platforms import current_platform
@@ -944,23 +945,6 @@ class DeepSeekV2FusedQkvAProjLinear(MergedColumnParallelLinear):
             return super().forward(input_)
 
 
-def is_skip_topk_layer(config, layer_id: int) -> bool:
-    """Whether a backbone sparse layer skips top-k index computation.
-
-    Skip layers (IndexCache, index_topk_freq > 1 or an explicit
-    index_topk_pattern) build no indexer and reuse the top-k indices the last
-    full-indexer layer left in the shared buffer.
-    """
-    index_topk_freq = getattr(config, "index_topk_freq", 1)
-    index_topk_pattern = getattr(config, "index_topk_pattern", None)
-    index_skip_topk_offset = getattr(config, "index_skip_topk_offset", 2)
-    if index_topk_pattern is None:
-        return max(layer_id - index_skip_topk_offset + 1, 0) % index_topk_freq != 0
-    if 0 <= layer_id < len(index_topk_pattern):
-        return index_topk_pattern[layer_id] == "S"
-    return False
-
-
 class DeepseekV2MLAAttention(nn.Module):
     """Main reference: DeepseekV2 paper, and FlashInfer Implementation
     (https://arxiv.org/abs/2405.04434 and https://github.com/flashinfer-ai/flashinfer/pull/551).
@@ -1099,7 +1083,7 @@ class DeepseekV2MLAAttention(nn.Module):
         is_mtp_layer = False
         if self.is_v32:
             layer_id = extract_layer_index(prefix)
-            _skip_topk = is_skip_topk_layer(config, layer_id)
+            _skip_topk = layer_id in compute_skip_topk_layers(config)
 
             # The skip pattern only governs backbone layers. MTP/nextn
             # layers (layer_id >= num_hidden_layers) always build a full
@@ -1404,7 +1388,7 @@ class DeepseekV2Model(nn.Module):
         # wrote into this rank's topk_indices_buffer. If a pipeline stage
         # starts with a skip layer, no layer on the rank has written the
         # buffer yet and attention would read uninitialized indices.
-        if self.is_v32 and is_skip_topk_layer(config, self.start_layer):
+        if self.is_v32 and self.start_layer in compute_skip_topk_layers(config):
             raise ValueError(
                 f"Pipeline stage starting at layer {self.start_layer} begins "
                 "with a skip-topk sparse layer, which would read top-k indices "
@@ -1414,10 +1398,10 @@ class DeepseekV2Model(nn.Module):
                 "index_topk_pattern)."
             )
 
-        self.is_fused_shared_expert_enabled = is_model_fused_shared_expert_compatible(
-            self.layers,
+        self.fused_shared_expert_layers = get_fused_shared_expert_layers(
+            self,
             DeepseekV2MoE,
-            "mlp",
+            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
         )
 
         if get_pp_group().is_last_rank:
@@ -1545,8 +1529,9 @@ class DeepseekV2Model(nn.Module):
             ckpt_gate_proj_name="gate_proj",
             ckpt_down_proj_name="down_proj",
             ckpt_up_proj_name="up_proj",
+            # NOTE: global despite per-layer FSE; non-fused layers skip the extras.
             num_experts=self.config.n_routed_experts
-            + (self.config.n_shared_experts if self.is_fused_shared_expert_enabled else 0),
+            + (self.config.n_shared_experts if self.fused_shared_expert_layers else 0),
             num_redundant_experts=self.num_redundant_experts,
         )
 
@@ -1567,7 +1552,12 @@ class DeepseekV2Model(nn.Module):
             if ".indexer." in name and (name.rsplit(".indexer.", 1)[0] not in indexer_present_prefixes):
                 continue  # this layer has no indexer; drop its checkpoint weights
 
-            is_fusion_moe_shared_experts_layer = self.is_fused_shared_expert_enabled and ("mlp.shared_experts" in name)
+            # Only parse the layer index when FSE is enabled.
+            is_fusion_moe_shared_experts_layer = (
+                "mlp.shared_experts" in name
+                and bool(rocm_aiter_ops.is_fusion_moe_shared_experts_enabled())
+                and extract_layer_index(name) in self.fused_shared_expert_layers
+            )
 
             if _try_load_fp8_indexer_wk(
                 name,

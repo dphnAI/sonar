@@ -196,39 +196,41 @@ class DeepseekCompressor(nn.Module):
 
     def _reset_primer_state(self) -> None:
         """Restore all reusable mutable capacity storage after a trial."""
-        self._values.zero_()
-        self._latent.zero_()
-        self._emitted.zero_()
-        self._slots.fill_(-1)
-        self._primer_starts.zero_()
-        self._primer_positions.fill_(-1)
-        self._primer_state_ids.fill_(-1)
-        self._primer_slots.fill_(-1)
-        self._primer_counts.zero_()
+        zeroed = [self._values, self._latent, self._emitted, self._primer_starts, self._primer_counts]
+        unset = [self._slots, self._primer_positions, self._primer_state_ids, self._primer_slots]
         if self.compress_ratio == 2:
-            self._gates.zero_()
-            self._pending_values.zero_()
-            self._pending_gates.zero_()
-            self._pending_tags.fill_(-1)
-            self._local_ids.fill_(-1)
+            zeroed += [self._gates, self._pending_values, self._pending_gates]
+            unset += [self._pending_tags, self._local_ids]
+        for buffer in zeroed:
+            assert buffer is not None, "compressor buffers must be allocated before priming"
+            buffer.zero_()
+        for buffer in unset:
+            assert buffer is not None, "compressor buffers must be allocated before priming"
+            buffer.fill_(-1)
 
     def _produce_primer_input(self) -> None:
         """Prime native code with a real nonzero ratio-one/pair invocation."""
         self._reset_primer_state()
         tokens = 2 if self.compress_ratio == 2 else 1
-        self._values[0].fill_(0.25)
+        values, starts, positions = self._values, self._primer_starts, self._primer_positions
+        state_ids, slots, counts = self._primer_state_ids, self._primer_slots, self._primer_counts
+        assert values is not None and starts is not None and positions is not None
+        assert state_ids is not None and slots is not None and counts is not None
+        values[0].fill_(0.25)
         if tokens == 2:
-            self._values[1].fill_(1.5)
-            self._gates[0].fill_(-0.75)
-            self._gates[1].fill_(0.5)
-        self._primer_starts[1].fill_(tokens)
-        self._primer_positions[0].zero_()
-        self._primer_state_ids[0].zero_()
-        self._primer_slots[0].fill_(5)
+            gates = self._gates
+            assert gates is not None
+            values[1].fill_(1.5)
+            gates[0].fill_(-0.75)
+            gates[1].fill_(0.5)
+        starts[1].fill_(tokens)
+        positions[0].zero_()
+        state_ids[0].zero_()
+        slots[0].fill_(5)
         if tokens == 2:
-            self._primer_slots[1].fill_(6)
-        self._primer_counts[0].fill_(tokens)
-        self._primer_counts[1].fill_(1)
+            slots[1].fill_(6)
+        counts[0].fill_(tokens)
+        counts[1].fill_(1)
 
     def _primer_binding(self, state):
         return state.bind(
@@ -318,6 +320,7 @@ class DeepseekCompressor(nn.Module):
         if plan is None:
             plan = self._projection_plans[self._projection_capacity]
         for index, output in enumerate((self._values, self._gates)[: self.compress_ratio]):
+            assert output is not None, "compressor buffers must be allocated before projection"
             bf16_gemv.mm(
                 hidden_states,
                 self.fused_wkv_wgate.weight[index * 512 : (index + 1) * 512],
@@ -389,11 +392,13 @@ class DeepseekCompressor(nn.Module):
     def forward(self, hidden_states, metadata, state_metadata=None):
         if self._plan is None or self._plan.prepared is None:
             raise PreparationResourceUnavailableError("compressor plan must be prepared before forwarding")
+        assert self._latent is not None and self._slots is not None
         rows = hidden_states.shape[0]
         self._project(hidden_states)
         if self.compress_ratio == 2:
             if state_metadata is None:
                 raise RuntimeError("ratio2 compression requires request-state metadata")
+            assert self.state_cache is not None
             pool = self.state_cache.kv_cache
             _load_partial_state[(self.requests,)](
                 pool,

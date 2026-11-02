@@ -31,7 +31,7 @@ from aphrodite.logger import init_logger
 from aphrodite.usage.usage_lib import UsageContext, is_usage_stats_enabled, usage_message
 from aphrodite.utils.network_utils import ZmqListener, get_open_zmq_ipc_path, get_tcp_uri
 from aphrodite.utils.system_utils import decorate_logs, kill_process_tree, set_process_title
-from aphrodite.utils.torch_utils import PIN_MEMORY
+from aphrodite.utils.torch_utils import PIN_MEMORY, TORCH_DTYPE_TO_NUMPY_DTYPE
 from aphrodite.v1.core.sched.output import SchedulerOutput
 
 if TYPE_CHECKING:
@@ -321,7 +321,7 @@ class RustFrontendProcessManager:
             inherited_fds.append(grpc_fd)
         if stats_update_address is not None:
             cmd.extend(["--coordinator-address", stats_update_address])
-        from aphrodite.entrypoints.serve.utils.api_utils import jsonify_non_default_args
+        from aphrodite.entrypoints.common.startup import jsonify_non_default_args
 
         args_dict = jsonify_non_default_args(
             args,
@@ -333,6 +333,23 @@ class RustFrontendProcessManager:
                 "data_parallel_hybrid_lb",
             },
         )
+
+        # Export only the public, resolved receipt configuration. Opt-in is
+        # explicit; environment defaults must not enable the frontend by accident.
+        from dataclasses import asdict
+
+        from aphrodite.config.dphn import DphnNetworkConfig
+
+        dphn_enabled = bool(getattr(args, "dphn_network", False))
+        dphn_config = DphnNetworkConfig.resolve(dphn_enabled, getattr(args, "dphn_network_config", None))
+        if dphn_config is not None:
+            args_dict["dphn_network"] = True
+            args_dict["dphn_network_config"] = asdict(dphn_config)
+            # A frontend binary without receipt support would ignore the JSON
+            # keys; the explicit flag makes it fail closed instead.
+            cmd.append("--require-dphn-network")
+        else:
+            args_dict.pop("dphn_network_config", None)
 
         # `model_tag` is the positional `aphrodite serve` model argument. When the
         # model is supplied only through `--config`, argparse populates `model`
@@ -356,7 +373,7 @@ class RustFrontendProcessManager:
 
         # The subprocess needs the real values, but the log must not carry
         # credentials such as api_key or hf_token.
-        from aphrodite.entrypoints.serve.utils.api_utils import redact_sensitive_args
+        from aphrodite.entrypoints.common.startup import redact_sensitive_args
 
         redacted_json = json.dumps(redact_sensitive_args(args_dict), sort_keys=True)
         logger.info("Launching Rust frontend: %s", " ".join(cmd[:-1] + [redacted_json]))
@@ -760,6 +777,15 @@ def tensor_data(tensor: torch.Tensor) -> memoryview:
         A memoryview of the tensor data as uint8.
 
     """
+    if tensor.is_cpu and tensor.is_contiguous():
+        # Avoid several torch ops, each of which releases and re-acquires the GIL.
+        # View dtypes NumPy cannot export as bytes.
+        try:
+            if tensor.dtype not in TORCH_DTYPE_TO_NUMPY_DTYPE:
+                tensor = tensor.view(torch.uint8)
+            return memoryview(tensor.numpy()).cast("B")
+        except (TypeError, RuntimeError):
+            pass
     return tensor.flatten().cpu().contiguous().view(torch.uint8).numpy().data
 
 

@@ -460,7 +460,7 @@ def save_weights_to_safetensors(weights: dict[str, torch.Tensor], output_path: P
             print(f"Saved shard {i + 1}/{len(shards)}: {filename}")
 
     # Create index file
-    index_data = {
+    index_data: dict[str, Any] = {
         "metadata": {"total_size": sum(tensor.numel() * tensor.element_size() for tensor in weights.values())},
         "weight_map": weight_map,
     }

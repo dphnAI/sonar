@@ -12,7 +12,10 @@ from aphrodite.config import ModelConfig
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import is_deferred_attention_layer
 from aphrodite.model_executor.layers.quantization.base_config import QuantizeMethodBase
-from aphrodite.model_executor.model_loader.weight_utils import default_weight_loader
+from aphrodite.model_executor.model_loader.weight_utils import (
+    default_weight_loader,
+    finalize_model_weights,
+)
 
 from .meta import (
     SKIP_LOAD_TENSORS,
@@ -78,7 +81,7 @@ def record_metadata_for_reloading(model: torch.nn.Module):
 
 
 @torch.no_grad()
-def initialize_layerwise_reload(model: torch.nn.Module):
+def initialize_layerwise_reload(model: torch.nn.Module, *, defer_processing: bool = False):
     """Set up layerwise weight loading with deferred processing.
 
     Must be called after `record_metadata_for_reloading`. This function:
@@ -91,6 +94,8 @@ def initialize_layerwise_reload(model: torch.nn.Module):
     2. Load all cached weights
     3. Run quantization processing if applicable
     4. Copy processed values back to original tensor storage
+
+    With defer_processing=True, only finalize_layerwise_reload triggers processing.
     """
     # disable torchao reloading to avoid infinite recursion
     model._original_do_torchao_reload = getattr(model, "_do_torchao_reload", False)
@@ -113,6 +118,7 @@ def initialize_layerwise_reload(model: torch.nn.Module):
 
         # Wrap weight loaders to buffer loading
         initialize_online_processing(layer)
+        info.defer_processing = defer_processing
 
 
 def initialize_online_processing(layer: torch.nn.Module):
@@ -192,7 +198,9 @@ def make_online_process_loader(layer: torch.nn.Module, param_name: str) -> Calla
         )
 
         # Do not online process attention layers, must wait until finalize
-        if is_deferred_attention_layer(layer):
+        # Preserve placement remapping until checkpoint iteration finishes:
+        # expert reload wrappers must survive trailing redundant mappings.
+        if info.defer_processing or is_deferred_attention_layer(layer):
             return ret
 
         # Log warnings allocating excessive buffers on device
@@ -266,7 +274,7 @@ def finalize_layerwise_processing(model: torch.nn.Module, model_config: ModelCon
         # if the created weight has extra padding elements which are not loaded
         # Having too many of these delayed layers can lead to excess memory usage
         # see Limitations(4)
-        elif info.load_numel > 0 and info.load_numel < info.load_numel_total:  # type: ignore[operator]
+        elif info.defer_processing or info.load_numel < info.load_numel_total:  # type: ignore[operator]
             logger.debug("%s: Delayed processing", layer.__class__.__name__)
             _layerwise_process(layer, info)
 
@@ -280,8 +288,9 @@ def finalize_layerwise_processing(model: torch.nn.Module, model_config: ModelCon
     LOADING_LAYERS.clear()
 
 
-def finalize_layerwise_reload(*args, **kwargs):
-    finalize_layerwise_processing(*args, **kwargs)
+def finalize_layerwise_reload(model: torch.nn.Module, model_config: ModelConfig):
+    finalize_layerwise_processing(model, model_config)
+    finalize_model_weights(model)
 
 
 def _finalize_attention_layer(layer: torch.nn.Module, info: LayerReloadingInfo, model_config: ModelConfig) -> None:

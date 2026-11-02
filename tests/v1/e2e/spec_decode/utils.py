@@ -13,7 +13,7 @@ from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
 from aphrodite.assets.image import VLM_IMAGES_DIR
 from aphrodite.outputs import RequestOutput
 from aphrodite.utils.torch_utils import set_random_seed
-from aphrodite.v1.metrics.reader import Metric
+from aphrodite.v1.metrics.reader import Counter, Gauge, Metric
 from tests.evals.gsm8k.gsm8k_eval import _build_gsm8k_prompts, evaluate_gsm8k_offline
 
 
@@ -166,6 +166,7 @@ def get_spec_decode_metric_value(metrics: Sequence[Metric], metric_name: str) ->
         "Available spec-decode metrics: "
         f"{sorted(name for name in name2metric if 'spec_decode' in name) or ['<none>']}"
     )
+    assert isinstance(metric, Counter | Gauge), f"{metric_name!r} has no scalar value"
     return float(metric.value)
 
 

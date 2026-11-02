@@ -13,7 +13,7 @@ use thiserror_ext::AsReport as _;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
-use crate::cli::{BenchCommand, Cli, Command};
+use crate::cli::{BenchCommand, Cli, Command, frontend_ipc_handshake_address};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -123,6 +123,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             aphrodite_server::serve(args.into_config(), shutdown_signal()).await
         }
         Command::Serve(args) => {
+            let topology = args.data_parallel_lb.resolve(&args.managed_engine, args.headless)?;
             let handshake_port = args.managed_engine.resolve_handshake_port()?;
 
             if args.managed_engine.data_parallel_size_local == Some(0) {
@@ -136,13 +137,30 @@ async fn async_main(cli: Cli) -> Result<()> {
                     engine_count = args.managed_engine.data_parallel_size,
                     "running Rust frontend without a managed local Python engine"
                 );
-                let config = args.to_frontend_config(handshake_address);
+                let config = args.to_frontend_config(handshake_address, &topology);
                 return aphrodite_server::serve(config, shutdown_signal()).await;
             }
 
             let shutdown_timeout = args.runtime.shutdown_timeout();
-            let engine_config = args.to_managed_engine_config(handshake_port);
-            let handshake_address = engine_config.handshake_address();
+            // The frontend owning rank 0 hosts the deployment's handshake. In hybrid or
+            // external DP LB, another node's frontend serves only its engines' second
+            // handshake, on a local IPC endpoint.
+            let client_handshake_address = (!args.headless
+                && topology.frontend_engine_start_index() != 0)
+                .then(frontend_ipc_handshake_address);
+            let engine_config = args.to_managed_engine_config(
+                handshake_port,
+                &topology,
+                client_handshake_address.clone(),
+            );
+            let handshake_address =
+                client_handshake_address.unwrap_or_else(|| engine_config.handshake_address());
+            // Reject an invalid frontend configuration before starting the engine.
+            let frontend_config =
+                (!args.headless).then(|| args.to_frontend_config(handshake_address, &topology));
+            if let Some(config) = &frontend_config {
+                config.validate().context("invalid frontend configuration")?;
+            }
 
             let engine = ManagedEngineHandle::spawn(engine_config)
                 .await
@@ -158,7 +176,7 @@ async fn async_main(cli: Cli) -> Result<()> {
                     Ok(())
                 })
             } else {
-                let config = args.to_frontend_config(handshake_address);
+                let config = frontend_config.expect("non-headless frontend configuration");
                 let shutdown = shutdown.clone();
                 tokio::spawn(async move {
                     let result = aphrodite_server::serve(config, shutdown).await;

@@ -29,7 +29,6 @@ from aphrodite.v1.attention.backends.mla.indexer import (
     DeepseekV32IndexerMetadata,
     DeepseekV32IndexerMetadataBuilder,
     DeepseekV41IndexerBackend,
-    dsa_indexer_uses_fp4,
 )
 from aphrodite.v1.kv_cache_interface import AttentionSpec
 
@@ -104,12 +103,6 @@ class DeepseekV41SparseIndexerMetadataBuilder(DeepseekV32IndexerMetadataBuilder)
         prefix = "attention_config.indexer_sparse_logits"
         if candidate_block_size <= 0 or candidate_topk_blocks <= 0:
             raise ValueError(f"{prefix} requires a two-level (candidate block) indexer model such as DeepSeek-V4.1.")
-        if not dsa_indexer_uses_fp4(aphrodite_config):
-            raise ValueError(
-                f"{prefix} requires the MXFP4 indexer cache "
-                "(attention_config.indexer_kv_dtype='mxfp4'): the sparse kernels "
-                "take UE8M0-packed granularity-32 scales."
-            )
         if not (current_platform.is_cuda() and current_platform.is_device_capability_family(100)):
             raise ValueError(f"{prefix} requires an SM100-class GPU.")
         if not has_deep_gemm_sparse_mqa():

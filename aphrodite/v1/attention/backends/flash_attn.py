@@ -16,7 +16,6 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import (
     PIN_MEMORY,
     canonicalize_singleton_dim_strides,
-    is_quantized_kv_cache,
 )
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
@@ -78,6 +77,7 @@ from aphrodite.v1.kv_cache_interface import (
     KVCacheSpec,
     KVQuantMode,
     SlidingWindowSpec,
+    is_quantized_kv_cache,
 )
 from aphrodite.v1.worker.cp_utils import (
     run_split_fa2_dcp_context_attention,
@@ -271,6 +271,8 @@ class FA4DenseAttentionKernel(AphroditeJitKernel["FA4DenseAttentionKernel.Compil
 
 
 class FlashAttentionBackend(AttentionBackend):
+    supports_kv_cache_update_bypass: bool = True
+
     supported_dtypes: ClassVar[list[torch.dtype]] = [torch.float16, torch.bfloat16]
     supported_kv_cache_dtypes: ClassVar[list[CacheDType]] = [
         "auto",
@@ -408,6 +410,9 @@ class FlashAttentionBackend(AttentionBackend):
             return False
         if head_size <= 256:
             return True
+        if current_platform.is_xpu():
+            # The XPU SYCL kernels support head sizes up to 512.
+            return head_size <= 512
         if is_fa_version_supported(4):
             return head_size <= 512
         return False
@@ -592,7 +597,9 @@ class FlashAttentionMetadataBuilder(AttentionMetadataBuilder[FlashAttentionMetad
     # TODO(luka, lucas): audit FA2 as part of:
     #  https://github.com/vllm-project/vllm/issues/22945
     _cudagraph_support = (
-        AttentionCGSupport.ALWAYS if get_flash_attn_version() in (3, 4) else AttentionCGSupport.UNIFORM_BATCH
+        AttentionCGSupport.ALWAYS
+        if get_flash_attn_version() in (3, 4) or current_platform.is_xpu()
+        else AttentionCGSupport.UNIFORM_BATCH
     )
     supports_update_block_table: bool = True
 

@@ -99,9 +99,6 @@ class Mamba2Model(nn.Module):
         model_config = aphrodite_config.model_config
         cache_config = aphrodite_config.cache_config
         quant_config = aphrodite_config.quant_config
-        lora_config = aphrodite_config.lora_config
-        is_lora_enabled = bool(lora_config)
-        assert not is_lora_enabled
 
         self.config = config
 

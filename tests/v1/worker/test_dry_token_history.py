@@ -17,9 +17,10 @@ from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
 
 def make_batch(prompts, outputs):
     batch = object.__new__(InputBatch)
-    batch._req_ids = [f"req{i}" for i in range(len(prompts))]
-    batch.req_id_to_index = {req_id: i for i, req_id in enumerate(batch._req_ids)}
-    batch.dry_reqs = set(batch._req_ids)
+    req_ids = [f"req{i}" for i in range(len(prompts))]
+    batch._req_ids = list(req_ids)
+    batch.req_id_to_index = {req_id: i for i, req_id in enumerate(req_ids)}
+    batch.dry_reqs = set(req_ids)
     batch.req_output_token_ids = outputs
     batch.num_prompt_tokens = np.array(list(map(len, prompts)), dtype=np.int32)
     batch.token_ids_cpu_tensor = torch.full((len(prompts), 64), -1, dtype=torch.int32)
@@ -164,12 +165,14 @@ def test_dry_history_survives_compaction_and_slot_reuse():
     batch.refresh_metadata()
     batch.refresh_dry_token_history()
     assert batch.req_ids == ["a", "c", "d"]
-    assert batch.sampling_metadata.token_history_ids_cpu.tolist() == [[1, 2, 1, 2], [5, 6, 5, 6], [7, 8, 7, 8]]
+    token_history_ids = batch.sampling_metadata.token_history_ids_cpu
+    assert token_history_ids is not None
+    assert token_history_ids.tolist() == [[1, 2, 1, 2], [5, 6, 5, 6], [7, 8, 7, 8]]
     assert_native_matches_reference(batch)
 
 
 @pytest.mark.parametrize("speculative", [False, True])
-def test_runner_refreshes_dry_after_resolving_async_tokens(speculative):
+def test_runner_refreshes_dry_after_resolving_async_tokens(speculative, monkeypatch):
     batch = make_batch([[1, 2]], [[1, -1]])
     batch.prev_req_id_to_index = {"req0": 0}
     batch.sampled_token_ids_cpu = torch.tensor([[2]])
@@ -177,7 +180,7 @@ def test_runner_refreshes_dry_after_resolving_async_tokens(speculative):
     runner.input_batch = batch
     runner.use_async_scheduling = True
     runner._draft_token_req_ids = None
-    runner._get_spec_decode_draft_probs = Mock(return_value=None)
+    monkeypatch.setattr(runner, "_get_spec_decode_draft_probs", Mock(return_value=None))
 
     def sample(*args, **kwargs):
         assert batch.sampling_metadata.token_history_ids_cpu.tolist() == [[1, 2, 1, 2]]

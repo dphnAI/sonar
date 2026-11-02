@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import torch
-from torch.nn.parameter import Parameter
 
 from aphrodite.model_executor.layers.fusion.quant_activation import (
     QuantizedActivation,
@@ -17,6 +16,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kMxfp8Dynamic,
 )
+from aphrodite.model_executor.utils import replace_parameter
 from aphrodite.platforms import current_platform
 from aphrodite.utils import flashinfer as aphrodite_flashinfer
 from aphrodite.utils.flashinfer import has_flashinfer, has_flashinfer_cutedsl
@@ -77,8 +77,8 @@ class FlashInferCutlassMxfp8LinearKernel(Mxfp8LinearKernel):
         weight_scale_2d = layer.weight_scale.data[:N, :scale_k].contiguous()
         weight_scale_swizzled = swizzle_mxfp8_scale(weight_scale_2d, M=N, K=K)
 
-        layer.weight = Parameter(weight.contiguous(), requires_grad=False)
-        layer.weight_scale = Parameter(weight_scale_swizzled.contiguous(), requires_grad=False)
+        replace_parameter(layer, "weight", weight.contiguous())
+        replace_parameter(layer, "weight_scale", weight_scale_swizzled.contiguous())
 
     def apply_weights(
         self,
@@ -96,7 +96,7 @@ class FlashInferCutlassMxfp8LinearKernel(Mxfp8LinearKernel):
             out_dtype, input_shape = qa.orig_dtype, qa.orig_shape
         else:
             assert isinstance(x, torch.Tensor)
-            out_dtype, input_shape = x.dtype, x.shape
+            out_dtype, input_shape = layer.params_dtype, x.shape
             input_mxfp8, input_scale = mxfp8_e4m3_quantize(x.view(-1, K), is_sf_swizzled_layout=True)
 
         if not weight.is_contiguous():
@@ -165,8 +165,8 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
             weight, weight_scale_swizzled = pad_mxfp8_columns(weight, weight_scale_swizzled, padded_k)
 
         # Store weight column-major [K, N] as mm_mxfp8 expects for operand B.
-        layer.weight = Parameter(weight.contiguous().t(), requires_grad=False)
-        layer.weight_scale = Parameter(weight_scale_swizzled.contiguous(), requires_grad=False)
+        replace_parameter(layer, "weight", weight.contiguous().t())
+        replace_parameter(layer, "weight_scale", weight_scale_swizzled.contiguous())
 
     def apply_weights(
         self,
@@ -185,7 +185,7 @@ class FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearKernel):
             out_dtype, input_shape = qa.orig_dtype, qa.orig_shape
         else:
             assert isinstance(x, torch.Tensor)
-            out_dtype, input_shape = x.dtype, x.shape
+            out_dtype, input_shape = layer.params_dtype, x.shape
             input_mxfp8, input_scale = mxfp8_e4m3_quantize(
                 x.view(-1, self.config.weight_shape[1]), is_sf_swizzled_layout=True
             )
@@ -248,17 +248,19 @@ class FlashInferTrtllmMxfp8LinearKernel(Mxfp8LinearKernel):
         else:
             weight = weight.contiguous()
 
-        layer.weight = Parameter(
+        replace_parameter(
+            layer,
+            "weight",
             shuffle_matrix_a(weight, 128).reshape(padded_n, K),
-            requires_grad=False,
         )
-        layer.weight_scale = Parameter(
+        replace_parameter(
+            layer,
+            "weight_scale",
             shuffle_matrix_sf_a(
                 weight_scale,
                 128,
                 num_elts_per_sf=MXFP8_BLOCK_SIZE,
             ).reshape(-1),
-            requires_grad=False,
         )
         layer._mxfp8_trtllm_output_size = N
 

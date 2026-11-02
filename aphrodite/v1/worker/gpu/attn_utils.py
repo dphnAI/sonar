@@ -17,7 +17,6 @@ from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.attention import Attention
 from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
 from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backend import (
     AttentionCGSupport,
@@ -544,33 +543,3 @@ def build_attn_metadata(
                 attn_metadata[layer_name] = metadata
         token_to_req_indices = common_attn_metadata._token_to_req_indices_cache
     return attn_metadata
-
-
-def compute_mm_prefix_ranges(
-    req_ids: list[str],
-    mm_features: dict[str, list[MultiModalFeatureSpec]],
-    sliding_window: int | None = None,
-    clamp_sliding_window_in_kernel: bool = False,
-) -> dict[int, list[tuple[int, int]]]:
-    """Compute PrefixLM bidirectional ranges for multimodal tokens.
-
-    Ranges exceeding sliding_window are skipped to prevent early tokens from
-    attending across the entire image span unless the model clamps the prefix
-    range to the sliding window in-kernel.
-    """
-    req_doc_ranges: dict[int, list[tuple[int, int]]] = {}
-    for req_idx, req_id in enumerate(req_ids):
-        image_doc_ranges = []
-        for mm_feature in mm_features.get(req_id, ()):
-            if mm_feature.modality == "audio":
-                continue
-            for r in mm_feature.mm_position.extract_embeds_range():
-                if (
-                    not clamp_sliding_window_in_kernel
-                    and sliding_window is not None
-                    and (r[1] - r[0] + 1) > sliding_window
-                ):
-                    continue
-                image_doc_ranges.append(r)
-        req_doc_ranges[req_idx] = image_doc_ranges
-    return req_doc_ranges

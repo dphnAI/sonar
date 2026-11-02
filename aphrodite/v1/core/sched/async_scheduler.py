@@ -6,7 +6,6 @@ from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.v1.core.sched.output import SchedulerOutput
 from aphrodite.v1.core.sched.scheduler import Scheduler
-from aphrodite.v1.request import Request, RequestStatus
 
 logger = init_logger(__name__)
 
@@ -49,22 +48,3 @@ class AsyncScheduler(Scheduler):
                 # Set the next step index in which this request is eligible to be
                 # scheduled for decode (for PP microbatching).
                 request.next_decode_eligible_step = self.current_step + self.decode_stagger
-
-    def _update_request_with_output(
-        self, request: Request, new_token_ids: list[int], is_stale: bool = False
-    ) -> tuple[list[int], bool]:
-        status_before_update = request.status
-        # Tokens trimmed at a stop resolve their placeholders too.
-        num_new_tokens = len(new_token_ids)
-        new_token_ids, stopped = super()._update_request_with_output(request, new_token_ids, is_stale)
-
-        # Placeholders were zeroed at preemption; a stale delivery must not
-        # decrement them (it would underflow).
-        if not is_stale:
-            request.num_output_placeholders -= num_new_tokens
-            assert request.num_output_placeholders >= 0
-
-        # Cache the new tokens. Preempted requests should be skipped.
-        if status_before_update == RequestStatus.RUNNING:
-            self.kv_cache_manager.cache_blocks(request, request.num_computed_tokens - request.num_output_placeholders)
-        return new_token_ids, stopped

@@ -7,14 +7,12 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedConfig
 
+from aphrodite._aiter_ops import rocm_aiter_ops
 from aphrodite.compilation.decorators import support_torch_compile
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import tensor_model_parallel_all_gather
 from aphrodite.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
-)
-from aphrodite.model_executor.layers.fused_moe.utils import (
-    is_model_fused_shared_expert_compatible,
 )
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
@@ -41,6 +39,8 @@ from .deepseek_v2 import (
 )
 from .interfaces import SupportsPP
 from .utils import (
+    extract_layer_index,
+    get_fused_shared_expert_layers,
     get_pp_missing_layer_names,
     get_spec_layer_idx_from_weight_name,
     make_empty_intermediate_tensors_factory,
@@ -232,6 +232,7 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
         super().__init__()
         self.config = aphrodite_config.model_config.hf_config
         self.quant_config = aphrodite_config.quant_config
+        self.aphrodite_config = aphrodite_config
         self.model = DeepSeekMultiTokenPredictor(
             aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model")
         )
@@ -257,10 +258,10 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
                 self.moe_mlp_layers.append(layer.mlp)
                 self.moe_layers.append(layer.mlp.experts)
         self.extract_moe_parameters(example_moe)
-        self.is_fused_shared_expert_enabled = is_model_fused_shared_expert_compatible(
-            self.model.layers.values(),
+        self.fused_shared_expert_layers = get_fused_shared_expert_layers(
+            self,
             DeepseekV2MoE,
-            "mtp_block.mlp",
+            enable_eplb=self.aphrodite_config.parallel_config.enable_eplb,
         )
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
@@ -306,19 +307,26 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
         ]
         stacked_params_mapping.extend(indexer_fused_mapping)
 
+        fused_shared_expert_layers = self.fused_shared_expert_layers
         expert_params_mapping = fused_moe_make_expert_params_mapping(
             self,
             ckpt_gate_proj_name="gate_proj",
             ckpt_down_proj_name="down_proj",
             ckpt_up_proj_name="up_proj",
+            # NOTE: global despite per-layer FSE; non-fused layers skip the extras.
             num_experts=self.config.n_routed_experts
-            + (self.config.n_shared_experts if self.is_fused_shared_expert_enabled else 0),
+            + (self.config.n_shared_experts if fused_shared_expert_layers else 0),
         )
 
         pp_missing_layer_names = get_pp_missing_layer_names(self)
         params_dict = dict(self.named_parameters())
         loaded_params: set[str] = set()
-        _pending_wk_fp8: dict = {}  # FP8 indexer wk dequant buffer
+        # Reordering loaders (e.g. runai_streamer) can split an FP8 indexer wk
+        # weight/scale pair across load_weights() calls; keep the pending
+        # buffer on the model so pairs survive the call boundary.
+        _pending_wk_fp8 = getattr(self, "_pending_indexer_wk_fp8", None)
+        if _pending_wk_fp8 is None:
+            self._pending_indexer_wk_fp8 = _pending_wk_fp8 = {}
         for name, loaded_weight in weights:
             if "rotary_emb.inv_freq" in name:
                 continue
@@ -332,7 +340,12 @@ class DeepSeekMTP(nn.Module, DeepseekV2MixtureOfExperts, SupportsPP):
                     weight_loader(param, loaded_weight)
                     loaded_params.add(name)
                 continue
-            is_fusion_moe_shared_experts_layer = self.is_fused_shared_expert_enabled and ("mlp.shared_experts" in name)
+            # Only parse the layer index when FSE is enabled.
+            is_fusion_moe_shared_experts_layer = (
+                "mlp.shared_experts" in name
+                and bool(rocm_aiter_ops.is_fusion_moe_shared_experts_enabled())
+                and extract_layer_index(name) in fused_shared_expert_layers
+            )
             name = self._rewrite_spec_layer_name(spec_layer, name)
 
             if _try_load_fp8_indexer_wk(

@@ -28,7 +28,8 @@ from aphrodite.model_executor.models.utils import (
 from aphrodite.models.common.ops.fused_allreduce_rms_norm import fused_allreduce_rms_norm
 from aphrodite.models.kimi_k3.nvidia.mla import MultiHeadLatentAttention
 from aphrodite.models.kimi_k3.nvidia.model import KimiMLP
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
+from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
+from aphrodite.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
 from aphrodite.v1.worker.workspace import current_workspace_manager
 
 _GROUPED_KV_CACHE_DTYPES = frozenset({"auto", "bfloat16", "fp8", "fp8_e4m3", "fp8_e5m2"})
@@ -397,6 +398,9 @@ class K3DSparkModel(nn.Module):
 
 
 class K3DSparkForCausalLM(nn.Module):
+    # The speculator this is a draft model of (see SpeculativeDraftModel).
+    speculator_config_class = DSparkSpeculatorConfig
+
     has_own_embed_tokens = False
     has_own_lm_head = False
     draft_id_to_target_id = None

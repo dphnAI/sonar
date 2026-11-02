@@ -338,7 +338,7 @@ class MediaConnector:
     ) -> _M:  # type: ignore[type-var]
         allowed_local_media_path = self.allowed_local_media_path
         if allowed_local_media_path is None:
-            raise RuntimeError("Cannot load local files without `--allowed-local-media-path`.")
+            raise AphroditeValidationError("Cannot load local files without `--allowed-local-media-path`.")
 
         url_spec_path = url_spec.path or ""
         url_spec_netloc = url_spec.netloc or ""

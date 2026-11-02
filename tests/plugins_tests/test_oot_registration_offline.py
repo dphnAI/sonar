@@ -3,7 +3,7 @@
 
 import pytest
 
-from aphrodite import LLM, SamplingParams
+from aphrodite import LLM, EmbeddingRequestOutput, SamplingParams
 from aphrodite.assets.image import ImageAsset
 from aphrodite.multimodal.image import convert_image_mode
 from tests.utils import create_new_process_for_each_test
@@ -53,6 +53,7 @@ def test_oot_registration_embedding(
         outputs = llm.embed(prompts)
 
         for output in outputs:
+            assert isinstance(output, EmbeddingRequestOutput)
             assert all(v == 0 for v in output.outputs.embedding)
 
 

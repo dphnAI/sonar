@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+from dataclasses import replace
+
 import torch
 
-from aphrodite.multimodal.inputs import MultiModalFeatureSpec
+from aphrodite.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
 
 
 class EncoderCache:
@@ -16,10 +18,17 @@ class EncoderCache:
         return len(self.encoder_outputs)
 
     def add_request(self, req_id: str, mm_features: list[MultiModalFeatureSpec]) -> None:
-        self.mm_features[req_id] = mm_features
+        # The uniprocess executor can share this list with EngineCore.
+        self.mm_features[req_id] = list(mm_features)
 
     def remove_request(self, req_id: str) -> None:
         self.mm_features.pop(req_id, None)
+
+    def update_encoder_inputs(self, req_id: str, updates: dict[int, MultiModalKwargsItem | None]) -> None:
+        features = self.mm_features[req_id]
+        for input_id, data in updates.items():
+            # Replace entries so EngineCore keeps its original payload for replay.
+            features[input_id] = replace(features[input_id], data=data)
 
     def reset_mm_cache(self) -> None:
         """Clear the multi-modal cache that was used during profiling,

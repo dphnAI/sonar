@@ -4,6 +4,7 @@
 import json
 from argparse import ArgumentError
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import replace
 from typing import Annotated, Literal
 
 import pytest
@@ -356,6 +357,18 @@ def test_jit_monitor_mode_arg(mode):
     assert engine_args.create_observability_config().jit_monitor_mode == mode
 
 
+def test_sleep_mode_backend_arg():
+    """A plugin-registered sleep-mode backend can be selected from the CLI."""
+    parser = EngineArgs.add_cli_args(FlexibleArgumentParser())
+    engine_args = EngineArgs.from_cli_args(parser.parse_args(["--model", "facebook/opt-125m"]))
+    assert engine_args.sleep_mode_backend == "cumem"
+
+    args = parser.parse_args(["--model", "facebook/opt-125m", "--sleep-mode-backend", "my_backend"])
+    engine_args = EngineArgs.from_cli_args(args)
+    assert engine_args.sleep_mode_backend == "my_backend"
+    assert engine_args.create_model_config().sleep_mode_backend == "my_backend"
+
+
 def test_hf_token_get_kwargs():
     kwargs = get_kwargs(ModelConfig)["hf_token"]
 
@@ -478,7 +491,7 @@ def test_compilation_config():
 
 
 def test_trust_request_mm_kwargs_cli():
-    from aphrodite.entrypoints.launchers.cli_args import FrontendArgs
+    from aphrodite.entrypoints.common.cli_args import FrontendArgs
 
     parser = FrontendArgs.add_cli_args(FlexibleArgumentParser())
 
@@ -777,6 +790,11 @@ def test_numa_bind_args():
     assert engine_args.numa_bind_nodes == [0, 0, 1, 1]
     assert engine_args.numa_bind_cpus == ["0-3", "4-7", "8-11", "12-15"]
 
+    # Unset means auto; --no-numa-bind disables explicitly.
+    assert EngineArgs.from_cli_args(args=parser.parse_args([])).numa_bind is None
+    args = parser.parse_args(["--no-numa-bind"])
+    assert EngineArgs.from_cli_args(args=args).numa_bind is False
+
 
 def test_ir_op_priority():
     from aphrodite.config.kernel import IrOpPriorityConfig, KernelConfig
@@ -791,6 +809,27 @@ def test_ir_op_priority():
             ir_op_priority=ir_op_priority,
             kernel_config=KernelConfig(ir_op_priority=ir_op_priority),
         ).create_engine_config()
+
+
+def test_ir_op_priority_deprecation_warning(caplog_aphrodite, disable_log_dedup):
+    """Setting ir_op_priority warns users because Aphrodite IR is being removed."""
+    from aphrodite.config.kernel import IrOpPriorityConfig, KernelConfig
+
+    msg = "ir_op_priority (--ir-op-priority) is deprecated"
+
+    # Platform defaults fill ir_op_priority; copying the config must not warn.
+    cfg = EngineArgs().create_engine_config()
+    replace(cfg.kernel_config, moe_backend="triton")
+    assert msg not in caplog_aphrodite.text
+
+    ir_op_priority = IrOpPriorityConfig(rms_norm=["aphrodite_c"])
+    EngineArgs(ir_op_priority=ir_op_priority).create_engine_config()
+    assert msg in caplog_aphrodite.text
+
+    caplog_aphrodite.clear()
+    kernel_config = KernelConfig(ir_op_priority=ir_op_priority)
+    EngineArgs(kernel_config=kernel_config).create_engine_config()
+    assert msg in caplog_aphrodite.text
 
 
 @pytest.mark.parametrize(

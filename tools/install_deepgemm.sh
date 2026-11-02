@@ -8,7 +8,7 @@ set -e
 # Keep DEEPGEMM_GIT_REF in sync with cmake/external_projects/deepgemm.cmake
 DEEPGEMM_GIT_REPO="https://github.com/vllm-project/DeepGEMM.git"
 # Stable PyTorch and CPython ABI source used by the vendored build.
-DEEPGEMM_GIT_REF="a7a927731b109fdfec770df7c2a5be5d7e2216b5"
+DEEPGEMM_GIT_REF="5cdb145704ec4672ecf4b61441599521ce635df6"
 WHEEL_DIR=""
 
 # Parse command line arguments

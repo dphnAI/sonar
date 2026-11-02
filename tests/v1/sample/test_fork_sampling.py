@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from aphrodite.sampling_params import SamplingParams
-from aphrodite.v1.worker.gpu.sample.fork import ForkSamplingState, needs_fork_sampling
+from aphrodite.v1.worker.gpu.sample.fork import GPUForkSamplingState, needs_fork_sampling
 
 pytestmark = pytest.mark.cpu_test
 
@@ -57,7 +57,7 @@ def test_custom_sampling_parameters_select_fork_path(extra):
 
 
 def test_native_sampling_parameters_keep_native_path():
-    state = ForkSamplingState(_request_states())
+    state = GPUForkSamplingState(_request_states())
     params = SamplingParams(temperature=0.7, top_k=4, top_p=0.9, min_p=0.1, repetition_penalty=1.1)
     assert not state.add_request(0, params, seed=11)
     assert not state.any(np.array([0]))
@@ -66,7 +66,7 @@ def test_native_sampling_parameters_keep_native_path():
 @pytest.mark.parametrize("accepted_count", [1, 2])
 def test_mirostat_commits_only_accepted_tokens_and_restores_on_rewind(accepted_count):
     requests = _request_states()
-    state = ForkSamplingState(requests)
+    state = GPUForkSamplingState(requests)
     params = SamplingParams(mirostat_mode=2, mirostat_tau=2.0, mirostat_eta=0.5)
     assert state.add_request(0, params, seed=11)
     logits = torch.tensor(

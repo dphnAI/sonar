@@ -2,7 +2,7 @@
 # Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
 # Copyright 2023 The vLLM team.
 #
-# This file is a part of the aphrodite-ascend project.
+# This file is a part of the vllm-ascend project.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 # limitations under the License.
 
 # Adapted from
-# https://github.com/vllm-project/vllm/blob/v0.7.3/aphrodite/model_executor/models/deepseek_mtp.py
+# https://github.com/vllm-project/vllm/blob/v0.7.3/vllm/model_executor/models/deepseek_mtp.py
 from collections.abc import Iterable
 
 import torch

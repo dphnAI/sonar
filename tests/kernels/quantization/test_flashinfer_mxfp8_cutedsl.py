@@ -52,6 +52,7 @@ def test_flashinfer_cutedsl_mxfp8_linear_graph(
     layer = torch.nn.Module()
     layer.weight = torch.nn.Parameter(weight_q, requires_grad=False)
     layer.weight_scale = torch.nn.Parameter(weight_scales, requires_grad=False)
+    layer.params_dtype = dtype
     kernel = FlashInferCutedslMxfp8LinearKernel(Mxfp8LinearLayerConfig(weight_shape=(n, k)))
     kernel.process_weights_after_loading(layer)
 

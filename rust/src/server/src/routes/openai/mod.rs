@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 pub mod chat_completions;
-mod completions;
+pub(crate) mod completions;
 mod models;
 pub(crate) mod utils;
 

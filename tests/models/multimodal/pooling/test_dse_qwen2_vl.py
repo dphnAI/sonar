@@ -169,7 +169,7 @@ def test_models_text(
         hf_runner,
         aphrodite_runner,
         input_texts,
-        input_images,  # type: ignore
+        input_images,
         embed_texts,
         model,
         dtype=dtype,

@@ -122,11 +122,13 @@ class DFlashSpeculator(DraftModelSpeculator):
             resolve_dflash_attention_backend,
         )
 
-        config = copy.copy(super().attn_aphrodite_config)
+        config = super().attn_aphrodite_config
         config.attention_config = replace(
-            self.aphrodite_config.attention_config,
+            config.attention_config,
             use_non_causal=self.requires_non_causal,
-            backend=resolve_dflash_attention_backend(self.aphrodite_config),
+            # Without a DCP head-replication or explicit draft backend, keep the
+            # backend the base config resolved so the KV cache layout matches.
+            backend=resolve_dflash_attention_backend(self.aphrodite_config) or config.attention_config.backend,
         )
         return config
 
@@ -415,6 +417,10 @@ class DFlashSpeculator(DraftModelSpeculator):
         """Publish context features required by a draft's candidate head. Runs
         inside the FULL graph, so it must not sync with the host."""
 
+    def supports_batch_sharded_draft_logits(self) -> bool:
+        # Every draft logits write goes through sample_draft.
+        return True
+
     @torch.inference_mode()
     def propose(
         self,
@@ -448,6 +454,8 @@ class DFlashSpeculator(DraftModelSpeculator):
             getattr(self, "model_state", None), "use_global_draft_cache_positions", False
         )
         num_reqs = input_batch.num_reqs
+        if dummy_run and dp_sync_state is not None:
+            num_reqs = min(num_reqs, dp_sync_state.num_reqs)
         num_target_tokens = input_batch.num_tokens
         num_query_tokens = num_reqs * self.num_query_per_req
         max_seq_len = input_batch.seq_lens_cpu_upper_bound[:num_reqs].max().item()
@@ -518,6 +526,7 @@ class DFlashSpeculator(DraftModelSpeculator):
             self.max_num_tokens,
             self.max_model_len,
             self.sample_from_anchor,
+            num_reqs_override=num_reqs,
             use_global_cache_positions=use_global_cache_positions,
         )
 
@@ -533,8 +542,19 @@ class DFlashSpeculator(DraftModelSpeculator):
                     self.dcp_size,
                 )
 
+        if num_speculative_tokens == 0:
+            # No drafts are needed: store the context K/V to keep the drafter in
+            # sync, and skip the query pass.
+            self._store_hidden_states(num_target_tokens, last_hidden_states, aux_hidden_states)
+            self._precompute_context_kv(0, num_target_tokens, dummy_run)
+            return self.draft_tokens[:num_reqs]
+
         batch_sync, num_batch_tokens = (
-            self._build_uniform_batch_dp_sync(dp_sync_state, num_reqs, self.num_query_per_req)
+            self._build_uniform_batch_dp_sync(
+                dp_sync_state,
+                num_reqs,
+                self.num_query_per_req,
+            )
             if dp_sync_state is not None
             else (None, num_query_tokens)
         )
@@ -548,6 +568,7 @@ class DFlashSpeculator(DraftModelSpeculator):
             dp_rank=self.dp_rank,
             need_eager=is_profile,
             dp_sync_state=batch_sync,
+            parallel_config=self.aphrodite_config.parallel_config,
         )
         num_tokens_padded = batch_desc.num_tokens
         num_tokens_across_dp = batch_sync.num_tokens_across_dp if batch_sync is not None else None
@@ -912,9 +933,11 @@ def prepare_dflash_inputs(
     max_num_tokens: int,
     max_model_len: int,
     sample_from_anchor: bool = False,
+    num_reqs_override: int | None = None,
     use_global_cache_positions: bool = False,
 ) -> None:
-    num_reqs = input_batch.num_reqs
+    num_reqs = input_batch.num_reqs if num_reqs_override is None else num_reqs_override
+    assert num_reqs <= input_batch.num_reqs
     num_groups = len(block_tables)
     assert num_groups > 0 and len(query_slot_mappings) == len(context_slot_mappings) == len(block_sizes) == num_groups
     assert all(t.dtype == torch.int64 for t in (*query_slot_mappings, *context_slot_mappings))
@@ -930,9 +953,9 @@ def prepare_dflash_inputs(
     assert num_reqs > 0
     # Cover the longest possible per-request span (ctx + query). Use the max
     # per-request query length, not the total token count across the batch.
-    max_target_query_len = int(input_batch.num_scheduled_tokens.max())
+    max_target_query_len = int(input_batch.num_scheduled_tokens[:num_reqs].max())
     max_tokens_per_req = max_target_query_len + num_query_per_req
-    BLOCK_SIZE = min(256, triton.next_power_of_2(max(1, max_tokens_per_req)))
+    BLOCK_SIZE = 128
     num_blocks = triton.cdiv(max_tokens_per_req, BLOCK_SIZE)
     _prepare_dflash_inputs_kernel[(num_reqs, num_blocks, num_groups)](
         input_buffers.input_ids,

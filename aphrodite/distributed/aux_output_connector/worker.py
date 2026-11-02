@@ -84,7 +84,6 @@ class AuxOutputWorkerConnector:
         *,
         aphrodite_config: AphroditeConfig,
         model: torch.nn.Module,
-        kv_cache_config: KVCacheConfig,
     ) -> None:
         max_num_batched_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
         capturer = RoutedExpertsCapturer(
@@ -92,6 +91,7 @@ class AuxOutputWorkerConnector:
         )
         bind_routed_experts_capturer(model, capturer)
         self._capturer = capturer
+        self._aphrodite_config = aphrodite_config
         self._store: BackgroundBlockObjectStore | None = None
         self._buffer: RoutedExpertsBuffer | None = None
         self._requests: dict[str, _WorkerRequestState] = {}
@@ -103,11 +103,15 @@ class AuxOutputWorkerConnector:
         self._pending_outputs: list[PendingAuxOutput] = []
         self._lock = Lock()
         self._max_concurrent_batches = aphrodite_config.max_concurrent_batches
+
+    def initialize_output_storage(self, kv_cache_config: KVCacheConfig) -> None:
+        """Create the output data plane once the KV cache layout is resolved."""
         # Every TP rank participates in capture collectives, but only the
         # executor output rank owns the auxiliary output data plane.
         if not get_tp_group().is_first_rank:
             return
 
+        aphrodite_config = self._aphrodite_config
         shape_per_token = self._capturer.shape_per_token
         dtype: np.dtype[Any] = np.dtype(self._capturer.output_dtype_name)
         scheduler_block_size, hash_block_size = resolve_kv_cache_block_sizes(kv_cache_config, aphrodite_config)
@@ -125,7 +129,7 @@ class AuxOutputWorkerConnector:
             shape_per_token,
             hash_block_size,
             aphrodite_config.scheduler_config.max_num_seqs,
-            max_num_batched_tokens,
+            aphrodite_config.scheduler_config.max_num_batched_tokens,
             aphrodite_config.max_concurrent_batches,
         )
 
@@ -318,7 +322,11 @@ class AuxOutputWorkerConnector:
         )
         assert metadata.generation >= self._generation, "auxiliary output metadata generation moved backwards"
         with self._lock:
-            release_keys: list[str] = []
+            namespace = str(self._generation)
+            hashes = metadata.retained_block_hashes or ()
+            retained_keys = routed_experts_keys(hashes, namespace)
+            hashes = metadata.released_block_hashes or ()
+            release_keys = routed_experts_keys(hashes, namespace)
             if metadata.generation > self._generation:
                 # A generation change follows a prefix-cache reset, which the
                 # scheduler only performs once all model output is consumed.
@@ -334,7 +342,6 @@ class AuxOutputWorkerConnector:
                     # scheduler's optimistic view; only check settled requests.
                     assert emit_start <= state.emit_cursor, "auxiliary output Scheduler emit cursor moved ahead"
             block_batches: list[tuple[_WorkerRequestState, list[tuple[int, np.ndarray]]]] = []
-            retained_keys: list[str] = []
             for request_id, block_hashes in metadata.block_hashes.items():
                 state = self._requests[request_id]
                 keys = routed_experts_keys(block_hashes, str(self._generation))
@@ -362,11 +369,5 @@ class AuxOutputWorkerConnector:
                     self._store = None
 
 
-def get_aux_output_connector(
-    model: torch.nn.Module, aphrodite_config: AphroditeConfig, kv_cache_config: KVCacheConfig
-) -> AuxOutputWorkerConnector:
-    return AuxOutputWorkerConnector(
-        model=model,
-        kv_cache_config=kv_cache_config,
-        aphrodite_config=aphrodite_config,
-    )
+def get_aux_output_connector(model: torch.nn.Module, aphrodite_config: AphroditeConfig) -> AuxOutputWorkerConnector:
+    return AuxOutputWorkerConnector(model=model, aphrodite_config=aphrodite_config)

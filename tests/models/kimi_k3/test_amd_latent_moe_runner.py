@@ -125,6 +125,7 @@ def _check_matches_replicated(
     row_sharded: bool = False,
 ) -> None:
     transform, up_weight = _build_transform(device, row_sharded=row_sharded)
+    assert transform.norm is not None
     runner = _tail_runner(transform, tp_world, use_ep)
     group = get_tp_group().device_group
 
@@ -162,6 +163,7 @@ def _check_presharded_matches_replicated(device: torch.device, tp_world: int, ra
 def _check_unfused_tail_gathers_full_hidden(device: torch.device, tp_world: int, rank: int) -> None:
     transform, up_weight = _build_transform(device, row_sharded=True)
     assert transform.up_proj.weight.shape[0] == HIDDEN_SIZE // tp_world
+    assert transform.norm is not None
 
     # all-gather reconstructs the full projection when all ranks feed the same
     # input, so use one seed for all ranks.
@@ -180,6 +182,7 @@ def _check_writes_only_its_own_shard(device: torch.device, tp_world: int, rank: 
     """Two ranks that swapped both weight rows and write offsets still sum to
     the right total, so inspect each slice before the final collective."""
     transform, up_weight = _build_transform(device)
+    assert transform.norm is not None
     runner = _tail_runner(transform, tp_world)
     group = get_tp_group().device_group
 

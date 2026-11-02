@@ -15,6 +15,7 @@ import time
 from collections.abc import Sequence
 from contextlib import contextmanager
 from types import TracebackType
+from typing import TYPE_CHECKING, TextIO
 
 import numpy as np
 from rich.console import Console
@@ -22,6 +23,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from aphrodite.inputs import TokensPrompt
 from aphrodite.outputs import RequestOutput
+
+if TYPE_CHECKING:
+    from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 ESC = "\u001b"
 COL_DEFAULT = f"{ESC}[0m"
@@ -73,7 +77,7 @@ class _StartupProgress:
     def __init__(self, enabled: bool) -> None:
         self.enabled = enabled
         self.progress: Progress | None = None
-        self.console_file = None
+        self.console_file: TextIO | None = None
 
     def __enter__(self) -> "_StartupProgress":
         if self.enabled:
@@ -220,7 +224,7 @@ def _measure_generate(
     return results
 
 
-def add_cli_args(parser: argparse.ArgumentParser) -> None:
+def add_cli_args(parser: "FlexibleArgumentParser") -> None:
     parser.add_argument(
         "model_tag",
         nargs="?",

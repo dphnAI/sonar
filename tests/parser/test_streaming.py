@@ -463,6 +463,8 @@ def test_engine_reasoning_hermes_tool_token_by_token(tokenizer, request_obj):
     """
     parser = Qwen3ReasoningHermesToolParser(tokenizer)
 
+    assert parser._reasoning_parser is not None
+    assert parser._tool_parser is not None
     assert parser._reasoning_parser.engine_based_streaming is True
     assert parser._tool_parser.engine_based_streaming is False
     assert parser._engine_based is False
@@ -486,6 +488,7 @@ def test_engine_reasoning_hermes_tool_boundary(tokenizer, request_obj):
     the <tool_call> text as content.
     """
     parser = Qwen3ReasoningHermesToolParser(tokenizer)
+    assert isinstance(parser._reasoning_parser, Qwen3ParserReasoningAdapter)
     end_token_id = parser._reasoning_parser._parser_engine._reasoning_end_token_id
     chunks = _boundary_chunks(tokenizer, parser, end_token_id=end_token_id)
     results = stream_chunks(parser, tokenizer, chunks, request_obj)
@@ -588,6 +591,7 @@ def test_engine_reasoning_no_tool_batched_content_passthrough(tokenizer, request
     text must be emitted as content, and the marker must not leak.
     """
     parser = Qwen3ReasoningNoToolParser(tokenizer)
+    assert isinstance(parser._reasoning_parser, Qwen3ParserReasoningAdapter)
     assert parser._reasoning_parser.engine_based_streaming is True
     assert parser._tool_parser is None
 

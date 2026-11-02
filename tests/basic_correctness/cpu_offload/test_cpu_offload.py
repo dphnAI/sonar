@@ -64,7 +64,7 @@ def test_mrv2_weight_offloading(aphrodite_runner, monkeypatch, offload_kwargs, o
         with aphrodite_runner(
             "hmellor/tiny-random-LlamaForCausalLM",
             enforce_eager=True,
-            gpu_memory_utilization=0.02,
+            gpu_memory_utilization=0.03,
             max_model_len=128,
             max_num_seqs=1,
             **offload_kwargs,

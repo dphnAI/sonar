@@ -50,6 +50,7 @@ class TestResponseInputToHarmonyMessage:
             {"type": "message", "role": "user", "content": "Hello"},
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.USER
         assert msg.content[0].text == "Hello"
@@ -61,6 +62,7 @@ class TestResponseInputToHarmonyMessage:
             {"role": "user", "content": "Hello"},
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.USER
         assert msg.content[0].text == "Hello"
@@ -72,6 +74,7 @@ class TestResponseInputToHarmonyMessage:
             {"type": "message", "role": "system", "content": "Be helpful."},
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.DEVELOPER
         assert isinstance(msg.content[0], DeveloperContent)
@@ -82,6 +85,7 @@ class TestResponseInputToHarmonyMessage:
             {"type": "message", "role": "assistant", "content": "The answer is 42."},
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.ASSISTANT
         assert msg.channel == "final"
@@ -94,6 +98,7 @@ class TestResponseInputToHarmonyMessage:
             {"type": "message", "role": "developer", "content": "Be concise."},
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.DEVELOPER
         assert isinstance(msg.content[0], DeveloperContent)
@@ -111,6 +116,7 @@ class TestResponseInputToHarmonyMessage:
             },
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.USER
         assert len(msg.content) == 2
@@ -131,6 +137,7 @@ class TestResponseInputToHarmonyMessage:
             },
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.DEVELOPER
         assert isinstance(msg.content[0], DeveloperContent)
@@ -148,6 +155,7 @@ class TestResponseInputToHarmonyMessage:
             },
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.ASSISTANT
         assert msg.channel == "analysis"
@@ -156,6 +164,7 @@ class TestResponseInputToHarmonyMessage:
     def test_reasoning_pydantic_model_input(self):
         """A Pydantic ResponseReasoningItem should be model_dump()'d before parsing."""
         msg = response_input_to_harmony(_REASONING_ITEM, prev_responses=[])
+        assert msg is not None
 
         assert msg.author.role == Role.ASSISTANT
         assert msg.channel == "analysis"
@@ -174,6 +183,7 @@ class TestResponseInputToHarmonyMessage:
             },
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.ASSISTANT
         assert msg.channel == "commentary"
@@ -186,6 +196,7 @@ class TestResponseInputToHarmonyMessage:
             {"type": "function_call", "name": "ping", "arguments": ""},
             prev_responses=[],
         )
+        assert msg is not None
 
         assert msg.recipient == "functions.ping"
         assert msg.content[0].text == ""
@@ -199,6 +210,7 @@ class TestResponseInputToHarmonyMessage:
             {"type": "function_call_output", "call_id": "call_test", "output": "18°C"},
             prev_responses=[_PREV_CALL],
         )
+        assert msg is not None
 
         assert msg.author.role == Role.TOOL
         assert msg.author.name == "functions.get_weather"
@@ -232,6 +244,7 @@ class TestResponseInputToHarmonyMessage:
             },
             prev_responses=[earlier, later],
         )
+        assert msg is not None
 
         assert msg.author.name == "functions.get_weather"
 
@@ -247,6 +260,7 @@ class TestResponseInputToHarmonyMessage:
             },
             prev_responses=[_REASONING_ITEM, _PREV_CALL],
         )
+        assert msg is not None
 
         assert msg.author.name == "functions.get_weather"
 

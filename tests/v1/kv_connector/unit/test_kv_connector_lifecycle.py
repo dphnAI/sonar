@@ -16,7 +16,7 @@ from aphrodite.v1.kv_cache_interface import KVCacheConfig
 from aphrodite.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
 
 # Importing utils registers TestExampleConnector with the factory
-from .utils import create_aphrodite_config
+from .utils import TestExampleConnector, create_aphrodite_config
 
 
 def _make_empty_scheduler_output():
@@ -63,6 +63,7 @@ def test_kv_connector_mixin_clears_metadata():
 
         # Verify clear_connector_metadata was called on the connector
         connector = get_kv_transfer_group()
+        assert isinstance(connector, TestExampleConnector)
         assert connector._connector_metadata is None
         # Test connector wrapper records method calls
         assert connector.call_record.get("bind_connector_metadata", 0) == 1

@@ -13,10 +13,7 @@ from aphrodite.v1.worker.gpu.spec_decode.dflash.utils import (
     resolve_dflash_attention_backend,
     resolve_dflash_cache_dtype,
 )
-from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import (
-    _should_share,
-    get_target_lm_head,
-)
+from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import get_target_lm_head
 from aphrodite.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 
 logger = init_logger(__name__)
@@ -84,6 +81,7 @@ def load_dspark_model(target_model: nn.Module, aphrodite_config: AphroditeConfig
     from aphrodite.model_executor.models.utils import get_draft_quant_config
     from aphrodite.v1.worker.gpu.spec_decode.eagle.utils import (
         maybe_share_target_embed,
+        share_target_lm_head,
     )
 
     draft_attention_backend = _resolve_dspark_attention_backend(
@@ -127,18 +125,14 @@ def load_dspark_model(target_model: nn.Module, aphrodite_config: AphroditeConfig
     if draft_model_config.get_vocab_size() <= target_vocab_size:
         maybe_share_target_embed(draft_model, draft_inner, target_inner)
 
-    target_lm_head = get_target_lm_head(target_model, target_language_model)
-    draft_lm_head = getattr(draft_model, "lm_head", None)
     draft_output_vocab_size = (
         getattr(draft_model_config.hf_config, "draft_vocab_size", None) or draft_model_config.get_vocab_size()
     )
-    if (
-        target_lm_head is not None
-        and draft_output_vocab_size == target_vocab_size
-        and _should_share(draft_model, "has_own_lm_head", draft_lm_head, target_lm_head)
-    ):
-        if draft_lm_head is not None:
-            del draft_model.lm_head
-        draft_model.lm_head = target_lm_head
+    share_target_lm_head(
+        draft_model,
+        get_target_lm_head(target_model, target_language_model),
+        speculative_config.draft_lm_head_quantization,
+        can_share=draft_output_vocab_size == target_vocab_size,
+    )
 
     return draft_model

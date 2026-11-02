@@ -16,6 +16,7 @@ import torch.multiprocessing as mp
 from aphrodite.config import AphroditeConfig, ModelConfig, set_current_aphrodite_config
 from aphrodite.config.quantization import QuantizationConfigArgs
 from aphrodite.distributed import cleanup_dist_env_and_memory, get_tp_group
+from aphrodite.distributed.device_communicators.cuda_communicator import CudaCommunicator
 from aphrodite.distributed.parallel_state import (
     graph_capture,
     init_distributed_environment,
@@ -104,7 +105,11 @@ def _run_mode(device: torch.device, backend: str, all_reduce: bool, world_size: 
             from aphrodite.model_executor.kernels.linear.mxfp8.rocm_native import (
                 RocmDotScaledMxfp8LinearKernel,
             )
+            from aphrodite.model_executor.layers.quantization.online.mxfp8 import (
+                Mxfp8OnlineLinearMethod,
+            )
 
+            assert isinstance(layer.quant_method, Mxfp8OnlineLinearMethod)
             assert isinstance(layer.quant_method.kernel, RocmDotScaledMxfp8LinearKernel)
             assert layer.weight.dtype == torch.float8_e4m3fn
         layers[K] = layer
@@ -115,6 +120,7 @@ def _run_mode(device: torch.device, backend: str, all_reduce: bool, world_size: 
 
     comm = group.device_communicator
     assert comm is not None
+    assert isinstance(comm, CudaCommunicator)
     assert comm.use_aiter_allreduce
     assert comm.aiter_ar_comm is not None and not comm.aiter_ar_comm.disabled
     assert comm.qr_comm is None or comm.qr_comm.disabled

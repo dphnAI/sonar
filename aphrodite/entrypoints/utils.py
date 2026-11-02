@@ -187,7 +187,7 @@ def get_max_tokens(
 
 
 def log_non_default_args(args: Namespace | EngineArgs):
-    from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
+    from aphrodite.entrypoints.common.cli_args import make_arg_parser
 
     non_default_args = {}
 

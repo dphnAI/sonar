@@ -10,15 +10,15 @@ import uvloop
 import aphrodite
 import aphrodite.envs as envs
 from aphrodite.entrypoints.cli.types import CLISubcommand
-from aphrodite.entrypoints.launchers.api_server.entry import run_server, setup_server
-from aphrodite.entrypoints.launchers.cli_args import (
+from aphrodite.entrypoints.common.cli_args import (
     make_arg_parser,
     propagate_flash_late_interaction,
     validate_parsed_serve_args,
 )
+from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
+from aphrodite.entrypoints.launchers.api_server.entry import run_server, setup_server
 from aphrodite.entrypoints.launchers.dp_supervisor import run_dp_supervisor
 from aphrodite.entrypoints.launchers.launcher import create_server_socket
-from aphrodite.entrypoints.serve.utils.api_utils import APHRODITE_SUBCMD_PARSER_EPILOG
 from aphrodite.logger import init_logger
 from aphrodite.reasoning import ReasoningParserManager
 from aphrodite.usage.usage_lib import UsageContext
@@ -229,16 +229,21 @@ def run_headless(args: argparse.Namespace):
         handshake_address,
     )
 
+    # A colocated frontend that serves only these engines (the Rust frontend in
+    # hybrid or external DP LB) also handshakes with them for their I/O.
+    client_handshake_address = args.headless_client_handshake_address
+
     # Create the engines.
     engine_manager = CoreEngineProcManager(
         local_engine_count=local_engine_count,
         start_index=aphrodite_config.parallel_config.data_parallel_rank,
         local_start_index=0,
         aphrodite_config=aphrodite_config,
-        local_client=False,
+        local_client=client_handshake_address is not None,
         handshake_address=handshake_address,
         executor_class=Executor.get_class(aphrodite_config),
         log_stats=not engine_args.disable_log_stats,
+        client_handshake_address=client_handshake_address,
     )
 
     try:

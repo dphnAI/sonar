@@ -6,6 +6,7 @@ import pytest
 import torch
 
 import aphrodite.model_executor.layers.sparse_attn_indexer as sparse_indexer
+from aphrodite.distributed.parallel_state import GroupCoordinator
 from aphrodite.platforms import current_platform
 from aphrodite.utils.import_utils import has_cutedsl
 from aphrodite.v1.attention.backends.mla.indexer import build_prefill_chunk_metadata
@@ -109,10 +110,12 @@ def _dcp_lse_merge(
     return merged_out, merged_lse
 
 
-class _FakeDCPGroup:
+class _FakeDCPGroup(GroupCoordinator):
     """Single-process stand-in: ``all_gather`` returns the pre-built
     concatenation of every rank's packed ``(score, global_id)`` candidates,
-    mirroring the one packed all-gather the merge issues."""
+    mirroring the one packed all-gather the merge issues.
+
+    ``GroupCoordinator.__init__`` is never run, so no process group exists."""
 
     def __init__(self, gathered_packed: torch.Tensor) -> None:
         self.gathered_packed = gathered_packed
@@ -217,7 +220,8 @@ def _merge_local_topks_global_with_fake_dcp(
         merged = []
         for rank, (logits, indices) in enumerate(zip(local_logits, local_topks)):
             rank_indices = indices.clone()
-            result = sparse_indexer._merge_dcp_topk_global(
+            # in-place merge; the None return is asserted below
+            result = sparse_indexer._merge_dcp_topk_global(  # type: ignore[func-returns-value]
                 logits,
                 rank_indices,
                 topk,

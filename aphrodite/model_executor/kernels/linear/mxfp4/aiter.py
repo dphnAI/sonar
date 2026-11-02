@@ -3,7 +3,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite Engine project
 
 import torch
-from torch.nn.parameter import Parameter
 
 import aphrodite.envs as envs
 from aphrodite._aiter_ops import is_aiter_found_and_supported, rocm_aiter_ops
@@ -11,6 +10,7 @@ from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp4Dynamic,
 )
+from aphrodite.model_executor.utils import replace_parameter
 from aphrodite.platforms import current_platform
 
 from .base import MxFp4LinearKernel, MxFp4LinearLayerConfig
@@ -217,14 +217,11 @@ class AiterMxfp4LinearKernel(MxFp4LinearKernel):
             weight_scale = weight_scale.view(sm // 32, 2, 16, sn // 8, 2, 4, 1)
             weight_scale = weight_scale.permute(0, 3, 5, 2, 4, 1, 6).contiguous()
             weight_scale = weight_scale.view(sm, sn)
-            layer.weight_scale = Parameter(weight_scale, requires_grad=False)
+            replace_parameter(layer, "weight_scale", weight_scale)
 
-            layer.weight = Parameter(
-                shuffle_weight(layer.weight.data, layout=(16, 16)),
-                requires_grad=False,
-            )
+            replace_parameter(layer, "weight", shuffle_weight(layer.weight.data, layout=(16, 16)))
         else:
-            layer.weight_scale = Parameter(layer.weight_scale.data.T.contiguous(), requires_grad=False)
+            replace_parameter(layer, "weight_scale", layer.weight_scale.data.T.contiguous())
 
     def apply_weights(
         self,

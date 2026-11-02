@@ -44,6 +44,7 @@ from aphrodite.model_executor.layers.fused_moe import (
     FusedMoEFactory,
     GateLinear,
 )
+from aphrodite.model_executor.layers.fusion.fused_act_quant import maybe_fused_act_quant
 from aphrodite.model_executor.layers.layernorm import RMSNorm
 from aphrodite.model_executor.layers.linear import (
     MergedColumnParallelLinear,
@@ -113,7 +114,7 @@ class Qwen2MoeMLP(nn.Module):
 
     def forward(self, x):
         gate_up, _ = self.gate_up_proj(x)
-        out = self.act_fn(gate_up)
+        out = maybe_fused_act_quant(self.act_fn, gate_up, self.down_proj)
         out, _ = self.down_proj(out)
 
         if self.expert_gate is not None:

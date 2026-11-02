@@ -10,7 +10,9 @@ import torch
 
 from aphrodite.config.model import PROCESSED_LOGPROBS_MODES, LogprobsMode
 from aphrodite.platforms import current_platform
+from aphrodite.v1.worker.gpu.sample.logprob import LogprobTokenIdsState
 from aphrodite.v1.worker.gpu.sample.output import SamplingMaskTensors
+from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
 from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler import (
     RejectionSampler,
     _iter_request_chunks,
@@ -47,6 +49,9 @@ def _make_rejection_sampler(sampler: SimpleNamespace, num_speculative_steps: int
     rejection_sampler.enable_adaptive_verification = False
     rejection_sampler.synthetic_conditional_rates = None
     rejection_sampler.use_block_verification = False
+    rejection_sampler.fly_window_size = 0
+    rejection_sampler.fly_entropy_threshold = 0.3
+    rejection_sampler.fly_entropy_top_k = 3
     rejection_sampler.watermark_key = None
     return rejection_sampler
 
@@ -61,16 +66,23 @@ def test_iter_request_chunks_preserves_request_boundaries():
     ]
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA")
+@pytest.mark.skipif(
+    not (current_platform.is_cuda() or current_platform.is_xpu()),
+    reason="Requires CUDA or XPU",
+)
 @pytest.mark.parametrize("logprobs_mode", get_args(LogprobsMode))
-def test_chunked_scores_match_full_batch(logprobs_mode: str):
-    device = torch.device("cuda")
+def test_chunked_scores_match_full_batch(monkeypatch: pytest.MonkeyPatch, logprobs_mode: str):
+    device = torch.device(current_platform.device_type)
     cu_num_logits_np = np.array([0, 3, 4, 8, 10], dtype=np.int32)
     num_logits_per_req = np.diff(cu_num_logits_np)
     idx_mapping_np = np.array([7, 2, 9, 1], dtype=np.int32)
     input_batch = _make_input_batch(cu_num_logits_np, idx_mapping_np, device)
     rejection_sampler = _make_rejection_sampler(
-        SimpleNamespace(logprobs_mode=logprobs_mode, return_sampling_mask=False),
+        SimpleNamespace(
+            logprobs_mode=logprobs_mode,
+            return_sampling_mask=False,
+            logprob_token_ids_state=LogprobTokenIdsState(int(idx_mapping_np.max()) + 1, device),
+        ),
         num_speculative_steps=3,
     )
 
@@ -88,7 +100,7 @@ def test_chunked_scores_match_full_batch(logprobs_mode: str):
         sampled = (idx_mapping.to(torch.int64).unsqueeze(1) + torch.arange(4, device=device)) % logits.shape[1]
         return logits.float() + 1, sampled, num_sampled
 
-    rejection_sampler._verify = MethodType(fake_verify, rejection_sampler)
+    monkeypatch.setattr(rejection_sampler, "_verify", MethodType(fake_verify, rejection_sampler))
     logits = torch.arange(170, dtype=torch.float32, device=device).view(10, 17)
 
     sampled, num_sampled, chunked_logprobs, sampling_mask_tensors = rejection_sampler._verify_in_chunks(
@@ -108,6 +120,8 @@ def test_chunked_scores_match_full_batch(logprobs_mode: str):
         input_batch.cu_num_logits,
         input_batch.cu_num_logits_np,
         max_num_logprobs=2,
+        expanded_idx_mapping=input_batch.expanded_idx_mapping,
+        max_per_req_token_ids=0,
     )
 
     assert sampled[:, 0].tolist() == idx_mapping_np.tolist()
@@ -127,9 +141,12 @@ def test_chunked_scores_match_full_batch(logprobs_mode: str):
     assert sampling_mask_tensors is None
 
 
-@pytest.mark.skipif(not current_platform.is_cuda(), reason="Requires CUDA")
+@pytest.mark.skipif(
+    not (current_platform.is_cuda() or current_platform.is_xpu()),
+    reason="Requires CUDA or XPU",
+)
 def test_replay_on_off_preserves_rejection_sampling_and_rng(monkeypatch):
-    device = torch.device("cuda")
+    device = torch.device(current_platform.device_type)
     num_reqs = 3
     num_speculative_steps = 3
     rows_per_request = num_speculative_steps + 1
@@ -140,7 +157,14 @@ def test_replay_on_off_preserves_rejection_sampling_and_rng(monkeypatch):
     processed_logits = torch.zeros((12, vocab_size), device=device)
     processed_logits[0, 0] = -float("inf")
     processed_logits[rows_per_request + 1, 1] = -float("inf")
-    draft_logits = torch.zeros((num_reqs, num_speculative_steps, vocab_size), device=device)
+    draft_logits = DraftLogitsCache(
+        num_reqs,
+        num_speculative_steps,
+        vocab_size,
+        dtype=torch.float32,
+        fill=0.0,
+        device=device,
+    )
     draft_sampled = torch.zeros((num_reqs, rows_per_request), dtype=torch.int64, device=device)
     draft_sampled[:, 1:] = torch.tensor([0, 1, 2], device=device)
     draft_sampled = draft_sampled.flatten()
@@ -154,12 +178,18 @@ def test_replay_on_off_preserves_rejection_sampling_and_rng(monkeypatch):
         ),
         use_fp64_gumbel=False,
         apply_sampling_params=lambda logits, *_: logits,
+        trace_replay_state=None,
+        logprob_token_ids_state=LogprobTokenIdsState(num_reqs, device),
     )
     rejection_sampler = _make_rejection_sampler(sampler, num_speculative_steps)
     pos = torch.arange(12, dtype=torch.int32, device=device)
 
     pack_calls: list[tuple[list[int], int, int]] = []
-    pack = SamplingMaskTensors.from_logits.__func__
+    # A classmethod looked up on its class is a bound method; keep the plain
+    # function so the patched classmethod can forward its own `cls`.
+    bound_from_logits = SamplingMaskTensors.from_logits
+    assert isinstance(bound_from_logits, MethodType)
+    pack = bound_from_logits.__func__
 
     def track_pack(
         cls,
@@ -185,7 +215,7 @@ def test_replay_on_off_preserves_rejection_sampling_and_rng(monkeypatch):
         classmethod(track_pack),
     )
 
-    rng_before = torch.cuda.get_rng_state()
+    rng_before = torch.get_device_module(device).get_rng_state()
     off_sampled, off_counts, off_logprobs, off_masks = rejection_sampler._verify_in_chunks(
         processed_logits,
         input_batch,
@@ -195,7 +225,7 @@ def test_replay_on_off_preserves_rejection_sampling_and_rng(monkeypatch):
         max_chunk_logits=8,
         max_num_logprobs=0,
     )
-    rng_after_off = torch.cuda.get_rng_state()
+    rng_after_off = torch.get_device_module(device).get_rng_state()
     assert pack_calls == []
 
     sampler.return_sampling_mask = True
@@ -208,7 +238,7 @@ def test_replay_on_off_preserves_rejection_sampling_and_rng(monkeypatch):
         max_chunk_logits=8,
         max_num_logprobs=0,
     )
-    rng_after_on = torch.cuda.get_rng_state()
+    rng_after_on = torch.get_device_module(device).get_rng_state()
 
     assert pack_calls == [
         ([0, 4, 8], vocab_size, rows_per_request),

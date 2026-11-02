@@ -403,7 +403,7 @@ def test_rust_frontend_launch_log_redacts_credentials(monkeypatch):
     Credentials must not reach the log line."""
     import subprocess as subprocess_mod
 
-    from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
+    from aphrodite.entrypoints.common.cli_args import make_arg_parser
     from aphrodite.utils.argparse_utils import FlexibleArgumentParser
     from aphrodite.v1.utils import RustFrontendProcessManager
 
@@ -455,7 +455,7 @@ def test_rust_frontend_uses_config_model_as_model_tag(monkeypatch, caplog, tmp_p
     """Config-only model selection must be forwarded to the Rust frontend."""
     import subprocess as subprocess_mod
 
-    from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
+    from aphrodite.entrypoints.common.cli_args import make_arg_parser
     from aphrodite.utils.argparse_utils import FlexibleArgumentParser
     from aphrodite.v1.utils import RustFrontendProcessManager
 
@@ -501,7 +501,7 @@ def test_rust_frontend_inherits_grpc_listener(monkeypatch):
     """The Python-bound gRPC socket is passed to Rust like the HTTP one."""
     import subprocess as subprocess_mod
 
-    from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
+    from aphrodite.entrypoints.common.cli_args import make_arg_parser
     from aphrodite.utils.argparse_utils import FlexibleArgumentParser
     from aphrodite.v1.utils import RustFrontendProcessManager
 
@@ -559,7 +559,7 @@ def test_rust_frontend_inherits_grpc_listener(monkeypatch):
 
 def test_rust_frontend_spawn_failure_cleans_up_listeners(tmp_path):
     """No child owns the listeners when Popen fails, so the parent removes them."""
-    from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
+    from aphrodite.entrypoints.common.cli_args import make_arg_parser
     from aphrodite.utils.argparse_utils import FlexibleArgumentParser
     from aphrodite.v1.utils import RustFrontendProcessManager
 

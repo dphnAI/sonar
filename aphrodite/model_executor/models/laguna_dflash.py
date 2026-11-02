@@ -29,6 +29,7 @@ from aphrodite.model_executor.model_loader.weight_utils import (
 )
 from aphrodite.model_executor.models.interfaces import EagleModelMixin, SupportsEagle3
 from aphrodite.multimodal.inputs import NestedTensors
+from aphrodite.v1.worker.gpu.spec_decode.dflash.config import DFlashSpeculatorConfig
 
 from .laguna import LagunaDecoderLayer
 from .qwen3_dflash import DFlashQwen3Model
@@ -239,6 +240,9 @@ class DFlashLagunaModel(DFlashQwen3Model, EagleModelMixin):
 
 
 class DFlashLagunaForCausalLM(nn.Module, SupportsEagle3):
+    # The speculator this is a draft model of (see SpeculativeDraftModel).
+    speculator_config_class = DFlashSpeculatorConfig
+
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = ""):
         nn.Module.__init__(self)
         speculative_config = aphrodite_config.speculative_config

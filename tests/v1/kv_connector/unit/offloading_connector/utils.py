@@ -32,6 +32,7 @@ from aphrodite.v1.core.kv_cache_utils import (
 from aphrodite.v1.core.sched.async_scheduler import AsyncScheduler
 from aphrodite.v1.core.sched.scheduler import Scheduler
 from aphrodite.v1.kv_cache_interface import (
+    AttentionSpec,
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
@@ -83,6 +84,9 @@ class MockOffloadingWorker(OffloadingWorker):
         self.transfer_specs: dict[int, tuple[LoadStoreSpec, LoadStoreSpec]] = {}
         self.completed_transfers: list[TransferResult] = []
         self.waiting_jobs: set[int] = set()
+        # When set, loads submitted from now on complete as failed.
+        self.fail_loads = False
+        self._failing_jobs: set[int] = set()
         self.completed_jobs: list[int] = []
         self.flushed_jobs: set[int] = set()
 
@@ -91,14 +95,22 @@ class MockOffloadingWorker(OffloadingWorker):
         self.completed_transfers = []
         return finished
 
-    def submit_store(self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec) -> bool:  # type: ignore[override]
+    def submit_store(self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec) -> bool:
         self.transfer_specs[job_id] = (src_spec, dst_spec)
         self.waiting_jobs.add(job_id)
         return True
 
-    def submit_load(self, job_id: int, src_spec: LoadStoreSpec, dst_spec: LoadStoreSpec) -> bool:  # type: ignore[override]
+    def submit_load(
+        self,
+        job_id: int,
+        src_spec: LoadStoreSpec,
+        dst_spec: LoadStoreSpec,
+        expedited: bool = False,
+    ) -> bool:
         self.transfer_specs[job_id] = (src_spec, dst_spec)
         self.waiting_jobs.add(job_id)
+        if self.fail_loads:
+            self._failing_jobs.add(job_id)
         return True
 
     def complete_jobs(self, job_ids: set[int]) -> None:
@@ -108,7 +120,7 @@ class MockOffloadingWorker(OffloadingWorker):
                 self.completed_jobs.append(job_id)
                 result = TransferResult(
                     job_id=job_id,
-                    success=True,
+                    success=job_id not in self._failing_jobs,
                     transfer_size=None,
                     transfer_time=None,
                 )
@@ -177,10 +189,9 @@ class RequestRunner:
         retention_interval: int | None = None,
         speculative_config: Any | None = None,
     ):
-        assert blocks_per_chunk == 1 or kv_cache_groups is None, (
-            "blocks_per_chunk > 1 requires all groups to have the same "
-            "block size, so kv_cache_groups must be None (use default group)"
-        )
+        assert blocks_per_chunk == 1 or all(
+            group.kv_cache_spec.block_size == block_size for group in kv_cache_groups or ()
+        ), "blocks_per_chunk > 1 requires every group to use block_size"
 
         self.blocks_per_chunk: int = blocks_per_chunk
         self.block_size: int = block_size
@@ -278,6 +289,7 @@ class RequestRunner:
         kv_caches: dict[str, torch.Tensor] = {}
         for group in kv_cache_groups:
             spec = group.kv_cache_spec
+            assert isinstance(spec, AttentionSpec)
             for layer_name in group.layer_names:
                 # Shape follows FlashAttention layout:
                 # Shape: (num_blocks, 2, block_size, num_kv_heads, head_size)
@@ -300,9 +312,10 @@ class RequestRunner:
         self.scheduler_connector: OffloadingConnector = scheduler_connector
 
         # extract mocked OffloadingManager of scheduler connector
-        self.connector_scheduler = scheduler_connector.connector_scheduler
-        assert self.connector_scheduler is not None
-        manager = self.connector_scheduler.manager
+        connector_scheduler = scheduler_connector.connector_scheduler
+        assert connector_scheduler is not None
+        self.connector_scheduler = connector_scheduler
+        manager = connector_scheduler.manager
         assert isinstance(manager, MagicMock)
         self.manager: MagicMock = manager
 
@@ -354,8 +367,12 @@ class RequestRunner:
         token_ids: list[int],
         kv_transfer_params: dict | None = None,
         skip_reading_prefix_cache: bool = False,
+        req_id: str | None = None,
+        resumable: bool = False,
     ):
-        self.req_id += 1
+        if req_id is None:
+            self.req_id += 1
+            req_id = str(self.req_id)
 
         sampling_params = SamplingParams(
             max_tokens=1000,
@@ -364,11 +381,12 @@ class RequestRunner:
         sampling_params.update_from_generation_config({}, EOS_TOKEN_ID)
 
         req = Request(
-            request_id=str(self.req_id),
+            request_id=req_id,
             prompt_token_ids=token_ids,
             sampling_params=sampling_params,
             pooling_params=None,
             block_hasher=self._block_hasher,
+            resumable=resumable,
         )
         if kv_transfer_params is not None:
             req.kv_transfer_params = kv_transfer_params
@@ -383,6 +401,7 @@ class RequestRunner:
                     self.flushed_gpu_blocks.add(self.gpu_blocks[block_id.item()])
             else:
                 # load flush
+                assert isinstance(dst_spec, GPULoadStoreSpec)
                 for block_id in dst_spec.block_ids:
                     self.flushed_gpu_blocks.add(self.gpu_blocks[block_id.item()])
 
@@ -395,6 +414,7 @@ class RequestRunner:
                 offload_spec = dst_spec
             else:
                 store = False
+                assert isinstance(dst_spec, GPULoadStoreSpec)
                 gpu_spec = dst_spec
                 offload_spec = src_spec
 
@@ -497,17 +517,18 @@ class RequestRunner:
                 self.offloading_spec.complete_transfers()
 
             self.worker_connector.wait_for_save()
-            finished_sending, finished_recving = self.worker_connector.get_finished(scheduler_output.finished_req_ids)
+            transfer_results = self.worker_connector.get_transfer_results(scheduler_output.finished_req_ids)
             worker_meta = self.worker_connector.build_connector_worker_meta() or OffloadingWorkerMetadata()
 
             self.worker_connector.clear_connector_metadata()
 
             model_runner_output = create_model_runner_output(
                 reqs=self.scheduler.running,
-                finished_sending=finished_sending,
-                finished_recving=finished_recving,
+                finished_sending=transfer_results.finished_sending,
+                finished_recving=transfer_results.finished_recving,
                 token_id=token_id or 0,
                 kv_connector_worker_meta=worker_meta,
+                failed_recving=transfer_results.failed_recving,
             )
 
             prev_token_id = token_id
@@ -517,6 +538,7 @@ class RequestRunner:
             if self.async_scheduling:
                 # in async scheduling we update the output of the previous step
                 if prev_model_runner_output is not None:
+                    assert prev_scheduler_output is not None
                     engine_outputs = self.scheduler.update_from_output(prev_scheduler_output, prev_model_runner_output)
                     self._record_kv_connector_stats(engine_outputs)
                 prev_scheduler_output = scheduler_output
@@ -539,6 +561,8 @@ class RequestRunner:
             if token_id is None:
                 if self.async_scheduling:
                     # Flush the previous step's output.
+                    assert prev_scheduler_output is not None
+                    assert prev_model_runner_output is not None
                     engine_outputs = self.scheduler.update_from_output(prev_scheduler_output, prev_model_runner_output)
                     self._record_kv_connector_stats(engine_outputs)
                     prev_model_runner_output = None

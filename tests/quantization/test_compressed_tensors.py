@@ -1051,7 +1051,7 @@ def test_mxfp4_moe_with_fp8_inputs_shares_native_mxfp4_method(monkeypatch):
     layer.quant_method.process_weights_after_loading(layer)
 
     assert layer.w13_weight is w13
-    assert not hasattr(layer, "w13_weight_packed")
+    assert layer.w13_weight_packed is w13
 
 
 @pytest.mark.skipif(not current_platform.is_cuda(), reason="FP8 x MXFP4 linear kernels need CUDA")

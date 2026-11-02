@@ -3,16 +3,17 @@
 """CPU tests for the kpool indexer's kernel block selection."""
 
 from types import SimpleNamespace
+from typing import Protocol
 
 import pytest
 import torch
 
 from aphrodite.config import AphroditeConfig, set_current_aphrodite_config
 from aphrodite.models.glm5next.common.attention import Glm5NextIndexerCache
-from aphrodite.v1.attention.backend import AttentionBackend, MultipleOf
+from aphrodite.v1.attention.backend import MultipleOf
 from aphrodite.v1.attention.backends.mla import indexer as indexer_mod
 from aphrodite.v1.attention.backends.mla.indexer import Glm5NextIndexerBackend
-from aphrodite.v1.kv_cache_interface import MLAAttentionSpec
+from aphrodite.v1.kv_cache_interface import KVCacheSpec, MLAAttentionSpec
 from aphrodite.v1.worker.utils import prepare_kernel_block_sizes, select_common_block_size
 
 pytestmark = pytest.mark.cpu_test
@@ -49,7 +50,19 @@ def _kpool_storage_spec(manager_block: int) -> MLAAttentionSpec:
     return spec
 
 
-def _prepare(spec: MLAAttentionSpec, backends: list[type[AttentionBackend]]) -> list[int]:
+class _KernelBlockSizeBackend(Protocol):
+    """The backend hooks ``prepare_kernel_block_sizes`` reads off each group."""
+
+    @staticmethod
+    def get_supported_kernel_block_sizes(
+        kv_cache_spec: KVCacheSpec | None = None,
+    ) -> list[int | MultipleOf]: ...
+
+    @staticmethod
+    def get_name() -> str: ...
+
+
+def _prepare(spec: MLAAttentionSpec, backends: list[type[_KernelBlockSizeBackend]]) -> list[int]:
     kv_cache_config = SimpleNamespace(
         kv_cache_groups=[SimpleNamespace(kv_cache_spec=spec, layer_names=[])],
         kv_cache_tensors=[],
@@ -72,7 +85,10 @@ def test_kpool_group_maps_pool_pages(monkeypatch: pytest.MonkeyPatch, manager_bl
     expected = 256 if manager_block % 256 == 0 else 128
 
     # The kpool group's AttentionGroup selects its kernel block this way.
-    selected = [select_common_block_size(manager_block, [Glm5NextIndexerBackend], [spec])]
+    selected = [
+        # indexer backend has no impl class
+        select_common_block_size(manager_block, [Glm5NextIndexerBackend], [spec])  # type: ignore[type-abstract]
+    ]
     assert selected == [expected]
     assert selected != [manager_block]
     # The hybrid block-table split stays integral.

@@ -25,7 +25,6 @@ from aphrodite.utils.platform_utils import num_compute_units
 from aphrodite.utils.torch_utils import (
     async_tensor_h2d,
     current_stream,
-    is_quantized_kv_cache,
 )
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
@@ -54,7 +53,7 @@ from aphrodite.v1.attention.ops.flashmla import (
     flash_mla_with_kvcache,
     get_mla_metadata,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec, KVQuantMode
+from aphrodite.v1.kv_cache_interface import AttentionSpec, KVQuantMode, is_quantized_kv_cache
 from aphrodite.v1.worker.workspace import current_workspace_manager
 
 if TYPE_CHECKING:

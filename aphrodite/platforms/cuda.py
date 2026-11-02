@@ -114,7 +114,7 @@ def _get_backend_priorities(
     use_mm_prefix: bool = False,
 ) -> list[AttentionBackendEnum]:
     """Get backend priorities with lazy import to avoid circular dependency."""
-    from aphrodite.utils.torch_utils import is_quantized_kv_cache
+    from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
 
     if use_mla:
         if device_capability.major == 10:
@@ -254,6 +254,10 @@ class CudaPlatformBase(Platform):
     ray_noset_device_env_vars: list[str] = [
         "RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES",
     ]
+
+    @classmethod
+    def get_hisparse_backend_cls(cls) -> str | None:
+        return "aphrodite.v1.hisparse.backend.CUDAHiSparseBackend"
 
     @classmethod
     def import_kernels(cls) -> None:
@@ -754,6 +758,7 @@ class CudaPlatformBase(Platform):
         )
 
     @classmethod
+    @cache
     def is_arch_support_pdl(cls) -> bool:
         try:
             device = torch.cuda.current_device()

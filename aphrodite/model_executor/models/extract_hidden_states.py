@@ -24,7 +24,7 @@ from aphrodite.model_executor.layers.attention.kv_transfer_utils import (
 )
 from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
 from aphrodite.model_executor.models.utils import maybe_prefix
-from aphrodite.utils.torch_utils import is_quantized_kv_cache, kv_cache_dtype_str_to_dtype
+from aphrodite.utils.torch_utils import kv_cache_dtype_str_to_dtype
 from aphrodite.v1.attention.backend import (
     AttentionBackend,
     AttentionImpl,
@@ -36,6 +36,7 @@ from aphrodite.v1.kv_cache_interface import (
     AttentionSpec,
     HiddenStateCacheSpec,
     KVCacheSpec,
+    is_quantized_kv_cache,
 )
 
 ########## Custom Ops ########

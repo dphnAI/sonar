@@ -13,7 +13,7 @@ from aphrodite.triton_utils.allocation import set_triton_allocator
 from aphrodite.utils.mem_utils import get_max_shared_memory_bytes
 from aphrodite.utils.torch_utils import async_tensor_h2d, direct_register_custom_op
 
-from .utils import supports_pdl, supports_tma
+from .utils import FUSED_MOE_LORA_TWO_KERNEL_MAX_TOKENS, supports_pdl, supports_tma
 
 
 @triton.jit
@@ -933,6 +933,7 @@ def _fused_moe_lora_kernel(
     USE_GDC: tl.constexpr,
     launch_pdl: tl.constexpr,
     IS_PRIMARY: tl.constexpr,
+    FP32_ADD_INPUTS: tl.constexpr,
     USE_TMA: tl.constexpr,
     # sort_c determines whether tokens are stored in C in the order determined
     # by sorted_token_ids to enable later TMA loads from this tensor.
@@ -1090,16 +1091,19 @@ def _fused_moe_lora_kernel(
             )
             a_ptrs += BLOCK_SIZE_K * SPLIT_K * stride_ak
 
-        # Cast operands to matching dtype for tl.dot. On ROCm, Triton's
-        # compiler may infer different types for a and b when merging
-        # if/else branches (TMA desc path returns fp32, tl.load returns
-        # the pointer's element type).
-        accumulator += tl.dot(a.to(tl.bfloat16), b.to(tl.bfloat16))
+        # Cast operands to the input dtype for tl.dot. On ROCm, Triton's
+        # compiler may infer different types for a and b when merging if/else
+        # branches (TMA desc path returns fp32, tl.load returns the pointer's
+        # element type). Casting to bfloat16 here silently changes fp16 LoRA
+        # operands and can produce incorrect results.
+        dot_dtype = a_ptr.dtype.element_ty
+        accumulator += tl.dot(a.to(dot_dtype), b.to(dot_dtype))
 
     if MUL_ROUTED_WEIGHT:
         moe_weight = tl.load(topk_weights_ptr + offs_token, mask=token_mask, other=0.0)
         accumulator = accumulator * moe_weight[:, None]
-    accumulator = accumulator.to(c_ptr.dtype.element_ty)
+    if not FP32_ADD_INPUTS:
+        accumulator = accumulator.to(c_ptr.dtype.element_ty)
     # Write back the block of the output
     offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
     c_ptrs = _get_c_ptrs(
@@ -1120,6 +1124,8 @@ def _fused_moe_lora_kernel(
     if SPLIT_K == 1:
         if ADD_INPUTS:
             prev = tl.load(c_ptrs, mask=c_mask, other=0.0)
+            if FP32_ADD_INPUTS:
+                prev = prev.to(tl.float32)
             tl.store(c_ptrs, prev + accumulator, mask=c_mask)
         else:
             tl.store(c_ptrs, accumulator, mask=c_mask)
@@ -1173,6 +1179,7 @@ def _fused_moe_lora_shrink(
         "SPLIT_K": split_k,
         "USE_GDC": use_gdc,
         "launch_pdl": use_gdc,  # triton kernel metadata
+        "FP32_ADD_INPUTS": False,
         "USE_TMA": use_tma,
     }
 
@@ -1188,7 +1195,9 @@ def _fused_moe_lora_shrink(
     a_desc = None
     b_desc = None
     if use_tma and num_slices == 1:
-        b_desc = triton.tools.tensor_descriptor.TensorDescriptor.from_tensor(
+        from triton.tools.tensor_descriptor import TensorDescriptor
+
+        b_desc = TensorDescriptor.from_tensor(
             lora_a_stacked[0],
             [1, 1, shrink_config["BLOCK_SIZE_N"], shrink_config["BLOCK_SIZE_K"]],
         )
@@ -1294,6 +1303,7 @@ def _fused_moe_lora_expand(
         "SPLIT_K": 1,  # Set split_k = 1 for expand calls
         "USE_GDC": use_gdc,
         "launch_pdl": use_gdc,  # triton kernel metadata
+        "FP32_ADD_INPUTS": device.type == "xpu",
         "USE_TMA": use_tma,
     }
 
@@ -1311,13 +1321,15 @@ def _fused_moe_lora_expand(
     a_desc = None
     b_desc = None
     if use_tma:
+        from triton.tools.tensor_descriptor import TensorDescriptor
+
         if sorted_token_ids is not None:
-            a_desc = triton.tools.tensor_descriptor.TensorDescriptor.from_tensor(
+            a_desc = TensorDescriptor.from_tensor(
                 a_intermediate_cache1,
                 [expand_config["BLOCK_SIZE_M"], expand_config["BLOCK_SIZE_K"]],
             )
         if num_slices == 1:
-            b_desc = triton.tools.tensor_descriptor.TensorDescriptor.from_tensor(
+            b_desc = TensorDescriptor.from_tensor(
                 lora_b_stacked[0],
                 [1, 1, expand_config["BLOCK_SIZE_N"], expand_config["BLOCK_SIZE_K"]],
             )
@@ -1417,7 +1429,11 @@ def _fused_moe_lora(
     assert top_k_num == topk_weights.shape[1]
 
     # Fast path: single fused kernel
-    if not fully_sharded and max_lora_rank <= _FUSED_MOE_LORA_ONE_SHOT_MAX_RANK:
+    if (
+        not fully_sharded
+        and max_lora_rank <= _FUSED_MOE_LORA_ONE_SHOT_MAX_RANK
+        and topk_weights.shape[0] > FUSED_MOE_LORA_TWO_KERNEL_MAX_TOKENS
+    ):
         M_pairs = topk_weights.numel()
         if sorted_token_ids is None and max_lora_rank <= 64 and M_pairs * max_lora_rank <= 1024:
             _run_fused_moe_lora_small_batch(
@@ -1475,7 +1491,7 @@ def _fused_moe_lora(
 
     # TMA is not currently compatiple with fully_sharded due to the non-determinism
     # of token id sorting across ranks.
-    use_tma = supports_tma(device) and not fully_sharded
+    use_tma = supports_tma(device) and not fully_sharded and max_lora_rank * output.element_size() % 16 == 0
 
     intermediate_cache_shape = (
         num_slices,

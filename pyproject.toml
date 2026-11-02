@@ -109,6 +109,11 @@ ignore_missing_imports = true
 check_untyped_defs = true
 follow_imports = "silent"
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = ["arg-type", "assignment"]
+enable_error_code = ["method-assign"]
+
 [tool.pytest.ini_options]
 markers = [
     "slow_test",
@@ -136,14 +141,16 @@ extend-exclude = ["tests/models/fixtures/*", "tests/prompts/*", "tests/tokenizer
     "examples/pooling/token_embed/*", "tests/models/language/pooling/*",
     "aphrodite/third_party/*", "aphrodite/entrypoints/serve/instrumentator/static/*", "tests/entrypoints/openai/speech_to_text/test_transcription_validation.py",
     "tests/entrypoints/speech_to_text/transcription/test_transcription_validation.py",
+    "tests/entrypoints/scale_out/token_in_token_out/test_protocol.py",
     "rust/src/chat/src/renderer/deepseek_v32/fixtures/*", "rust/src/parser/**",
     "docs/governance/process.md", "docs/assets/contributing/aphrodite_bench_serve_timeline.html",
-    "tests/v1/engine/test_fast_incdec_prefix_err.py", ".git/*",
+    "tests/v1/engine/test_fast_incdec_prefix_err.py", ".git/*", "csrc/cpu/sgl-kernels/*",
     "rust/src/text/src/output/decoded.rs",
     "rust/src/tokenizer/src/incremental.rs",
     # Vendored NVIDIA CUTLASS reference kernel. Keep identifiers aligned with upstream.
     "aphrodite/model_executor/kernels/linear/mxfp6/cutedsl_kernel.py",
-    "aphrodite/model_executor/kernels/linear/mxfp6/cutedsl_grouped_kernel.py"]
+    "aphrodite/model_executor/kernels/linear/mxfp6/cutedsl_grouped_kernel.py",
+    "recipes/models/*"]
 ignore-hidden = false
 
 [tool.typos.default]
@@ -183,6 +190,7 @@ tool_call_512_thinkg_budget = "tool_call_512_thinkg_budget"
 unsed_kwargs_1 = "unsed_kwargs_1"
 unsed_kwargs_2 = "unsed_kwargs_2"
 view_seperator = "view_seperator"
+stride_bse = "stride_bse"
 womens_doubles = "womens_doubles"
 
 # code identifiers (renaming would break behavior)
@@ -198,6 +206,9 @@ thi = "thi"
 tru = "tru"
 
 [tool.typos.default.extend-words]
+certifi = "certifi"
+MoNE = "MoNE"
+mone = "mone"
 Hel = "Hel"
 wether = "wether"
 iy = "iy"
@@ -208,6 +219,8 @@ dout = "dout"
 Pn = "Pn"
 arange = "arange"
 thw = "thw"
+# temporal position ids (parallels hpos/wpos in vision RoPE)
+tpos = "tpos"
 subtile = "subtile"
 HSA = "HSA"
 setp = "setp"
@@ -219,10 +232,15 @@ pard = "pard"
 AKS = "AKS"
 ba = "ba"
 fo = "fo"
+ot = "ot"
 nd = "nd"
 eles = "eles"
 datas = "datas"
 ser = "ser"
+# numpy flags.writeable
+writeable = "writeable"
+# HF CLIP weight name
+layrnorm = "layrnorm"
 ure = "ure"
 VALU = "VALU"
 ather = "ather"
@@ -245,6 +263,8 @@ thinkg = "thinkg"
 # Walsh-Hadamard Transform
 wht = "wht"
 WHT = "WHT"
+# Huawei Compute Architecture for Neural Networks
+CANN = "CANN"
 advnace = "advnace"
 Algorith = "Algorith"
 correctess = "correctess"

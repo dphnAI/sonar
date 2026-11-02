@@ -10,6 +10,7 @@ from transformers import PreTrainedConfig
 
 from aphrodite.config.aphrodite import AphroditeConfig
 from aphrodite.config.ec_transfer import ECRole, ECTransferConfig
+from aphrodite.config.kv_transfer import KVTransferConfig
 from aphrodite.config.model import ModelConfig
 from aphrodite.config.multimodal import MultiModalConfig
 from aphrodite.transformers_utils.model_arch_config_convertor import (
@@ -609,6 +610,38 @@ def test_ec_producer_only_enables_mm_encoder_only(ec_role: ECRole | None, expect
     AphroditeConfig._resolve_mm_encoder_only(aphrodite_config)
 
     assert mm_config.mm_encoder_only is expected
+
+
+@pytest.mark.parametrize(
+    ("role", "language_model_only", "enable_mm_embeds", "expected"),
+    [
+        ("kv_consumer", False, False, True),
+        # Text-only P/D decode: no MM infrastructure.
+        ("kv_consumer", True, False, False),
+        # EPD decode that skips the encoder but still takes embeddings.
+        ("kv_consumer", True, True, True),
+        ("ec_consumer", True, False, True),
+    ],
+)
+def test_consumer_resolves_mm_embedding_inputs(
+    role: str, language_model_only: bool, enable_mm_embeds: bool, expected: bool
+):
+    mm_config = MultiModalConfig(language_model_only=language_model_only, enable_mm_embeds=enable_mm_embeds)
+    model_config = MagicMock(spec=ModelConfig)
+    model_config.multimodal_config = mm_config
+    aphrodite_config = MagicMock(spec=AphroditeConfig)
+    aphrodite_config.model_config = model_config
+    aphrodite_config.ec_transfer_config = (
+        ECTransferConfig(ec_connector="ECExampleConnector", ec_role=role) if role == "ec_consumer" else None
+    )
+    aphrodite_config.kv_transfer_config = (
+        KVTransferConfig(kv_connector="ExampleConnector", kv_role=role) if role == "kv_consumer" else None
+    )
+
+    AphroditeConfig._resolve_mm_embedding_inputs(aphrodite_config)
+
+    assert mm_config.allow_missing_mm_embeddings is expected
+    assert mm_config.enable_mm_embeds is expected
 
 
 def test_aphrodite_config_runs_the_mm_processor_device_check():

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """The fused b12x W4A8 decode MoE (csrc/moe/b12x_moe_fused_sm120.cu) against b12x's own kernels, bit for bit."""
 
 import pytest

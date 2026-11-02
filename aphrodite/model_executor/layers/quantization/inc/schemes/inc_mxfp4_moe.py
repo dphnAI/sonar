@@ -35,7 +35,11 @@ from aphrodite.model_executor.layers.fused_moe.oracle.mxfp4 import (
 from aphrodite.model_executor.layers.quantization.utils.marlin_utils_fp4 import (
     prepare_moe_fp4_layer_for_marlin,
 )
-from aphrodite.model_executor.utils import set_weight_attrs
+from aphrodite.model_executor.utils import (
+    move_parameter,
+    replace_parameter,
+    set_weight_attrs,
+)
 from aphrodite.platforms import current_platform
 
 logger = init_logger(__name__)
@@ -151,10 +155,8 @@ class INCMxfp4MoEMethod(FusedMoEMethodBase):
         )
 
     def process_weights_after_loading(self, layer: RoutedExperts) -> None:
-        layer.w13_weight = torch.nn.Parameter(layer.w13_weight_packed.data, requires_grad=False)
-        delattr(layer, "w13_weight_packed")
-        layer.w2_weight = torch.nn.Parameter(layer.w2_weight_packed.data, requires_grad=False)
-        delattr(layer, "w2_weight_packed")
+        move_parameter(layer, "w13_weight_packed", "w13_weight")
+        move_parameter(layer, "w2_weight_packed", "w2_weight")
         if self.use_cutlass_mxfp4:
             from aphrodite.model_executor.layers.fused_moe.experts.cutlass_moe import (
                 swizzle_mxfp4_scales,
@@ -174,8 +176,8 @@ class INCMxfp4MoEMethod(FusedMoEMethodBase):
                 scale2 = layer.w2_weight_scale[expert_idx]
                 swizzled2 = swizzle_mxfp4_scales(scale2, w2_m, w2_scale_n * 32)
                 swizzled_w2.append(swizzled2.reshape(w2_m, w2_scale_n))
-            layer.w13_weight_scale = torch.nn.Parameter(torch.stack(swizzled_w13), requires_grad=False)
-            layer.w2_weight_scale = torch.nn.Parameter(torch.stack(swizzled_w2), requires_grad=False)
+            replace_parameter(layer, "w13_weight_scale", torch.stack(swizzled_w13))
+            replace_parameter(layer, "w2_weight_scale", torch.stack(swizzled_w2))
         elif self.mxfp4_backend in B12X_BACKENDS or current_platform.is_xpu():
             pass
         else:

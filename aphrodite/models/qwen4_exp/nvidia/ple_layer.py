@@ -3,6 +3,7 @@
 """GPU-resident Qwen4Exp position-learning enhancement layers."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 import torch
 from torch import nn
@@ -12,7 +13,14 @@ from aphrodite.compilation.breakable_cudagraph import eager_break_during_capture
 from aphrodite.config import AphroditeConfig, CacheConfig, ModelConfig, get_current_aphrodite_config
 from aphrodite.forward_context import get_forward_context
 from aphrodite.model_executor.layers.linear import MergedColumnParallelLinear
-from aphrodite.model_executor.layers.mamba.abstract import MambaBase
+from aphrodite.model_executor.layers.mamba.abstract import (
+    MambaBase,
+    get_mamba_prefill_checkpoint_alignment,
+    get_mamba_prefill_checkpoint_grid,
+)
+from aphrodite.model_executor.layers.mamba.checkpoint import (
+    MambaPrefillCheckpointExporter,
+)
 from aphrodite.model_executor.layers.mamba.mamba_utils import (
     MambaStateDtypeCalculator,
     MambaStateShapeCalculator,
@@ -24,6 +32,7 @@ from aphrodite.v1.attention.backends.short_conv_attn import (
     PleShortConvAttentionBackend,
     PleShortConvAttentionMetadata,
 )
+from aphrodite.v1.kv_cache_interface import KVCacheSpec, MambaSpec
 
 from ..common.ops.ple import ple_conv, ple_gate
 from .ngram_embedding import Qwen4ExpNGramEmbedding
@@ -83,6 +92,8 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
         self.conv_kernel_size = int(config.ple_conv_kernel_size)
         self.short_conv_dilation = int(config.ngram_size)
         self.conv_state_len = (self.conv_kernel_size - 1) * self.short_conv_dilation
+        # The conv window ending at a checkpoint is a copy of its last inputs.
+        self._checkpoint_exporter = MambaPrefillCheckpointExporter(state_len=self.conv_state_len)
         self.num_spec_tokens = aphrodite_config.num_speculative_tokens
         self.activation = "silu"
         self.ple_embedding = Qwen4ExpNGramEmbedding(
@@ -176,6 +187,24 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
             conv_kernel=self.conv_state_len + 1,
             num_spec=self.num_spec_tokens,
         )
+
+    def get_prefill_checkpoint_alignment(self) -> int | None:
+        return 1 if self.cache_config.mamba_cache_mode == "align" else None
+
+    def get_kv_cache_spec(self, aphrodite_config: AphroditeConfig) -> KVCacheSpec | None:
+        spec = super().get_kv_cache_spec(aphrodite_config)
+        # The scheduler takes internal checkpoints only when every Mamba layer
+        # can export them.
+        if (
+            self.get_prefill_checkpoint_alignment() is None
+            or get_mamba_prefill_checkpoint_alignment(aphrodite_config) is None
+            or not isinstance(spec, MambaSpec)
+        ):
+            return spec
+        grid = get_mamba_prefill_checkpoint_grid(aphrodite_config)
+        # Offsets are multiples of the grid, so the window holds only inputs.
+        assert grid >= self.conv_state_len
+        return replace(spec, num_prefill_checkpoint_blocks=1, prefill_checkpoint_alignment=grid)
 
     def _short_conv_dilated_dispatch(
         self,
@@ -294,6 +323,15 @@ class Qwen4ExpPLELayer(nn.Module, MambaBase):
                 has_initial_states=has_initial_states,
                 token_indices=token_indices_p,
             )
+            if metadata.checkpoint is not None:
+                assert metadata.non_spec_query_start_loc is not None
+                self._checkpoint_exporter.export(
+                    metadata.checkpoint,
+                    raw_qkv=inputs,
+                    conv_state=conv_state,
+                    cu_seqlens=metadata.non_spec_query_start_loc,
+                    token_indices=non_spec_token_indices,
+                )
         else:
             num_decode_rows = non_spec_token_indices.numel() if non_spec_token_indices is not None else inputs.size(0)
             ple_conv(

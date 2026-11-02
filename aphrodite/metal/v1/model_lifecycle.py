@@ -234,7 +234,9 @@ class ModelLifecycle:
         self._runner.kv_cache_dtype = None
         self._runner._is_vlm = False
         self._runner._is_stt = True
-        self._runner._stt_runtime_adapter = model.create_runtime_adapter(model_name)
+        self._runner._stt_runtime_adapter = model.create_runtime_adapter(
+            model_name, self._runner.model_config.trust_remote_code
+        )
 
     def resolve_model_dims(self) -> None:
         args = self._runner.model_args

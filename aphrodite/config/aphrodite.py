@@ -22,6 +22,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 import aphrodite.envs as envs
 from aphrodite.logger import enable_trace_function_call, init_logger
+from aphrodite.platforms import current_platform
 from aphrodite.transformers_utils.runai_utils import is_runai_obj_uri
 from aphrodite.triton_utils import HAS_TRITON
 from aphrodite.utils import random_uuid
@@ -33,6 +34,7 @@ from .cache import CacheConfig
 from .compilation import CompilationConfig, CompilationMode, CUDAGraphMode
 from .device import DeviceConfig
 from .diffusion import DiffusionConfig
+from .dphn import DphnNetworkConfig
 from .ec_manager_config import EncoderCacheManagerConfig
 from .ec_transfer import ECTransferConfig
 from .engram import EngramConfig, model_has_engram_layers
@@ -53,6 +55,7 @@ from .scheduler import SchedulerConfig
 from .speculative import EagleModelTypes, NgramGPUTypes, SpeculativeConfig
 from .structured_outputs import StructuredOutputsConfig
 from .utils import SupportsHash, config, get_field, replace
+from .watchdog_config import WatchdogConfig
 from .watermarking import WatermarkConfig
 from .weight_transfer import WeightTransferConfig
 
@@ -61,13 +64,13 @@ if TYPE_CHECKING:
 
     from aphrodite.model_executor.layers.quantization.base_config import QuantizationConfig
     from aphrodite.sampling_params import BeamSearchParams, SamplingParams
-    from aphrodite.v1.kv_cache_interface import KVCacheConfig
+    from aphrodite.v1.kv_cache_interface import KVCacheGroupSpec
 else:
     PreTrainedConfig = Any
 
     QuantizationConfig = Any
 
-    KVCacheConfig = Any
+    KVCacheGroupSpec = Any
 
 logger = init_logger(__name__)
 
@@ -75,9 +78,21 @@ logger = init_logger(__name__)
 # Other architectures use upstream's V2 defaults.
 ROCM_DEFAULT_MRV1_ARCHITECTURES = frozenset({"KimiK3ForConditionalGeneration"})
 
+_QWEN3_5_ARCHITECTURES = frozenset(
+    {
+        "Qwen3_5ForCausalLM",
+        "Qwen3_5ForConditionalGeneration",
+        "Qwen3_5MTP",
+        "Qwen3_5MoeForCausalLM",
+        "Qwen3_5MoeForConditionalGeneration",
+        "Qwen3_5MoeMTP",
+    }
+)
+
 DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES = frozenset(
     {
         "AliceAIForCausalLM",
+        "BeamForCausalLM",
         "DeepseekV32MTPModel",
         "DeepseekV32ForCausalLM",
         "DeepseekV4ForCausalLM",
@@ -99,9 +114,13 @@ DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES = frozenset(
         "KimiLinearForCausalLM",
         "MiniMaxM3SparseForCausalLM",
         "MiniMaxM3SparseForConditionalGeneration",
+        "MuseSpark1xForCausalLM",
+        "MuseSparkForConditionalGeneration",
         "Qwen4ExpForCausalLM",
         "Qwen4ExpForConditionalGeneration",
         "Qwen4ExpMTP",
+        "Step5ForCausalLM",
+        "Step5ForConditionalGeneration",
     }
 )
 
@@ -123,6 +142,10 @@ def default_breakable_cudagraph_architectures() -> frozenset[str]:
         # graphs are on. Enable this architecture so the published AMD
         # recipe can start.
         return frozenset({"DeepseekV41ForCausalLM"})
+    if current_platform.is_cuda():
+        # Qwen3.5 migrates to breakable CUDA graphs on NVIDIA only; other
+        # platforms keep the torch.compile path.
+        return DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES | _QWEN3_5_ARCHITECTURES
     return DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES
 
 
@@ -367,6 +390,8 @@ class AphroditeConfig:
     """Execution auxiliary output configuration."""
     engram_config: EngramConfig | None = None
     """N-gram embedding storage and sharding settings."""
+    dphn_network_config: DphnNetworkConfig | None = None
+    """Opt-in weight-only sampling receipts; not inference provenance."""
     mamba_config: MambaConfig = Field(default_factory=MambaConfig)
     """Mamba configuration."""
     kernel_config: KernelConfig = Field(default_factory=KernelConfig)
@@ -433,6 +458,9 @@ class AphroditeConfig:
 
     weight_transfer_config: WeightTransferConfig | None = None
     """The configurations for weight transfer during RL training."""
+
+    watchdog_config: WatchdogConfig = Field(default_factory=WatchdogConfig)
+    """Configuration for the stack-dump watchdog."""
 
     shutdown_timeout: int = Field(default=0, ge=0)
     """Shutdown grace period for in-flight requests. Shutdown will be delayed for
@@ -601,20 +629,7 @@ class AphroditeConfig:
         speculative_config = self.speculative_config
         if speculative_config is None:
             return 0
-        dspark_fill_in = speculative_config.use_dspark() and not getattr(
-            speculative_config.draft_model_config.hf_config, "sample_from_anchor", True
-        )
-        if speculative_config.use_dflash() or dspark_fill_in:
-            # Fill-in drafting uses a bonus query plus one query per draft token.
-            # DSpark's anchor-sampling layout does not need the extra slot.
-            return self.num_speculative_tokens + 1
-        if speculative_config.use_eagle() or speculative_config.uses_draft_model():
-            # Anchor-sampling DSpark drafts a block of num_speculative_tokens
-            # query tokens in which the anchor itself is the first prediction
-            # position (no separate bonus query), so it needs exactly
-            # num_speculative_tokens lookahead slots.
-            return self.num_speculative_tokens
-        return 0
+        return speculative_config.speculator_config.num_lookahead_tokens
 
     @property
     def num_prefill_lookahead_tokens(self) -> int:
@@ -629,15 +644,26 @@ class AphroditeConfig:
         their own per-method lookahead, so those components cannot drift apart.
         """
         speculative_config = self.speculative_config
-        if speculative_config is None or not speculative_config.use_eagle():
+        if speculative_config is None:
             return 0
-        if speculative_config.use_multi_module_mtp():
-            # Each MTP module reads one token further ahead than the one before
-            # it, so the chain needs num_speculative_tokens of runway at a
-            # chunked-prefill boundary.
-            return self.num_speculative_tokens
-        # Eagle-family drafters read only the immediate next token.
-        return 1
+        return speculative_config.speculator_config.num_prefill_lookahead_tokens
+
+    @property
+    def num_hash_lookahead_tokens(self) -> int:
+        """Tokens after each block that its hash covers; 0 keeps the legacy hashes."""
+        speculative_config = self.speculative_config
+        if (
+            speculative_config is None
+            or not speculative_config.use_eagle_block_drop()
+            or speculative_config.disable_lookahead_block_hashes
+            or not self.cache_config.enable_prefix_caching
+        ):
+            return 0
+        # KV connectors, including HiSparse's, keep the legacy hashes.
+        if self.kv_transfer_config is not None:
+            return 0
+        # The drafter's KV at a block's last position reads this far ahead.
+        return self.num_prefill_lookahead_tokens
 
     @property
     def uniform_decode_query_len(self) -> int:
@@ -677,21 +703,9 @@ class AphroditeConfig:
 
     @property
     def use_v2_model_runner(self) -> bool:
-        if self.attention_config.hisparse_config is not None:
-            if envs.APHRODITE_USE_V2_MODEL_RUNNER is False:
-                raise ValueError("HiSparse requires Model Runner V2; remove APHRODITE_USE_V2_MODEL_RUNNER=0.")
-            return True
-
-        if getattr(self, "watermark_config", None) is not None:
-            if envs.APHRODITE_USE_V2_MODEL_RUNNER is False:
-                logger.info_once("Watermarking requires Model Runner V2 and overrides APHRODITE_USE_V2_MODEL_RUNNER=0.")
-            return True
-
         use_v2_model_runner = envs.APHRODITE_USE_V2_MODEL_RUNNER
         if use_v2_model_runner is not None:
             return use_v2_model_runner
-
-        from aphrodite.platforms import current_platform
 
         model_config = self.model_config
         if model_config is not None and current_platform.is_rocm():
@@ -703,11 +717,14 @@ class AphroditeConfig:
                 )
                 return False
 
-        if not HAS_TRITON:
+        unsupported = self._get_v2_model_runner_unsupported_features()
+
+        if current_platform.uses_standalone_cpu_model_runner():
+            unsupported.extend(self._get_standalone_cpu_model_runner_unsupported_features())
+        elif not HAS_TRITON and not current_platform.is_unspecified():
             logger.warning_once("Model Runner V2 requires Triton; using the V1 model runner instead.")
             return False
 
-        unsupported = self._get_v2_model_runner_unsupported_features()
         if unsupported:
             logger.warning_once(
                 "Model Runner V2 does not yet support %s; using the V1 model runner instead.",
@@ -726,7 +743,13 @@ class AphroditeConfig:
         draft_config = getattr(spec, "draft_model_config", None)
         if draft_config is None:
             return False
-        return bool({"DFlash2DraftModel", "LiLiCorrDraftModel"}.intersection(draft_config.architectures or []))
+        return bool(
+            {
+                "DFlash2DraftModel",
+                "DFlash2BeamDraftModel",
+                "LiLiCorrDraftModel",
+            }.intersection(draft_config.architectures or [])
+        )
 
     def _dflash_needs_multi_kv_group(self) -> bool:
         """Whether a DFlash draft mixes sliding-window and full attention."""
@@ -1149,6 +1172,53 @@ class AphroditeConfig:
                         f"{connector_name}; PD auxiliary output is not supported."
                     )
 
+    def _verify_direct_reload_compat(self) -> None:
+        """Reject configurations that direct weight reload cannot support."""
+        # not `direct_reload_enabled()`: importing it would load the model
+        # loaders into every process that builds a config
+        if envs.APHRODITE_RELOAD_MODE != "direct":
+            return
+        from aphrodite.model_executor.layers.quantization.online.base import (
+            OnlineQuantizationConfig,
+        )
+
+        offload = self.offload_config
+        if (
+            offload.offload_backend != "auto"
+            or offload.prefetch.offload_group_size > 0
+            or offload.uva.cpu_offload_gb > 0
+        ):
+            # CPU/UVA offload gives parameters new storage on every post-load
+            # processing; prefetch offload shares one buffer between layers
+            raise ValueError("Direct reload does not support weight offloading.")
+        model_config = self.model_config
+        if model_config is not None and model_config.quantization == "torchao":
+            # its load_weights runs a layerwise reload, and its post-load
+            # processing replaces the weight parameter
+            raise ValueError("Direct reload does not support torchao quantization.")
+        if isinstance(self.quant_config, OnlineQuantizationConfig) or (
+            getattr(self.quant_config, "online_quantization_config", None) is not None
+        ):
+            # `finish` clears the guard that keeps online quantization from
+            # quantizing its already-quantized bytes again
+            raise ValueError("Direct reload does not support online quantization.")
+        if self.lora_config is not None:
+            # LoRA wraps layers after cold start; their wrappers forward
+            # `quant_method`, so a rerun would process each base layer twice
+            raise ValueError("Direct reload does not support LoRA.")
+        spec = self.speculative_config
+        if spec is not None and spec.draft_lm_head_quantization is not None:
+            # after `begin` the draft's quantized lm_head is a view of the target
+            # lm_head's storage: post-load processing would write it there
+            raise ValueError("Direct reload does not support draft_lm_head_quantization.")
+        transfer = self.weight_transfer_config
+        if transfer is not None and transfer.backend == "sharded_rdt":
+            # its replay plan is baked by a layerwise (meta) dry run
+            raise ValueError(
+                "Direct reload does not support the sharded_rdt weight-transfer "
+                "backend. Use APHRODITE_RELOAD_MODE=layerwise or another backend."
+            )
+
     def _verify_kv_transfer_compat(self) -> None:
         """Reject configurations that silently corrupt KV transfers."""
         if self.kv_transfer_config is None or self.kv_transfer_config.kv_connector is None:
@@ -1252,18 +1322,12 @@ class AphroditeConfig:
                 raise ValueError("Speculative decoding with watermarking requires rejection_sample_method='standard'.")
             if speculative_config.parallel_drafting and speculative_config.method not in ("dflash", "dspark"):
                 raise ValueError("Parallel speculative drafting is not supported with watermarking.")
-            if speculative_config.method not in (
-                "dflash",
-                "dspark",
-                "eagle",
-                "eagle3",
-                "mtp",
-            ):
+            if not speculative_config.speculator_config.supports_watermarking:
                 raise ValueError(
-                    "Watermarking supports only dflash, dspark, eagle, eagle3 and mtp speculative decoding."
+                    "Watermarking supports only dflash, dspark, eagle, eagle3 and "
+                    "mtp speculative decoding, and not DFlash2 and LiLiCorr "
+                    "candidate-head drafters yet."
                 )
-            if self._is_dflash_candidate_draft():
-                raise ValueError("Watermarking does not support DFlash2 and LiLiCorr candidate-head drafters yet.")
             if (
                 not watermark_config.allow_target_only_watermarking
                 and not watermark_config.supports_speculative_decoding
@@ -1374,6 +1438,11 @@ class AphroditeConfig:
         # To give each torch profile run a unique instance name.
         self.instance_id = f"{time.time_ns()}"
 
+        if self.dphn_network_config is not None:
+            from aphrodite.proof import ensure_native_available
+
+            ensure_native_available()
+
         if self.model_config is not None and self.model_config.is_submodel_config:
             # with_hf_config() view: the parent config was already validated,
             # and this view's empty architecture list makes the model-dependent checks
@@ -1395,6 +1464,9 @@ class AphroditeConfig:
         if self.performance_mode != "balanced":
             logger.info_once("Performance mode set to '%s'.", self.performance_mode)
 
+        # Model hooks derive values from max_model_len, so apply the draft's
+        # limit first.
+        self._limit_max_model_len_to_draft()
         self.try_verify_and_update_config()
         self._reject_mismatched_float_kv_cache()
         self._resolve_and_verify_engram_config()
@@ -1405,6 +1477,9 @@ class AphroditeConfig:
         self.parallel_config.set_dcp_defaults()
 
         if self.model_config is not None:
+            # Normalize EPLB num_redundant_experts before verification.
+            self.parallel_config.compute_eplb_num_redundant_experts(self.model_config.get_num_experts())
+
             self.model_config.verify_with_parallel_config(self.parallel_config)
             self.model_config.verify_dual_chunk_attention_config(self.load_config)
 
@@ -1442,6 +1517,7 @@ class AphroditeConfig:
                     "PD with decode_context_parallel_size > 1 is only supported for MLA models."
                 )
         if self.lora_config is not None:
+            self.lora_config.verify_with_kernel_config(self.kernel_config)
             self.lora_config.verify_with_model_config(self.model_config)
 
         if self.mamba_config.enable_stochastic_rounding and self.cache_config.mamba_ssm_cache_dtype != "float16":
@@ -1455,6 +1531,7 @@ class AphroditeConfig:
 
         if self.quant_config is None and self.model_config is not None:
             self.quant_config = AphroditeConfig._get_quantization_config(self.model_config, self.load_config)
+        self._verify_direct_reload_compat()
 
         # "dummy" reads no weights at all, and the sharded formats read a Aphrodite
         # state dict, which stores tied word embeddings under the lm_head only.
@@ -1495,31 +1572,33 @@ class AphroditeConfig:
             and self.parallel_config.all2all_backend == "deepep_high_throughput"
         )
 
+        # Async scheduling incompatibilities specific to the V1 model runner.
+        v1_async_sched_incompat: str | None = None
+        if not self.use_v2_model_runner:
+            spec_config = self.speculative_config
+            if spec_config is not None and (
+                spec_config.method not in get_args(EagleModelTypes)
+                and spec_config.method not in get_args(NgramGPUTypes)
+                and spec_config.method not in ("draft_model", "dspark", "dflash")
+            ):
+                v1_async_sched_incompat = f"{spec_config.method}-based speculative decoding"
+            elif spec_config is not None and spec_config.disable_padded_drafter_batch:
+                v1_async_sched_incompat = "disable_padded_drafter_batch=True"
+            elif self.parallel_config.pipeline_parallel_size > 1:
+                v1_async_sched_incompat = "pipeline parallelism"
+
         if self.scheduler_config.async_scheduling:
             # Async scheduling explicitly enabled, hard fail any incompatibilities.
-            # Currently, async scheduling only support eagle speculative
-            # decoding.
             if uses_rocm_deepep_ht_dbo:
                 raise ValueError(
                     "Async scheduling is not compatible with ROCm DeepEP "
                     "high-throughput DBO. Please use --no-async-scheduling or "
                     "select a different all2all backend."
                 )
-            if self.speculative_config is not None:
-                if (
-                    self.speculative_config.method not in get_args(EagleModelTypes)
-                    and self.speculative_config.method not in get_args(NgramGPUTypes)
-                    and self.speculative_config.method != "draft_model"
-                    and self.speculative_config.method != "dspark"
-                    and self.speculative_config.method != "dflash"
-                ):
-                    raise ValueError(
-                        "Currently, async scheduling is only supported "
-                        "with EAGLE/MTP/Draft Model/NGram GPU/DSpark/DFlash "
-                        "kind of speculative decoding"
-                    )
-                if self.speculative_config.disable_padded_drafter_batch:
-                    raise ValueError("Async scheduling is not compatible with disable_padded_drafter_batch=True.")
+            if v1_async_sched_incompat is not None:
+                raise ValueError(
+                    f"Async scheduling is not supported by the V1 model runner with {v1_async_sched_incompat}."
+                )
             if not executor_supports_async_sched:
                 raise ValueError(f"`{executor_backend}` does not support async scheduling yet.")
         elif self.scheduler_config.async_scheduling is None:
@@ -1528,24 +1607,6 @@ class AphroditeConfig:
                 # The current implementation of asynchronous scheduling negatively
                 # impacts performance of pooling models, so we disable by default.
                 logger.debug("Disabling asynchronous scheduling by default for pooling model.")
-                self.scheduler_config.async_scheduling = False
-            elif (
-                self.speculative_config is not None
-                and self.speculative_config.method not in get_args(EagleModelTypes)
-                and self.speculative_config.method not in get_args(NgramGPUTypes)
-                and self.speculative_config.method != "draft_model"
-                and self.speculative_config.method != "dspark"
-                and self.speculative_config.method != "dflash"
-            ):
-                logger.warning_once(
-                    "Async scheduling not supported with %s-based speculative decoding and will be disabled.",
-                    self.speculative_config.method,
-                )
-                self.scheduler_config.async_scheduling = False
-            elif self.speculative_config is not None and self.speculative_config.disable_padded_drafter_batch:
-                logger.warning_once(
-                    "Async scheduling is not compatible with disable_padded_drafter_batch=True and will be disabled.",
-                )
                 self.scheduler_config.async_scheduling = False
             elif not executor_supports_async_sched:
                 logger.warning_once(
@@ -1561,10 +1622,10 @@ class AphroditeConfig:
                     "DP+EP generation accuracy."
                 )
                 self.scheduler_config.async_scheduling = False
-            elif self.parallel_config.pipeline_parallel_size > 1 and not self.use_v2_model_runner:
+            elif v1_async_sched_incompat is not None:
                 logger.warning_once(
-                    "Async scheduling is disabled because the V1 model runner "
-                    "does not support it with pipeline parallelism."
+                    "Async scheduling is disabled because the V1 model runner does not support it with %s.",
+                    v1_async_sched_incompat,
                 )
                 self.scheduler_config.async_scheduling = False
             else:
@@ -1581,6 +1642,15 @@ class AphroditeConfig:
                 self.parallel_config.disable_nccl_for_dp_synchronization = True
             else:
                 self.parallel_config.disable_nccl_for_dp_synchronization = False
+
+        if self.parallel_config.enable_fault_tolerance and not self.parallel_config.disable_nccl_for_dp_synchronization:
+            # FT only supports DP allreduce over the CPU group: recovery
+            # rebuilds only the cpu group, so a device-group (NCCL) sync
+            # would hang after reinit.
+            logger.info_once(
+                "Disabling NCCL for DP synchronization because fault tolerance is enabled.",
+            )
+            self.parallel_config.disable_nccl_for_dp_synchronization = True
 
         if self.observability_config.per_request_spec_decode_metrics != "none" and self.speculative_config is None:
             raise ValueError(
@@ -1718,8 +1788,8 @@ class AphroditeConfig:
             self.attention_config.hisparse_config = HiSparseConfig()
 
         if self.attention_config.hisparse_config is not None:
-            if not current_platform.is_cuda():
-                raise ValueError("HiSparse currently requires NVIDIA CUDA.")
+            if current_platform.get_hisparse_backend_cls() is None:
+                raise ValueError("The current platform does not support HiSparse.")
             if self.parallel_config.pipeline_parallel_size > 1:
                 raise ValueError("HiSparse does not support pipeline parallelism.")
             if self.parallel_config.decode_context_parallel_size > 1:
@@ -1833,7 +1903,7 @@ class AphroditeConfig:
             self.compilation_config.cudagraph_mode = CUDAGraphMode.NONE
 
         if self.cache_config.kv_sharing_fast_prefill:
-            if self.speculative_config is not None and self.speculative_config.use_eagle():
+            if self.speculative_config is not None and self.speculative_config.uses_target_hidden_states:
                 raise ValueError(
                     "Fast prefill optimization for KV sharing is not "
                     "compatible with EAGLE as EAGLE requires correct logits "
@@ -1990,6 +2060,8 @@ class AphroditeConfig:
                 " and install the matching kernels."
             )
 
+            self._raise_dbo_thresholds_for_spec_decode()
+
         if not self.instance_id:
             self.instance_id = random_uuid()[:5]
 
@@ -2020,7 +2092,7 @@ class AphroditeConfig:
             # Hybrid KV cache manager is not supported on non-GPU platforms.
             need_disable_hybrid_kv_cache_manager = True
         if self.model_config is not None and self.model_config.attention_chunk_size is not None:
-            if self.speculative_config is not None and self.speculative_config.use_eagle():
+            if self.speculative_config is not None and self.speculative_config.uses_target_hidden_states:
                 # Hybrid KV cache manager is not yet supported with chunked
                 # local attention + eagle.
                 need_disable_hybrid_kv_cache_manager = True
@@ -2146,16 +2218,16 @@ class AphroditeConfig:
                     f" num_lookahead_tokens={self.num_lookahead_tokens}."
                 )
             spec = self.speculative_config
-            if spec.use_dflash() or spec.use_dspark():
+            max_draft_seqs = spec.speculator_config.max_num_draft_seqs(max_num_batched_tokens)
+            if max_draft_seqs is not None:
                 max_num_active_seqs = self.scheduler_config.max_num_active_seqs or self.scheduler_config.max_num_seqs
-                max_draft_seqs = max_num_batched_tokens // self.num_lookahead_tokens
                 if max_draft_seqs < max_num_active_seqs:
                     logger.warning_once(
-                        "The %s draft pass needs %d query tokens per request within "
+                        "The %s draft pass fits at most %d requests within "
                         "max_num_batched_tokens=%d. Overriding max_num_active_seqs "
                         "from %d to %d.",
                         spec.method,
-                        self.num_lookahead_tokens,
+                        max_draft_seqs,
                         max_num_batched_tokens,
                         max_num_active_seqs,
                         max_draft_seqs,
@@ -2577,10 +2649,14 @@ class AphroditeConfig:
 
         ec_config = self.ec_transfer_config
         kv_config = self.kv_transfer_config
+        is_ec_consumer = ec_config is not None and ec_config.is_ec_consumer
+        is_kv_consumer = kv_config is not None and kv_config.is_kv_consumer
         # Derived, so overwrite unconditionally rather than honouring a value
         # that was set by hand.
-        mm_config.allow_missing_mm_embeddings = (ec_config is not None and ec_config.is_ec_consumer) or (
-            kv_config is not None and kv_config.is_kv_consumer
+        # A language-model-only KV consumer (text-only P/D) stays text-only
+        # unless the user opts in with --enable-mm-embeds.
+        mm_config.allow_missing_mm_embeddings = is_ec_consumer or (
+            is_kv_consumer and (not mm_config.language_model_only or mm_config.enable_mm_embeds)
         )
         if not mm_config.allow_missing_mm_embeddings:
             return
@@ -2724,6 +2800,27 @@ class AphroditeConfig:
 
         mm_config.validate_mm_processor_device(self.ec_transfer_config)
 
+    def _limit_max_model_len_to_draft(self) -> None:
+        """Lower max_model_len to the draft model's when the V2 model runner
+        can't serve longer sequences.
+        """
+        spec_config = self.speculative_config
+        if spec_config is None or self.model_config is None or not self.use_v2_model_runner:
+            return
+        draft_max_model_len = spec_config.speculator_config.max_model_len
+        target_max_model_len = self.model_config.max_model_len
+        if draft_max_model_len is None or draft_max_model_len >= target_max_model_len:
+            return
+        logger.warning(
+            "The draft model's max_model_len (%d) is smaller than the target "
+            "model's (%d) and the V2 model runner can't skip speculation for "
+            "longer sequences; reducing max_model_len to %d.",
+            draft_max_model_len,
+            target_max_model_len,
+            draft_max_model_len,
+        )
+        self.model_config.max_model_len = draft_max_model_len
+
     def _get_v2_model_runner_unsupported_features(self) -> list[str]:
         """Collect features not yet supported by the V2 model runner."""
         unsupported: list[str] = []
@@ -2738,7 +2835,7 @@ class AphroditeConfig:
             unsupported.append("pipeline parallelism with external_launcher")
 
         if speculative_config is not None:
-            if speculative_config.method in ("suffix", "custom_class"):
+            if speculative_config.speculator_config.speculator_class is None:
                 unsupported.append(f"speculative method '{speculative_config.method}'")
 
             # V2 EagleSpeculator does not support parallel_drafting (for P-Eagle).
@@ -2757,8 +2854,55 @@ class AphroditeConfig:
 
         return unsupported
 
+    def _get_standalone_cpu_model_runner_unsupported_features(self) -> list[str]:
+        """Collect features not supported by the standalone CPU model runner."""
+        unsupported: list[str] = []
+
+        if self.is_mm_encoder_only:
+            unsupported.append("multimodal encoder-only instances")
+
+        if self.speculative_config is not None:
+            unsupported.append("speculative decoding")
+
+        if self.model_config is not None:
+            if self.model_config.enable_prompt_embeds:
+                unsupported.append("prompt embeddings")
+            if self.model_config.is_diffusion:
+                unsupported.append("diffusion models")
+            if self.model_config.logits_processors:
+                unsupported.append("custom logits processors")
+
+        if self.parallel_config.decode_context_parallel_size > 1:
+            unsupported.append("decode context parallelism")
+
+        if self.parallel_config.prefill_context_parallel_size > 1:
+            unsupported.append("prefill context parallelism")
+
+        if self.parallel_config.enable_batch_sharded_sampling:
+            unsupported.append("batch-sharded sampling")
+
+        if self.parallel_config.use_ubatching:
+            unsupported.append("microbatching")
+
+        if self.parallel_config.enable_eplb:
+            unsupported.append("expert parallel load balancing")
+
+        if self.aux_output_config.enabled:
+            unsupported.append("routed-expert auxiliary outputs")
+
+        if self.lora_config and self.lora_config.enable_tower_connector_lora:
+            unsupported.append("multimodal tower and connector LoRA")
+
+        return unsupported
+
     def _get_v1_model_runner_unsupported_features(self) -> list[str]:
         unsupported: list[str] = []
+
+        if self.attention_config.hisparse_config is not None:
+            unsupported.append("HiSparse")
+
+        if self.watermark_config is not None:
+            unsupported.append("watermarking")
 
         # PCP runtime support is implemented only by the V2 model runner.
         if self.parallel_config.prefill_context_parallel_size > 1:
@@ -2777,12 +2921,27 @@ class AphroditeConfig:
 
         # DSpark is implemented only by the V2 GPU model runner.
         if self.speculative_config:
+            # Imported here since it imports aphrodite.config.
+            from aphrodite.v1.worker.gpu.spec_decode.xpress.config import (
+                XPressSpeculatorConfig,
+            )
+
+            if self.speculative_config.custom_method is not None:
+                unsupported.append(f"custom speculative method '{self.speculative_config.custom_method}'")
             if self.speculative_config.method == "dspark":
                 unsupported.append("dspark speculative decoding")
+            elif isinstance(self.speculative_config.speculator_config, XPressSpeculatorConfig):
+                unsupported.append("xpress speculative decoding")
             if self.speculative_config.enable_adaptive_verification:
                 unsupported.append("adaptive draft verification")
             if self.speculative_config.draft_lm_head_quantization is not None:
                 unsupported.append("draft lm_head quantization")
+
+        # The attention-free Parse MTP draft requires the V2 speculator.
+        if self.speculative_config:
+            draft_config = self.speculative_config.draft_model_config
+            if draft_config is not None and "ParseAuxMTPModel" in (draft_config.architectures or []):
+                unsupported.append("Parse 3.5 MTP")
 
         # Mixed sliding/full DFlash drafts need multiple KV groups (V2 only).
         if self._dflash_needs_multi_kv_group():
@@ -2799,6 +2958,12 @@ class AphroditeConfig:
 
         if self.parallel_config.enable_batch_sharded_sampling:
             unsupported.append("batch-sharded sampling")
+
+        if self.model_config is not None and self.model_config.architecture in (
+            "Step5ForCausalLM",
+            "Step5ForConditionalGeneration",
+        ):
+            unsupported.append("Step5")
 
         return unsupported
 
@@ -2854,18 +3019,6 @@ class AphroditeConfig:
             # gather_sampler_output() drops SamplingMaskTensors: masks come back None.
             blockers.append("return_sampling_mask is set and the batch-sharded gather does not forward sampling masks")
 
-        if self.speculative_config is not None and self.speculative_config.enable_adaptive_verification:
-            # Adaptive verification picks the per-request draft split on the GPU,
-            # so cu_num_logits_np is only an upper bound, while the shard plan is
-            # built from that CPU array. The two disagree once the budget binds.
-            # TODO(TheEpicDolphin): Support adaptive verification with batch-sharded
-            # sampling.
-            blockers.append(
-                "it does not yet work with adaptive verification, which decides "
-                "the per-request logits counts on the GPU, where the CPU-side "
-                "shard plan cannot see them"
-            )
-
         if blockers:
             raise ValueError(
                 "Batch-sharded sampling was explicitly enabled via "
@@ -2874,12 +3027,34 @@ class AphroditeConfig:
                 f"{'; '.join(blockers)}."
             )
 
+    def _raise_dbo_thresholds_for_spec_decode(self) -> None:
+        """The speculative counterpart of ParallelConfig's DBO threshold check.
+
+        A uniform decode batch below one request per microbatch cannot be split
+        on a request boundary, and an idle DP rank's one-request dummy batch
+        must stay below the thresholds too. Such batches gain nothing from
+        microbatching, so raise the thresholds rather than reject the config.
+        """
+        parallel_config = self.parallel_config
+        min_ubatch_tokens = parallel_config.num_ubatches * self.uniform_decode_query_len
+        for name in ("dbo_decode_token_threshold", "dbo_prefill_token_threshold"):
+            threshold = getattr(parallel_config, name)
+            if threshold < min_ubatch_tokens:
+                logger.warning_once(
+                    "Raising %s from %d to %d, the number of microbatches times the decode query length.",
+                    name,
+                    threshold,
+                    min_ubatch_tokens,
+                )
+                setattr(parallel_config, name, min_ubatch_tokens)
+
     def _get_dbo_unsupported_features(self) -> list[str]:
         """Collect what the V2 model runner cannot combine with DBO.
 
-        The V2 runner microbatches a plain decoder forward pass. Anything that
-        slices or replays the batch differently (drafting, adapters, pipeline
-        stages, context parallelism, encoders) is not handled yet.
+        The V2 runner microbatches a decoder forward pass (drafting runs whole,
+        after it). Anything else that slices or replays the batch differently
+        (adapters, pipeline stages, prefill context parallelism, encoders) is
+        not handled yet.
         """
         # TODO: DBO with model runner V2 is under development.
         # It should be enabled with explicit APHRODITE_USE_V2_MODEL_RUNNER environ.
@@ -2893,12 +3068,10 @@ class AphroditeConfig:
 
         if self.lora_config is not None:
             unsupported.append("dual batch overlap with LoRA")
-        if self.speculative_config is not None:
-            unsupported.append("dual batch overlap with speculative decoding")
         if parallel_config.pipeline_parallel_size > 1:
             unsupported.append("dual batch overlap with pipeline parallelism")
-        if parallel_config.decode_context_parallel_size > 1 or parallel_config.prefill_context_parallel_size > 1:
-            unsupported.append("dual batch overlap with context parallelism")
+        if parallel_config.prefill_context_parallel_size > 1:
+            unsupported.append("dual batch overlap with prefill context parallelism")
         if model_config is not None and (model_config.is_multimodal_model or model_config.is_encoder_decoder):
             unsupported.append("dual batch overlap with multimodal models")
         if model_config is not None and model_config.is_hybrid:
@@ -2961,24 +3134,31 @@ class AphroditeConfig:
 
     def _validate_v2_model_runner(self) -> None:
         """Check for features not yet supported by the V2 model runner."""
-        if not HAS_TRITON:
-            raise ValueError("Model Runner V2 requires Triton.")
-
         unsupported = self._get_v2_model_runner_unsupported_features()
         if unsupported:
             raise ValueError(f"Model Runner V2 does not yet support: {', '.join(unsupported)}")
+        if current_platform.uses_standalone_cpu_model_runner():
+            unsupported = self._get_standalone_cpu_model_runner_unsupported_features()
+            if unsupported:
+                raise ValueError(f"CPU Model Runner V2 without Triton does not yet support: {', '.join(unsupported)}")
 
     def _validate_v1_model_runner(self) -> None:
         unsupported = self._get_v1_model_runner_unsupported_features()
         if unsupported:
             raise ValueError(f"Model Runner V1 does not support: {', '.join(unsupported)}")
 
-    def adjust_dcp_kv_cache_interleave_size(self, kv_cache_config: "KVCacheConfig") -> None:
-        """Normalize DCP interleave size against block_size for NIXL P/D.
+    def adjust_dcp_kv_cache_interleave_size(self, kv_cache_groups: list["KVCacheGroupSpec"]) -> None:
+        """Resolve the NIXL P/D DCP interleave from the global KV cache groups.
 
-        Called by each worker (via ensure_kv_transfer_initialized), once it knows its
-        own final block_size via kv_cache_config.
+        Called once by the engine core before profiling; workers only assign the
+        result via ``set_kv_cache_layout``.
         """
+        if (
+            not kv_cache_groups
+            or self.kv_transfer_config is None
+            or not self.kv_transfer_config.is_kv_transfer_instance
+        ):
+            return
         dcp_size = self.parallel_config.decode_context_parallel_size
         if dcp_size <= 1:
             return
@@ -2992,14 +3172,14 @@ class AphroditeConfig:
                 "deprecated when PCP is fully supported."
             )
 
-        if self.kv_transfer_config is None or not self.kv_transfer_config.has_connector("NixlConnector"):
+        if not self.kv_transfer_config.has_connector("NixlConnector"):
             return
         if not self.parallel_config._allow_auto_resolve_cp_interleave_size:
             return
 
         # Get the kernel block_size, but don't use resolve_kv_cache_block_size to avoid
         # scaling by dcp_size (we need the local block_size here).
-        local_block_size = min(g.kv_cache_spec.block_size for g in kv_cache_config.kv_cache_groups)
+        local_block_size = min(g.kv_cache_spec.block_size for g in kv_cache_groups)
         if self.parallel_config.cp_kv_cache_interleave_size != local_block_size:
             interleave = self.parallel_config.cp_kv_cache_interleave_size
             self.parallel_config.cp_kv_cache_interleave_size = local_block_size
@@ -3022,7 +3202,7 @@ class AphroditeConfig:
         block_size = self.cache_config.block_size
 
         # Skip DCP interleave-size compatibility for NIXL P/D: the interleave
-        # size is pinned to block_size by each worker.
+        # size is finalized from the global KV cache groups.
         nixl_pd_active = self.kv_transfer_config is not None and self.kv_transfer_config.has_connector("NixlConnector")
         if self.parallel_config.decode_context_parallel_size > 1 and not nixl_pd_active:
             assert (
@@ -3043,6 +3223,13 @@ class AphroditeConfig:
 
     @model_validator(mode="after")
     def validate_nvfp4_kv_cache_with_mla(self) -> "AphroditeConfig":
+        if self.cache_config.cache_dtype == "nvfp4_ds_mla" and self.parallel_config.decode_context_parallel_size > 1:
+            raise ValueError(
+                "nvfp4_ds_mla KV cache is not supported with decode context "
+                "parallelism: the chunked-context prefill gather is not "
+                "validated under DCP. Use decode_context_parallel_size=1 or a "
+                "different --kv-cache-dtype."
+            )
         if self.model_config is None:
             return self
         # The ds_mla layouts are MLA-only by construction; the plain nvfp4
@@ -3130,7 +3317,14 @@ class AphroditeConfig:
             raise ValueError(
                 "Triton ReplaySSM requires Model Runner V1; use --mamba-backend flashinfer or Model Runner V1"
             )
-        if self.kv_transfer_config is not None and self.kv_transfer_config.is_kv_transfer_instance:
+        if (
+            self.kv_transfer_config is not None
+            and self.kv_transfer_config.is_kv_transfer_instance
+            # A KDA RecoverSSM request's state is its conv and SSM state in the
+            # stock Mamba page (the verify records are kept outside the KV
+            # cache), so KV connectors transfer it as usual.
+            and not self.cache_config.use_kda_recoverssm
+        ):
             raise ValueError(
                 "--use-replayssm is incompatible with KV connectors (P/D disaggregation, KV cache offload)"
             )

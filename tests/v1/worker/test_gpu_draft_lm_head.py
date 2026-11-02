@@ -113,7 +113,7 @@ def _draft_update_worker(aphrodite_config, drafter: torch.nn.Module, **engine) -
     )
     worker.model_runner = SimpleNamespace(get_draft_model=lambda: drafter)
     worker._weight_update_active = False
-    worker._set_draft_weight_update_target = lambda: None
+    worker._set_draft_weight_update_target = lambda: None  # type: ignore[method-assign]
     return worker
 
 

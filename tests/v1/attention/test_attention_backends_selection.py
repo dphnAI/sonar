@@ -23,6 +23,7 @@ from aphrodite.v1.attention.backends.mamba1_attn import Mamba1AttentionBackend
 from aphrodite.v1.attention.backends.mamba2_attn import Mamba2AttentionBackend
 from aphrodite.v1.attention.backends.registry import MambaAttentionBackendEnum
 from aphrodite.v1.attention.backends.short_conv_attn import ShortConvAttentionBackend
+from aphrodite.v1.kv_cache_interface import MambaSpec
 
 
 @pytest.mark.parametrize(("use_replayssm", "expected_blocks"), [(False, 3), (True, 0)])
@@ -46,6 +47,7 @@ def test_replayssm_does_not_reserve_speculative_state_blocks(use_replayssm, expe
     spec = MambaBase.get_kv_cache_spec(layer, aphrodite_config)
 
     assert spec is not None
+    assert isinstance(spec, MambaSpec)
     assert spec.num_speculative_blocks == expected_blocks
 
 

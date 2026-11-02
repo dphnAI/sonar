@@ -47,15 +47,13 @@ from aphrodite.v1.attention.backends.registry import (
     AttentionBackendEnum,
     MambaAttentionBackendEnum,
 )
-from aphrodite.v1.core.kv_cache_planning import (
-    estimate_max_model_len,
-    get_kv_cache_configs,
-)
+from aphrodite.v1.core.kv_cache_planning import estimate_max_model_len
 from aphrodite.v1.core.sched.output import CachedRequestData, NewRequestData, SchedulerOutput
 from aphrodite.v1.kv_cache_interface import (
     FullAttentionSpec,
     KVCacheConfig,
     KVCacheGroupSpec,
+    KVCacheSpec,
     KVCacheTensor,
 )
 from aphrodite.v1.outputs import EMPTY_MODEL_RUNNER_OUTPUT
@@ -73,6 +71,7 @@ from aphrodite.v1.worker.gpu_input_batch import InputBatch
 from aphrodite.v1.worker.gpu_model_runner import GPUModelRunner
 from aphrodite.v1.worker.gpu_worker import Worker
 from aphrodite.v1.worker.utils import select_common_block_size
+from tests.v1.core.utils import get_kv_cache_configs
 
 BLOCK_SIZE = 16
 NUM_BLOCKS = 10
@@ -334,7 +333,7 @@ def test_select_common_block_size_accepts_rocm_sparse_block_size_16(monkeypatch)
 
     selected_size = select_common_block_size(
         16,
-        [DeepseekV32IndexerBackend, ROCMAiterMLASparseBackend],
+        [DeepseekV32IndexerBackend, ROCMAiterMLASparseBackend],  # type: ignore[type-abstract]  # not instantiated
     )
     assert selected_size == 16
 
@@ -382,7 +381,11 @@ def test_sample_tokens_receives_pp_sampled_ids_only_on_non_last_rank(
         nonlocal receive_calls
         receive_calls += 1
 
-    runner._pp_receive_prev_sampled_token_ids_to_input_batch = receive_prev_sampled_token_ids
+    monkeypatch.setattr(
+        runner,
+        "_pp_receive_prev_sampled_token_ids_to_input_batch",
+        receive_prev_sampled_token_ids,
+    )
     monkeypatch.setattr(
         gpu_model_runner_module,
         "get_pp_group",
@@ -432,7 +435,9 @@ def _mock_backend(supported: list, *, exact: bool = False):
             return "MOCK_EXACT" if exact else "MOCK"
 
         @staticmethod
-        def get_supported_kernel_block_sizes(kv_cache_spec=None):
+        def get_supported_kernel_block_sizes(
+            kv_cache_spec: KVCacheSpec | None = None,
+        ) -> list[int | MultipleOf]:
             return list(supported)
 
         if exact:
@@ -1091,12 +1096,13 @@ def test_reload_weights_path_replaces_object_storage_source(monkeypatch):
     loader = Mock()
     loader.get_all_weights.return_value = iter(())
     monkeypatch.setattr(reload_inplace_module, "get_model_loader", lambda _: loader)
-    monkeypatch.setattr(reload_inplace_module, "initialize_layerwise_reload", Mock())
-    monkeypatch.setattr(reload_inplace_module, "finalize_layerwise_reload", Mock())
+    monkeypatch.setattr(reload_inplace_module, "start_reload", Mock())
+    monkeypatch.setattr(reload_inplace_module, "finish_reload", Mock())
 
     aphrodite_config = SimpleNamespace(
         lora_config=None,
-        load_config=SimpleNamespace(load_format="runai_streamer"),
+        load_config=SimpleNamespace(load_format="runai_streamer", device=None),
+        device_config=SimpleNamespace(device="cpu"),
         model_config=SimpleNamespace(
             model="/tmp/pulled-config-files",
             model_weights="s3://bucket/original",
@@ -1631,8 +1637,9 @@ def test_input_batch_reinitialized_after_late_interleave_adjustment(monkeypatch)
         logitsprocs=None,
         logitsprocs_need_output_token_ids=False,
     )
-    runner.jit_warmup_registry = Mock()
-    runner.jit_warmup_registry.activate.return_value = nullcontext()
+    jit_warmup_registry = Mock()
+    jit_warmup_registry.activate.return_value = nullcontext()
+    runner.jit_warmup_registry = jit_warmup_registry  # type: ignore[attr-defined]  # set by JitWarmupRegistry.capture
 
     spec = SimpleNamespace(
         block_size=16,

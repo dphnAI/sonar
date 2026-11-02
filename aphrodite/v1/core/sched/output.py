@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from aphrodite.distributed.ec_transfer.ec_connector.base import ECConnectorMetadata
     from aphrodite.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
     from aphrodite.lora.request import LoRARequest
-    from aphrodite.multimodal.inputs import MultiModalFeatureSpec
+    from aphrodite.multimodal.inputs import MultiModalFeatureSpec, MultiModalKwargsItem
     from aphrodite.pooling_params import PoolingParams
     from aphrodite.sampling_params import SamplingParams
     from aphrodite.v1.core.kv_cache_utils import KVCacheBlockCopy
@@ -252,6 +252,11 @@ class SchedulerOutput:
     # freed from the encoder cache.
     free_encoder_mm_hashes: list[str]
 
+    # Request-local CPU payload updates: None releases a consumed input; a
+    # payload restores it for re-encoding after KV-load rollback. GPU embeddings
+    # and the feature's identifier/placeholder metadata are unaffected.
+    encoder_input_updates: dict[str, dict[int, "MultiModalKwargsItem | None"]] = field(default_factory=dict)
+
     scheduled_encoder_input_stats: ScheduledEncoderInputStats | None = None
 
     # Request IDs that are preempted in this step.
@@ -304,6 +309,11 @@ class SchedulerOutput:
     # Kept for out-of-tree schedulers and workers.
     num_common_prefix_blocks: list[int] = field(default_factory=list)
 
+    # Whether no scheduled request can use the drafts proposed after this step
+    # (non-final prefill chunks, or requests sure to reach max_tokens), so the
+    # drafter can skip proposing them.
+    skip_drafts: bool = False
+
     @classmethod
     def make_empty(cls) -> "SchedulerOutput":
         return cls(
@@ -324,8 +334,3 @@ class GrammarOutput:
     structured_output_request_ids: list[str]
     # Bitmask ordered as structured_output_request_ids.
     grammar_bitmask: "npt.NDArray[np.int32]"
-    # Per request, ordered as structured_output_request_ids: how many leading
-    # drafts the bitmask constrained. `grammar_bitmask` fills every row after
-    # the first -1 placeholder with the all-permissive `_full_mask`, so drafts
-    # from this index on must not be accepted. None invalidates every draft.
-    num_acceptable_drafts: list[int] | None = None

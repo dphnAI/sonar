@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import json
 from typing import TYPE_CHECKING
 
 from aphrodite.logger import init_logger
@@ -52,16 +53,11 @@ class AliceAIForCausalLMConfig(VerifyAndUpdateConfig):
             )
 
         speculative_config = aphrodite_config.speculative_config
-        speculative_method = speculative_config.method if speculative_config is not None else None
-        if speculative_method in {
-            "dflash",
-            "dspark",
-            "eagle3",
-            "extract_hidden_states",
-        }:
+        if speculative_config is not None and speculative_config.uses_aux_hidden_states:
             raise NotImplementedError(
                 "AliceAI does not support speculative method "
-                f"{speculative_method!r} because it requires auxiliary hidden states"
+                f"{speculative_config.method!r} because it requires auxiliary "
+                "hidden states"
             )
 
 
@@ -80,6 +76,30 @@ class DeepseekV32ForCausalLM(VerifyAndUpdateConfig):
             logger.info("Using bfloat16 kv-cache for DeepSeekV3.2")
 
 
+class MiniMaxM3SparseConfig(VerifyAndUpdateConfig):
+    @staticmethod
+    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+        from aphrodite.v1.kv_cache_interface import get_kv_quant_mode
+
+        if not get_kv_quant_mode(aphrodite_config.cache_config.cache_dtype).is_nvfp4:
+            return
+        # The NVFP4 KV attention kernels (MSA's CUTLASS Q8KV4 prefill) need 16
+        # query heads per KV head on each rank; fail before the workers start.
+        text_config = aphrodite_config.model_config.hf_text_config
+        tp_size = aphrodite_config.parallel_config.tensor_parallel_size
+        num_heads = text_config.num_attention_heads // tp_size
+        num_kv_heads = max(1, text_config.num_key_value_heads // tp_size)
+        if num_heads != 16 * num_kv_heads:
+            raise ValueError(
+                "MiniMax-M3 does not support an NVFP4 KV cache with "
+                f"tensor_parallel_size={tp_size} yet: each rank holds {num_heads} "
+                f"query heads over {num_kv_heads} KV head(s), and the NVFP4 "
+                "attention kernels need 16 per KV head. Use a smaller "
+                "tensor_parallel_size (with data/expert parallelism) or another "
+                "kv_cache_dtype."
+            )
+
+
 class GlmMoeDsaForCausalLM(VerifyAndUpdateConfig):
     @staticmethod
     def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
@@ -93,10 +113,12 @@ class GlmMoeDsaForCausalLM(VerifyAndUpdateConfig):
         ):
             cache_config.cache_dtype = "fp8_e4m3"
             logger.info_once("Using fp8 kv-cache for GlmMoeDsaForCausalLM on SM10x")
-            # MTP shares the target's KV cache layout; a separate draft model
-            # must not inherit a default it was never validated with.
             spec_config = aphrodite_config.speculative_config
-            if spec_config is not None and spec_config.method != "mtp" and spec_config.kv_cache_dtype is None:
+            if (
+                spec_config is not None
+                and spec_config.method not in ("mtp", "dspark", "dflash")
+                and spec_config.kv_cache_dtype is None
+            ):
                 spec_config.kv_cache_dtype = "auto"
 
         # For Glm-Moe-DSA, qrep + a2a is better than the default all-gather + ag-rs
@@ -196,7 +218,7 @@ class UnlimitedOCRForCausalLMConfig(VerifyAndUpdateConfig):
                     "Unlimited-OCR: --attention-config backend=FLASH_ATTN "
                     "requires FA4 (rswa_mask_mod), but FA4 is not available on "
                     "this device/installation. Use backend=TRITON_ATTN or "
-                    "FLEX_ATTENTION, or upgrade aphrodite-flash-attn."
+                    "FLEX_ATTENTION, or upgrade vllm-flash-attn."
                 )
             # On SM90 (H20), the default FA version is FA3 regardless of FA4
             # availability (FA4 is only auto-upgraded when head_size > 256).
@@ -324,6 +346,12 @@ class Gemma4Config(VerifyAndUpdateConfig):
                         "for all layers to avoid mixed FA3/FA4 penalty.",
                         head_dims,
                     )
+        elif current_platform.is_xpu():
+            logger.info(
+                "Gemma4 model has heterogeneous head dimensions %s. Leaving the "
+                "attention backend choice to the XPU platform.",
+                head_dims,
+            )
         elif aphrodite_config.attention_config.backend is None:
             aphrodite_config.attention_config.backend = AttentionBackendEnum.TRITON_ATTN
             logger.info(
@@ -424,7 +452,53 @@ class DiffusionGemmaModelForBlockDiffusionConfig(VerifyAndUpdateConfig):
             )
 
 
+def _indexer_sparse_logits_supported(aphrodite_config: "AphroditeConfig") -> bool:
+    """Whether the DeepSeek V4.1 sparse-logits indexer can run: a two-level
+    (candidate block) model on SM100 with DeepGEMM's sparse MQA kernels and
+    DeepSelect, no decode/prefill context parallelism, and a DeepSelect top-k
+    backend. Mirrors DeepseekV41SparseIndexerMetadataBuilder's checks."""
+    from aphrodite.platforms import current_platform
+
+    hf_config = aphrodite_config.model_config.hf_text_config
+    block = getattr(hf_config, "candidate_block_size", 0)
+    topk_blocks = getattr(hf_config, "candidate_topk_blocks", 0)
+    parallel = aphrodite_config.parallel_config
+    if (
+        block <= 0
+        or topk_blocks <= 0
+        or not current_platform.is_cuda()
+        or not current_platform.is_device_capability_family(100)
+        or parallel.decode_context_parallel_size > 1
+        or parallel.prefill_context_parallel_size > 1
+        or aphrodite_config.kernel_config.sparse_indexer_topk_backend not in ("auto", "deep_select")
+    ):
+        return False
+    from aphrodite.model_executor.kernels.attention.dsa.sparse_mqa_logits import (
+        check_deep_select_layout,
+        has_deep_select,
+        pick_sparse_block_kv,
+    )
+    from aphrodite.utils.deep_gemm import has_deep_gemm_sparse_mqa
+
+    if not (has_deep_gemm_sparse_mqa() and has_deep_select()):
+        return False
+    try:
+        pick_sparse_block_kv(block)
+        check_deep_select_layout(topk_blocks * block, getattr(hf_config, "index_topk", 0))
+    except ValueError:
+        return False
+    return True
+
+
 class DeepseekV4ForCausalLMConfig(VerifyAndUpdateConfig):
+    @staticmethod
+    def verify_and_update_config(aphrodite_config: "AphroditeConfig") -> None:
+        # indexer_sparse_logits=None (default): enable the sparse-logits
+        # indexer wherever it is supported; True / False are kept as given.
+        attention_config = aphrodite_config.attention_config
+        if attention_config.indexer_sparse_logits is None:
+            attention_config.indexer_sparse_logits = _indexer_sparse_logits_supported(aphrodite_config)
+
     @staticmethod
     def verify_and_update_model_config(model_config: "ModelConfig") -> None:
         quant_config = getattr(model_config.hf_config, "quantization_config", None)
@@ -751,6 +825,28 @@ class MambaModelConfig(VerifyAndUpdateConfig):
                 cache_config.mamba_block_size = model_config.max_model_len
 
 
+class MiniMaxM3SparseForConditionalGenerationConfig(MiniMaxM3SparseConfig):
+    INDEX_CACHE_KEYS = ("use_index_cache", "index_topk_freq", "index_skip_topk_offset")
+
+    @classmethod
+    def verify_and_update_model_config(cls, model_config: "ModelConfig") -> None:
+        """Reject IndexCache overrides set on the outer VL config, where the
+        ROCm text model never reads them."""
+        from aphrodite.platforms import current_platform
+
+        overrides = model_config.hf_overrides
+        if not current_platform.is_rocm() or not isinstance(overrides, dict):
+            return
+        misplaced = [key for key in cls.INDEX_CACHE_KEYS if key in overrides]
+        if misplaced:
+            suggested = {"text_config": {key: overrides[key] for key in misplaced}}
+            raise ValueError(
+                "MiniMax-M3 reads IndexCache settings from text_config, so "
+                f"top-level {', '.join(misplaced)} would be ignored. Pass them as "
+                f"--hf-overrides '{json.dumps(suggested)}'."
+            )
+
+
 class NemotronHForCausalLMConfig(VerifyAndUpdateConfig):
     DEFAULT_MAMBA_SSM_CACHE_DTYPE: "MambaDType" = "float32"
     """Only `float32` is known to have no accuracy issues by default."""
@@ -793,6 +889,15 @@ class NemotronHNanoVLV2Config(VerifyAndUpdateConfig):
         if mm_config is not None:
             video_kwargs = mm_config.media_io_kwargs.setdefault("video", {})
             video_kwargs.setdefault("video_backend", "nemotron_vl")
+
+
+class Nemotron3_5TranscribeForConditionalGenerationConfig(VerifyAndUpdateConfig):
+    @classmethod
+    def verify_and_update_config(cls, aphrodite_config: "AphroditeConfig") -> None:
+        NemotronHForCausalLMConfig.update_mamba_ssm_cache_dtype(
+            cache_config=aphrodite_config.cache_config,
+            hf_config=aphrodite_config.model_config.hf_config.text_config,
+        )
 
 
 class NomicBertModelConfig(VerifyAndUpdateConfig):
@@ -959,14 +1064,6 @@ class Qwen4ExpForConditionalGenerationConfig(Qwen3_5ForConditionalGenerationConf
         uses_ple_or_qsa = bool(text_config.ple_layer_ids) or (getattr(text_config, "indexer_n_heads", None) is not None)
         if uses_ple_or_qsa and (parallel_config.enable_dbo or parallel_config.ubatch_size > 1):
             raise NotImplementedError("Qwen4Exp PLE/QSA does not support dual-batch overlap or microbatching")
-        # Checked again in Qwen4ExpModelState; rejecting it here keeps the
-        # engine from loading weights first.
-        if text_config.ple_layer_ids and parallel_config.pipeline_parallel_size > 1:
-            raise NotImplementedError(
-                "Qwen4Exp N-gram PLE embedding requires pipeline_parallel_size=1 "
-                "because non-first pipeline ranks do not receive the raw input_ids "
-                "it needs. Please run with PP=1."
-            )
         multimodal_config = aphrodite_config.model_config.multimodal_config
         if multimodal_config is not None and multimodal_config.language_model_only:
             _strip_qwen4_exp_mrope(aphrodite_config.model_config)
@@ -1155,11 +1252,17 @@ MODELS_CONFIG_MAP: dict[str, type[VerifyAndUpdateConfig]] = {
     "LlamaBidirectionalModel": LlamaBidirectionalConfig,
     "LlamaNemotronVLForSequenceClassification": LlamaNemotronVLConfig,
     "LlamaNemotronVLModel": LlamaNemotronVLConfig,
+    "MiniMaxM3SparseForCausalLM": MiniMaxM3SparseConfig,
     "Mamba2ForCausalLM": MambaModelConfig,
     "MambaForCausalLM": MambaModelConfig,
+    "MiniMaxM3SparseForConditionalGeneration": (MiniMaxM3SparseForConditionalGenerationConfig),
     "NemotronHForCausalLM": NemotronHForCausalLMConfig,
     "NemotronHPuzzleForCausalLM": NemotronHForCausalLMConfig,
     "NemotronH_Nano_VL_V2": NemotronHNanoVLV2Config,
+    "NemotronH_Nano_Omni_Reasoning_V3": NemotronHNanoVLV2Config,
+    "NemotronH_Super_Omni_Reasoning_V3": NemotronHNanoVLV2Config,
+    "NemotronH_Omni_Reasoning_V3": NemotronHNanoVLV2Config,
+    "Nemotron3_5TranscribeForConditionalGeneration": (Nemotron3_5TranscribeForConditionalGenerationConfig),
     "NomicBertModel": NomicBertModelConfig,
     "Qwen2ForProcessRewardModel": Qwen2ForProcessRewardModelConfig,
     "Qwen2ForRewardModel": Qwen2ForRewardModelConfig,

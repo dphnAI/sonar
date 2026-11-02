@@ -65,6 +65,9 @@ from aphrodite.model_executor.layers.quantization.utils.config_utils import (
     get_layer_name_after_index,
 )
 from aphrodite.model_executor.layers.quantization.utils.mxfp4_utils import mxfp4_quantize
+from aphrodite.model_executor.layers.quantization.utils.mxfp8_utils import (
+    dequant_mxfp8_to_bf16,
+)
 from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     QuantKey,
     kFp8Static128BlockSym,
@@ -76,6 +79,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kMxfp6E2M3Static,
     kMxfp6E3M2Static,
     kMxfp8Dynamic,
+    kMxfp8Static,
     kNvfp4Static,
 )
 
@@ -120,6 +124,12 @@ _ONLINE_MOE_METHODS: dict[QuantKey, type] = {
 # arrival, so only block-local schemes are supported.
 ONLINE_SHARED_EXPERT_QUANTIZERS: dict[QuantKey, Callable[[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]] = {
     kMxfp4Static: mxfp4_quantize,
+}
+
+# Dequantizers `(weight, weight_scale) -> high precision weight` of quantized fused
+# shared-expert checkpoint weights, keyed by the checkpoint weight QuantKey.
+ONLINE_SHARED_EXPERT_DEQUANTIZERS: dict[QuantKey, Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = {
+    kMxfp8Static: dequant_mxfp8_to_bf16,
 }
 
 
