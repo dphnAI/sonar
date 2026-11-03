@@ -114,6 +114,10 @@ def test_backend_sentinel_properties():
     assert mode != KVQuantMode.NONE
     assert mode.is_per_token_head is False
     assert mode.is_nvfp4 is False
+    # Must not alias a built-in mode (it once shared Octave K3V4's value).
+    assert mode.name == "CUSTOM"
+    assert mode.is_octave is False
+    assert not any(other.is_custom_mode for other in KVQuantMode if other is not mode)
 
 
 def test_no_snapshot_of_shared_dtype_registry():
