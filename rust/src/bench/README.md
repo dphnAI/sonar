@@ -419,6 +419,7 @@ to measure a concurrent serving-style workload.
 | --------- | ------------- | ------------- |
 | `aphrodite` / `openai` | `/v1/completions` | OpenAI-compatible completions (streaming) |
 | `openai-chat` | `/v1/chat/completions` | OpenAI-compatible chat completions (streaming, multimodal) |
+| `openai-responses` | `/v1/responses` | OpenAI Responses API (streaming; reasoning deltas count toward TTFT and ITL) |
 
 ### Embedding / Pooling
 
@@ -474,7 +475,7 @@ Run `aphrodite-bench --help` for the authoritative list. Grouped reference below
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
-| `--backend` | `openai` | Backend type (`aphrodite`, `openai`, `openai-chat`, `openai-embeddings`, `openai-embeddings-chat`, `aphrodite-pooling`, `aphrodite-rerank`) |
+| `--backend` | `openai` | Backend type (`aphrodite`, `openai`, `openai-chat`, `openai-responses`, `openai-embeddings`, `openai-embeddings-chat`, `aphrodite-pooling`, `aphrodite-rerank`) |
 | `--base-url` | — | Server base URL (overrides `--host`/`--port`) |
 | `--host` | `127.0.0.1` | Server host |
 | `--port` | `8000` | Server port |
@@ -564,7 +565,7 @@ Run `aphrodite-bench --help` for the authoritative list. Grouped reference below
 | `--presence-penalty` | Presence penalty |
 | `--repetition-penalty` | Repetition penalty |
 
-Merged into the request body. Only effective with generation backends (`aphrodite`, `openai`, `openai-chat`); ignored by pooling/embedding backends.
+Merged into the request body. Only effective with generation backends (`aphrodite`, `openai`, `openai-chat`, `openai-responses`); ignored by pooling/embedding backends.
 
 </details>
 
@@ -785,6 +786,7 @@ src/
 │   ├── streaming.rs         # SSE stream parser with speculative JSON parse
 │   ├── openai_completions.rs # /v1/completions backend
 │   ├── openai_chat.rs       # /v1/chat/completions backend
+│   ├── openai_responses.rs  # /v1/responses backend
 │   └── pooling.rs           # Embedding/pooling/rerank backends (non-streaming)
 ├── datasets/
 │   ├── mod.rs               # SampleRequest, ConversationTurn, MultiTurnConversation types

@@ -48,9 +48,9 @@ from aphrodite.multimodal.processing import (
 )
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.transformers_utils.processors.internvl import (
-    InternVLImageProcessor,
-    InternVLProcessor,
-    InternVLVideoProcessor,
+    InternVLChatImageProcessor,
+    InternVLChatProcessor,
+    InternVLChatVideoProcessor,
 )
 from aphrodite.utils.tensor_schema import TensorSchema, TensorShape
 
@@ -134,7 +134,7 @@ class BaseInternVLProcessingInfo(BaseProcessingInfo):
     """Basic image-only ProcessingInfo for InternVL-style models."""
 
     @abstractmethod
-    def get_hf_processor(self, **kwargs: object) -> InternVLProcessor:
+    def get_hf_processor(self, **kwargs: object) -> InternVLChatProcessor:
         raise NotImplementedError
 
     def get_supported_mm_limits(self) -> Mapping[str, int | None]:
@@ -145,7 +145,7 @@ class BaseInternVLProcessingInfo(BaseProcessingInfo):
         *,
         image_width: int,
         image_height: int,
-        processor: InternVLProcessor,
+        processor: InternVLChatProcessor,
     ) -> int:
         return processor.get_num_image_tokens(
             image_width=image_width,
@@ -257,7 +257,7 @@ class BaseInternVLMultiModalProcessor(BaseMultiModalProcessor[_I]):
     def _get_prompt_repl_image(
         self,
         mm_items: MultiModalDataItems,
-        hf_processor: InternVLProcessor,
+        hf_processor: InternVLChatProcessor,
         out_mm_data: BatchedTensorInputs,
     ):
         tokenizer = self.info.get_tokenizer()
@@ -327,7 +327,7 @@ class InternVLProcessingInfo(BaseInternVLProcessingInfo):
         kwargs.setdefault("dynamic_image_size", config.dynamic_image_size)
         kwargs.setdefault("use_thumbnail", config.use_thumbnail)
 
-        return InternVLImageProcessor(**kwargs)
+        return InternVLChatImageProcessor(**kwargs)
 
     def get_video_processor(self, **kwargs):
         config = self.get_hf_config()
@@ -336,7 +336,7 @@ class InternVLProcessingInfo(BaseInternVLProcessingInfo):
         kwargs = self.ctx.get_merged_mm_kwargs(kwargs)
         kwargs.setdefault("image_size", vision_config.image_size)
 
-        return InternVLVideoProcessor(**kwargs)
+        return InternVLChatVideoProcessor(**kwargs)
 
     @cached_property
     def ctx_video_token(self):
@@ -357,7 +357,7 @@ class InternVLProcessingInfo(BaseInternVLProcessingInfo):
 
         return ctx_video_token
 
-    def get_hf_processor(self, **kwargs: object) -> InternVLProcessor:
+    def get_hf_processor(self, **kwargs: object) -> InternVLChatProcessor:
         config = self.get_hf_config()
         vision_config = config.vision_config
 
@@ -370,7 +370,7 @@ class InternVLProcessingInfo(BaseInternVLProcessingInfo):
         ctx_video_token = self.ctx_video_token
         video_processor = self.get_video_processor(**kwargs) if ctx_video_token else None
 
-        return InternVLProcessor(
+        return InternVLChatProcessor(
             tokenizer=self.get_tokenizer(),
             image_processor=image_processor,
             video_processor=video_processor,
@@ -480,7 +480,7 @@ class InternVLMultiModalProcessor(BaseInternVLMultiModalProcessor[InternVLProces
     def _get_prompt_repl_video(
         self,
         mm_items: MultiModalDataItems,
-        hf_processor: InternVLProcessor,
+        hf_processor: InternVLChatProcessor,
         out_mm_data: BatchedTensorInputs,
     ):
         tokenizer = self.info.get_tokenizer()

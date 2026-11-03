@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 import torch
+import transformers
+from packaging.version import Version
 from PIL import Image as PILImage
 from torch import nn
 from transformers import MiniCPMV4_6Config
@@ -116,6 +118,10 @@ def _expand_flags(value: object, num_items: int) -> list[bool | None]:
     # Unexpected shape: keep one decision for the whole batch instead of
     # failing the request.
     return [any(bool(v) for v in raw)] * num_items
+
+
+# Transformers >= 5.21 sizes images by the `downsample_mode` merge factor
+RESIZE_TAKES_DOWNSAMPLE_MODE = Version(transformers.__version__) >= Version("5.21.0.dev0")
 
 
 def _vision_downsample_mode(flag: bool | None) -> str | None:
@@ -714,6 +720,7 @@ class MiniCPMV4_6ProcessingInfo(MiniCPMVProcessingInfo):
         scale_res = image_processor.scale_resolution
         downsample_mode = self._get_downsample_mode(downsample_mode)
         token_divisor = 4 if downsample_mode == "4x" else 16
+        resize_kwargs = {"downsample_mode": downsample_mode} if RESIZE_TAKES_DOWNSAMPLE_MODE else {}
 
         # Aphrodite ImageSize is (width, height); transformers expects (height, width)
         hf_image_size = (image_size.height, image_size.width)
@@ -737,6 +744,7 @@ class MiniCPMV4_6ProcessingInfo(MiniCPMVProcessingInfo):
                 scale_res,
                 patch_size,
                 allow_upscale=True,
+                **resize_kwargs,
             )
             source_tokens = best_size[0] * best_size[1] // (patch_size * patch_size * token_divisor)
             return [0, 0], source_tokens, 0
@@ -745,6 +753,7 @@ class MiniCPMV4_6ProcessingInfo(MiniCPMVProcessingInfo):
             hf_image_size,
             scale_res,
             patch_size,
+            **resize_kwargs,
         )
         source_tokens = best_resize[0] * best_resize[1] // (patch_size * patch_size * token_divisor)
         refine_size = image_processor.get_refine_size(
@@ -753,6 +762,7 @@ class MiniCPMV4_6ProcessingInfo(MiniCPMVProcessingInfo):
             scale_res,
             patch_size,
             allow_upscale=True,
+            **resize_kwargs,
         )
         patch_w = refine_size[0] // grids[0]
         patch_h = refine_size[1] // grids[1]

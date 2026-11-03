@@ -398,7 +398,7 @@ def _calculate_mtp_layers(aphrodite_config, model_config):
         if aphrodite_config.speculative_config.method == "deepseek_mtp":
             num_mtp_layers = getattr(model_config.hf_config, "num_nextn_predict_layers", 0)
 
-        elif aphrodite_config.speculative_config.use_eagle():
+        elif aphrodite_config.speculative_config.uses_target_hidden_states:
             try:
                 draft_model_config = aphrodite_config.speculative_config.draft_model_config
                 num_mtp_layers = draft_model_config.get_num_layers(aphrodite_config.parallel_config)

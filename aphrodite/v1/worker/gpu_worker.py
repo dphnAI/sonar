@@ -67,6 +67,7 @@ from aphrodite.model_executor.layers.quantization.online.lm_head import (
     share_source_lm_heads,
 )
 from aphrodite.model_executor.model_loader import get_model_loader
+from aphrodite.model_executor.model_loader.reload.direct import direct_reload_enabled
 from aphrodite.model_executor.model_loader.weight_checksum import (
     compute_tensor_digests,
     zero_weights,
@@ -82,6 +83,7 @@ from aphrodite.profiler.wrapper import (
 from aphrodite.sequence import IntermediateTensors
 from aphrodite.tasks import SupportedTask
 from aphrodite.tracing import instrument
+from aphrodite.triton_utils import HAS_TRITON
 from aphrodite.utils.flashinfer import warn_if_flashinfer_kernels_missing
 from aphrodite.utils.gc_utils import freeze_gc_heap, maybe_attach_gc_debug_callback
 from aphrodite.utils.gpu_sync_debug import enable_gpu_sync_check, with_gpu_sync_check
@@ -125,7 +127,7 @@ logger = init_logger(__name__)
 
 def _num_workspace_lanes(aphrodite_config: AphroditeConfig, use_v2_model_runner: bool) -> int:
     spec_config = aphrodite_config.speculative_config
-    return 2 if use_v2_model_runner and spec_config is not None and spec_config.use_dspark() else 1
+    return 2 if use_v2_model_runner and spec_config is not None and spec_config.uses_separate_workspace_lane else 1
 
 
 def maybe_rocm_profiling_fallback(profile_result: MemoryProfilingResult) -> int | None:
@@ -203,6 +205,10 @@ class Worker(WorkerBase):
         distributed_init_method: str,
         is_driver_worker: bool = False,
     ):
+        self.use_v2_model_runner = aphrodite_config.use_v2_model_runner
+        if self.use_v2_model_runner and not HAS_TRITON and not current_platform.uses_standalone_cpu_model_runner():
+            raise ValueError("Model Runner V2 requires Triton.")
+
         super().__init__(
             aphrodite_config=aphrodite_config,
             local_rank=local_rank,
@@ -239,7 +245,6 @@ class Worker(WorkerBase):
         self.profiler_config = aphrodite_config.profiler_config
         validate_worker_profiler_config(self.profiler_config)
 
-        self.use_v2_model_runner = aphrodite_config.use_v2_model_runner
         self._b12x_session = None
 
         # Device handles of the previous step's PP intermediate-tensor send.
@@ -497,6 +502,13 @@ class Worker(WorkerBase):
             # Set random seed.
             set_random_seed(self.model_config.seed)
 
+            # Initialize shared locality resources before weight loading and capture.
+            from aphrodite.distributed.localization import (
+                maybe_init_localized_resources,
+            )
+
+            self.localized_resources = maybe_init_localized_resources(self.device)
+
             # cuBLAS(Lt) asks CUDA for its handle memory directly. When torch's own
             # cudaMalloc fails, torch frees its unused cache and retries, but a cuBLAS
             # request never triggers that because torch doesn't see it. Profiling can
@@ -673,15 +685,16 @@ class Worker(WorkerBase):
         ):
             profile_b12x_memory(self)
 
-        # Profile CUDA graph memory if graphs will be captured.
+        # Profile CUDA graph memory if graphs will be captured. The V2 runner
+        # decides itself, since encoder graphs don't depend on cudagraph_mode.
         # ROCm is included: #44825 moved the profiler to
         # torch.accelerator.get_memory_info (reliable on ROCm, as used by
         # the AMD-CI mem tests), and graph_pool_handle resolves to the same
         # torch.cuda handle the live capture path already uses on ROCm.
         cudagraph_memory_estimate = 0
-        if (
-            current_platform.is_cuda_alike() or current_platform.is_xpu()
-        ) and self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
+        if (current_platform.is_cuda_alike() or current_platform.is_xpu()) and (
+            self.use_v2_model_runner or self.aphrodite_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE
+        ):
             cudagraph_memory_estimate = profile_b12x_memory(self, cudagraphs=True)
 
         # Respect the opt-in flag as originally designed.
@@ -870,6 +883,18 @@ class Worker(WorkerBase):
 
         # Rebind final storage through the selection cache, not warmup-only defaults.
         run_b12x_preparation(self, stage="bind")
+
+    def get_simple_cpu_offload_num_cpu_blocks(self) -> int | None:
+        from aphrodite.distributed.kv_transfer.kv_connector.v1.simple_cpu_offload_connector import (  # noqa: E501
+            _find_simple_cpu_offload_connector,
+        )
+
+        if not has_kv_transfer_group():
+            return None
+        connector = _find_simple_cpu_offload_connector(get_kv_transfer_group())
+        if connector is None:
+            return None
+        return connector.get_aligned_num_cpu_blocks()
 
     @instrument(span_name="Warmup (GPU)")
     def compile_or_warm_up_model(self) -> CompilationTimes:
@@ -1278,6 +1303,7 @@ class Worker(WorkerBase):
         *,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict | None = None,
     ):
         # Check if profiling is enabled
         if self.profiler_config is None or self.profiler_config.profiler is None:
@@ -1308,9 +1334,11 @@ class Worker(WorkerBase):
                     self.profiler_config,
                     worker_name=trace_name,
                     local_rank=self.local_rank,
+                    profiler_kwargs=profiler_kwargs,
                 )
 
             self.profiler.set_output_name(trace_name)
+            self.profiler.set_profiler_kwargs(profiler_kwargs)
             self.profiler.start(
                 delay_iterations=delay_iterations,
                 max_iterations=max_iterations,
@@ -1483,11 +1511,15 @@ class Worker(WorkerBase):
                     local_update_info = update_info
                 self.weight_transfer_engine.update_weights(local_update_info)
             except BaseException:
-                self._weight_update_active = False
-                self.weight_transfer_engine.reset_weight_update_target()
-                if self._weight_update_is_draft and ((draft_model := self.get_draft_model()) is not None):
-                    restore_quantized_lm_heads(draft_model, refresh=False)
+                self._end_weight_update(refresh=False)
                 raise
+
+    def _end_weight_update(self, refresh: bool) -> None:
+        assert self.weight_transfer_engine is not None
+        self._weight_update_active = False
+        self.weight_transfer_engine.reset_weight_update_target()
+        if self._weight_update_is_draft and ((draft_model := self.get_draft_model()) is not None):
+            restore_quantized_lm_heads(draft_model, refresh=refresh)
 
     def finish_weight_update(self) -> None:
         """Finish the current weight update session."""
@@ -1498,11 +1530,15 @@ class Worker(WorkerBase):
             raise RuntimeError("finish_weight_update called without a matching start_weight_update.")
 
         with set_current_aphrodite_config(self.aphrodite_config):
-            self.weight_transfer_engine.finish_weight_update()
-            self.weight_transfer_engine.reset_weight_update_target()
-            self._weight_update_active = False
-            if self._weight_update_is_draft and ((draft_model := self.get_draft_model()) is not None):
-                restore_quantized_lm_heads(draft_model)
+            try:
+                self.weight_transfer_engine.finish_weight_update()
+            except BaseException:
+                if direct_reload_enabled():
+                    # a failed direct finish cannot be retried: end the
+                    # session so that a new full update can start
+                    self._end_weight_update(refresh=False)
+                raise
+            self._end_weight_update(refresh=True)
 
         # Weight transfer bypasses GPUModelRunner.reload_weights().
         if not self._weight_update_is_draft:

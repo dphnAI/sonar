@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 import json
 
-import pytest
-
-from aphrodite.renderers.deepseek_v41 import _order_like_v41_prompt
-from aphrodite.tokenizers.deepseek_v41 import _normalize_messages
-from aphrodite.tokenizers.deepseek_v41_encoding import IMAGE_PLACEHOLDER, encode_messages
+from aphrodite.tokenizers.deepseek_v41_encoding import encode_messages
 
 
 def _call(call_id: str) -> dict:
@@ -39,46 +36,3 @@ def test_user_text_after_tool_results_starts_a_new_turn():
     prompt = encode_messages(_tool_loop(follow_up=True), thinking_mode="thinking")
     assert "think-1" not in prompt and "think-2" not in prompt
     assert prompt.endswith("follow-up<｜Assistant｜><think>")
-
-
-def _image_tool(call_id: str, url: str) -> dict:
-    content = [{"type": "text", "text": f"result {call_id}"}, {"type": "image_url", "image_url": {"url": url}}]
-    return {"role": "tool", "tool_call_id": call_id, "content": content}
-
-
-def _parallel_images(results: list[dict]) -> list[dict]:
-    calls = {"role": "assistant", "content": "", "tool_calls": [_call("c0"), _call("c1"), _call("c2")]}
-    return [{"role": "user", "content": "look"}, calls, *results, {"role": "user", "content": "compare"}]
-
-
-def _encode(messages: list[dict]) -> str:
-    return encode_messages(_normalize_messages(messages), thinking_mode="chat")
-
-
-def test_parallel_tool_images_are_parsed_in_prompt_order():
-    a, b, c = _image_tool("c0", "a.png"), _image_tool("c1", "b.png"), _image_tool("c2", "c.png")
-    messages = _parallel_images([c, a, b])
-    ordered = _order_like_v41_prompt(messages)
-    assert ordered == _parallel_images([a, b, c])
-    # The prompt itself is unchanged, and its placeholders now follow the parse order.
-    prompt = _encode(messages)
-    assert _encode(ordered) == prompt
-    positions = [prompt.index(f"result {call_id}") for call_id in ("c0", "c1", "c2")]
-    assert positions == sorted(positions)
-    assert prompt.count(IMAGE_PLACEHOLDER) == 3
-
-
-@pytest.mark.parametrize(
-    "messages",
-    [
-        _tool_loop(follow_up=True),
-        _parallel_images([_image_tool("c0", "a.png"), _image_tool("c1", "b.png"), _image_tool("c2", "c.png")]),
-        [
-            {"role": "system", "content": "sys"},
-            {"role": "developer", "content": "dev"},
-            {"role": "user", "content": "q"},
-        ],
-    ],
-)
-def test_prompt_order_is_identity_when_nothing_moves(messages):
-    assert _order_like_v41_prompt(messages) == messages

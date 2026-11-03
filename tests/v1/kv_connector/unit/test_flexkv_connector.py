@@ -19,6 +19,7 @@ import pytest
 import torch
 
 from aphrodite.config import AphroditeConfig, KVTransferConfig
+from aphrodite.config.kv_transfer import KVRole
 from aphrodite.distributed.kv_transfer.kv_connector.v1 import KVConnectorRole
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 
@@ -31,7 +32,7 @@ from .utils import create_aphrodite_config
 
 def _make_aphrodite_config(
     kv_connector: str = "FlexKVConnectorV1",
-    kv_role: str = "kv_both",
+    kv_role: KVRole = "kv_both",
 ) -> AphroditeConfig:
     """Return a minimal AphroditeConfig with a KVTransferConfig attached."""
     aphrodite_config = create_aphrodite_config(block_size=16, max_num_batched_tokens=512)
@@ -57,14 +58,12 @@ def _make_flexkv_module(
     adapter_mod = types.ModuleType("flexkv.integration.aphrodite.aphrodite_v1_adapter")
 
     # Make FlexKVConnectorV1Impl() return our mock instance.
-    # The "# type: ignore" markers below are needed because ModuleType does
-    # not declare these attributes statically; they are set dynamically.
     FlexKVConnectorV1ImplCls = MagicMock(return_value=impl_mock)
-    adapter_mod.FlexKVConnectorV1Impl = FlexKVConnectorV1ImplCls  # type: ignore
+    adapter_mod.FlexKVConnectorV1Impl = FlexKVConnectorV1ImplCls  # type: ignore[attr-defined]
 
-    flexkv_mod.integration = integration_mod  # type: ignore
-    integration_mod.aphrodite = aphrodite_mod  # type: ignore
-    aphrodite_mod.aphrodite_v1_adapter = adapter_mod  # type: ignore
+    flexkv_mod.integration = integration_mod  # type: ignore[attr-defined]
+    integration_mod.aphrodite = aphrodite_mod  # type: ignore[attr-defined]
+    aphrodite_mod.aphrodite_v1_adapter = adapter_mod  # type: ignore[attr-defined]
 
     return flexkv_mod, adapter_mod
 

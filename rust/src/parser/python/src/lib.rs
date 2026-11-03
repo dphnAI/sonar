@@ -8,7 +8,10 @@
 //! Rust. Python callers should use this module as a typed bridge and keep any
 //! Aphrodite protocol adaptation outside the binding.
 
+use std::sync::Arc;
+
 use aphrodite_parser::tool::{Tool, ToolCallDelta, ToolParser, ToolParserOutput};
+use aphrodite_tokenizer::{DecodedText, DynTokenizer, Tokenizer, TokenizerError};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyModule};
@@ -16,16 +19,63 @@ use pythonize::{depythonize, pythonize};
 use serde_json::Value;
 use thiserror_ext::AsReport as _;
 
+/// Tokenizer of the text-only Python boundary.
+///
+/// Python feeds decoded text without generated-token attributions, so the
+/// bridge exposes no vocabulary: markers that a parser would otherwise guard
+/// with a dedicated special token match by spelling, as they do for
+/// tokenizers that lack that token.
+struct TextOnlyTokenizer;
+
+impl TextOnlyTokenizer {
+    fn unavailable<T>() -> aphrodite_tokenizer::Result<T> {
+        Err(TokenizerError(
+            "the Python tool-parser bridge has no tokenizer vocabulary".to_owned(),
+        ))
+    }
+}
+
+impl Tokenizer for TextOnlyTokenizer {
+    fn encode(
+        &self,
+        _text: &str,
+        _add_special_tokens: bool,
+    ) -> aphrodite_tokenizer::Result<Vec<u32>> {
+        Self::unavailable()
+    }
+
+    fn encode_ordinary(&self, _text: &str) -> aphrodite_tokenizer::Result<Vec<u32>> {
+        Self::unavailable()
+    }
+
+    fn decode(
+        &self,
+        _token_ids: &[u32],
+        _skip_special_tokens: bool,
+    ) -> aphrodite_tokenizer::Result<String> {
+        Self::unavailable()
+    }
+
+    fn token_to_id(&self, _token: &str) -> Option<u32> {
+        None
+    }
+
+    fn id_to_token(&self, _id: u32) -> Option<String> {
+        None
+    }
+}
+
 macro_rules! tool_parser_factory {
     ($($parser:ident),+ $(,)?) => {
         fn create_tool_parser(
             name: &str,
             tools: &[Tool],
         ) -> PyResult<Box<dyn ToolParser>> {
+            let tokenizer: DynTokenizer = Arc::new(TextOnlyTokenizer);
             match name {
                 $(
                     stringify!($parser) => {
-                        <aphrodite_parser::tool::$parser as ToolParser>::create(tools)
+                        <aphrodite_parser::tool::$parser as ToolParser>::create(tools, tokenizer)
                     }
                 )+
                 _ => {
@@ -197,7 +247,7 @@ struct PyToolParser(Box<dyn ToolParser>);
 impl PyToolParser {
     fn parse_into_output(&mut self, chunk: &str, output: &mut PyToolParserOutput) -> PyResult<()> {
         self.0
-            .parse_into(chunk, &mut output.0)
+            .parse_into(DecodedText::unattributed(chunk), &mut output.0)
             .map_err(|error| PyValueError::new_err(error.to_report_string()))
     }
 }

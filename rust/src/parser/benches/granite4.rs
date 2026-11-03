@@ -8,7 +8,7 @@ use aphrodite_parser::tool::{Granite4ToolParser, Tool, ToolParser};
 use criterion::{BatchSize, Criterion, Throughput, black_box, criterion_group, criterion_main};
 
 mod utils;
-use utils::feed_parser;
+use utils::{feed_parser, test_tokenizer};
 
 const CHUNK_CHARS: usize = 7;
 const LONG_ARGUMENT_BYTES: usize = 64 * 1024;
@@ -27,7 +27,7 @@ fn object_args_fixture() -> String {
 }
 
 fn parser(tools: &[Tool]) -> Box<dyn ToolParser> {
-    Granite4ToolParser::create(tools).expect("Granite4 parser should initialize")
+    Granite4ToolParser::create(tools, test_tokenizer()).expect("Granite4 parser should initialize")
 }
 
 fn run_stream_group(c: &mut Criterion, name: &str, tools: &[Tool], text: &str) {

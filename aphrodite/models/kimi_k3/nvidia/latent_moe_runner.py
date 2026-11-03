@@ -15,6 +15,7 @@ from aphrodite.logger import init_logger
 from aphrodite.model_executor.layers.fused_moe.moe_output import UnfinalizedMoEOutput
 from aphrodite.model_executor.layers.fused_moe.runner.moe_runner import MoERunner, _unpack
 from aphrodite.model_executor.layers.layernorm import RMSNorm
+from aphrodite.model_executor.layers.linear import UnquantizedLinearMethod
 from aphrodite.platforms import current_platform
 from aphrodite.utils.multi_stream_utils import maybe_execute_in_parallel
 from aphrodite.utils.torch_utils import aux_stream
@@ -166,6 +167,12 @@ class LatentMoERunner(MoERunner):
             and self._shared_experts is not None
             and not self._fused_output_is_reduced
             and not self.moe_config.is_sequence_parallel
+            # Tail kernels multiply by the raw up_proj.weight (no scales): BF16 only.
+            and self.routed_output_transform is not None
+            and isinstance(
+                self.routed_output_transform.up_proj.quant_method,
+                UnquantizedLinearMethod,
+            )
         )
 
     def _select_tail_tier(

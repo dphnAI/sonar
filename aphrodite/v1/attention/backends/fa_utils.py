@@ -6,7 +6,7 @@ from typing import Any
 import aphrodite.envs as envs
 from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
+from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
 
 logger = init_logger(__name__)
 

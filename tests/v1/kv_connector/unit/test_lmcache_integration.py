@@ -178,6 +178,7 @@ def test_sampling_params_interface():
         "lmcache.ttl": 60,
     }
     sampling_params = SamplingParams(extra_args={"kv_transfer_params": kv_transfer_params})
+    assert sampling_params.extra_args is not None
     assert sampling_params.extra_args["kv_transfer_params"] == kv_transfer_params
 
 

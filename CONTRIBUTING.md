@@ -19,10 +19,16 @@ Make sure you build in editable mode with `-e`.
 
 Our test units at the moment are incomplete, so you can skip test units for now.
 
-After submitting a patch, make sure to run the linter/formatter before asking for a review:
+Install the pre-commit hooks once so the linters and formatters run on every commit:
 
 ```sh
-sh ./formatting.sh
+pre-commit install
+```
+
+To run them by hand on every file:
+
+```sh
+pre-commit run --all-files
 ```
 
 Thank you for your interest in Aphrodite Engine!

@@ -34,7 +34,7 @@ class VitCudagraphTestConfig:
 
 def params_with_marks(
     configs: dict[str, VitCudagraphTestConfig],
-) -> list[pytest.param]:
+) -> list[object]:
     return [pytest.param(model_id, marks=cfg.marks) for model_id, cfg in configs.items()]
 
 
@@ -476,6 +476,7 @@ def test_vit_cudagraph_video(model_id, aphrodite_runner, video_assets):
             "baby_reading": config.video_prompt,  # type: ignore[typeddict-item]
         }
     )
+    sampled_vids: list
     if config.needs_video_metadata:
         sampled_vids = [
             sample_frames_with_video_metadata((asset.np_ndarrays, asset.metadata), config.num_video_frames)

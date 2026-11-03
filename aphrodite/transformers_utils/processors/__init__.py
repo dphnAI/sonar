@@ -12,7 +12,6 @@ import importlib
 __all__ = [
     "BagelProcessor",
     "CohereASRProcessor",
-    "Cosmos3EdgeProcessor",
     "DeepseekVLV2Processor",
     "FireRedASR2Processor",
     "FunASRProcessor",
@@ -24,6 +23,7 @@ __all__ = [
     "KimiK25Processor",
     "KimiK3Processor",
     "MiMoOmniProcessor",
+    "MingASRFeatureExtractor",
     "MiniCPMOProcessor",
     "MiniCPMVProcessor",
     "MiniMaxM3VLImageProcessor",
@@ -44,7 +44,6 @@ __all__ = [
 _CLASS_TO_MODULE: dict[str, str] = {
     "BagelProcessor": "aphrodite.transformers_utils.processors.bagel",
     "CohereASRProcessor": "aphrodite.transformers_utils.processors.cohere_asr",
-    "Cosmos3EdgeProcessor": "aphrodite.transformers_utils.processors.cosmos3_edge",
     "DeepseekVLV2Processor": "aphrodite.transformers_utils.processors.deepseek_vl2",
     "FireRedASR2Processor": "aphrodite.transformers_utils.processors.fireredasr2",
     "FunASRProcessor": "aphrodite.transformers_utils.processors.funasr",
@@ -55,6 +54,7 @@ _CLASS_TO_MODULE: dict[str, str] = {
     "KimiK25Processor": "aphrodite.transformers_utils.processors.kimi_k25",
     "KimiK3Processor": "aphrodite.transformers_utils.processors.kimi_k3",
     "MiMoOmniProcessor": "aphrodite.transformers_utils.processors.mimo_v2_omni",
+    "MingASRFeatureExtractor": "aphrodite.transformers_utils.processors.ming_audio",
     "MiniCPMOProcessor": "aphrodite.transformers_utils.processors.minicpmo",
     "MiniCPMVProcessor": "aphrodite.transformers_utils.processors.minicpmv",
     "MiniMaxM3VLImageProcessor": "aphrodite.transformers_utils.processors.minimax_m3",

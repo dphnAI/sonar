@@ -159,7 +159,7 @@ pub async fn finish_weight_update(
     State(state): State<Arc<AppState>>,
     body: Result<Option<Json<FinishWeightUpdateRequest>>, JsonRejection>,
 ) -> Result<Json<MessageResponse>, ApiError> {
-    // HTTPAPHRODITEWeightSyncClient omits the body when no version is supplied.
+    // HTTPAphroditeWeightSyncClient omits the body when no version is supplied.
     let request = body?.map(|Json(request)| request).unwrap_or_default();
 
     let client = state.engine_core_client();

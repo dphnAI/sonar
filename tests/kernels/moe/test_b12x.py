@@ -1149,10 +1149,12 @@ def test_b12x_moe_warmup_prepares_each_owner_for_static_decode(workspace_init) -
             for layer, case in zip(layers, cases)
         ]
         warmup_b12x_model(layers, (7, 8), torch.bfloat16)
+        owners: list[B12xExperts] = []
+        for kernel in kernels:
+            assert isinstance(kernel.fused_experts, B12xExperts)
+            owners.append(kernel.fused_experts)
         first = cases[0]
-        _, scratch_shape, _ = kernels[0].fused_experts.workspace_shapes(
-            8, 256, 512, first.topk, 4, 4, None, first.activation
-        )
+        _, scratch_shape, _ = owners[0].workspace_shapes(8, 256, 512, first.topk, 4, 4, None, first.activation)
         scratch = torch.empty(scratch_shape, device="cuda", dtype=torch.bfloat16)
         outputs = [torch.empty_like(case.hidden_states) for case in cases]
         routes = [fused_topk(case.hidden_states, case.score, case.topk, renormalize=False)[:2] for case in cases]
@@ -1160,8 +1162,8 @@ def test_b12x_moe_warmup_prepares_each_owner_for_static_decode(workspace_init) -
         # Equal geometry must not deduplicate layer-owned plans. Neither owner
         # has had a serving invocation before this capture.
         with torch.cuda.graph(graph):
-            for layer, kernel, case, output, (weights, ids) in zip(layers, kernels, cases, outputs, routes):
-                kernel.fused_experts.apply(
+            for layer, experts, case, output, (weights, ids) in zip(layers, owners, cases, outputs, routes):
+                experts.apply(
                     output=output,
                     hidden_states=case.hidden_states,
                     w1=layer.w13_weight,

@@ -7,7 +7,7 @@ from starlette.datastructures import State
 
 import aphrodite.entrypoints.launchers.render.app_state as app_state_mod
 from aphrodite.config import AphroditeConfig, ModelConfig
-from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
+from aphrodite.entrypoints.common.cli_args import make_arg_parser
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 

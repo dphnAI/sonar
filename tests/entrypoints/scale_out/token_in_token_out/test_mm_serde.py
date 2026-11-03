@@ -26,7 +26,7 @@ from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
     MultiModalFeatures,
     PlaceholderRangeInfo,
 )
-from aphrodite.inputs import mm_input
+from aphrodite.inputs import MultiModalInput, mm_input
 from aphrodite.multimodal.inputs import (
     MultiModalBatchedField,
     MultiModalFieldElem,
@@ -131,7 +131,7 @@ def _image_engine_input(
     *,
     pixel_keep_on_cpu: bool = False,
     grid_keep_on_cpu: bool = True,
-) -> tuple[object, MultiModalFieldElem, MultiModalFieldElem]:
+) -> tuple[MultiModalInput, MultiModalFieldElem, MultiModalFieldElem]:
     pixel_values = MultiModalFieldElem(
         data=torch.randn(5, 3, dtype=torch.float32),
         field=MultiModalBatchedField(keep_on_cpu=pixel_keep_on_cpu),

@@ -27,7 +27,7 @@ def benchmark_rope_kernels_multi_lora(
     torch.set_default_device(device)
     if rotary_dim is None:
         rotary_dim = head_size
-    # silulating serving 4 LoRAs
+    # simulating serving 4 LoRAs
     scaling_factors = [1, 2, 4, 8]
     # batched RoPE can take multiple scaling factors
     batched_rope = get_rope(

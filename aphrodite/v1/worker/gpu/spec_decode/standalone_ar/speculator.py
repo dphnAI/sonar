@@ -11,6 +11,7 @@ from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.forward_context import BatchDescriptor, set_forward_context
 from aphrodite.logger import init_logger
 from aphrodite.model_executor.model_loader import get_model
+from aphrodite.model_executor.model_loader.utils import get_draft_load_config
 from aphrodite.triton_utils import tl, triton
 from aphrodite.v1.kv_cache_interface import KVCacheConfig
 from aphrodite.v1.spec_decode.utils import next_power_of_2
@@ -21,6 +22,7 @@ from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
 from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers
 from aphrodite.v1.worker.gpu.model_states.interface import ModelState
 from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from aphrodite.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 from aphrodite.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
@@ -97,25 +99,24 @@ class StandaloneARSpeculator(DraftModelSpeculator):
     ) -> nn.Module:
         spec = self.speculative_config
         assert spec is not None
-        cache_config = self.aphrodite_config.cache_config
-        if spec.kv_cache_dtype is not None:
-            cache_config = replace(cache_config, cache_dtype=spec.kv_cache_dtype)
-
         draft_aphrodite_config = replace(
-            self.aphrodite_config,
+            spec.apply_draft_overrides(self.aphrodite_config),
             model_config=self.draft_model_config,
             quant_config=None,
-            cache_config=cache_config,
             parallel_config=replace(
                 spec.draft_parallel_config,
                 rank=self.aphrodite_config.parallel_config.rank,
             ),
+        )
+        draft_aphrodite_config.parallel_config.data_parallel_index = (
+            self.aphrodite_config.parallel_config.data_parallel_index
         )
         self._draft_aphrodite_config = draft_aphrodite_config
         with set_model_tag("draft_model"):
             return get_model(
                 aphrodite_config=draft_aphrodite_config,
                 prefix="draft_model",
+                load_config=get_pp_safe_draft_load_config(get_draft_load_config(draft_aphrodite_config)),
             )
 
     @torch.inference_mode()
@@ -324,6 +325,10 @@ class StandaloneARSpeculator(DraftModelSpeculator):
                 self.current_draft_step,
                 self.draft_logits,
             )
+
+    def supports_batch_sharded_draft_logits(self) -> bool:
+        # Every draft logits write goes through sample_draft.
+        return True
 
     @torch.inference_mode()
     def propose(

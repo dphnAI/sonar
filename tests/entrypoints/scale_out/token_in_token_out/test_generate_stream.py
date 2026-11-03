@@ -37,6 +37,7 @@ from aphrodite.multimodal.inputs import (
 )
 from aphrodite.outputs import CompletionOutput, RequestOutput, SamplingMask
 from aphrodite.renderers import renderer_from_config
+from aphrodite.renderers.online_derenderer import OnlineDerenderer
 from aphrodite.renderers.online_renderer import OnlineRenderer
 from aphrodite.sampling_params import SamplingParams
 from aphrodite.v1.engine.async_llm import AsyncLLM
@@ -122,6 +123,7 @@ def _build_serving_tokens(engine: AsyncLLM, **kwargs) -> ServingTokens:
         engine,
         models,
         online_renderer=online_renderer,
+        online_derenderer=MagicMock(spec=OnlineDerenderer),
         request_logger=None,
         **kwargs,
     )

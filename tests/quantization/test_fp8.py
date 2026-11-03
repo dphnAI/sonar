@@ -335,7 +335,7 @@ def test_deepseek_v41_nvfp4_export_keeps_ignored_experts_mxfp4(monkeypatch, ckpt
         "get_current_aphrodite_config",
         lambda: SimpleNamespace(model_config=model_config),
     )
-    monkeypatch.setattr(dsv41_qc, "Mxfp4MoEMethod", lambda moe_config: "mxfp4")
+    monkeypatch.setattr(dsv41_qc, "Mxfp4MoEMethod", lambda moe_config, **kwargs: "mxfp4")
     monkeypatch.setattr(modelopt, "ModelOptNvFp4FusedMoE", lambda **kwargs: "nvfp4")
 
     config = dsv41_qc.DeepseekV4FP8Config.from_config(
@@ -588,11 +588,14 @@ def test_static_fp8_moe_input_scales_remain_scalar() -> None:
     reason="FP8 is not supported on this GPU type.",
 )
 @pytest.mark.parametrize("model_id", MODELS)
-@pytest.mark.parametrize("force_marlin", [True, False] if current_platform.is_cuda() else [False])
+@pytest.mark.parametrize(
+    "linear_backend",
+    ["auto", "marlin", "humming"] if current_platform.is_cuda() else ["auto"],
+)
 @pytest.mark.parametrize("use_rocm_aiter", [True, False] if current_platform.is_rocm() else [False])
 def test_model_load_and_run(
     model_id: str,
-    force_marlin: bool,
+    linear_backend: str,
     use_rocm_aiter: bool,
     monkeypatch,
     dist_init,
@@ -602,8 +605,8 @@ def test_model_load_and_run(
         monkeypatch.setenv("APHRODITE_ROCM_USE_AITER", "1")
 
     kernel_config = KernelConfig(
-        linear_backend="marlin" if force_marlin else "auto",
-        moe_backend="marlin" if force_marlin else "auto",
+        linear_backend=linear_backend,
+        moe_backend="marlin" if linear_backend == "marlin" else "auto",
     )
     model, aphrodite_config = load_model_without_aphrodite_runner(
         model_id,

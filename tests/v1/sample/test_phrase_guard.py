@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from aphrodite.exceptions import AphroditeValidationError
 from aphrodite.sampling_params import SamplingParams
 from aphrodite.v1.phrase_guard.matcher import MAX_ZERO_WIDTH_TOKENS, PendingText, validate_phrases
 from aphrodite.v1.phrase_guard.processor import RETRY_KEY, PhraseRetryProcessor
@@ -152,7 +153,9 @@ def test_compiled_cache_has_weighted_budget(monkeypatch):
         matcher._pattern_cache.clear()
 
 
-@pytest.mark.parametrize("case", ["missing", "slow", "v1_missing_processor", "sampling_mask", "routed"])
+@pytest.mark.parametrize(
+    "case", ["missing", "slow", "v1_missing_processor", "sampling_mask", "routed", "default_scheduler"]
+)
 def test_runtime_requirements_are_validated_before_core_dispatch(case):
     from tokenizers import Tokenizer, models
     from transformers import TokenizersBackend
@@ -175,14 +178,17 @@ def test_runtime_requirements_are_validated_before_core_dispatch(case):
             model_config=model_config,
             use_v2_model_runner=case != "v1_missing_processor",
             aux_output_config=SimpleNamespace(enabled=case == "routed"),
-            scheduler_config=SimpleNamespace(get_scheduler_cls=lambda: PhraseScheduler),
+            scheduler_config=SimpleNamespace(
+                get_scheduler_cls=lambda: object if case == "default_scheduler" else PhraseScheduler
+            ),
         ),
         model_config=model_config,
         speculative_config=None,
         structured_outputs_config=None,
     )
     params = SamplingParams(extra_args={"banned_strings": ["hello"]})
-    with pytest.raises(ValueError, match="banned_strings"):
+    # A client error maps to HTTP 400 instead of an opaque engine failure.
+    with pytest.raises(AphroditeValidationError, match="--scheduler-cls" if case == "default_scheduler" else ""):
         InputProcessor._validate_params(processor, params, ("generate",))
 
 

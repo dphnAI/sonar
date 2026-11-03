@@ -41,11 +41,11 @@ def monitor_torch_compile(
     depyf_cm = None
     path = aphrodite_config.compile_debug_dump_path()
     if compilation_config.mode == CompilationMode.APHRODITE_COMPILE and path:
-        import depyf
+        from aphrodite.compilation import depyf_compat
 
         path.mkdir(parents=True, exist_ok=True)
         logger.debug("Dumping depyf output to %s", path)
-        depyf_cm = depyf.prepare_debug(path.as_posix())
+        depyf_cm = depyf_compat.prepare_debug(path.as_posix())
         depyf_cm.__enter__()
 
     try:

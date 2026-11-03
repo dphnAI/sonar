@@ -34,12 +34,19 @@ from aphrodite.utils.b12x import (
 if TYPE_CHECKING:
     from b12x.preparation import PreparationRequest
 
+    from aphrodite.v1.worker.gpu.model_runner import GPUModelRunner as GPUModelRunnerV2
     from aphrodite.v1.worker.gpu_worker import Worker
 
 
 def b12x_native_supported(worker: Worker) -> bool:
     """Opt in by the loaded model contract, never by installed package alone."""
     return bool(getattr(worker.get_model(), "supports_b12x_native_preparation", False))
+
+
+def _native_runner(worker: Worker) -> GPUModelRunnerV2:
+    # Worker.model_runner is annotated with the V1 runner, but native
+    # preparation only runs on the V2 runner (see _validate_native_worker).
+    return cast("GPUModelRunnerV2", worker.model_runner)
 
 
 def _validate_native_worker(worker: Worker) -> None:
@@ -112,7 +119,7 @@ def b12x_workload(worker: Worker, *, stage: str, lane: int = 0) -> B12xWorkload:
     )
     # Sonar's scheduler warmup can cap its request count by available blocks.
     # Declare every reachable prefill row count before either cache pool exists.
-    prompt_len = int(worker.model_runner.decode_query_len) + 1
+    prompt_len = int(_native_runner(worker).decode_query_len) + 1
     warmup_reqs = min(int(worker.scheduler_config.max_num_seqs), max_tokens // prompt_len)
     token_counts = tuple(
         sorted(
@@ -436,7 +443,7 @@ def prepare_b12x_state(worker: Worker, kv_cache_config) -> None:
     finally:
         try:
             # Graphs and model cache aliases must die before their plans.
-            _teardown_profiling_state(worker.model_runner)
+            _teardown_profiling_state(_native_runner(worker))
         finally:
             if batch is not None:
                 batch.release()

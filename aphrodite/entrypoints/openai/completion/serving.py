@@ -6,6 +6,7 @@ import itertools
 import time
 from collections.abc import AsyncGenerator, AsyncIterator
 from collections.abc import Sequence as GenericSequence
+from http import HTTPStatus
 from typing import cast
 
 from fastapi import Request
@@ -44,6 +45,7 @@ from aphrodite.inputs import EngineInput
 from aphrodite.logger import init_logger
 from aphrodite.logprobs import Logprob
 from aphrodite.outputs import RequestOutput
+from aphrodite.proof.http import DphnNonceError, DphnProofContext, DphnProofError, get_proof_nonce
 from aphrodite.renderers.online_renderer import OnlineRenderer
 from aphrodite.sampling_params import BeamSearchParams, SamplingParams
 from aphrodite.tokenizers import TokenizerLike
@@ -65,6 +67,8 @@ class OpenAIServingCompletion(GenerateBaseServing):
         return_tokens_as_token_ids: bool = False,
         enable_prompt_tokens_details: bool = False,
         enable_force_include_usage: bool = False,
+        enable_log_outputs: bool = False,
+        enable_log_deltas: bool = True,
         enable_per_request_metrics: bool = False,
     ):
         super().__init__(
@@ -77,6 +81,8 @@ class OpenAIServingCompletion(GenerateBaseServing):
         self.online_renderer = online_renderer
         self.enable_prompt_tokens_details = enable_prompt_tokens_details
         self.enable_force_include_usage = enable_force_include_usage
+        self.enable_log_outputs = enable_log_outputs
+        self.enable_log_deltas = enable_log_deltas
         self.enable_per_request_metrics = enable_per_request_metrics
 
         self.default_sampling_params = self.model_config.get_diff_sampling_param()
@@ -120,15 +126,26 @@ class OpenAIServingCompletion(GenerateBaseServing):
 
         NOTE: suffix is only supported by models that implement FIM rendering.
         """
-        return await self._with_kv_transfer_rejection_cleanup(
-            self._create_completion(request, raw_request), request, raw_request
-        )
+        try:
+            return await self._with_kv_transfer_rejection_cleanup(
+                self._create_completion(request, raw_request), request, raw_request
+            )
+        except DphnNonceError as exc:
+            return self.create_error_response(str(exc))
+        except DphnProofError:
+            logger.exception("DPHN weight receipt generation failed.")
+            return self.create_error_response(
+                "DPHN weight receipt generation failed",
+                err_type="InternalServerError",
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     async def _create_completion(
         self,
         request: CompletionRequest,
         raw_request: Request | None = None,
     ) -> AsyncGenerator[str, None] | CompletionResponse | ErrorResponse:
+        nonce = get_proof_nonce(self.engine_client, raw_request)
         if request.stream and request.use_beam_search:
             return self.create_error_response("Streaming is not currently supported with beam search")
 
@@ -139,6 +156,11 @@ class OpenAIServingCompletion(GenerateBaseServing):
         engine_inputs = result
 
         request_id = f"cmpl-{self._base_request_id(raw_request, request.request_id)}"
+        proof_context = (
+            DphnProofContext(self.engine_client, request_id, nonce, len(engine_inputs) * (request.n or 1))
+            if nonce is not None
+            else None
+        )
         created_time = int(time.time())
 
         request_metadata = RequestResponseMetadata(request_id=request_id)
@@ -192,6 +214,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
                     lora_request=lora_request,
                     trace_headers=trace_headers,
                     session_id=session_id,
+                    priority=self._get_priority(request, raw_request),
                 )
             else:
                 generator = self.engine_client.generate(
@@ -205,6 +228,12 @@ class OpenAIServingCompletion(GenerateBaseServing):
                     session_id=session_id,
                 )
 
+            if proof_context is not None:
+                generator = proof_context.capture(
+                    generator,
+                    index_offset=i * (request.n or 1),
+                    delta=bool(request.stream) and not isinstance(sampling_params, BeamSearchParams),
+                )
             generators.append(generator)
 
         result_generator = merge_async_iterators(*generators)
@@ -216,7 +245,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
         tokenizer = self.renderer.tokenizer
 
         if request.stream:
-            return self.completion_stream_generator(
+            stream = self.completion_stream_generator(
                 request,
                 engine_inputs,
                 result_generator,
@@ -227,6 +256,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
                 tokenizer=tokenizer,
                 request_metadata=request_metadata,
             )
+            return proof_context.stream(stream) if proof_context is not None else stream
 
         # Non-streaming response
         final_res_batch: list[RequestOutput | None] = [None] * num_prompts
@@ -254,9 +284,23 @@ class OpenAIServingCompletion(GenerateBaseServing):
                 tokenizer,
                 request_metadata,
             )
+
+            if self.enable_log_outputs and self.request_logger:
+                for final_res in final_res_batch_checked:
+                    for output in final_res.outputs:
+                        self.request_logger.log_outputs(
+                            request_id=request_id,
+                            outputs=output.text,
+                            output_token_ids=output.token_ids,
+                            finish_reason=output.finish_reason,
+                            is_streaming=False,
+                            delta=False,
+                        )
         except asyncio.CancelledError:
             return self.create_error_response("Client disconnected")
 
+        if proof_context is not None:
+            response = proof_context.attach_response(response)
         # When user requests streaming but we don't stream, we still need to
         # return a streaming response with a single event.
         if request.stream:
@@ -285,6 +329,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
         num_choices = 1 if request.n is None else request.n
         next_text_offsets = [0] * num_choices * num_prompts
         previous_num_tokens = [0] * num_choices * num_prompts
+        previous_texts = [""] * num_choices * num_prompts
         has_echoed = [False] * num_choices * num_prompts
         num_prompt_tokens = [0] * num_prompts
         num_cached_tokens = None
@@ -392,6 +437,19 @@ class OpenAIServingCompletion(GenerateBaseServing):
                     previous_num_tokens[i] += len(output.token_ids)
                     stop_reason = output.stop_reason
 
+                    if self.enable_log_outputs and self.request_logger:
+                        delta_content = output.text
+                        previous_texts[i] += delta_content
+                        if delta_content and self.enable_log_deltas:
+                            self.request_logger.log_outputs(
+                                request_id=request_id,
+                                outputs=delta_content,
+                                output_token_ids=as_list(output.token_ids),
+                                finish_reason=finish_reason,
+                                is_streaming=True,
+                                delta=True,
+                            )
+
                     chunk = CompletionStreamResponse(
                         id=request_id,
                         object="text_completion",
@@ -409,6 +467,7 @@ class OpenAIServingCompletion(GenerateBaseServing):
                                 weight_versions=(output.weight_versions if request.return_weight_versions else None),
                             )
                         ],
+                        kv_transfer_params=(res.kv_transfer_params if finish_reason is not None else None),
                     )
                     # Stamp on terminal chunk only when no trailing usage chunk
                     # will follow (that one is the true final message).
@@ -425,6 +484,17 @@ class OpenAIServingCompletion(GenerateBaseServing):
 
                     response_json = chunk.model_dump_json(exclude_unset=True)
                     yield f"data: {response_json}\n\n"
+
+            if self.enable_log_outputs and self.request_logger:
+                for full_text in previous_texts:
+                    self.request_logger.log_outputs(
+                        request_id=request_id,
+                        outputs=full_text,
+                        output_token_ids=None,
+                        finish_reason="streaming_complete",
+                        is_streaming=True,
+                        delta=False,
+                    )
 
             total_prompt_tokens = sum(num_prompt_tokens)
             total_completion_tokens = sum(previous_num_tokens)

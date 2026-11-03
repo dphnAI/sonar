@@ -17,6 +17,9 @@ from aphrodite.v1.worker.gpu import pcp_manager as pcp_manager_module
 from aphrodite.v1.worker.gpu.cudagraph_utils import BatchExecutionDescriptor
 from aphrodite.v1.worker.gpu.input_batch import InputBatch, InputBuffers, set_dummy_context
 from aphrodite.v1.worker.gpu.pcp_manager import PCPManager
+from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
+from aphrodite.v1.worker.gpu.spec_decode.dspark.config import DSparkSpeculatorConfig
+from tests.v1.spec_decode.utils import fake_speculative_config
 
 
 def _copy_to_cpu(value, device=None, dtype=None, out=None):
@@ -84,8 +87,8 @@ def test_validate_config_dcp_for_dspark(draft_uses_mla, dcp_size):
     config.parallel_config.prefill_context_parallel_size = 4
     config.parallel_config.decode_context_parallel_size = dcp_size
     config.model_config.hf_text_config.index_topk = 1
-    config.speculative_config = SimpleNamespace(
-        use_dspark=lambda: True,
+    config.speculative_config = fake_speculative_config(
+        DSparkSpeculatorConfig,
         draft_model_config=SimpleNamespace(use_mla=draft_uses_mla),
     )
     if draft_uses_mla and dcp_size == 2:
@@ -141,6 +144,31 @@ def test_input_buffers_are_exposed_for_cudagraph_capture():
     assert manager.input_buffers.input_ids.shape == (8,)
     assert manager.input_buffers.positions.shape == (8,)
     assert manager.input_buffers.is_padding.shape == (8,)
+
+
+def test_sync_drafts_writes_logits_to_request_slots(monkeypatch):
+    """Rank 0's draft logits land in each batch request's persistent slot."""
+    manager = PCPManager(
+        pcp_world_size=2,
+        pcp_rank=1,
+        device=torch.device("cpu"),
+        shard_decode_requests=False,
+        max_num_reqs=4,
+        max_num_tokens=8,
+    )
+    root_tokens = torch.tensor([[11, 12, 13]])
+    root_logits = torch.arange(24, dtype=torch.float32).view(1, 3, 8)
+    broadcasts = iter([root_tokens, root_logits])
+    group = SimpleNamespace(broadcast=lambda tensor, src: tensor.copy_(next(broadcasts)))
+    monkeypatch.setattr(pcp_manager_module, "get_pcp_group", lambda: group)
+    draft_tokens = torch.full((1, 3), -1)
+    draft_logits = DraftLogitsCache(4, 3, 8, dtype=torch.float32, fill=-1.0, device="cpu")
+
+    manager.sync_drafts(draft_tokens, torch.tensor([2]), draft_logits)
+
+    torch.testing.assert_close(draft_tokens, root_tokens)
+    torch.testing.assert_close(draft_logits.values[2], root_logits[0])
+    assert (draft_logits.values[[0, 1, 3]] == -1).all()
 
 
 @pytest.mark.parametrize(
@@ -690,10 +718,11 @@ def test_partition_defers_dcp_metadata_to_post_partition_batch():
 
     assert local_batch.dcp_local_seq_lens is None
     assert local_batch.seq_lens.tolist() == [17, 25, 0, 0]
-    assert local_batch.dcp_local_seq_lens_cpu_upper_bound is not None
+    assert local_batch.pcp is not None
+    assert local_batch.pcp.dcp_local_seq_lens_cpu_upper_bound is not None
     expected_dcp_upper_bound = get_dcp_local_seq_lens(torch.tensor([17, 25], dtype=torch.int32), 2, 0, 1)
     assert torch.equal(
-        local_batch.dcp_local_seq_lens_cpu_upper_bound,
+        local_batch.pcp.dcp_local_seq_lens_cpu_upper_bound,
         torch.cat([expected_dcp_upper_bound, torch.zeros(2, dtype=torch.int32)]),
     )
 

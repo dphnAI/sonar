@@ -28,9 +28,10 @@ class STTRuntimeAdapter(ABC):
     - decoding strategy (prompt handling, token extraction, EOT selection)
     """
 
-    def __init__(self, model: object, model_path: str) -> None:
+    def __init__(self, model: object, model_path: str, trust_remote_code: bool) -> None:
         self.model = model
         self._model_path = model_path
+        self._trust_remote_code = trust_remote_code
 
     @staticmethod
     def _to_mx_float16(value: STTAudioInput) -> mx.array:

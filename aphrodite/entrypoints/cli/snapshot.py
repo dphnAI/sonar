@@ -105,7 +105,7 @@ class SnapshotSubcommand(CLISubcommand):
 
         create_parser = actions.add_parser("create", help="Create a snapshot from an initialized TP1 engine.")
         if self.create_requested:
-            from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
+            from aphrodite.entrypoints.common.cli_args import make_arg_parser
 
             create_parser = make_arg_parser(create_parser)
         else:

@@ -22,11 +22,11 @@ done
 
 # Step 1: Build the wheel
 DOCKER_BUILDKIT=1 docker build . -f docker/Dockerfile --target build --tag alpindale/aphrodite-build \
-    --build-arg CUDA_VERSION=$CUDA_VERSION \
-    --build-arg PYTHON_VERSION=$PYTHON_VERSION \
+    --build-arg CUDA_VERSION="$CUDA_VERSION" \
+    --build-arg PYTHON_VERSION="$PYTHON_VERSION" \
     --build-arg torch_cuda_arch_list="$TORCH_CUDA_ARCH_LIST" \
-    --build-arg max_jobs=$MAX_JOBS \
-    --build-arg nvcc_threads=$NVCC_THREADS
+    --build-arg max_jobs="$MAX_JOBS" \
+    --build-arg nvcc_threads="$NVCC_THREADS"
 
 # Create a temporary container to extract the wheel
 docker run -d --name aphrodite-build-container alpindale/aphrodite-build tail -f /dev/null
@@ -38,16 +38,16 @@ docker stop aphrodite-build-container && docker rm aphrodite-build-container
 
 # Step 2: Build the final Docker image using the wheel
 DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile . --target aphrodite-openai --tag alpindale/aphrodite-openai \
-    --build-arg CUDA_VERSION=$CUDA_VERSION \
-    --build-arg PYTHON_VERSION=$PYTHON_VERSION \
+    --build-arg CUDA_VERSION="$CUDA_VERSION" \
+    --build-arg PYTHON_VERSION="$PYTHON_VERSION" \
     --build-arg torch_cuda_arch_list="$TORCH_CUDA_ARCH_LIST" \
-    --build-arg max_jobs=$MAX_JOBS \
-    --build-arg nvcc_threads=$NVCC_THREADS
+    --build-arg max_jobs="$MAX_JOBS" \
+    --build-arg nvcc_threads="$NVCC_THREADS"
 
 # Step 3: Tag and push the Docker image
 commit=$(git rev-parse --short HEAD)
-docker tag alpindale/aphrodite-openai alpindale/aphrodite-openai:${commit}
-docker push alpindale/aphrodite-openai:${commit}
+docker tag alpindale/aphrodite-openai alpindale/aphrodite-openai:"${commit}"
+docker push alpindale/aphrodite-openai:"${commit}"
 docker tag alpindale/aphrodite-openai alpindale/aphrodite-openai:latest
 docker push alpindale/aphrodite-openai:latest
 

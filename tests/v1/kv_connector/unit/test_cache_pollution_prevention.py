@@ -40,6 +40,7 @@ def _make_get_num_new_matched_tokens(
 def fail_scheduler():
     """Scheduler with kv_load_failure_policy='fail'."""
     aphrodite_config = create_aphrodite_config()
+    assert aphrodite_config.kv_transfer_config is not None
     aphrodite_config.kv_transfer_config.kv_load_failure_policy = "fail"
     return create_scheduler(aphrodite_config)
 

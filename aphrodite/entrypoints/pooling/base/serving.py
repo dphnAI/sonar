@@ -19,7 +19,6 @@ from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.entrypoints.serve.engine.serving import BaseServing
 from aphrodite.entrypoints.serve.engine.typing import AnyRequest
 from aphrodite.entrypoints.serve.utils.request_logger import RequestLogger
-from aphrodite.exceptions import GenerationError, RetryableRequestError
 from aphrodite.lora.request import LoRARequest
 from aphrodite.renderers.base import BaseRenderer
 from aphrodite.renderers.chat_utils import ChatTemplateConfig
@@ -184,9 +183,7 @@ class PoolingBaseServing(ABC, BaseServing):
 
         async for i, res in ctx.result_generator:
             if res.error is not None:
-                if res.error.retryable:
-                    raise RetryableRequestError(res.error.message)
-                raise GenerationError(res.error.message)
+                raise res.error.to_exception()
             final_res_batch[i] = res
 
         if None in final_res_batch:

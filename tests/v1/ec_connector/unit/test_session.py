@@ -91,8 +91,8 @@ def _xfer_req(mm_hash: str = "h1", session_id: str = "sess-1") -> XferReq:
     return XferReq(mm_hash=mm_hash, compatibility_hash="hash-abc", session_id=session_id)
 
 
-def _make_producer_session(cache: EmbeddingCache | None = None) -> ProducerSession:
-    data = _make_data()
+def _make_producer_session(cache: EmbeddingCache | None = None, data: MagicMock | None = None) -> ProducerSession:
+    data = data or _make_data()
     data.get_agent_metadata.return_value = b"meta"
     data.get_mem_descriptor.return_value = b"desc"
     return ProducerSession(
@@ -113,6 +113,7 @@ def test_producer_session_grant_pins_ready_entry_and_returns_blocks():
 
     assert ack.status == XferStatus.OK
     entry = cache.get("h1")
+    assert entry is not None
     assert not entry.evictable  # pinned by the grant
     assert list(ack.src_block_indices) == list(entry.block_ids)
 
@@ -149,6 +150,7 @@ def test_producer_session_grant_nacks_version_mismatch():
 
     assert ack.status == XferStatus.NACK_VERSION
     entry = cache.get("h1")
+    assert entry is not None
     assert entry.evictable  # nothing was pinned
 
 
@@ -163,6 +165,7 @@ def test_producer_session_grant_nacks_compat_hash_mismatch():
 
     assert ack.status == XferStatus.NACK_INCOMPAT
     entry = cache.get("h1")
+    assert entry is not None
     assert entry.evictable  # nothing was pinned
 
 
@@ -170,12 +173,14 @@ def test_producer_session_notif_unpins_via_cache():
     cache = EmbeddingCache(num_blocks=8)
     cache.alloc("h1", 2)
     cache.mark_ready("h1")
-    s = _make_producer_session(cache)
+    data = _make_data()
+    s = _make_producer_session(cache, data)
     s._grant_or_nack(_xfer_req(mm_hash="h1", session_id="sess-1"))
     entry = cache.get("h1")
+    assert entry is not None
     assert not entry.evictable  # pinned
 
-    s._data.get_new_notifs.return_value = {"agent": [b"sess-1:h1"]}
+    data.get_new_notifs.return_value = {"agent": [b"sess-1:h1"]}
     s._drain_notifs()
 
     assert entry.evictable  # unpinned via cache
@@ -193,7 +198,9 @@ def test_producer_session_sweep_timeouts_unpins_via_cache():
 
     s._sweep_timeouts()
 
-    assert cache.get("h1").evictable
+    entry = cache.get("h1")
+    assert entry is not None
+    assert entry.evictable
     assert s._active_xfers == {}
 
 

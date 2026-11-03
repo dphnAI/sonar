@@ -33,7 +33,7 @@ async def _records_start_then_never_finishes(started_request_ids, request_id):
         ),
     ],
 )
-async def test_non_streaming_cancel_aborts_engine_requests(engine_inputs, expected_request_ids):
+async def test_non_streaming_cancel_aborts_engine_requests(engine_inputs, expected_request_ids, monkeypatch):
     engine_client = SimpleNamespace(
         errored=False,
         check_admission=Mock(),
@@ -44,22 +44,26 @@ async def test_non_streaming_cancel_aborts_engine_requests(engine_inputs, expect
 
     server = SpeechToTextBaseServing.__new__(SpeechToTextBaseServing)
     server.engine_client = engine_client
-    server.task_type = "transcribe"
+    server.task_type = "transcribe"  # type: ignore[misc]  # Final, set in __init__
     server.models = SimpleNamespace(model_name=lambda: "audio")
     server.model_config = SimpleNamespace(max_model_len=1024)
     server.model_cls = SimpleNamespace(no_space_languages=set())
     server.default_sampling_params = {}
     server.asr_config = SimpleNamespace(max_audio_clip_s=30)
-    server._check_model = AsyncMock(return_value=None)
-    server._maybe_get_adapters = Mock(return_value=None)
-    server._preprocess_speech_to_text = AsyncMock(
-        return_value=(
-            engine_inputs,
-            40.0,
-            [30.0 * i for i in range(len(engine_inputs))],
-        )
+    monkeypatch.setattr(server, "_check_model", AsyncMock(return_value=None))
+    monkeypatch.setattr(server, "_maybe_get_adapters", Mock(return_value=None))
+    monkeypatch.setattr(
+        server,
+        "_preprocess_speech_to_text",
+        AsyncMock(
+            return_value=(
+                engine_inputs,
+                40.0,
+                [30.0 * i for i in range(len(engine_inputs))],
+            )
+        ),
     )
-    server._log_inputs = Mock()
+    monkeypatch.setattr(server, "_log_inputs", Mock())
 
     request = SimpleNamespace(
         model="audio",
@@ -97,7 +101,7 @@ async def test_non_streaming_cancel_aborts_engine_requests(engine_inputs, expect
 
 
 @pytest.mark.asyncio
-async def test_non_streaming_cancel_advances_all_chunk_generators():
+async def test_non_streaming_cancel_advances_all_chunk_generators(monkeypatch):
     started_request_ids: list[str] = []
     engine_client = SimpleNamespace(
         errored=False,
@@ -116,16 +120,20 @@ async def test_non_streaming_cancel_advances_all_chunk_generators():
     ]
     server = SpeechToTextBaseServing.__new__(SpeechToTextBaseServing)
     server.engine_client = engine_client
-    server.task_type = "transcribe"
+    server.task_type = "transcribe"  # type: ignore[misc]  # Final, set in __init__
     server.models = SimpleNamespace(model_name=lambda: "audio")
     server.model_config = SimpleNamespace(max_model_len=1024)
     server.model_cls = SimpleNamespace(no_space_languages=set())
     server.default_sampling_params = {}
     server.asr_config = SimpleNamespace(max_audio_clip_s=30)
-    server._check_model = AsyncMock(return_value=None)
-    server._maybe_get_adapters = Mock(return_value=None)
-    server._preprocess_speech_to_text = AsyncMock(return_value=(engine_inputs, 90.0, [0.0, 29.5, 29.5 + 29.7]))
-    server._log_inputs = Mock()
+    monkeypatch.setattr(server, "_check_model", AsyncMock(return_value=None))
+    monkeypatch.setattr(server, "_maybe_get_adapters", Mock(return_value=None))
+    monkeypatch.setattr(
+        server,
+        "_preprocess_speech_to_text",
+        AsyncMock(return_value=(engine_inputs, 90.0, [0.0, 29.5, 29.5 + 29.7])),
+    )
+    monkeypatch.setattr(server, "_log_inputs", Mock())
 
     request = SimpleNamespace(
         model="audio",

@@ -48,7 +48,9 @@ if current_platform.is_rocm():
     from aphrodite.models.qwen4_exp.amd import model as qwen4_model
     from aphrodite.models.qwen4_exp.amd.model import Qwen4ExpDecoderLayer
 else:
-    from aphrodite.models.qwen4_exp.nvidia import model as qwen4_model
+    from aphrodite.models.qwen4_exp.nvidia import (  # type: ignore[no-redef]
+        model as qwen4_model,
+    )
     from aphrodite.models.qwen4_exp.nvidia.model import Qwen4ExpDecoderLayer
 
 
@@ -216,6 +218,7 @@ def _check_moe_sp(rank: int, config: AphroditeConfig) -> None:
         full_hidden, moe_input, injection = layer.mlp_hyper_connection.combine_and_mix(
             full_hidden, attn_output, injection
         )
+        assert injection is not None
         expected = tuple(x.clone() for x in (full_hidden, layer.mlp(moe_input), injection))
         output = layer(
             sp_shard(hidden),

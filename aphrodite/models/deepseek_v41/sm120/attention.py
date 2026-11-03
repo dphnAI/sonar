@@ -1514,7 +1514,7 @@ class DeepseekV41B12xAttention(nn.Module, AttentionLayerBase):
             block_size=(32, 32),
         )
         q_weight, kv_weight = self.q_norm.weight, self.kv_norm.weight
-        capacities = getattr(self.wq_b, "b12x_capacities", ())
+        capacities: tuple[int, ...] = getattr(self.wq_b, "b12x_capacities", ())
         consumers = (self.wq_b,) if self.indexer is None else (self.wq_b, self.indexer.wq_b)
         eps = self.q_norm.variance_epsilon
         self._qkv_norm_quant = (

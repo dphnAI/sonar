@@ -8,6 +8,7 @@ import torch
 from aphrodite import LLM, PoolingParams, PoolingRequestOutput
 from aphrodite.config import PoolerConfig
 from aphrodite.exceptions import AphroditeValidationError
+from aphrodite.outputs import PoolingOutput
 from aphrodite.pooling_params import LateChunkingParams
 from aphrodite.tasks import PoolingTask
 from tests.models.utils import check_embeddings_close
@@ -39,16 +40,20 @@ def llm(aphrodite_runner):
 
 
 @pytest.mark.skip_global_cleanup
-def test_str_prompts(llm: LLM):
-    outputs = llm.encode(prompt, pooling_task="token_embed", use_tqdm=False)
+@pytest.mark.parametrize("method", ["encode", "embed"])
+def test_str_prompts(llm: LLM, method: str):
+    kwargs = {"pooling_task": "token_embed"} if method == "encode" else {}
+    outputs = getattr(llm, method)(prompt, use_tqdm=False, **kwargs)
     assert len(outputs) == 1
     assert isinstance(outputs[0], PoolingRequestOutput)
     assert outputs[0].outputs.data.shape == (11, 384)
 
 
 @pytest.mark.skip_global_cleanup
-def test_token_ids_prompts(llm: LLM):
-    outputs = llm.encode([prompt_token_ids], pooling_task="token_embed", use_tqdm=False)
+@pytest.mark.parametrize("method", ["encode", "embed"])
+def test_token_ids_prompts(llm: LLM, method: str):
+    kwargs = {"pooling_task": "token_embed"} if method == "encode" else {}
+    outputs = getattr(llm, method)([prompt_token_ids], use_tqdm=False, **kwargs)
     assert len(outputs) == 1
     assert isinstance(outputs[0], PoolingRequestOutput)
     assert outputs[0].outputs.data.shape == (11, 384)
@@ -167,6 +172,17 @@ def test_nomic_late_chunking_without_special_tokens(aphrodite_runner):
 
 
 @pytest.mark.skip_global_cleanup
+def test_late_chunking_rejects_oversized_chunk_size(llm: LLM):
+    chunk_params = LateChunkingParams(1)
+    params = PoolingParams(late_chunking_params=chunk_params)
+    # Exercise request validation after a mutable parameter has changed.
+    chunk_params.chunk_size = 2**64
+    with pytest.raises(AphroditeValidationError, match="positive integer"):
+        llm.encode(prompt, pooling_task="token_embed", pooling_params=params, use_tqdm=False)
+    assert not llm.llm_engine.has_unfinished_requests()
+
+
+@pytest.mark.skip_global_cleanup
 @pytest.mark.parametrize("normalize", [False, True])
 def test_e5_late_chunking_mixed_requests(llm: LLM, normalize: bool):
     texts = [prompt, "Short text.", "中文 😀 café"]
@@ -184,8 +200,10 @@ def test_e5_late_chunking_mixed_requests(llm: LLM, normalize: bool):
         )
         for size in sizes
     ]
-    actual = llm.encode(texts, pooling_task="token_embed", pooling_params=params, use_tqdm=False)
-    for original, result, size in zip(raw, actual, sizes):
+    actual = llm.embed(texts, pooling_params=params, use_tqdm=False)
+    for index, (original, size) in enumerate(zip(raw, sizes)):
+        result = actual[index]
+        assert isinstance(result.outputs, PoolingOutput)
         expected = original.outputs.data
         if size is not None:
             expected = torch.stack([part.float().mean(0) for part in expected.split(size)])

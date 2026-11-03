@@ -36,6 +36,7 @@ import queue
 import signal as signal_module
 from typing import Any
 
+from aphrodite.config import WatchdogConfig
 from aphrodite.v1.engine import EngineCoreRequestType
 from aphrodite.v1.engine import core as core_module
 from aphrodite.v1.engine.core import EngineCoreProc, EngineShutdownState
@@ -113,6 +114,9 @@ class _StubAphroditeConfig:
         self.logging_config = None
         self.kv_transfer_config = None
         self.shutdown_timeout = 0
+        # run_engine_core starts the watchdog from this field. The default
+        # config has no dump_dir, so start_watch_dog returns immediately.
+        self.watchdog_config = WatchdogConfig()
 
 
 def _run_engine_core(

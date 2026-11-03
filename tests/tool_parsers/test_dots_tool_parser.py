@@ -14,6 +14,7 @@ from aphrodite.entrypoints.openai.chat_completion.protocol import (
 )
 from aphrodite.tool_parsers import ToolParserManager
 from aphrodite.tool_parsers.dots_tool_parser import DotsToolParser
+from tests.tool_parsers.utils import get_function_delta
 
 
 def _tool(name: str, properties: dict) -> ChatCompletionToolsParam:
@@ -184,7 +185,7 @@ def test_streaming_buffers_partial_marker_and_emits_all_complete_calls(
     assert "".join(message.content or "" for message in messages) == "visible"
     calls = [call for message in messages for call in message.tool_calls]
     assert [call.index for call in calls] == [0, 1]
-    assert [json.loads(call.function.arguments or "") for call in calls] == [
+    assert [json.loads(get_function_delta(call).arguments or "") for call in calls] == [
         {"query": "chairs"},
         {"query": "tables"},
     ]
@@ -228,6 +229,7 @@ def test_streaming_malformed_block_does_not_block_later_valid_call(
 
     assert messages[0].content == "garbage"
     assert messages[0].tool_calls == []
+    assert messages[1].tool_calls[0].function is not None
     assert messages[1].tool_calls[0].function.name == "search"
 
 
@@ -268,6 +270,6 @@ def test_streaming_emits_complete_json_before_end_marker_without_duplication(
     )
 
     calls = [call for message in messages for call in message.tool_calls]
-    assert [call.function.name for call in calls] == ["search", None]
-    assert "".join(call.function.arguments or "" for call in calls) == ('{"query": "chairs"}')
+    assert [get_function_delta(call).name for call in calls] == ["search", None]
+    assert "".join(get_function_delta(call).arguments or "" for call in calls) == ('{"query": "chairs"}')
     assert messages[-1].tool_calls == calls

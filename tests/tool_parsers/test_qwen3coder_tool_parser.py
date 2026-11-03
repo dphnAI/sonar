@@ -27,6 +27,7 @@ from aphrodite.tokenizers.detokenizer_utils import detokenize_incrementally
 from aphrodite.tool_parsers.qwen3_engine_tool_parser import (
     Qwen3EngineToolParser,
 )
+from tests.tool_parsers.utils import ToolState, ToolStateWithHeader
 
 MODEL = "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8"
 
@@ -629,7 +630,7 @@ true
     parser = Qwen3EngineToolParser(qwen3_tokenizer, tools=tools)
     request = ChatCompletionRequest(model=MODEL, messages=[], tools=tools)
 
-    tool_states = {}
+    tool_states: dict[int, ToolState] = {}
     for delta_message in stream_delta_message_generator(parser, qwen3_tokenizer, model_output, request):
         if delta_message.tool_calls:
             for tool_call in delta_message.tool_calls:
@@ -832,7 +833,7 @@ def test_extract_tool_calls_streaming(
     request = ChatCompletionRequest(model=MODEL, messages=[])
 
     other_content = ""
-    tool_states = {}  # Track state per tool index
+    tool_states: dict[int, ToolStateWithHeader] = {}  # Track state per tool index
 
     for delta_message in stream_delta_message_generator(qwen3_tool_parser, qwen3_tokenizer, model_output, request):
         # role should never be streamed from tool parser
@@ -953,7 +954,7 @@ fahrenheit
     request = ChatCompletionRequest(model=MODEL, messages=[])
 
     other_content = ""
-    tool_states = {}
+    tool_states: dict[int, ToolStateWithHeader] = {}
 
     for delta_message in stream_delta_message_generator(qwen3_tool_parser, qwen3_tokenizer, model_output, request):
         if delta_message.content:
@@ -1034,6 +1035,7 @@ TX
     for chunk in chunks:
         if chunk.tool_calls and chunk.tool_calls[0].id:
             header_found = True
+            assert chunk.tool_calls[0].function is not None
             assert chunk.tool_calls[0].function.name == "get_current_weather"
             assert chunk.tool_calls[0].type == "function"
             break
@@ -1079,7 +1081,7 @@ fahrenheit
     request = ChatCompletionRequest(model=MODEL, messages=[])
 
     other_content = ""
-    tool_states = {}
+    tool_states: dict[int, ToolStateWithHeader] = {}
 
     for delta_message in stream_delta_message_generator(qwen3_tool_parser, qwen3_tokenizer, model_output, request):
         if delta_message.content:

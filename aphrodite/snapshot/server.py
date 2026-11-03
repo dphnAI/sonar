@@ -170,7 +170,7 @@ async def wait_for_release_marker(
 
 
 def parse_aphrodite_args(argv: list[str]) -> Any:
-    from aphrodite.entrypoints.launchers.cli_args import (
+    from aphrodite.entrypoints.common.cli_args import (
         make_arg_parser,
         validate_parsed_serve_args,
     )

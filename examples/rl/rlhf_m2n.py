@@ -15,7 +15,7 @@ full tensor, which broadcast-based weight sync would force it to do.
 
 Every FSDP rank builds an ``M2NTrainerWeightTransferEngine`` and calls
 ``send_weights()``; all ranks run every reshard, and only rank 0 drives the
-inference side through its ``RayAPHRODITEWeightSyncClient``.
+inference side through its ``RayAphroditeWeightSyncClient``.
 
 Requires the ``nccl-extensions`` package (NCCL 2.30.5+). The backend creates
 the data-plane communicator with ``nccl4py`` and passes it directly to M2N.
@@ -39,10 +39,10 @@ from transformers import AutoModelForCausalLM
 from aphrodite import LLM, SamplingParams
 from aphrodite.config import WeightTransferConfig
 from aphrodite.distributed.weight_transfer import (
-    RayAPHRODITEWeightSyncClient,
+    ModuleSource,
+    RayAphroditeWeightSyncClient,
     WeightTransferTrainerFactory,
 )
-from aphrodite.distributed.weight_transfer.m2n_source import DTensorModuleSource
 from aphrodite.distributed.weight_transfer.m2n_trainer import M2NTrainerInitInfo
 from aphrodite.utils.network_utils import get_ip, get_open_port
 
@@ -102,9 +102,9 @@ class FSDPTrainWorker:
     ):
         """Build the trainer engine on every FSDP rank.
 
-        `DTensorModuleSource` reads each parameter's FSDP device mesh and
-        placements, so the engine knows the source layout without gathering
-        anything. Rank 0 additionally drives the inference-side handshake.
+        `ModuleSource` reads each parameter's FSDP device mesh and placements,
+        so the engine knows the source layout without gathering anything.
+        Rank 0 additionally drives the inference-side handshake.
         """
         self.engine = WeightTransferTrainerFactory.trainer_init(
             init_info=M2NTrainerInitInfo(
@@ -118,8 +118,8 @@ class FSDPTrainWorker:
                 dst_mesh_dims=(num_workers // INFERENCE_TP_SIZE, INFERENCE_TP_SIZE),
                 rank=self.rank,  # FSDP rank; sender is 0
             ),
-            client=RayAPHRODITEWeightSyncClient(llm_handle),
-            source=DTensorModuleSource(self.model, FSDP_WORLD_SIZE),
+            client=RayAphroditeWeightSyncClient(llm_handle),
+            source=ModuleSource(self.model),
         )
 
     def send_weights(self):

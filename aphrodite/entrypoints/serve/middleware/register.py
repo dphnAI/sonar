@@ -29,6 +29,11 @@ def init_entrypoints_middleware(
         allow_headers=args.allowed_headers,
     )
 
+    if getattr(args, "dphn_network", False):
+        from aphrodite.proof.http import DphnHTTPMiddleware
+
+        app.add_middleware(DphnHTTPMiddleware)
+
     # Ensure --api-key option from CLI takes precedence over APHRODITE_API_KEY
     if tokens := [key for key in (args.api_key or [envs.APHRODITE_API_KEY]) if key]:
         from .authenticate import AuthenticationMiddleware

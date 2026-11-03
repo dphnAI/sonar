@@ -118,9 +118,9 @@ class PassConfig:
     don't all have access to full configuration - that would create a cycle as
     the `PassManager` is set as a property of config.
 
-    You must pass PassConfig to APHRODITEConfig constructor via the CompilationConfig
-    constructor. APHRODITEConfig's post_init does further initialization.
-    If used outside of the APHRODITEConfig, some fields may be left in an
+    You must pass PassConfig to AphroditeConfig constructor via the CompilationConfig
+    constructor. AphroditeConfig's post_init does further initialization.
+    If used outside of the AphroditeConfig, some fields may be left in an
     improper state.
     """
 
@@ -286,7 +286,7 @@ class PassConfig:
 
     def log_enabled_passes(self) -> None:
         """Log the enabled custom fusion passes.
-        This is called at the end of APHRODITEConfig post_init,
+        This is called at the end of AphroditeConfig post_init,
         after all defaults are finalized.
         TODO also log the compile ranges for which this is enabled.
         """
@@ -367,9 +367,9 @@ class DynamicShapesConfig:
 class CompilationConfig:
     """Configuration for compilation.
 
-    You must pass CompilationConfig to APHRODITEConfig constructor.
-    APHRODITEConfig's post_init does further initialization. If used outside of the
-    APHRODITEConfig, some fields will be left in an improper state.
+    You must pass CompilationConfig to AphroditeConfig constructor.
+    AphroditeConfig's post_init does further initialization. If used outside of the
+    AphroditeConfig, some fields will be left in an improper state.
 
     It contains PassConfig, which controls the custom fusion/transformation passes.
     The rest has three parts:
@@ -767,6 +767,7 @@ class CompilationConfig:
         "aphrodite::rocm_aiter_sparse_attn_indexer",
         "aphrodite::deepseek_v4_attention",
         "aphrodite::hpc_rope_norm_forward",
+        "aphrodite::step5_csa_attention",
     ]
 
     def compute_hash(self) -> str:

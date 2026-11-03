@@ -49,7 +49,9 @@ class DummyConfig:
 
 
 def make_model() -> Qwen3OmniMoeThinkerForConditionalGeneration:
-    model = Qwen3OmniMoeThinkerForConditionalGeneration.__new__(Qwen3OmniMoeThinkerForConditionalGeneration)
+    model = Qwen3OmniMoeThinkerForConditionalGeneration.__new__(
+        Qwen3OmniMoeThinkerForConditionalGeneration  # type: ignore[type-abstract]  # protocol attrs unset
+    )
     model.config = DummyConfig()
     return model
 

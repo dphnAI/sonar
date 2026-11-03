@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import json
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,6 +18,7 @@ from aphrodite.entrypoints.openai.chat_completion.serving import OpenAIServingCh
 from aphrodite.entrypoints.openai.models.protocol import BaseModelPath
 from aphrodite.entrypoints.openai.models.serving import OpenAIServingModels
 from aphrodite.entrypoints.scale_out.render.serving import ServingRender
+from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse
 from aphrodite.exceptions import AphroditeValidationError, GenerationError
 from aphrodite.outputs import CompletionOutput, RequestOutput
 from aphrodite.renderers.hf import HfRenderer
@@ -87,7 +89,7 @@ def _build_renderer(model_config: MockModelConfig):
     )
 
 
-def _build_serving_chat(engine: AsyncLLM) -> OpenAIServingChat:
+def _build_serving_chat(engine: AsyncLLM, monkeypatch: pytest.MonkeyPatch) -> OpenAIServingChat:
     models = OpenAIServingModels(
         engine_client=engine,
         base_model_paths=BASE_MODEL_PATHS,
@@ -117,12 +119,16 @@ def _build_serving_chat(engine: AsyncLLM) -> OpenAIServingChat:
             [{"prompt_token_ids": [1, 2, 3]}],
         )
 
-    serving_chat.online_renderer.preprocess_chat = AsyncMock(side_effect=_fake_preprocess_chat)
+    monkeypatch.setattr(
+        serving_chat.online_renderer,
+        "preprocess_chat",
+        AsyncMock(side_effect=_fake_preprocess_chat),
+    )
     return serving_chat
 
 
 @pytest.mark.asyncio
-async def test_chat_error_non_stream():
+async def test_chat_error_non_stream(monkeypatch: pytest.MonkeyPatch):
     """Test finish_reason='error' returns 500 InternalServerError (non-streaming)."""
     mock_engine = MagicMock(spec=AsyncLLM)
     mock_engine.errored = False
@@ -130,7 +136,7 @@ async def test_chat_error_non_stream():
     mock_engine.input_processor = MagicMock()
     mock_engine.renderer = _build_renderer(mock_engine.model_config)
 
-    serving_chat = _build_serving_chat(mock_engine)
+    serving_chat = _build_serving_chat(mock_engine, monkeypatch)
 
     completion_output = CompletionOutput(
         index=0,
@@ -171,14 +177,16 @@ async def test_chat_error_non_stream():
 
 
 @pytest.mark.asyncio
-async def test_openai_chat_keeps_mm_cache_for_engine_execution():
+async def test_openai_chat_keeps_mm_cache_for_engine_execution(
+    monkeypatch: pytest.MonkeyPatch,
+):
     mock_engine = MagicMock(spec=AsyncLLM)
     mock_engine.errored = False
     mock_engine.model_config = MockModelConfig()
     mock_engine.input_processor = MagicMock()
     mock_engine.renderer = _build_renderer(mock_engine.model_config)
 
-    serving_chat = _build_serving_chat(mock_engine)
+    serving_chat = _build_serving_chat(mock_engine, monkeypatch)
 
     request = ChatCompletionRequest(
         model=MODEL_NAME,
@@ -188,10 +196,12 @@ async def test_openai_chat_keeps_mm_cache_for_engine_execution():
     result = await serving_chat.render_chat_request(request)
 
     assert isinstance(result, tuple)
-    assert serving_chat.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"] is False
+    preprocess_chat = serving_chat.online_renderer.preprocess_chat
+    assert isinstance(preprocess_chat, AsyncMock)
+    assert preprocess_chat.call_args.kwargs["skip_mm_cache"] is False
 
 
-def _build_serving_render(engine: AsyncLLM) -> ServingRender:
+def _build_serving_render(engine: AsyncLLM, monkeypatch: pytest.MonkeyPatch) -> ServingRender:
     models = OpenAIServingModels(
         engine_client=engine,
         base_model_paths=BASE_MODEL_PATHS,
@@ -213,19 +223,25 @@ def _build_serving_render(engine: AsyncLLM) -> ServingRender:
             [{"prompt_token_ids": [1, 2, 3]}],
         )
 
-    serving_render.online_renderer.preprocess_chat = AsyncMock(side_effect=_fake_preprocess_chat)
+    monkeypatch.setattr(
+        serving_render.online_renderer,
+        "preprocess_chat",
+        AsyncMock(side_effect=_fake_preprocess_chat),
+    )
     return serving_render
 
 
 @pytest.mark.asyncio
-async def test_renderer_only_chat_request_skips_mm_cache():
+async def test_renderer_only_chat_request_skips_mm_cache(
+    monkeypatch: pytest.MonkeyPatch,
+):
     mock_engine = MagicMock(spec=AsyncLLM)
     mock_engine.errored = False
     mock_engine.model_config = MockModelConfig()
     mock_engine.input_processor = MagicMock()
     mock_engine.renderer = _build_renderer(mock_engine.model_config)
 
-    serving_render = _build_serving_render(mock_engine)
+    serving_render = _build_serving_render(mock_engine, monkeypatch)
 
     request = ChatCompletionRequest(
         model=MODEL_NAME,
@@ -234,13 +250,16 @@ async def test_renderer_only_chat_request_skips_mm_cache():
 
     result = await serving_render.render_chat_request(request)
 
+    assert not isinstance(result, ErrorResponse)
     assert result.token_ids == [1, 2, 3]
-    assert serving_render.online_renderer.preprocess_chat.call_args.kwargs["skip_mm_cache"] is True
+    preprocess_chat = serving_render.online_renderer.preprocess_chat
+    assert isinstance(preprocess_chat, AsyncMock)
+    assert preprocess_chat.call_args.kwargs["skip_mm_cache"] is True
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("include_usage", [False, True])
-async def test_chat_error_stream(include_usage: bool):
+async def test_chat_error_stream(include_usage: bool, monkeypatch: pytest.MonkeyPatch):
     """Test finish_reason='error' returns 500 InternalServerError (streaming)."""
     mock_engine = MagicMock(spec=AsyncLLM)
     mock_engine.errored = False
@@ -248,7 +267,7 @@ async def test_chat_error_stream(include_usage: bool):
     mock_engine.input_processor = MagicMock()
     mock_engine.renderer = _build_renderer(mock_engine.model_config)
 
-    serving_chat = _build_serving_chat(mock_engine)
+    serving_chat = _build_serving_chat(mock_engine, monkeypatch)
 
     completion_output_1 = CompletionOutput(
         index=0,
@@ -310,6 +329,7 @@ async def test_chat_error_stream(include_usage: bool):
 
     response = await serving_chat.create_chat_completion(request)
 
+    assert isinstance(response, AsyncGenerator)
     chunks = []
     async for chunk in response:
         chunks.append(chunk)
@@ -321,7 +341,7 @@ async def test_chat_error_stream(include_usage: bool):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("include_usage", [False, True])
-async def test_chat_error_stream_first_chunk(include_usage: bool):
+async def test_chat_error_stream_first_chunk(include_usage: bool, monkeypatch: pytest.MonkeyPatch):
     """An error before the first token must reach the streaming client."""
     mock_engine = MagicMock(spec=AsyncLLM)
     mock_engine.errored = False
@@ -329,7 +349,7 @@ async def test_chat_error_stream_first_chunk(include_usage: bool):
     mock_engine.input_processor = MagicMock()
     mock_engine.renderer = _build_renderer(mock_engine.model_config)
 
-    serving_chat = _build_serving_chat(mock_engine)
+    serving_chat = _build_serving_chat(mock_engine, monkeypatch)
 
     completion_output = CompletionOutput(
         index=0,
@@ -368,6 +388,7 @@ async def test_chat_error_stream_first_chunk(include_usage: bool):
 
     response = await serving_chat.create_chat_completion(request)
 
+    assert isinstance(response, AsyncGenerator)
     chunks = []
     async for chunk in response:
         chunks.append(chunk)

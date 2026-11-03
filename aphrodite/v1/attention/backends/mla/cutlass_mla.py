@@ -17,13 +17,13 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
 )
 from aphrodite.platforms.interface import DeviceCapability
 from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
 from aphrodite.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
     AttentionType,
     MultipleOf,
 )
+from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
 
 logger = init_logger(__name__)
 

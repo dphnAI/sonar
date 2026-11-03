@@ -17,6 +17,7 @@ import torch
 from PIL import Image, ImageChops
 
 from aphrodite.assets.base import APHRODITE_S3_BUCKET_URL
+from aphrodite.exceptions import AphroditeValidationError
 from aphrodite.multimodal.image import convert_image_mode
 from aphrodite.multimodal.inputs import PlaceholderRange
 from aphrodite.multimodal.media import MediaConnector
@@ -154,12 +155,12 @@ async def test_fetch_image_local_files(image_url: str):
 
         with pytest.raises(ValueError, match="must be a subpath"):
             await local_connector.fetch_image_async(f"file://{temp_dir}/../{os.path.basename(image_url)}")
-        with pytest.raises(RuntimeError, match="Cannot load local files"):
+        with pytest.raises(AphroditeValidationError, match="Cannot load local files"):
             await connector.fetch_image_async(f"file://{temp_dir}/../{os.path.basename(image_url)}")
 
         with pytest.raises(ValueError, match="must be a subpath"):
             local_connector.fetch_image(f"file://{temp_dir}/../{os.path.basename(image_url)}")
-        with pytest.raises(RuntimeError, match="Cannot load local files"):
+        with pytest.raises(AphroditeValidationError, match="Cannot load local files"):
             connector.fetch_image(f"file://{temp_dir}/../{os.path.basename(image_url)}")
 
 

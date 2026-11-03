@@ -2,15 +2,14 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Unit tests for native offloading specs and their factory."""
 
+import os
+import uuid
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 import torch
 
-from aphrodite.config import KVTransferConfig
-from aphrodite.distributed.kv_transfer.kv_connector.v1.offloading.config import build_offloading_config
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheConfig, KVCacheGroupSpec, KVCacheTensor, MambaSpec
 from aphrodite.v1.kv_offload.base import (
     CanonicalKVCaches,
     OffloadingHistogramMetadata,
@@ -19,16 +18,15 @@ from aphrodite.v1.kv_offload.base import (
     OffloadingWorker,
 )
 from aphrodite.v1.kv_offload.config import (
-    OffloadingCacheConfig,
-    OffloadingConfig,
     OffloadingGroupConfig,
-    OffloadingModelConfig,
-    OffloadingParallelConfig,
 )
+from aphrodite.v1.kv_offload.cpu.common import CPUOffloadingInfo
 from aphrodite.v1.kv_offload.cpu.shared_offload_region import SharedOffloadRegion
 from aphrodite.v1.kv_offload.cpu.spec import CPUOffloadingSpec
 from aphrodite.v1.kv_offload.factory import OffloadingSpecFactory
+from aphrodite.v1.kv_offload.tiering.manager import CPUPrimaryTierOffloadingManager
 from aphrodite.v1.kv_offload.tiering.spec import TieringOffloadingSpec
+from tests.v1.kv_offload.conftest import make_offloading_config
 
 
 @pytest.fixture(autouse=True)
@@ -38,65 +36,14 @@ def restore_registry():
     OffloadingSpecFactory._registry = original
 
 
-def _make_offloading_config(
-    *,
-    spec_name: str | None = "CPUOffloadingSpec",
-    cpu_bytes_to_use: int | None = 65536,
-    worker_kv_bytes_per_block: int = 8,
-    groups: tuple[OffloadingGroupConfig, ...] | None = None,
-    tokens_per_hash: int = 16,
-    blocks_per_chunk: int = 1,
-    rank: int = 0,
-    world_size: int = 1,
-    tp_size: int | None = None,
-    pp_size: int = 1,
-    pcp_size: int = 1,
-    dcp_size: int = 1,
-    data_parallel_index: int = 0,
-    data_parallel_size: int = 1,
-    data_parallel_rank_local: int | None = None,
-    is_parallelism_agnostic: bool = False,
-    replicated_layout: bool = False,
-    extra_config: dict[str, Any] | None = None,
-) -> OffloadingConfig:
-    normalized_extra_config = dict(extra_config or {})
-    if spec_name is not None:
-        normalized_extra_config["spec_name"] = spec_name
-    if cpu_bytes_to_use is not None:
-        normalized_extra_config["cpu_bytes_to_use"] = cpu_bytes_to_use
-
-    if groups is None:
-        groups = (OffloadingGroupConfig(16, ("layer",), 0),)
-
-    return OffloadingConfig(
-        groups=groups,
-        worker_kv_bytes_per_block=worker_kv_bytes_per_block,
-        enable_kv_cache_events=False,
-        extra_config=normalized_extra_config,
-        engine_id="test-engine",
-        model=OffloadingModelConfig(name="test-model", dtype="float16"),
-        cache=OffloadingCacheConfig(
-            tokens_per_hash=tokens_per_hash,
-            blocks_per_chunk=blocks_per_chunk,
-        ),
-        parallel=OffloadingParallelConfig(
-            rank=rank,
-            world_size=world_size,
-            tp_size=world_size if tp_size is None else tp_size,
-            pp_size=pp_size,
-            pcp_size=pcp_size,
-            dcp_size=dcp_size,
-            data_parallel_index=data_parallel_index,
-            data_parallel_size=data_parallel_size,
-            data_parallel_rank_local=data_parallel_rank_local,
-            is_parallelism_agnostic=is_parallelism_agnostic,
-        ),
-        replicated_layout=replicated_layout,
-    )
-
-
 def _create_spec(**kwargs: Any) -> OffloadingSpec:
-    return OffloadingSpecFactory.create_spec(_make_offloading_config(**kwargs))
+    return OffloadingSpecFactory.create_spec(make_offloading_config(**kwargs))
+
+
+def _capacity_tokens(spec: OffloadingSpec) -> str | int | float | bool:
+    """The token capacity the manager of the spec publishes as an info label."""
+    (info,) = spec.get_manager().config_info()
+    return info["cpu_kv_cache_size_tokens"]
 
 
 class SingleArgExternalOffloadingSpec(OffloadingSpec):
@@ -124,12 +71,12 @@ def test_tiering_spec_registered():
 
 
 def test_get_spec_cls_returns_registered_class():
-    spec_cls = OffloadingSpecFactory.get_spec_cls(_make_offloading_config().extra_config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(make_offloading_config().extra_config)
     assert spec_cls is CPUOffloadingSpec
 
 
 def test_get_spec_cls_defaults_to_cpu():
-    spec_cls = OffloadingSpecFactory.get_spec_cls(_make_offloading_config(spec_name=None).extra_config)
+    spec_cls = OffloadingSpecFactory.get_spec_cls(make_offloading_config(spec_name=None).extra_config)
     assert spec_cls is CPUOffloadingSpec
 
 
@@ -166,6 +113,213 @@ def test_cpu_spec_zero_worker_bytes_produces_empty_cache():
     assert spec.cpu_page_size_per_worker == 0
     assert spec.kv_bytes_per_chunk == 0
     assert spec.num_chunks == 0
+
+
+@pytest.mark.parametrize("blocks_per_chunk", [1, 2, 4])
+def test_cpu_config_info_converts_slots_to_tokens(blocks_per_chunk: int):
+    """One uncapped group makes the capacity the slot count in KV tokens.
+
+    A slot holds blocks_per_chunk blocks of tokens_per_block tokens each, so
+    dropping either factor understates the tier.
+    """
+    alignment = SharedOffloadRegion.BLOCK_SIZE_ALIGNMENT
+    tokens_per_block = 8
+    spec = _create_spec(
+        cpu_bytes_to_use=alignment * 12,
+        worker_kv_bytes_per_block=alignment,
+        blocks_per_chunk=blocks_per_chunk,
+        groups=(OffloadingGroupConfig(tokens_per_block, ("layer",), 0),),
+    )
+
+    assert isinstance(spec, CPUOffloadingSpec)
+    assert spec.num_chunks == 12 // blocks_per_chunk
+    assert _capacity_tokens(spec) == (spec.num_chunks * blocks_per_chunk * tokens_per_block)
+
+
+@pytest.mark.parametrize("world_size", [1, 2, 4])
+def test_cpu_config_info_capacity_accounts_for_tensor_parallel_copies(
+    world_size: int,
+):
+    """A slot holds every worker's copy of the block, so capacity divides by TP.
+
+    Without the num_copies factor a TP=4 tier would be reported at four times
+    the tokens it can hold.
+    """
+    alignment = SharedOffloadRegion.BLOCK_SIZE_ALIGNMENT
+    tokens_per_block = 8
+    spec = _create_spec(
+        cpu_bytes_to_use=alignment * 12,
+        worker_kv_bytes_per_block=alignment,
+        world_size=world_size,
+        groups=(OffloadingGroupConfig(tokens_per_block, ("layer",), 0),),
+    )
+
+    assert isinstance(spec, CPUOffloadingSpec)
+    assert spec.num_chunks == 12 // world_size
+    assert _capacity_tokens(spec) == spec.num_chunks * tokens_per_block
+
+
+def test_cpu_config_info_capacity_dedups_a_replicated_layout(monkeypatch):
+    """A replicated layout stores one copy, so capacity does not divide by TP.
+
+    Same TP=4 sizing as the test above, which yields 3 slots; deduplicating to a
+    single copy yields 12.
+    """
+    import aphrodite.v1.kv_offload.cpu.spec as cpu_spec_module
+
+    monkeypatch.setattr(cpu_spec_module.current_platform, "is_cuda_alike", lambda: True)
+    # Pin the ROCm answer too: on a ROCm runner the shared-region path is off,
+    # and the dedup under test never engages.
+    monkeypatch.setattr(cpu_spec_module.current_platform, "is_rocm", lambda: False)
+    alignment = SharedOffloadRegion.BLOCK_SIZE_ALIGNMENT
+    tokens_per_block = 8
+    spec = _create_spec(
+        cpu_bytes_to_use=alignment * 12,
+        worker_kv_bytes_per_block=alignment,
+        world_size=4,
+        replicated_layout=True,
+        groups=(OffloadingGroupConfig(tokens_per_block, ("layer",), 0),),
+    )
+
+    assert isinstance(spec, CPUOffloadingSpec)
+    assert spec.num_chunks == 12
+    assert _capacity_tokens(spec) == 12 * tokens_per_block
+
+
+def test_cpu_config_info_mirrors_spec_sizing():
+    """The published labels are the facts of the spec, not a second derivation.
+
+    The frontend turns these keys into Prometheus label names, so a renamed key
+    renames a label. The "cpu_" prefix keeps one name for the cache, standalone
+    or as the primary tier of a tiering manager.
+    """
+    alignment = SharedOffloadRegion.BLOCK_SIZE_ALIGNMENT
+    tokens_per_block = 16
+    spec = _create_spec(
+        cpu_bytes_to_use=alignment * 5,
+        worker_kv_bytes_per_block=alignment,
+        blocks_per_chunk=1,
+    )
+
+    assert isinstance(spec, CPUOffloadingSpec)
+    assert spec.get_manager().config_info() == [
+        {
+            "cpu_num_chunks": spec.num_chunks,
+            "cpu_blocks_per_chunk": spec.blocks_per_chunk,
+            "cpu_kv_cache_size_bytes": spec.num_chunks * spec.kv_bytes_per_chunk,
+            "cpu_kv_cache_size_tokens": spec.num_chunks * tokens_per_block,
+        }
+    ]
+
+
+def test_cpu_config_info_zero_capacity_is_exact_not_unknown():
+    """A tier sized to nothing holds zero tokens; that is known, not unknown."""
+    spec = _create_spec(
+        worker_kv_bytes_per_block=0,
+        groups=(OffloadingGroupConfig(16, ("layer",), 0),),
+    )
+
+    assert isinstance(spec, CPUOffloadingSpec)
+    assert spec.num_chunks == 0
+    assert _capacity_tokens(spec) == 0
+
+
+def test_cpu_config_info_capacity_shrinks_when_a_second_group_shares_slots():
+    """Two groups take two chunks for one request, so the capacity halves."""
+    one_group = _create_spec(groups=(OffloadingGroupConfig(16, ("full_layer",), 0),))
+    two_groups = _create_spec(
+        groups=(
+            OffloadingGroupConfig(16, ("full_layer",), 0),
+            OffloadingGroupConfig(16, ("swa_layer",), 1),
+        ),
+    )
+
+    assert isinstance(one_group, CPUOffloadingSpec)
+    assert isinstance(two_groups, CPUOffloadingSpec)
+    assert two_groups.num_chunks == one_group.num_chunks
+    one_capacity = _capacity_tokens(one_group)
+    assert isinstance(one_capacity, int)
+    assert _capacity_tokens(two_groups) == one_capacity // 2
+
+
+def test_cpu_config_info_no_token_capacity_without_a_kv_cache_group():
+    """A model with no KV cache has no group whose chunk size to apply."""
+    spec = _create_spec(groups=())
+
+    assert isinstance(spec, CPUOffloadingSpec)
+    assert spec.num_chunks > 0
+    assert _capacity_tokens(spec) == "None"
+
+
+def test_cpu_config_info_no_token_capacity_without_max_model_len():
+    """The capacity holds at max_model_len, so an unknown length gives None."""
+    spec = _create_spec(max_model_len=0)
+
+    assert isinstance(spec, CPUOffloadingSpec)
+    assert spec.num_chunks > 0
+    assert _capacity_tokens(spec) == "None"
+
+
+def test_tiering_primary_tier_publishes_the_cpu_labels():
+    """The primary tier must keep the labels, because it renders them itself.
+
+    TieringOffloadingManager.config_info() does not touch a primary tier label,
+    so a CPU fact keeps one name in both managers. The tiering spec passes the
+    same config info as the CPU spec.
+    """
+    primary_tier = CPUPrimaryTierOffloadingManager(
+        num_chunks=5,
+        mmap_region=MagicMock(),
+        info=CPUOffloadingInfo.from_config(
+            make_offloading_config(blocks_per_chunk=2, max_model_len=1024),
+            num_chunks=5,
+            kv_bytes_per_chunk=4096,
+        ),
+    )
+
+    assert primary_tier.config_info() == [
+        {
+            "cpu_num_chunks": 5,
+            "cpu_blocks_per_chunk": 2,
+            "cpu_kv_cache_size_bytes": 5 * 4096,
+            # 5 slots of 32 tokens each, over a request of 32 chunks.
+            "cpu_kv_cache_size_tokens": 160,
+        }
+    ]
+
+
+@pytest.mark.skip_global_cleanup
+@pytest.mark.skipif(not os.path.isdir("/dev/shm"), reason="requires /dev/shm")
+def test_tiering_spec_passes_the_cpu_facts_to_the_primary_tier():
+    """The tiering spec must give the primary tier the facts that it publishes.
+
+    The spec builds a real shared region before the primary tier, so this test
+    needs /dev/shm. It is the only test that runs the argument list of
+    TieringOffloadingSpec.get_manager(). Both the chunk size and the
+    configuration have a default, so a dropped argument gives no type error.
+    A unique engine_id keeps the region path of this test separate.
+    """
+    spec = _create_spec(
+        spec_name="TieringOffloadingSpec",
+        engine_id=f"test-tiering-{uuid.uuid4().hex}",
+        blocks_per_chunk=2,
+        max_model_len=1024,
+    )
+    assert isinstance(spec, TieringOffloadingSpec)
+
+    manager = spec.get_manager()
+    try:
+        (primary_info,) = manager.config_info()
+        assert primary_info == {
+            "tier": "0:primary",
+            "cpu_num_chunks": spec.num_chunks,
+            "cpu_blocks_per_chunk": 2,
+            "cpu_kv_cache_size_bytes": spec.num_chunks * spec.kv_bytes_per_chunk,
+            # 32 tokens for each chunk, over a request of 32 chunks.
+            "cpu_kv_cache_size_tokens": spec.num_chunks * 32,
+        }
+    finally:
+        manager.shutdown()
 
 
 def test_tiering_spec_aligns_row_size():
@@ -478,6 +632,7 @@ def test_cpu_spec_create_worker_rank_assignment(
         world_size=world_size,
         replicated_layout=replicated_layout,
     )
+    assert isinstance(spec, CPUOffloadingSpec)
 
     region_calls: list[dict[str, Any]] = []
 
@@ -495,7 +650,7 @@ def test_cpu_spec_create_worker_rank_assignment(
 
 
 def test_offloading_spec_has_replicated_layout_default():
-    spec = SingleArgExternalOffloadingSpec(_make_offloading_config())
+    spec = SingleArgExternalOffloadingSpec(make_offloading_config())
     assert spec.replicated_layout is False
 
 
@@ -516,7 +671,7 @@ def test_offloading_spec_uses_normalized_chunk_geometry():
 
 
 def test_create_dynamic_spec_receives_config():
-    config = _make_offloading_config(
+    config = make_offloading_config(
         spec_name="SingleArgExternalOffloadingSpec",
         extra_config={"spec_module_path": "tests.v1.kv_offload.test_factory"},
     )
@@ -529,7 +684,7 @@ def test_create_dynamic_spec_receives_config():
 
 def test_dynamic_load_via_spec_module_path():
     del OffloadingSpecFactory._registry["CPUOffloadingSpec"]
-    config = _make_offloading_config(extra_config={"spec_module_path": "aphrodite.v1.kv_offload.cpu.spec"})
+    config = make_offloading_config(extra_config={"spec_module_path": "aphrodite.v1.kv_offload.cpu.spec"})
 
     spec_cls = OffloadingSpecFactory.get_spec_cls(config.extra_config)
 
@@ -537,7 +692,7 @@ def test_dynamic_load_via_spec_module_path():
 
 
 def test_unregistered_spec_without_module_path_raises():
-    config = _make_offloading_config(spec_name="NonexistentSpec")
+    config = make_offloading_config(spec_name="NonexistentSpec")
     with pytest.raises(ValueError, match="Unsupported spec type"):
         OffloadingSpecFactory.get_spec_cls(config.extra_config)
 
@@ -598,201 +753,58 @@ def test_build_metric_definitions_returns_counter_at_threshold():
     assert CPUOffloadingMetrics.STORES_SKIPPED in metrics
 
 
-def _make_aphrodite_config(
-    spec_name: str | None = "CPUOffloadingSpec",
-    cpu_bytes_to_use: int | None = None,
-    store_threshold: int = 0,
-    extra_config: dict | None = None,
-):
-    """Build a real AphroditeConfig with kv_transfer_config set for offloading."""
-    from aphrodite.config import (
-        AphroditeConfig,
-        CacheConfig,
-        DeviceConfig,
-        ModelConfig,
-        SchedulerConfig,
+@pytest.mark.parametrize(
+    ("secondary_tiers", "spanning_group", "rejected"),
+    [
+        ([], "tp", False),
+        ([{"type": "example"}], None, False),
+        ([{"type": "example"}], "tp", True),
+        ([{"type": "example"}], "pp", True),
+        ([{"type": "example"}], "pcp", True),
+    ],
+)
+def test_tiering_spec_rejects_secondary_tiers_across_nodes(monkeypatch, secondary_tiers, spanning_group, rejected):
+    import aphrodite.distributed.parallel_state as parallel_state
+    import aphrodite.v1.kv_offload.tiering.spec as tiering_spec_module
+
+    spec = _create_spec(
+        spec_name="TieringOffloadingSpec",
+        worker_kv_bytes_per_block=4096,
+        rank=1,
+        world_size=4,
+        tp_size=2,
+        pp_size=2,
+        extra_config={"secondary_tiers": secondary_tiers},
     )
+    assert isinstance(spec, TieringOffloadingSpec)
 
-    model_config = ModelConfig(
-        model="facebook/opt-125m",
-        trust_remote_code=True,
-        dtype="float16",
-        seed=42,
-    )
-    scheduler_config = SchedulerConfig(
-        max_num_seqs=16,
-        max_num_batched_tokens=64,
-        max_model_len=10000,
-        enable_chunked_prefill=True,
-        is_encoder_decoder=model_config.is_encoder_decoder,
-    )
-    cache_config = CacheConfig(
-        block_size=16,
-        gpu_memory_utilization=0.9,
-        cache_dtype="auto",
-        enable_prefix_caching=True,
-    )
+    groups = {name: MagicMock(world_size=2, cpu_group=name) for name in ("tp", "pp", "pcp")}
+    monkeypatch.setattr(parallel_state, "get_tp_group", lambda: groups["tp"])
+    monkeypatch.setattr(parallel_state, "get_pp_group", lambda: groups["pp"])
+    monkeypatch.setattr(parallel_state, "get_pcp_group", lambda: groups["pcp"])
+    queried: list[str] = []
 
-    cfg = extra_config or {}
-    if cpu_bytes_to_use is not None:
-        cfg["cpu_bytes_to_use"] = cpu_bytes_to_use
-    cfg["spec_name"] = spec_name
-    if store_threshold > 0:
-        cfg["store_threshold"] = store_threshold
+    def same_node_as(group, source_rank):
+        queried.append(group)
+        return [True, group != spanning_group]
 
-    kv_transfer_config = KVTransferConfig(
-        kv_connector="OffloadingConnector",
-        kv_role="kv_both",
-        kv_connector_extra_config=cfg,
-    )
-    return AphroditeConfig(
-        scheduler_config=scheduler_config,
-        model_config=model_config,
-        cache_config=cache_config,
-        kv_transfer_config=kv_transfer_config,
-        device_config=DeviceConfig("cpu"),
-    )
+    monkeypatch.setattr(parallel_state, "in_the_same_node_as", same_node_as)
+    region_ctor = MagicMock()
+    worker_ctor = MagicMock()
+    monkeypatch.setattr(tiering_spec_module, "SharedOffloadRegion", region_ctor)
+    monkeypatch.setattr(tiering_spec_module, "CPUOffloadingWorker", worker_ctor)
 
-
-def _make_kv_cache_config():
-    """Build a minimal KVCacheConfig with one KV cache tensor."""
-    num_blocks = 16
-    num_kv_heads = 1
-    head_size = 1
-    dtype = torch.float32
-    page_size = 16 * 2 * num_kv_heads * head_size * torch.finfo(dtype).bits // 8
-    kv_tensor = KVCacheTensor(size=num_blocks * page_size, layers=["layer"], layer_stride=0, block_stride=page_size)
-    return KVCacheConfig(
-        num_blocks=num_blocks,
-        kv_cache_tensors=[kv_tensor],
-        kv_cache_groups=[
-            KVCacheGroupSpec(
-                ["layer"],
-                FullAttentionSpec(
-                    block_size=16,
-                    num_kv_heads=num_kv_heads,
-                    head_size=head_size,
-                    dtype=dtype,
-                ),
-            )
-        ],
-    )
-
-
-def _make_hybrid_kv_cache_config():
-    """Build a minimal KVCacheConfig with heterogeneous KV cache groups."""
-    num_blocks = 16
-    num_kv_heads = 1
-    head_size = 1
-    dtype = torch.float32
-    page_size = 2 * num_kv_heads * head_size * torch.finfo(dtype).bits // 8
-    kv_tensors = [
-        KVCacheTensor(
-            size=num_blocks * block_size * page_size,
-            layers=[layer],
-            layer_stride=0,
-            block_stride=block_size * page_size,
-        )
-        for layer, block_size in (("attention_layer", 12), ("sliding_layer", 16))
-    ]
-    return KVCacheConfig(
-        num_blocks=num_blocks,
-        kv_cache_tensors=kv_tensors,
-        kv_cache_groups=[
-            KVCacheGroupSpec(
-                ["attention_layer"],
-                FullAttentionSpec(
-                    block_size=12,
-                    num_kv_heads=num_kv_heads,
-                    head_size=head_size,
-                    dtype=dtype,
-                ),
-            ),
-            KVCacheGroupSpec(
-                ["sliding_layer"],
-                FullAttentionSpec(
-                    block_size=16,
-                    num_kv_heads=num_kv_heads,
-                    head_size=head_size,
-                    dtype=dtype,
-                ),
-            ),
-        ],
-    )
-
-
-def _make_mamba_hybrid_kv_cache_config() -> KVCacheConfig:
-    return KVCacheConfig(
-        num_blocks=4,
-        kv_cache_tensors=[],
-        kv_cache_groups=[
-            KVCacheGroupSpec(
-                ["full_layer"],
-                FullAttentionSpec(
-                    block_size=16,
-                    num_kv_heads=1,
-                    head_size=1,
-                    dtype=torch.float32,
-                ),
-            ),
-            KVCacheGroupSpec(
-                ["mamba_layer"],
-                MambaSpec(
-                    block_size=16,
-                    shapes=((1, 1),),
-                    dtypes=(torch.float32,),
-                    mamba_cache_mode="align",
-                ),
-            ),
-        ],
-    )
-
-
-def test_offloading_spec_accepts_blocks_per_chunk_for_heterogeneous_groups():
-    config = _make_aphrodite_config(
-        cpu_bytes_to_use=65536,
-        extra_config={"blocks_per_chunk": 2},
-    )
-
-    spec = OffloadingSpecFactory.create_spec(build_offloading_config(config, _make_hybrid_kv_cache_config()))
-
-    assert spec.tokens_per_block == (12, 16)
-    assert spec.blocks_per_chunk == 2
-
-
-def test_dcp_scales_attention_but_not_mamba_group_blocks():
-    config = _make_aphrodite_config(cpu_bytes_to_use=65536)
-    config.parallel_config.tensor_parallel_size = 2
-    config.parallel_config.decode_context_parallel_size = 2
-
-    offloading_config = build_offloading_config(config, _make_mamba_hybrid_kv_cache_config())
-
-    assert tuple(group.tokens_per_block for group in offloading_config.groups) == (
-        32,
-        16,
-    )
-
-
-def test_block_size_and_blocks_per_chunk_are_mutually_exclusive():
-    config = _make_aphrodite_config(
-        cpu_bytes_to_use=65536,
-        extra_config={
-            "block_size": 64,
-            "blocks_per_chunk": 2,
-        },
-    )
-
-    with pytest.raises(ValueError, match="Specify only one"):
-        OffloadingSpecFactory.create_spec(build_offloading_config(config, _make_kv_cache_config()))
-
-
-def test_blocks_per_chunk_must_be_positive():
-    config = _make_aphrodite_config(
-        cpu_bytes_to_use=65536,
-        extra_config={
-            "blocks_per_chunk": 0,
-        },
-    )
-
-    with pytest.raises(ValueError, match="greater than 0"):
-        OffloadingSpecFactory.create_spec(build_offloading_config(config, _make_kv_cache_config()))
+    if rejected:
+        with pytest.raises(NotImplementedError, match="span several nodes"):
+            spec.create_worker(MagicMock())
+        # Rejected before any CPU memory is allocated.
+        region_ctor.assert_not_called()
+        worker_ctor.assert_not_called()
+    else:
+        spec.create_worker(MagicMock())
+        region_ctor.assert_called_once()
+        worker_ctor.assert_called_once()
+    # Without secondary tiers each node's region serves its own workers. With
+    # them every group is queried, even after one spans nodes, since each
+    # query is a collective that the group's other ranks also join.
+    assert sorted(queried) == (["pcp", "pp", "tp"] if secondary_tiers else [])

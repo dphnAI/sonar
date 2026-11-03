@@ -181,6 +181,7 @@ def test_trtllm_bf16_lora_accepts_checkpoint_shaped_weights(has_lora_delta):
             global_num_experts=128,
             a1q_scale=None,
             output=torch.empty_like(x),
+            activation=config.activation,
         )
         if has_lora_delta:
             # Only compare rows belonging to real tokens, excluding padding.

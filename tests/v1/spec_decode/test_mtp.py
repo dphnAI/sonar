@@ -18,6 +18,7 @@ from aphrodite.config import (
 )
 from aphrodite.config.load import LoadConfig
 from aphrodite.model_executor.models.llama import LlamaForCausalLM
+from aphrodite.models.deepseek_v4.common.spec_decode import needs_mtp_hidden_buffer
 from aphrodite.platforms import current_platform
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.spec_decode.eagle import EagleProposer
@@ -226,3 +227,24 @@ def test_mtp_propose(num_speculative_tokens, monkeypatch):
     assert model_mock.called
     # Verify output shape
     assert result.shape == (batch_size, num_speculative_tokens)
+
+
+@pytest.mark.parametrize(
+    ("method", "expected"),
+    [
+        (None, False),
+        ("ngram", False),
+        ("mtp", True),
+        ("eagle3", True),
+        ("draft_model", True),
+        ("dspark", False),
+    ],
+)
+def test_deepseek_v4_mtp_hidden_buffer_skips_dspark(method, expected):
+    """Only drafters that read DeepSeek V4's pre-hc_head residual get the
+    buffer; DSpark drafts from the target's aux hidden states."""
+    spec_config = None
+    if method is not None:
+        spec_config = SpeculativeConfig.__new__(SpeculativeConfig)
+        object.__setattr__(spec_config, "method", method)
+    assert needs_mtp_hidden_buffer(spec_config) is expected

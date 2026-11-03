@@ -107,9 +107,10 @@ class WorkerBase:
         backends = get_current_attn_backends(self.aphrodite_config)
         return [layout.name for layout in get_supported_kv_cache_layouts(backends)]
 
-    def set_kv_cache_layout(self, kv_cache_layout: str) -> None:
-        """Adopt the KV cache layout resolved by the engine core."""
+    def set_kv_cache_layout(self, kv_cache_layout: str, cp_kv_cache_interleave_size: int) -> None:
+        """Assign the KV cache layout and CP interleave size resolved by the core."""
         record_kv_cache_layout(self.aphrodite_config.cache_config, kv_cache_layout)
+        self.aphrodite_config.parallel_config.cp_kv_cache_interleave_size = cp_kv_cache_interleave_size
 
     def compile_or_warm_up_model(self) -> CompilationTimes:
         """Prepare model for execution through compilation/warmup.
@@ -148,6 +149,79 @@ class WorkerBase:
 
     def get_model(self) -> nn.Module:
         raise NotImplementedError
+
+    def dphn_prove(self, request_id: str, nonce: str, output_token_ids: list[int]) -> dict[str, Any]:
+        """Sample runtime weights, without claiming inference provenance."""
+        config = self.aphrodite_config.dphn_network_config
+        if config is None:
+            raise RuntimeError("DPHN weight receipts are not enabled")
+        from aphrodite.proof import generate_weight_receipt, rank_worker_id
+
+        dp_rank = self.parallel_config.data_parallel_index
+        worker_id = rank_worker_id(config.worker_id, dp_rank, self.rank)
+        proof = generate_weight_receipt(
+            self.get_model(),
+            config,
+            worker_id=worker_id,
+            request_id=request_id,
+            nonce=nonce,
+            output_token_ids=output_token_ids,
+        )
+        if not isinstance(proof, str) or not proof:
+            raise RuntimeError("DPHN provider returned no weight receipt")
+        return {"rank": self.rank, "dp_rank": dp_rank, "worker_id": worker_id, "proof": proof}
+
+    def dphn_snapshot(self, output_dir: str) -> dict[str, Any]:
+        """Dump this worker's actual runtime layout for an offline manifest."""
+        config = self.aphrodite_config.dphn_network_config
+        if config is None:
+            raise RuntimeError("DPHN weight receipts are not enabled")
+        from aphrodite.config import get_layers_from_aphrodite_config
+        from aphrodite.model_executor.layers.attention_layer_base import AttentionLayerBase
+        from aphrodite.proof import dump_runtime_snapshot
+        from aphrodite.version import __version__
+
+        model = self.get_model()
+        parallel = self.parallel_config
+        backend = parallel.distributed_executor_backend
+        if isinstance(backend, type):
+            backend = f"{backend.__module__}.{backend.__qualname__}"
+        quant_config = self.aphrodite_config.quant_config
+        attention_layers = get_layers_from_aphrodite_config(
+            self.aphrodite_config,
+            AttentionLayerBase,  # type: ignore[type-abstract]
+        )
+        runtime_info = {
+            "backend": self.current_platform.device_type,
+            "executor_backend": backend,
+            "attention_backends": sorted({layer.get_attn_backend().get_name() for layer in attention_layers.values()}),
+            "model_class": f"{type(model).__module__}.{type(model).__qualname__}",
+            "runner_class": f"{type(self.model_runner).__module__}.{type(self.model_runner).__qualname__}",
+            "quantization": self.model_config.quantization,
+            "quantization_class": (
+                f"{type(quant_config).__module__}.{type(quant_config).__qualname__}"
+                if quant_config is not None
+                else None
+            ),
+            "dtype": str(self.model_config.dtype),
+            "tensor_parallel_size": parallel.tensor_parallel_size,
+            "pipeline_parallel_size": parallel.pipeline_parallel_size,
+            "data_parallel_size": parallel.data_parallel_size,
+            "prefill_context_parallel_size": parallel.prefill_context_parallel_size,
+            "decode_context_parallel_size": parallel.decode_context_parallel_size,
+            "rank": self.rank,
+            "local_rank": self.local_rank,
+            "dp_rank": parallel.data_parallel_index,
+            "build": {"aphrodite": __version__, "torch": str(torch.__version__), "cuda": torch.version.cuda},
+        }
+        return dump_runtime_snapshot(
+            model,
+            config,
+            rank=self.rank,
+            dp_rank=parallel.data_parallel_index,
+            output_dir=output_dir,
+            runtime_info=runtime_info,
+        )
 
     def supports_draft_weight_updates(self) -> bool:
         """Whether this worker can update its configured speculative model."""
@@ -267,6 +341,11 @@ class WorkerWrapperBase:
         assert aphrodite_config is not None, "aphrodite_config is required to initialize the worker"
         self.aphrodite_config = aphrodite_config
 
+        if aphrodite_config.dphn_network_config is not None:
+            from aphrodite.proof import ensure_native_available
+
+            ensure_native_available()
+
         aphrodite_config.enable_trace_function_call_for_thread()
 
         from aphrodite.plugins import load_general_plugins
@@ -313,6 +392,12 @@ class WorkerWrapperBase:
                     worker_class,
                     extended_calls,
                 )
+
+        if aphrodite_config.dphn_network_config is not None:
+            for method in ("get_model", "dphn_prove", "dphn_snapshot"):
+                implementation = getattr(worker_class, method, None)
+                if not callable(implementation) or implementation is WorkerBase.get_model:
+                    raise ValueError(f"DPHN weight receipts require a worker implementing {method}()")
 
         assigned_physical_gpu_ids = kwargs.pop("assigned_physical_gpu_ids", None)
         if assigned_physical_gpu_ids is not None:

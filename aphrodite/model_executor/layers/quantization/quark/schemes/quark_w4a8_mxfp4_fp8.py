@@ -20,6 +20,7 @@ from aphrodite.model_executor.parameter import (
     PackedAphroditeParameter,
     PerTensorScaleParameter,
 )
+from aphrodite.model_executor.utils import replace_parameter
 from aphrodite.platforms import current_platform
 
 from .quark_scheme import QuarkScheme
@@ -128,19 +129,12 @@ class QuarkW4A8_MXFP4_FP8(QuarkScheme):
         layer.register_parameter("input_scale", input_scale)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        # Ensuring weights & scales are non-trainable
-        layer.weight = torch.nn.Parameter(layer.weight.data, requires_grad=False)
-        layer.weight_scale = torch.nn.Parameter(layer.weight_scale.data, requires_grad=False)
-
         input_scale = layer.input_scale.data
         # For fused modules (QKV), take the max scale
         if input_scale.numel() != 1:
             input_scale = input_scale.max()
 
-        layer.input_scale = torch.nn.Parameter(
-            torch.tensor(input_scale, dtype=torch.float32),
-            requires_grad=False,
-        )
+        replace_parameter(layer, "input_scale", torch.tensor(input_scale, dtype=torch.float32))
 
     def apply_weights(
         self,

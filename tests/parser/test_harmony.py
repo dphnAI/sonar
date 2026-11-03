@@ -525,7 +525,8 @@ class TestParseDelta:
                 request=chat_request,
                 finished=False,
             )
-            assert delta.reasoning or delta.content == "thinking"
+            assert delta is not None
+            assert (delta.reasoning or delta.content) == "thinking"
             assert not delta.tool_calls
 
         last_delta = parser.parse_delta(
@@ -614,6 +615,8 @@ class TestParseDelta:
             finished=False,
         )
 
+        assert delta_a is not None
+        assert delta_b is not None
         assert [tool.function.name for tool in tool_call_headers(delta_a)] == ["get_weather"]
         assert [tool.function.name for tool in tool_call_headers(delta_b)] == ["get_time"]
         assert {tool.index for tool in delta_a.tool_calls} == {0}

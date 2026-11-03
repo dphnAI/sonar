@@ -8,6 +8,7 @@ from dataclasses import replace
 from aphrodite.parser.deepseek_v4 import (
     DeepSeekV4Parser,
     _dsml_arg_converter,
+    _dsml_arg_value_extender,
     _param_patterns,
     deepseek_v4_config,
 )
@@ -45,6 +46,14 @@ def deepseek_v41_config(thinking: bool = False) -> ParserEngineConfig:
             _dsml_arg_converter,
             param_re=_PARAM_RE,
             partial_param_re=_PARTIAL_PARAM_RE,
+            param_start=DSML_PARAM_START,
+        ),
+        arg_value_extender=functools.partial(
+            _dsml_arg_value_extender,
+            param_re=_PARAM_RE,
+            partial_param_re=_PARTIAL_PARAM_RE,
+            param_start=DSML_PARAM_START,
+            param_close=DSML_PARAM_CLOSE,
         ),
     )
 

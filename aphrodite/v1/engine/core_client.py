@@ -41,6 +41,7 @@ from aphrodite.utils.network_utils import (
 from aphrodite.v1.engine import (
     EEP_NOTIFICATION_CALL_ID,
     FT_STATUS_CALL_ID,
+    CheckpointState,
     EEPNotificationType,
     EngineCoreOutputs,
     EngineCoreReadyResponse,
@@ -189,6 +190,7 @@ class EngineCoreClient(ABC):
         profile_prefix: str | None = None,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict | None = None,
     ) -> None:
         raise NotImplementedError
 
@@ -292,6 +294,7 @@ class EngineCoreClient(ABC):
         profile_prefix: str | None = None,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict | None = None,
     ) -> None:
         raise NotImplementedError
 
@@ -316,6 +319,15 @@ class EngineCoreClient(ABC):
         raise NotImplementedError
 
     async def is_sleeping_async(self) -> bool:
+        raise NotImplementedError
+
+    async def checkpoint_prepare_async(self, mode: PauseMode) -> str | None:
+        raise NotImplementedError
+
+    async def checkpoint_restore_async(self) -> None:
+        raise NotImplementedError
+
+    async def checkpoint_state_async(self) -> tuple[CheckpointState, str | None]:
         raise NotImplementedError
 
     async def abort_requests_async(self, request_ids: list[str]) -> None:
@@ -345,6 +357,12 @@ class EngineCoreClient(ABC):
         args: tuple = (),
         kwargs: dict[str, Any] | None = None,
     ) -> list[_R]:
+        raise NotImplementedError
+
+    async def dphn_prove_async(self, request_id: str, nonce: str, output_token_ids: list[int]) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def dphn_snapshot_async(self, output_dir: str) -> list[dict[str, Any]]:
         raise NotImplementedError
 
     async def handle_fault(self, fault_tolerance_request: FaultToleranceRequest) -> FaultToleranceResult:
@@ -389,6 +407,8 @@ class InprocClient(EngineCoreClient):
     def get_output(self) -> EngineCoreOutputs:
         outputs, model_executed = self.engine_core.step_fn()
         self.engine_core.post_step(model_executed=model_executed)
+        # Read by LLMEngine.step() to keep the DP ranks' collectives aligned.
+        self.last_step_model_executed = model_executed
         return outputs and outputs.get(0) or EngineCoreOutputs()
 
     def get_supported_tasks(self) -> tuple[SupportedTask, ...]:
@@ -412,12 +432,14 @@ class InprocClient(EngineCoreClient):
         profile_prefix: str | None = None,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict | None = None,
     ) -> None:
         self.engine_core.profile(
             is_start,
             profile_prefix,
             delay_iterations=delay_iterations,
             max_iterations=max_iterations,
+            profiler_kwargs=profiler_kwargs,
         )
 
     def reset_mm_cache(self) -> None:
@@ -818,7 +840,11 @@ class MPClient(EngineCoreClient):
         sizes = self._effective_attention_block_sizes
         aphrodite_config.cache_config.effective_attention_block_size = next(iter(sizes)) if len(sizes) == 1 else None
         if response is None:
+            if aphrodite_config.dphn_network_config is not None:
+                raise ValueError("DPHN weight-receipt mode requires engine readiness metadata")
             return
+        if response.dphn_network_enabled != (aphrodite_config.dphn_network_config is not None):
+            raise ValueError("DPHN weight-receipt mode differs between frontend and engine")
         if not hasattr(self, "capacity_reports"):
             self.capacity_reports: dict[int, EngineCoreReadyResponse] = {}
         self.capacity_reports[response.data_parallel_rank] = response
@@ -1026,6 +1052,7 @@ class SyncMPClient(MPClient):
         profile_prefix: str | None = None,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict | None = None,
     ) -> None:
         self.call_utility(
             "profile",
@@ -1033,6 +1060,7 @@ class SyncMPClient(MPClient):
             profile_prefix,
             delay_iterations,
             max_iterations,
+            profiler_kwargs,
         )
 
     def reset_mm_cache(self) -> None:
@@ -1272,6 +1300,9 @@ class AsyncMPClient(MPClient):
     async def pause_scheduler_async(self, mode: PauseMode = "abort", clear_cache: bool = True) -> None:
         await self.call_utility_async("pause_scheduler", mode, clear_cache)
 
+    async def pause_generation_async(self, mode: PauseMode = "abort", clear_cache: bool = True) -> None:
+        await self.call_utility_async("pause_generation", mode, clear_cache)
+
     async def resume_scheduler_async(self) -> None:
         await self.call_utility_async("resume_scheduler")
 
@@ -1284,6 +1315,7 @@ class AsyncMPClient(MPClient):
         profile_prefix: str | None = None,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict | None = None,
     ) -> None:
         await self.call_utility_async(
             "profile",
@@ -1291,6 +1323,7 @@ class AsyncMPClient(MPClient):
             profile_prefix,
             delay_iterations,
             max_iterations,
+            profiler_kwargs,
         )
 
     async def reset_mm_cache_async(self) -> None:
@@ -1315,6 +1348,16 @@ class AsyncMPClient(MPClient):
 
     async def is_sleeping_async(self) -> bool:
         return await self.call_utility_consensus_async("is_sleeping")
+
+    async def checkpoint_prepare_async(self, mode: PauseMode) -> str | None:
+        return await self.call_utility_async("checkpoint_prepare", mode)
+
+    async def checkpoint_restore_async(self) -> None:
+        await self.call_utility_async("checkpoint_restore")
+
+    async def checkpoint_state_async(self) -> tuple[CheckpointState, str | None]:
+        state, error = await self.call_utility_async("checkpoint_state")
+        return CheckpointState(state), error
 
     async def execute_dummy_batch_async(self) -> None:
         await self.call_utility_async("execute_dummy_batch")
@@ -1355,15 +1398,55 @@ class AsyncMPClient(MPClient):
         per_engine = await self.call_utility_all_async("compute_weight_checksums")
         return [worker for workers in per_engine for worker in workers]
 
+    async def dphn_prove_async(self, request_id: str, nonce: str, output_token_ids: list[int]) -> list[dict[str, Any]]:
+        per_engine = await self.call_utility_all_async("dphn_prove", request_id, nonce, output_token_ids)
+        receipts = [receipt for workers in per_engine for receipt in workers]
+        if not per_engine or any(not workers for workers in per_engine):
+            raise RuntimeError("DPHN provider returned no receipts for a managed engine")
+        return receipts
+
+    async def dphn_snapshot_async(self, output_dir: str) -> list[dict[str, Any]]:
+        per_engine = await self.call_utility_all_async(
+            "collective_rpc", "dphn_snapshot", None, (), {"output_dir": output_dir}
+        )
+        if not per_engine or any(not workers for workers in per_engine):
+            raise RuntimeError("DPHN provider returned no snapshots for a managed engine")
+        return [record for workers in per_engine for record in workers]
+
     async def handle_fault(self, ft_request: FaultToleranceRequest) -> FaultToleranceResult:
-        res = await self.call_utility_async(FT_UTILITY_METHOD, ft_request)
-        result = msgspec.convert(res, FaultToleranceResult)
+        status = self._engine_status[self.engine_ranks_managed[0]]
+
+        # Reject a second recovery while one is in flight
+        if status.get("ft_state") == "recovering":
+            return FaultToleranceResult(
+                request_id=ft_request.request_id,
+                success=False,
+                reason="another recovery is in progress",
+            )
+
+        status["ft_state"] = "recovering"
+        status["last_ft_request_id"] = ft_request.request_id
+        status.pop("ft_error", None)
+
+        try:
+            res = await self.call_utility_async(FT_UTILITY_METHOD, ft_request)
+            result = msgspec.convert(res, FaultToleranceResult)
+        except Exception as e:
+            result = FaultToleranceResult(ft_request.request_id, False, str(e))
+
         if not result.success:
-            status = self._engine_status.get(self.engine_ranks_managed[0])
-            if status is not None:
-                status["last_ft_request_id"] = result.request_id
-                status["ft_error"] = result.reason
+            # Status pushes replace the cached entry; re-read before recording.
+            status = self._engine_status[self.engine_ranks_managed[0]]
+            status["ft_state"] = "failed"
+            status["last_ft_request_id"] = result.request_id
+            status["ft_error"] = result.reason
+
         return result
+
+    @property
+    def engine_status(self) -> dict:
+        """Cached FT status entry of the managed engine."""
+        return self._engine_status.get(self.engine_ranks_managed[0], {})
 
     async def get_status(self):
         return {
@@ -1685,6 +1768,21 @@ class DPLBAsyncMPClient(DPAsyncMPClient):
     async def call_utility_async(self, method: str, *args) -> Any:
         # Only the result from the first engine is returned.
         return (await self.call_utility_all_async(method, *args))[0]
+
+    async def checkpoint_state_async(self) -> tuple[CheckpointState, str | None]:
+        # Engines move independently: failed if any failed, otherwise a state
+        # all share or the transition in progress. A failure reports the first
+        # failed engine's error.
+        states: dict[CheckpointState, str | None] = {}
+        for state, error in await self.call_utility_all_async("checkpoint_state"):
+            states.setdefault(CheckpointState(state), error)
+        if CheckpointState.FAILED in states:
+            return CheckpointState.FAILED, states[CheckpointState.FAILED]
+        if len(states) == 1:
+            return next(iter(states)), None
+        if CheckpointState.PREPARING in states:
+            return CheckpointState.PREPARING, None
+        return CheckpointState.RESTORING, None
 
     @staticmethod
     async def process_engine_outputs(self: "DPLBAsyncMPClient", outputs: EngineCoreOutputs):

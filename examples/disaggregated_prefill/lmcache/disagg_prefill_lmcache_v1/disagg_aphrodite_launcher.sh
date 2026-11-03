@@ -34,7 +34,7 @@ if [[ $1 == "prefiller" ]]; then
         APHRODITE_ENABLE_V1_MULTIPROCESSING=1 \
         APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
         CUDA_VISIBLE_DEVICES=0 \
-        aphrodite run $MODEL \
+        aphrodite run "$MODEL" \
         --port 8100 \
         --enforce-eager \
         --kv-transfer-config \
@@ -51,7 +51,7 @@ elif [[ $1 == "decoder" ]]; then
         APHRODITE_ENABLE_V1_MULTIPROCESSING=1 \
         APHRODITE_WORKER_MULTIPROC_METHOD=spawn \
         CUDA_VISIBLE_DEVICES=1 \
-        aphrodite run $MODEL \
+        aphrodite run "$MODEL" \
         --port 8200 \
         --enforce-eager \
         --kv-transfer-config \

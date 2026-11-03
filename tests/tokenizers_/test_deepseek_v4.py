@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from aphrodite.entrypoints.openai.chat_completion.protocol import ChatCompletionRequest
 from aphrodite.renderers.chat_utils import parse_chat_messages
 from aphrodite.renderers.registry import RENDERER_REGISTRY
 from aphrodite.tokenizers.deepseek_v4 import get_deepseek_v4_tokenizer
@@ -365,6 +366,24 @@ def test_deepseek_v4_maps_xhigh_to_high_reasoning_effort():
     )
 
     assert prompt.startswith("<｜begin▁of▁sentence｜>Reasoning Effort: Absolute maximum")
+
+
+@pytest.mark.parametrize(
+    ("effort_map", "expected_prefix"),
+    [
+        (None, "<｜begin▁of▁sentence｜>Reasoning Effort: Absolute maximum"),
+        ({"xhigh": "max"}, "<｜begin▁of▁sentence｜>Reasoning Effort: Beyond maximum"),
+        ({"xhigh": "low"}, "<｜begin▁of▁sentence｜><｜User｜>Hello"),
+    ],
+)
+def test_deepseek_v4_respects_reasoning_effort_map(effort_map, expected_prefix):
+    messages = [{"role": "user", "content": "Hello"}]
+    request = ChatCompletionRequest(messages=messages, reasoning_effort="xhigh")
+    params = request.build_chat_params(None, "auto", effort_map)
+
+    prompt = _tokenizer().apply_chat_template(messages, tokenize=False, **params.get_apply_chat_template_kwargs())
+
+    assert prompt.startswith(expected_prefix)
 
 
 @pytest.mark.parametrize(

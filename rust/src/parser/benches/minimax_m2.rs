@@ -9,7 +9,7 @@ use criterion::{BatchSize, Criterion, Throughput, black_box, criterion_group, cr
 use tool_parser::parsers::MinimaxM2Parser as ExternalMinimaxM2Parser;
 
 mod utils;
-use utils::{feed_external_parser, feed_parser, openai_tools};
+use utils::{feed_external_parser, feed_parser, openai_tools, test_tokenizer};
 
 const CHUNK_CHARS: usize = 7;
 const LONG_NORMAL_TEXT_REPEATS: usize = 2048;
@@ -41,7 +41,8 @@ fn long_normal_text_fixture() -> String {
 }
 
 fn native_parser(tools: &[Tool]) -> Box<dyn ToolParser> {
-    MinimaxM2ToolParser::create(tools).expect("MiniMax M2 parser should initialize")
+    MinimaxM2ToolParser::create(tools, test_tokenizer())
+        .expect("MiniMax M2 parser should initialize")
 }
 
 fn run_stream_group(

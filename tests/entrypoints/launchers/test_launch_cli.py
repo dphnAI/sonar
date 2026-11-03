@@ -24,6 +24,7 @@ from aphrodite.entrypoints.cli.launch import (
     RenderSubcommand,
     cmd_init,
 )
+from aphrodite.entrypoints.common import startup
 from aphrodite.snapshot.controller import (
     LocalSnapshotTools,
     SnapshotCreateError,
@@ -159,9 +160,7 @@ def test_snapshot_environment_contract(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ):
-    from aphrodite.entrypoints.serve.utils import api_utils
-
-    monkeypatch.setattr(api_utils, "cli_env_setup", pytest.fail)
+    monkeypatch.setattr(startup, "cli_env_setup", pytest.fail)
     secret = "snapshot-secret"
     monkeypatch.setenv("APHRODITE_API_KEY", secret)
     monkeypatch.setenv("APHRODITE_USER_SETTING", secret)

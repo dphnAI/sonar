@@ -15,7 +15,10 @@ from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.utils.mem_constants import GiB_bytes
 from aphrodite.v1.attention.backends.utils import resolve_kv_cache_layout
-from aphrodite.v1.core.kv_cache_planning import get_kv_cache_configs
+from aphrodite.v1.core.kv_cache_planning import (
+    get_global_kv_cache_groups,
+    get_kv_cache_configs,
+)
 from aphrodite.v1.core.kv_cache_utils import generate_scheduler_kv_cache_config
 from aphrodite.v1.engine.core import EngineCore as V1EngineCore
 
@@ -125,11 +128,16 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
             self.model_executor.get_supported_kv_cache_layouts(),
             [spec for worker_specs in kv_cache_specs for spec in worker_specs.values()],
         )
-        self.model_executor.set_kv_cache_layout(layout.name)
+        global_kv_cache_groups = get_global_kv_cache_groups(aphrodite_config, kv_cache_specs)
+        aphrodite_config.adjust_dcp_kv_cache_interleave_size(global_kv_cache_groups)
+        self.model_executor.set_kv_cache_layout(
+            layout.name, aphrodite_config.parallel_config.cp_kv_cache_interleave_size
+        )
         kv_cache_configs = get_kv_cache_configs(
             aphrodite_config,
             kv_cache_specs,
             [10 * GiB_bytes],
+            global_kv_cache_groups,
         )
         scheduler_kv_cache_config = generate_scheduler_kv_cache_config(kv_cache_configs)
         aphrodite_config.cache_config.num_gpu_blocks = scheduler_kv_cache_config.num_blocks
@@ -169,6 +177,21 @@ def can_initialize(model_arch: str, monkeypatch: pytest.MonkeyPatch, EXAMPLE_MOD
                     f"backend. Current device has compute capability "
                     f"{capability.major}.{capability.minor}"
                 )
+
+    if model_arch == "Step5ForConditionalGeneration":
+        from aphrodite.platforms import current_platform
+        from aphrodite.platforms.interface import DeviceCapability
+
+        if current_platform.is_rocm():
+            from aphrodite.platforms.rocm import on_mi3xx
+
+            if not on_mi3xx():
+                pytest.skip("Step5 on ROCm requires MI300 or MI350")
+        elif not current_platform.is_cuda() or current_platform.get_device_capability() not in (
+            DeviceCapability(9, 0),
+            DeviceCapability(10, 3),
+        ):
+            pytest.skip("Step5 DSA requires CUDA SM90 or SM103")
 
     if model_arch == "DeepseekV4ForConditionalGeneration":
         from aphrodite.platforms import current_platform

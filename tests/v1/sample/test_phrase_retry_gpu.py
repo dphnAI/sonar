@@ -43,7 +43,7 @@ def test_v1_retry_in_mixed_speculative_batch(guard_first, greedy):
     device = torch.device("cuda")
     guard_row = 0 if guard_first else 1
     neighbor_row = 1 - guard_row
-    histories = [[], []]
+    histories: list[list[int]] = [[], []]
     processor = PhraseRetryProcessor(None, device, False)
     params = SamplingParams(extra_args={RETRY_KEY: (0, [4])})
     processor.update_state(BatchUpdate(2, [], [(guard_row, params, [0], histories[guard_row])], []))

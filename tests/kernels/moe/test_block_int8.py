@@ -17,7 +17,8 @@ from tests.kernels.quant_utils import (
     native_w8a8_block_matmul,
 )
 
-if current_platform.get_device_capability() < (7, 0):
+device_capability = current_platform.get_device_capability()
+if device_capability is None or device_capability < (7, 0):
     pytest.skip("INT8 Triton requires CUDA 7.0 or higher", allow_module_level=True)
 
 aphrodite_config = AphroditeConfig()

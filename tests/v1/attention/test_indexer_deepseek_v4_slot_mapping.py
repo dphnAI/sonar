@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from aphrodite.config import SpeculativeConfig
 from aphrodite.model_executor.layers.attention.sparse_mla_attention import (
     SparseMLACommonMetadataBuilder,
 )
@@ -39,6 +40,65 @@ from aphrodite.v1.kv_cache_interface import (
 from aphrodite.v1.worker.block_table import get_block_table_width
 from aphrodite.v1.worker.utils import select_common_block_size
 from tests.v1.attention.utils import create_aphrodite_config
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_adaptive_indexer_uses_configured_max_decode_len():
+    """GLM adaptive verification may replay wider rows than capture dummy rows."""
+    device = torch.device("cuda")
+    num_speculative_tokens = 5
+    configured_max_decode_len = num_speculative_tokens + 1
+
+    kv_cache_spec = MLAAttentionSpec(
+        block_size=64,
+        num_kv_heads=1,
+        head_size=128,
+        dtype=torch.bfloat16,
+    )
+    aphrodite_config = create_aphrodite_config(
+        model_name="hmellor/tiny-random-LlamaForCausalLM",
+        max_model_len=1024,
+    )
+    aphrodite_config.speculative_config = SpeculativeConfig(
+        method="ngram",
+        num_speculative_tokens=num_speculative_tokens,
+        enable_adaptive_verification=True,
+    )
+    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(aphrodite_config, 1024)
+    block_table_width = get_block_table_width(max_num_blocks, kv_cache_spec.block_size)
+    builder = DeepseekV32IndexerMetadataBuilder(
+        kv_cache_spec=kv_cache_spec,
+        layer_names=["dummy"],
+        aphrodite_config=aphrodite_config,
+        device=device,
+        block_table_width=block_table_width,
+    )
+
+    # The dummy capture rows are at most two tokens wide, but adaptive
+    # verification may assign all k+1 tokens to one request during replay.
+    query_lens = torch.tensor([2, 2, 2, 2, 1, 1, 1, 1], dtype=torch.int32)
+    query_start_loc_cpu = torch.cat((torch.zeros(1, dtype=torch.int32), query_lens.cumsum(0)))
+    query_start_loc = query_start_loc_cpu.to(device)
+    seq_lens = (query_lens + 100).to(device)
+    common = CommonAttentionMetadata(
+        query_start_loc=query_start_loc,
+        query_start_loc_cpu=query_start_loc_cpu,
+        seq_lens=seq_lens,
+        seq_lens_cpu_upper_bound=seq_lens.cpu(),
+        num_reqs=8,
+        num_actual_tokens=12,
+        max_query_len=2,
+        max_seq_len=102,
+        block_table_tensor=torch.ones((8, block_table_width), dtype=torch.int32, device=device),
+        slot_mapping=torch.arange(12, dtype=torch.int64, device=device),
+        causal=True,
+    )
+
+    metadata = builder.build(0, common)
+
+    assert metadata.decode is not None
+    assert metadata.decode.write_max_decode_len == configured_max_decode_len
+    assert not metadata.decode.decode_is_uniform
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -259,7 +319,11 @@ def test_device_token_request_mapping(query_lens, use_sparse_mla_builder):
 
 def test_indexer_shares_uncompressed_block_size_with_deepseek_v4_mla():
     """Packed MLA/indexer groups must retain 64 compressed rows per page."""
-    kernel_block_size = select_common_block_size(256, [DeepseekV4SparseMLABackend, DeepseekV4IndexerBackend])
+    kernel_block_size = select_common_block_size(
+        256,
+        # indexer backend has no impl class
+        [DeepseekV4SparseMLABackend, DeepseekV4IndexerBackend],  # type: ignore[type-abstract]
+    )
     spec = MLAAttentionSpec(
         block_size=256,
         num_kv_heads=1,
@@ -279,7 +343,14 @@ def test_indexer_preserves_deepseek_v41_mla_block_size():
     """V4.1 retains its smaller pages independently of V4's C4 indexer."""
     block_size = DeepseekV41SparseMLABackend.get_supported_kernel_block_sizes()[0]
     assert isinstance(block_size, int)
-    assert select_common_block_size(block_size, [DeepseekV41SparseMLABackend, DeepseekV41IndexerBackend]) == block_size
+    assert (
+        select_common_block_size(
+            block_size,
+            # indexer backend has no impl class
+            [DeepseekV41SparseMLABackend, DeepseekV41IndexerBackend],  # type: ignore[type-abstract]
+        )
+        == block_size
+    )
 
 
 def test_indexer_warmup_normalizes_zero_compress_ratios():
@@ -400,6 +471,7 @@ def test_compressed_slot_mapping_dcp_uses_rank_local_state_positions():
 
 def test_index_conversion_warmup_uses_physical_block_stride():
     config = SimpleNamespace(
+        attention_config=SimpleNamespace(hisparse_config=None),
         cache_config=SimpleNamespace(block_size=64),
         model_config=SimpleNamespace(
             max_model_len=1024,
@@ -618,3 +690,27 @@ def test_indexer_prefill_budget_matches_compressed_workspace(compress_ratio):
     assert len(chunks) > 1
     for req_slice, _ in chunks:
         assert int(compressed_seq_lens[req_slice].sum()) <= workspace_rows
+
+
+def test_indexer_expanded_block_table_sized_by_decode_tokens():
+    """Allocated after the memory profile, so it must not scale with the token
+    budget: only decode tokens (one per request without drafts) are expanded."""
+    kv_cache_spec = MLAAttentionSpec(
+        block_size=256,
+        num_kv_heads=1,
+        head_size=128,
+        dtype=torch.bfloat16,
+        tokens_per_state=4,
+    )
+    aphrodite_config = create_aphrodite_config(max_model_len=1024, max_num_seqs=8, max_num_batched_tokens=8192)
+    max_num_blocks = kv_cache_spec.max_num_blocks_per_req(aphrodite_config, 1024)
+    block_table_width = get_block_table_width(max_num_blocks, kv_cache_spec.block_size)
+    builder = DeepseekV32IndexerMetadataBuilder(
+        kv_cache_spec=kv_cache_spec,
+        layer_names=["dummy"],
+        aphrodite_config=aphrodite_config,
+        device=torch.device("cpu"),
+        block_table_width=block_table_width,
+    )
+
+    assert builder.expanded_block_table_buffer.shape == (8, block_table_width)

@@ -144,10 +144,17 @@ class InputProcessor:
                 from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
                 from aphrodite.v1.phrase_guard.scheduler import PhraseScheduler
 
-                PhraseRetryProcessor.validate_params(params)
                 if not issubclass(self.aphrodite_config.scheduler_config.get_scheduler_cls(), PhraseScheduler):
-                    raise ValueError("banned_strings requires PhraseScheduler")
-                PhraseRetryProcessor.validate_runtime(self.aphrodite_config, self.tokenizer)
+                    raise AphroditeValidationError(
+                        "banned_strings requires starting the server with "
+                        "--scheduler-cls aphrodite.v1.phrase_guard.scheduler.PhraseScheduler",
+                        parameter="banned_strings",
+                    )
+                try:
+                    PhraseRetryProcessor.validate_params(params)
+                    PhraseRetryProcessor.validate_runtime(self.aphrodite_config, self.tokenizer)
+                except ValueError as error:
+                    raise AphroditeValidationError(str(error), parameter="banned_strings") from error
             supported_generation_tasks = [task for task in supported_tasks if task in GENERATION_TASKS]
             if not supported_generation_tasks:
                 raise AphroditeValidationError("This model does not support generation")
@@ -158,6 +165,11 @@ class InputProcessor:
                 self.structured_outputs_config,
                 self.tokenizer,
             )
+            if params.prompt_logprob_start is not None and not self.aphrodite_config.use_v2_model_runner:
+                raise AphroditeValidationError(
+                    "prompt_logprob_start requires the V2 model runner (APHRODITE_USE_V2_MODEL_RUNNER=1).",
+                    parameter="prompt_logprob_start",
+                )
             if params.prompt_logprob_token_ids is not None:
                 if not self.aphrodite_config.use_v2_model_runner:
                     raise AphroditeValidationError(
@@ -423,9 +435,16 @@ class InputProcessor:
                     parameter="routed_experts_prompt_start",
                     value=sampling_params.routed_experts_prompt_start,
                 )
+            start = sampling_params.prompt_logprob_start or 0
+            if start and start >= prompt_len - 1:
+                raise AphroditeValidationError(
+                    f"prompt_logprob_start must be less than prompt_len - 1 "
+                    f"({prompt_len - 1}) so at least one prompt row is scored.",
+                    parameter="prompt_logprob_start",
+                    value=start,
+                )
             rows = sampling_params.prompt_logprob_token_ids
             if rows is not None:
-                start = sampling_params.prompt_logprob_start or 0
                 num_rows = max(prompt_len - 1 - start, 0)
                 if len(rows) != num_rows:
                     raise AphroditeValidationError(
@@ -496,9 +515,12 @@ class InputProcessor:
         if sampling_params is not None and "banned_strings" in (sampling_params.extra_args or {}):
             from aphrodite.v1.phrase_guard.processor import PhraseRetryProcessor
 
-            PhraseRetryProcessor.validate_input(
-                resumable, bool(mm_features) or encoder_input is not None, prompt_embeds
-            )
+            try:
+                PhraseRetryProcessor.validate_input(
+                    resumable, bool(mm_features) or encoder_input is not None, prompt_embeds
+                )
+            except ValueError as error:
+                raise AphroditeValidationError(str(error), parameter="banned_strings") from error
 
         return EngineCoreRequest(
             request_id=request_id,

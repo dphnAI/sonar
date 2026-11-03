@@ -13,6 +13,7 @@ import pytest
 from aphrodite import LLM
 from aphrodite.config.attention import AttentionConfig
 from aphrodite.platforms import current_platform
+from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 
 MODEL = "google/gemma-3-1b-it"
 
@@ -67,7 +68,7 @@ def test_backend_per_kind_overrides_global_backend(monkeypatch):
         model=MODEL,
         attention_config=AttentionConfig(
             backend="FLASH_ATTN",
-            backend_per_kind={"sliding_window": "TRITON_ATTN"},
+            backend_per_kind={"sliding_window": AttentionBackendEnum.TRITON_ATTN},
         ),
         enforce_eager=True,
         max_model_len=2048,

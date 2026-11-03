@@ -197,6 +197,30 @@ def test_save_and_load(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.skipif(
+    current_platform.device_count() < 2 or not is_torch_equal_or_newer("2.14.0.dev"),
+    reason="requires 2 GPUs and torch 2.14",
+)
+def test_load_on_another_device(monkeypatch: pytest.MonkeyPatch, aphrodite_tmp_cache: Path):
+    # With --device-ids, a rank can load a cache compiled on another device.
+    monkeypatch.setenv("APHRODITE_USE_AOT_COMPILE", "1")
+    monkeypatch.setenv("APHRODITE_USE_MEGA_AOT_ARTIFACT", "1")
+    monkeypatch.setenv("APHRODITE_USE_STANDALONE_COMPILE", "1")
+    monkeypatch.setenv("APHRODITE_COMPILE_ON_ONE_RANK", "1")
+    for device_index, loaded in ((0, 0), (1, 1)):
+        monkeypatch.setenv("APHRODITE_FORCE_AOT_LOAD", str(loaded))
+        disable_envs_cache()
+        x = torch.randn(10, 10, device=f"cuda:{device_index}")
+        aphrodite_config = make_aphrodite_config()
+        with (
+            torch.accelerator.device_index(device_index),
+            use_aphrodite_config(aphrodite_config),
+            compilation_counter.expect(num_aot_compiles=1 - loaded, num_aot_artifacts_loaded=loaded),
+        ):
+            out = CompiledMod(aphrodite_config=aphrodite_config)(x)
+        torch.testing.assert_close(out, reference_fn(x))
+
+
+@pytest.mark.skipif(
     not current_platform.is_cuda() or not is_torch_equal_or_newer("2.10.0"),
     reason="requires CUDA and torch 2.10",
 )

@@ -682,13 +682,15 @@ class Glm5NextProcessingInfo(Glm4vProcessingInfo):
         video_processor = self.get_video_processor()
         temporal_patch_size = int(getattr(video_processor, "temporal_patch_size", 1) or 1)
         video_fps = float(metadata["fps"])
+        do_sample_frames = metadata.get("do_sample_frames", True)
 
-        if not metadata.get("do_sample_frames", True):
-            # The loader already picked the frames and the processor keeps them
-            # as they are, so the frame count is what was handed in and
-            # ``frames_indices`` only supplies the timestamp values.
+        if not do_sample_frames:
+            # Loader or HF write-back already picked the frames; use those
+            # indices for timestamps. After HF write-back, do_sample_frames is
+            # cleared so the count is len(frames_indices); a pre-sampled loader
+            # hands in frames whose count matches frames_indices.
             frame_indices = [int(idx) for idx in metadata["frames_indices"]]
-            num_frames = int(total_frames)
+            num_frames = len(frame_indices)
         else:
             frame_indices = [
                 int(idx)
@@ -782,10 +784,7 @@ class Glm5NextProcessingInfo(Glm4vProcessingInfo):
 class Glm5NextMultiModalProcessor(Glm4vMultiModalProcessor):
     """``Glm5NextProcessor`` extracts image/video features
     only and passes the prompt text through unchanged, so prompt expansion
-    (image token repeat, video frame/timestamp structure) is owned by Aphrodite's
-    prompt-update machinery — the inherited ``_get_prompt_updates`` builds
-    the replacement content and the placeholder scan validates against
-    exactly that."""
+    is owned by the inherited GLM-4V prompt-update machinery."""
 
     def _hf_processor_applies_updates(
         self,

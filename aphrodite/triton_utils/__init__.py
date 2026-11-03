@@ -3,6 +3,7 @@
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
+import aphrodite.envs as envs
 from aphrodite.triton_utils.importing import (
     HAS_TRITON,
     TritonLanguagePlaceholder,
@@ -30,6 +31,17 @@ else:
     aggregate = TritonLanguagePlaceholder()
 
 from aphrodite.triton_utils.tensor_descriptor import use_tensor_descriptor  # noqa: E402
+
+# Replace Autotuner.run so it always picks the first valid configuration, to
+# eliminate autotune variability. Installed here rather than in
+# aphrodite.env_override because importing this package resolves current_platform,
+# which must not happen during `import aphrodite`.
+if envs.APHRODITE_TRITON_FORCE_FIRST_CONFIG:
+    from aphrodite.triton_utils.force_first_config import (
+        install as _install_force_first_config,
+    )
+
+    _install_force_first_config()
 
 LOG2E = 1.4426950408889634
 LOGE2 = 0.6931471805599453

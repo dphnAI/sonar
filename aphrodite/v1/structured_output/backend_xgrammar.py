@@ -150,6 +150,10 @@ class XgrammarBackend(StructuredOutputBackend):
                 self.compiler.compile_regex,
                 grammar_spec,
             )
+        elif request_type == StructuredOutputOptions.CHOICE:
+            # xgrammar has no choice type. Python request validation rewrites
+            # `choice` into this grammar, but other frontends send it as is.
+            ctx = self.compiler.compile_grammar(choice_as_grammar(json.loads(grammar_spec)))
         elif request_type == StructuredOutputOptions.STRUCTURAL_TAG:
             s_tag = json.loads(grammar_spec)
             if "structures" in s_tag:
@@ -234,13 +238,12 @@ class XgrammarGrammar(StructuredOutputGrammar):
         """
         if self._is_terminated:
             return True
-        for token in tokens:
+        for num_accepted, token in enumerate(tokens):
             if not self.matcher.accept_token(token):
-                logger.error(
-                    "Failed to advance FSM for request %s for tokens %s. Please file an issue.",
-                    request_id,
-                    token,
-                )
+                if num_accepted:
+                    self.matcher.rollback(num_accepted)
+                    self.num_processed_tokens -= num_accepted
+                    self._is_terminated = self.matcher.is_terminated()
                 return False
             self.num_processed_tokens += 1
             self._is_terminated = self.matcher.is_terminated()
@@ -435,7 +438,7 @@ def has_xgrammar_unsupported_json_features(schema: dict[str, Any]) -> bool:
 def validate_xgrammar_grammar(sampling_params: SamplingParams) -> None:
     """Validate that the request is supported by structured output.
 
-    Raises APHRODITEValidationError if the request is not supported.
+    Raises AphroditeValidationError if the request is not supported.
     """
     if sampling_params.structured_outputs is None:
         return

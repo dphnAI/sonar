@@ -31,17 +31,19 @@ from aphrodite.model_executor.layers.sparse_attn_indexer import (
 from aphrodite.model_executor.models.deepseek_v2 import (
     DeepSeekV2FusedQkvAProjLinear,
     DeepseekV32IndexerCache,
-    is_skip_topk_layer,
     yarn_get_mscale,
 )
-from aphrodite.model_executor.models.utils import extract_layer_index
+from aphrodite.model_executor.models.utils import (
+    compute_skip_topk_layers,
+    extract_layer_index,
+)
 from aphrodite.models.deepseek_v32.common.kernels import fused_norm_rope, fused_q
 from aphrodite.platforms import current_platform
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
 from aphrodite.v1.attention.ops.pcp import (
     finalize_mla_pcp_decode,
     maybe_gather_mla_latent_cache_inputs,
 )
+from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
 
 if TYPE_CHECKING:
     from aphrodite.model_executor.layers.attention.mla_attention import MLACommonMetadata
@@ -169,7 +171,7 @@ class DeepseekV32Attention(MLAAttention):
             scaling = scaling * mscale * mscale
 
         layer_id = extract_layer_index(prefix)
-        skip_topk = is_skip_topk_layer(config, layer_id)
+        skip_topk = layer_id in compute_skip_topk_layers(config)
 
         num_hidden_layers = getattr(config, "num_hidden_layers", None)
         is_mtp_layer = num_hidden_layers is not None and layer_id >= num_hidden_layers
@@ -395,6 +397,7 @@ class DeepseekV32Attention(MLAAttention):
             mla_kv_cache=mla_kv_cache,
             mla_kv_cache_dtype=self.kv_cache_dtype,
             mla_k_scale=mla_k_scale,
+            skip_scale=self._k_scale_float == 1.0,
             has_indexer=has_indexer,
             index_rope_interleave=self._index_rope_interleave,
             kv_c_out=kv_c_out,
@@ -533,6 +536,7 @@ class DeepseekV32Attention(MLAAttention):
                 cache_slot_mapping,
                 self.kv_cache_dtype,
                 self._k_scale,
+                self._k_scale_float == 1.0 and self.kv_cache_dtype in ("fp8", "fp8_e4m3", "fp8_e5m2"),
             )
 
         num_actual = attn_metadata.num_actual_tokens  # type: ignore[attr-defined]

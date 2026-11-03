@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use aphrodite_chat::ChatLlm;
 use aphrodite_engine_core_client::EngineCoreClient;
-use aphrodite_engine_core_client::protocol::lora::LoraRequest;
 use aphrodite_engine_core_client::runtime::BackgroundShutdownRuntime;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -15,10 +14,11 @@ use tokio::runtime::Runtime;
 use tokio::time::{Duration, Instant, sleep_until};
 use tracing::warn;
 
-use crate::config::{ApiServerOptions, CorsConfig, LoraModulePath};
+use crate::config::{AccessLogConfig, ApiServerOptions, CorsConfig, LoraModulePath};
 use crate::lora::{
-    LoadLoraError, LoraDisabledError, LoraManager, LoraModelResolution, UnloadLoraError,
+    LoadLoraError, LoadedLora, LoraDisabledError, LoraManager, LoraModelResolution, UnloadLoraError,
 };
+use crate::model_names::ServedModelNames;
 use crate::runtime::build_request_runtime;
 use crate::server_info::{ServerInfoConfigFormat, ServerInfoSnapshot};
 
@@ -41,6 +41,8 @@ pub struct AppState {
     pub api_server_options: ApiServerOptions,
     /// CORS settings applied to every HTTP response.
     pub cors: CorsConfig,
+    /// HTTP access log settings.
+    pub access_log: AccessLogConfig,
     /// Runtime server information returned by `/server_info`, when available.
     server_info: Option<ServerInfoSnapshot>,
     /// SHA-256 hashes of API keys accepted as bearer tokens for guarded routes.
@@ -56,6 +58,8 @@ pub struct AppState {
     /// Profiler mode that registers `/start_profile` and `/stop_profile`
     /// routes when present.
     pub profiler: Option<String>,
+    /// Public weight-receipt configuration; `None` leaves legacy serving unchanged.
+    pub(crate) dphn_network_config: Option<crate::DphnNetworkConfig>,
 }
 
 impl AppState {
@@ -77,6 +81,7 @@ impl AppState {
             chat,
             api_server_options: ApiServerOptions::default(),
             cors: CorsConfig::default(),
+            access_log: AccessLogConfig::default(),
             server_info: None,
             api_key_hashes: Vec::new(),
             server_load: AtomicU64::new(0),
@@ -84,6 +89,7 @@ impl AppState {
             model_path: None,
             request_runtime: OnceLock::new(),
             profiler: None,
+            dphn_network_config: None,
         }
     }
 
@@ -99,6 +105,12 @@ impl AppState {
         self
     }
 
+    /// Set the HTTP access log settings.
+    pub fn with_access_log(mut self, access_log: AccessLogConfig) -> Self {
+        self.access_log = access_log;
+        self
+    }
+
     /// Set the backend model path reported as `root` for base-model cards.
     pub fn with_model_path(mut self, model_path: String) -> Self {
         self.model_path = Some(model_path);
@@ -108,6 +120,11 @@ impl AppState {
     /// Set the profiler mode that enables `/start_profile` and `/stop_profile`.
     pub fn with_profiler(mut self, profiler: Option<String>) -> Self {
         self.profiler = profiler;
+        self
+    }
+
+    pub fn with_dphn_network_config(mut self, config: Option<crate::DphnNetworkConfig>) -> Self {
+        self.dphn_network_config = config;
         self
     }
 
@@ -160,21 +177,27 @@ impl AppState {
     }
 
     /// Snapshot the loaded LoRA adapters in load order, for `/v1/models` cards.
-    pub async fn served_lora_requests(&self) -> Vec<LoraRequest> {
-        self.lora_manager.served_lora_requests().await
+    pub async fn served_loras(&self) -> Vec<LoadedLora> {
+        self.lora_manager.served_loras().await
     }
 
     /// Snapshot loaded LoRA adapters for the lifecycle API.
     ///
     /// Returns error if the engine was started without LoRA support.
-    pub async fn list_loras(&self) -> Result<Vec<LoraRequest>, LoraDisabledError> {
+    pub async fn list_loras(&self) -> Result<Vec<LoadedLora>, LoraDisabledError> {
         self.ensure_lora_enabled()?;
-        Ok(self.lora_manager.served_lora_requests().await)
+        Ok(self.lora_manager.served_loras().await)
+    }
+
+    /// The base model names a request may select, before LoRA adapters.
+    pub(crate) fn base_model_names(&self) -> ServedModelNames {
+        ServedModelNames::new(self.served_model_names.clone())
+            .with_accept_any(self.api_server_options.skip_model_name_validation)
     }
 
     /// Resolve the requested model against one dynamic LoRA registry snapshot.
     pub async fn resolve_model_with_loras(&self, model_name: Option<&str>) -> LoraModelResolution {
-        self.lora_manager.resolve_model(&self.served_model_names, model_name).await
+        self.lora_manager.resolve_model(self.base_model_names(), model_name).await
     }
 
     /// Load one dynamic LoRA adapter and register it as a public model name.
@@ -184,7 +207,7 @@ impl AppState {
         &self,
         module: LoraModulePath,
         load_inplace: bool,
-    ) -> Result<LoraRequest, LoadLoraError> {
+    ) -> Result<LoadedLora, LoadLoraError> {
         self.ensure_lora_enabled()?;
         self.lora_manager
             .load_lora(
@@ -203,7 +226,7 @@ impl AppState {
     pub async fn load_static_lora(
         &self,
         module: &LoraModulePath,
-    ) -> Result<LoraRequest, LoadLoraError> {
+    ) -> Result<LoadedLora, LoadLoraError> {
         self.ensure_lora_enabled()?;
         self.lora_manager
             .load_static_lora(self.engine_core_client(), &self.served_model_names, module)
@@ -218,7 +241,7 @@ impl AppState {
         &self,
         lora_name: &str,
         lora_int_id: Option<u64>,
-    ) -> Result<LoraRequest, UnloadLoraError> {
+    ) -> Result<LoadedLora, UnloadLoraError> {
         self.ensure_lora_enabled()?;
         self.lora_manager
             .unload_lora(self.engine_core_client(), lora_name, lora_int_id)

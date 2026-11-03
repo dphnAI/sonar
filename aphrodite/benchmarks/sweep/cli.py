@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import argparse
 
-from aphrodite.entrypoints.serve.utils.api_utils import APHRODITE_SUBCMD_PARSER_EPILOG
+from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
 from .plot import SweepPlotArgs

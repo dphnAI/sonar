@@ -8,7 +8,6 @@ from aphrodite.logger import init_logger
 from aphrodite.platforms import current_platform
 from aphrodite.utils.torch_utils import (
     canonicalize_singleton_dim_strides,
-    is_quantized_kv_cache,
 )
 from aphrodite.v1.attention.backend import AttentionType
 from aphrodite.v1.attention.backends.fa_utils import (
@@ -18,6 +17,7 @@ from aphrodite.v1.attention.backends.fa_utils import (
 from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
     triton_reshape_and_cache_flash_diffkv,
 )
+from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
 
 if is_flash_attn_varlen_func_available():
     from aphrodite.v1.attention.backends.fa_utils import flash_attn_varlen_func
@@ -34,6 +34,10 @@ logger = init_logger(__name__)
 class FlashAttentionDiffKVBackend(FlashAttentionBackend):
     # Default to 128 for this backend
     head_size_v: int = 128
+
+    @classmethod
+    def supports_head_size_v(cls, head_size: int, head_size_v: int) -> bool:
+        return True
 
     @classmethod
     def set_head_size_v(cls, head_size_v: int) -> None:

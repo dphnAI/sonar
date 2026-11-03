@@ -7,6 +7,7 @@
 import functools
 import math
 from collections.abc import Hashable, Iterable, Mapping, Sequence
+from contextlib import nullcontext
 from typing import Annotated, Any, Literal, TypeAlias
 
 import torch
@@ -18,10 +19,11 @@ from transformers import BatchFeature
 from aphrodite.config import AphroditeConfig
 from aphrodite.config.multimodal import MultiModalDummyOptions
 from aphrodite.distributed import get_tensor_model_parallel_world_size
-from aphrodite.inputs import MultiModalDataDict
+from aphrodite.inputs import MultiModalDataDict, MultiModalHashes
 from aphrodite.model_executor.layers.quantization import QuantizationConfig
 from aphrodite.model_executor.models.transformers.utils import replace_linear_class
 from aphrodite.multimodal import MULTIMODAL_REGISTRY
+from aphrodite.multimodal.hasher import MultiModalHasher
 from aphrodite.multimodal.inputs import (
     MultiModalFieldConfig,
     MultiModalKwargsItems,
@@ -285,6 +287,19 @@ class DeepseekVL2MultiModalProcessor(BaseMultiModalProcessor[DeepseekVL2Processi
             )
         ]
 
+    def _get_mm_hashes(self, inputs: ProcessorInputs) -> MultiModalHashes:
+        hashes = dict(super()._get_mm_hashes(inputs))
+        images = inputs.mm_data_items.get("image")
+        if isinstance(images, ImageProcessorItems):
+            # process_one disables cropping when there are more than two images.
+            cropping = len(images) <= 2
+            algorithm = self.info.ctx.get_mm_config().mm_hasher_algorithm
+            hashes["image"] = [
+                MultiModalHasher.hash_kwargs(algorithm, mm_hash=mm_hash, cropping=cropping)
+                for mm_hash in hashes["image"]
+            ]
+        return hashes
+
     def _cached_apply_hf_processor(
         self,
         inputs: ProcessorInputs,
@@ -402,7 +417,13 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
         except ImportError as e:
             raise ImportError("Please install timm") from e
 
-        with set_default_torch_dtype(torch.float16):
+        # Skipped towers are built under a meta default device, but timm's
+        # constructor calls .item(), which meta tensors do not support.
+        on_meta = torch.get_default_device().type == "meta"
+        with (
+            set_default_torch_dtype(torch.float16),
+            torch.device("cpu") if on_meta else nullcontext(),
+        ):
             model = timm.create_model(
                 "vit_so400m_patch14_siglip_384.webli",
                 pretrained=False,
@@ -410,6 +431,8 @@ class DeepseekVLV2ForCausalLM(nn.Module, SupportsMultiModal, SupportsPP, Support
                 dynamic_img_size=True,
                 dynamic_img_pad=True,
             )
+        if on_meta:
+            model = model.to("meta")
 
         if get_tensor_model_parallel_world_size() > 1:
             model = self.patch_vit_for_tp(model, quant_config)

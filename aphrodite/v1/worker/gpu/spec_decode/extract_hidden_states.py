@@ -10,9 +10,11 @@ from aphrodite.config import AphroditeConfig
 from aphrodite.config.compilation import CUDAGraphMode
 from aphrodite.forward_context import set_forward_context
 from aphrodite.model_executor.model_loader import get_model
+from aphrodite.model_executor.model_loader.utils import get_draft_load_config
 from aphrodite.v1.worker.gpu.dp_utils import DPSyncState
 from aphrodite.v1.worker.gpu.input_batch import InputBatch
 from aphrodite.v1.worker.gpu.spec_decode.speculator import DraftModelSpeculator
+from aphrodite.v1.worker.gpu.spec_decode.utils import get_pp_safe_draft_load_config
 
 
 class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
@@ -61,6 +63,7 @@ class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
             return get_model(
                 aphrodite_config=self.aphrodite_config,
                 model_config=self.draft_model_config,
+                load_config=get_pp_safe_draft_load_config(get_draft_load_config(self.aphrodite_config)),
             )
 
     def load_model(self, target_model: nn.Module) -> None:
@@ -121,6 +124,8 @@ class ExtractHiddenStatesSpeculator(DraftModelSpeculator):
         stacked_hidden_states = torch.stack(aux_hidden_states, dim=1)
         num_tokens = stacked_hidden_states.shape[0]
         self.hidden_states[:num_tokens].copy_(stacked_hidden_states)
+
+        attn_metadata, slot_mappings = self._build_drafter_attn_metadata(input_batch, attn_metadata, slot_mappings)
 
         draft_attn_metadata = {name: attn_metadata[name] for name in self.draft_attn_layer_names}
         draft_slot_mappings = {name: slot_mappings[name][:num_tokens] for name in self.draft_attn_layer_names}

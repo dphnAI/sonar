@@ -64,6 +64,7 @@ def test_request_finished_producer_emits_params(monkeypatch):
     assert entry.evictable
     assert params == {
         "h1": {
+            "modality": "image",
             "metadata": {},
             "item_indices": [0],
             "peer_host": "1.2.3.4",
@@ -89,6 +90,7 @@ def test_request_finished_announces_not_ready_entry(monkeypatch):
     assert delay is False
     assert params == {
         "h1": {
+            "modality": "image",
             "metadata": {},
             "item_indices": [0],
             "peer_host": "1.2.3.4",
@@ -110,5 +112,5 @@ def test_request_finished_skips_unallocated_entry(monkeypatch):
     assert delay is False
     # The item's placeholder metadata is still reported even though there's
     # no cache entry to transfer (empty "metadata": no fields, no transfer).
-    assert params == {"h1": {"metadata": {}, "item_indices": [0]}}
+    assert params == {"h1": {"modality": "image", "metadata": {}, "item_indices": [0]}}
     s.shutdown()

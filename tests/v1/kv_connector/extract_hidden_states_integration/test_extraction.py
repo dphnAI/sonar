@@ -136,6 +136,7 @@ def test_extract_hidden_states_with_predictable_dummy_model(predictable_llama_co
 
     assert len(outputs) == len(prompts)
     for output in outputs:
+        assert output.prompt_token_ids is not None
         expected_shape = (
             len(output.prompt_token_ids),
             num_layers,
@@ -167,6 +168,7 @@ def test_extract_hidden_states_with_predictable_dummy_model(predictable_llama_co
 
     assert len(outputs) == len(chunked_prompts)
     for output in outputs:
+        assert output.prompt_token_ids is not None
         prompt_len = len(output.prompt_token_ids)
         expected_shape = (prompt_len, num_layers, hidden_size)
         _token_ids, hidden_states = get_and_check_output(output, expected_shape)
@@ -209,6 +211,8 @@ def test_extract_hidden_states_with_predictable_dummy_model(predictable_llama_co
 
     # First output: prompt-only hidden states, default path
     out0 = outputs[0]
+    assert out0.kv_transfer_params is not None
+    assert out0.prompt_token_ids is not None
     path0 = out0.kv_transfer_params["hidden_states_path"]
     assert path0 != custom_path
     obj0 = example_hidden_states_connector.load_hidden_states(path0)
@@ -222,6 +226,8 @@ def test_extract_hidden_states_with_predictable_dummy_model(predictable_llama_co
 
     # Second output: prompt + output tokens, custom path
     out1 = outputs[1]
+    assert out1.kv_transfer_params is not None
+    assert out1.prompt_token_ids is not None
     assert out1.kv_transfer_params["hidden_states_path"] == custom_path
     obj1 = example_hidden_states_connector.load_hidden_states(custom_path)
     token_ids = obj1["token_ids"]
@@ -283,6 +289,7 @@ def test_extract_hidden_states_qwen35_hybrid_smoke(tmp_path):
         token_ids = obj["token_ids"]
         hidden_states = obj["hidden_states"]
 
+        assert output.prompt_token_ids is not None
         assert torch.equal(token_ids, torch.tensor(output.prompt_token_ids))
         assert hidden_states.shape == (
             len(output.prompt_token_ids),
@@ -333,6 +340,7 @@ def test_extract_hidden_states_tp2():
         token_ids = obj["token_ids"]
         hidden_states = obj["hidden_states"]
 
+        assert output.prompt_token_ids is not None
         assert torch.equal(token_ids, torch.tensor(output.prompt_token_ids))
         assert hidden_states.shape == (
             len(output.prompt_token_ids),

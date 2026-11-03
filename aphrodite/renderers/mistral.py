@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from typing import Any
+
 from aphrodite.config import AphroditeConfig
 from aphrodite.logger import init_logger
 from aphrodite.renderers.chat_utils import (
@@ -45,6 +47,16 @@ def safe_apply_chat_template(
         raise ValueError(str(e)) from e
 
 
+def _get_chat_template_kwargs(params: ChatParams) -> dict[str, Any]:
+    kwargs = params.get_apply_chat_template_kwargs()
+    if params.response_format is not None:
+        rf = params.response_format.model_dump(mode="json", by_alias=True, exclude_none=True)
+        # mistral-common only accepts JSON objects and JSON schemas.
+        if rf["type"] == "json_object" or "schema" in rf.get("json_schema", {}):
+            kwargs["response_format"] = rf
+    return kwargs
+
+
 class MistralRenderer(BaseRenderer[MistralTokenizer]):
     def __init__(
         self,
@@ -69,11 +81,7 @@ class MistralRenderer(BaseRenderer[MistralTokenizer]):
             mm_processor_kwargs=params.mm_processor_kwargs,
         )
 
-        prompt_raw = safe_apply_chat_template(
-            tokenizer,
-            messages,
-            **params.get_apply_chat_template_kwargs(),
-        )
+        prompt_raw = safe_apply_chat_template(tokenizer, messages, **_get_chat_template_kwargs(params))
 
         prompt = parse_dec_only_prompt(prompt_raw)
         if mm_data is not None:
@@ -97,11 +105,7 @@ class MistralRenderer(BaseRenderer[MistralTokenizer]):
             mm_processor_kwargs=params.mm_processor_kwargs,
         )
 
-        prompt_raw = await self._apply_chat_template_async(
-            tokenizer,
-            messages,
-            **params.get_apply_chat_template_kwargs(),
-        )
+        prompt_raw = await self._apply_chat_template_async(tokenizer, messages, **_get_chat_template_kwargs(params))
 
         prompt = parse_dec_only_prompt(prompt_raw)
         if mm_data is not None:

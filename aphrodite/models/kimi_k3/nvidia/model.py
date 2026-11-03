@@ -38,6 +38,7 @@ from aphrodite.model_executor.layers.linear import (
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
+    UnquantizedLinearMethod,
 )
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
 from aphrodite.model_executor.layers.mamba.gdn.kimi_gdn_linear_attn import (
@@ -314,15 +315,17 @@ class KimiRoutedOutputTransform(nn.Module):
         Args:
             hidden_states: Routed expert output in latent space.
             residual: Optional tensor of the up-projection's output shape to
-                accumulate into. It is consumed in the GEMM's beta-add
-                epilogue, so adding it costs no extra kernel.
+                accumulate into. Unquantized projections fuse the addition
+                into the GEMM epilogue.
 
         """
         if self.norm is not None:
             hidden_states = self.norm(hidden_states)
-        if residual is not None:
+        if residual is not None and isinstance(self.up_proj.quant_method, UnquantizedLinearMethod):
             return residual.addmm_(hidden_states, self.up_proj.weight.t())
         hidden_states, _ = self.up_proj(hidden_states)
+        if residual is not None:
+            return residual.add_(hidden_states)
         return hidden_states
 
 
@@ -484,8 +487,13 @@ class KimiMoE(nn.Module):
             if num_experts % ep_size != 0:
                 raise ValueError(f"Kimi K3 num_experts={num_experts} must be divisible by EP size {ep_size}.")
             num_local_experts = num_experts // ep_size
+            max_num_tokens = aphrodite_config.scheduler_config.max_num_batched_tokens
+            if use_sequence_parallel:
+                # The layer only sees this rank's shard of the batch.
+                max_num_tokens = cdiv(max_num_tokens, self.tp_size)
             self.experts = DeepGemmMegaMoEExperts(
                 aphrodite_config,
+                max_num_tokens=max_num_tokens,
                 num_experts=num_experts,
                 num_local_experts=num_local_experts,
                 experts_start_idx=ep_rank * num_local_experts,
@@ -1381,14 +1389,11 @@ class KimiLinearForCausalLM(
         cls,
         aphrodite_config: "AphroditeConfig",
     ) -> tuple[torch.dtype, ...]:
-        dtypes = MambaStateDtypeCalculator.kda_state_dtype(
+        return MambaStateDtypeCalculator.kda_state_dtype(
             aphrodite_config.model_config.dtype,
             aphrodite_config.cache_config.mamba_cache_dtype,
             aphrodite_config.cache_config.mamba_ssm_cache_dtype,
         )
-        if aphrodite_config.cache_config.use_kda_recoverssm:
-            dtypes = MambaStateDtypeCalculator.append_kda_recoverssm_record(dtypes, aphrodite_config.model_config.dtype)
-        return dtypes
 
     @classmethod
     def get_mamba_state_shape_from_config(cls, aphrodite_config: "AphroditeConfig") -> MambaStateShapes:
@@ -1398,22 +1403,13 @@ class KimiLinearForCausalLM(
         num_spec = (
             aphrodite_config.speculative_config.num_speculative_tokens if aphrodite_config.speculative_config else 0
         )
-        shapes = MambaStateShapeCalculator.kda_state_shape(
+        return MambaStateShapeCalculator.kda_state_shape(
             tp_size,
             hf_config.linear_attn_config["num_heads"],
             hf_config.linear_attn_config["head_dim"],
             conv_kernel_size=hf_config.linear_attn_config["short_conv_kernel_size"],
             num_spec=num_spec,
         )
-        if aphrodite_config.cache_config.use_kda_recoverssm:
-            return MambaStateShapeCalculator.append_kda_recoverssm_record(
-                shapes,
-                hf_config.linear_attn_config["num_heads"],
-                hf_config.linear_attn_config["head_dim"],
-                tp_world_size=tp_size,
-                spec_query_len=1 + num_spec,
-            )
-        return shapes
 
     @classmethod
     def get_mamba_state_copy_func(

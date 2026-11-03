@@ -516,12 +516,12 @@ class Qwen3ASRModel(nn.Module):
         embeds = self.language_model.embed(token_id)
         return self.language_model.forward_embeds(embeds, cache)
 
-    def create_runtime_adapter(self, model_path: str) -> STTRuntimeAdapter:
+    def create_runtime_adapter(self, model_path: str, trust_remote_code: bool) -> STTRuntimeAdapter:
         """Create the model-owned runtime adapter used by the Aphrodite runner."""
         # Local import: avoid import-time cycles (adapter imports transcriber).
         from .adapter import Qwen3ASRRuntimeAdapter
 
-        return Qwen3ASRRuntimeAdapter(self, model_path)
+        return Qwen3ASRRuntimeAdapter(self, model_path, trust_remote_code)
 
     def sanitize(self, weights: dict) -> dict:
         """Map HF weight keys to MLX model structure.

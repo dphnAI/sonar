@@ -10,7 +10,7 @@ import torch
 from transformers import AutoModelForCausalLM
 
 from aphrodite.distributed.weight_transfer import (
-    HTTPAPHRODITEWeightSyncClient,
+    HTTPAphroditeWeightSyncClient,
     ModuleSource,
     WeightTransferTrainerFactory,
 )
@@ -106,7 +106,7 @@ def test_ipc_weight_transfer_restores_reset_weights():
         trainer_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.bfloat16).cuda()
         WeightTransferTrainerFactory.trainer_init(
             IPCTrainerInitInfo(rank=0),
-            client=HTTPAPHRODITEWeightSyncClient(url),
+            client=HTTPAphroditeWeightSyncClient(url),
             source=ModuleSource(trainer_model),
         ).send_weights()
         assert weight_checker(url, "compare", baseline).json() == {

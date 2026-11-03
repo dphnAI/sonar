@@ -6,7 +6,7 @@ by the Cohere v2 chat API:
 * ``aphrodite/renderers/registry.py``: new ``"cohere"`` renderer entry.
 * ``aphrodite/tokenizers/registry.py``: new ``"cohere"`` tokenizer entry
   (aliased to the cached HF tokenizer).
-* ``aphrodite/entrypoints/openai/cli_args.py``: new
+* ``aphrodite/entrypoints/common/cli_args.py``: new
   ``cohere_is_reasoning_model`` field.
 * ``aphrodite/config/model.py``: ``"cohere"`` added to ``TokenizerMode``
   Literal.
@@ -18,7 +18,7 @@ import typing
 import pytest
 
 from aphrodite.config.model import TokenizerMode
-from aphrodite.entrypoints.launchers.cli_args import BaseFrontendArgs, make_arg_parser
+from aphrodite.entrypoints.common.cli_args import BaseFrontendArgs, make_arg_parser
 from aphrodite.renderers.registry import RENDERER_REGISTRY
 from aphrodite.tokenizers.registry import TokenizerRegistry
 from aphrodite.utils.argparse_utils import FlexibleArgumentParser

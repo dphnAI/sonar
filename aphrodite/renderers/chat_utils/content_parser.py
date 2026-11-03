@@ -40,6 +40,12 @@ position during chat template rendering.
 Registered as an additional special token when `--enable-prompt-embeds` is set.
 See `_ensure_prompt_embeds_placeholder_token` in `aphrodite/renderers/hf.py`.
 """
+PROMPT_EMBEDS_PLACEHOLDER_ID_PREFIX: Final[str] = f"{PROMPT_EMBEDS_PLACEHOLDER_TOKEN}__aphrodite_prompt_embed_"
+
+
+def make_prompt_embeds_placeholder(index: int) -> str:
+    return f"{PROMPT_EMBEDS_PLACEHOLDER_ID_PREFIX}{index}__"
+
 
 _ENABLE_PROMPT_EMBEDS_ERROR: Final[str] = "You must set `--enable-prompt-embeds` to input `prompt_embeds`"
 
@@ -115,6 +121,7 @@ class BaseMultiModalContentParser(ABC):
         self,
         video_embeds: MultiModalEmbedsPayload | None,
         uuid: str | None = None,
+        audio_embeds: MultiModalEmbedsPayload | None = None,
     ) -> None:
         raise NotImplementedError
 
@@ -271,6 +278,7 @@ class MultiModalContentParser(BaseMultiModalContentParser):
         self,
         video_embeds: MultiModalEmbedsPayload | None,
         uuid: str | None = None,
+        audio_embeds: MultiModalEmbedsPayload | None = None,
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
@@ -292,6 +300,8 @@ class MultiModalContentParser(BaseMultiModalContentParser):
             placeholder = self._tracker.add("video_embeds", (None, uuid))
 
         self._add_placeholder("video", placeholder)
+        if audio_embeds is not None:
+            self.parse_audio_embeds(audio_embeds, uuid)
 
 
 class AsyncMultiModalContentParser(BaseMultiModalContentParser):
@@ -471,6 +481,7 @@ class AsyncMultiModalContentParser(BaseMultiModalContentParser):
         self,
         video_embeds: MultiModalEmbedsPayload | None,
         uuid: str | None = None,
+        audio_embeds: MultiModalEmbedsPayload | None = None,
     ) -> None:
         mm_config = self.model_config.get_multimodal_config()
         if not mm_config.enable_mm_embeds:
@@ -484,6 +495,8 @@ class AsyncMultiModalContentParser(BaseMultiModalContentParser):
             partial(self._video_embeds_with_uuid_async, video_embeds, uuid),
         )
         self._add_placeholder("video", placeholder)
+        if audio_embeds is not None:
+            self.parse_audio_embeds(audio_embeds, uuid)
 
     async def _video_embeds_with_uuid_async(
         self,

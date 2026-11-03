@@ -591,7 +591,7 @@ strategy_overrides:
     hardware_overrides:
       hopper:
         extra_args:
-          - "--no-enable-flashinfer-autotune"
+          - "--disable-flashinfer-autotune"
       blackwell:
     # Replaces recipe-level blackwell override: keeps the FP4 indexer cache
     # but drops --moe-backend deep_gemm_mega_moe (TP-only path uses the
@@ -599,7 +599,7 @@ strategy_overrides:
         extra_args:
          - "--attention_config.indexer_kv_dtype"
          - "mxfp4"
-         - "--no-enable-flashinfer-autotune"
+         - "--disable-flashinfer-autotune"
       rtx_pro_6000_8x:
         extra_args:
           - "--attention_config.indexer_kv_dtype"
@@ -711,7 +711,7 @@ strategy_overrides:
     prefill:
       nodes: 1               # 1 GB200 node = 4 GPUs
       parallelism: dep       # DP + expert-parallel pool
-      aphrodite_args:
+      vllm_args:
         - "--max-num-seqs"
         - "8"
         - "--max-num-batched-tokens"
@@ -722,7 +722,7 @@ strategy_overrides:
     decode:
       nodes: 1               # 1 GB200 nodes = 4 GPUs
       parallelism: dep
-      aphrodite_args:
+      vllm_args:
         - "--max-num-seqs"
         - "1536"
         - "--max-num-batched-tokens"
@@ -1167,10 +1167,10 @@ guide: |
   **[Router](https://github.com/vllm-project/router)**:
 
   ```bash
-  pip install aphrodite-router
+  pip install vllm-router
 
-  aphrodite-router --policy round_robin \
-    --aphrodite-pd-disaggregation \
+  vllm-router --policy round_robin \
+    --vllm-pd-disaggregation \
     --prefill http://localhost:8000 \
     --decode http://localhost:8001 \
     --host 127.0.0.1 \
@@ -1252,10 +1252,10 @@ guide: |
   **[Router](https://github.com/vllm-project/router)**:
 
   ```bash
-  pip install aphrodite-router
+  pip install vllm-router
 
-  aphrodite-router --policy round_robin \
-    --aphrodite-pd-disaggregation \
+  vllm-router --policy round_robin \
+    --vllm-pd-disaggregation \
     --prefill http://localhost:8000 \
     --decode http://localhost:8001 \
     --host 127.0.0.1 \

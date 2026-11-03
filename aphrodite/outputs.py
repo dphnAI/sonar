@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from typing_extensions import TypeVar
 
+from aphrodite.exceptions import AphroditeValidationError, GenerationError, RetryableRequestError
 from aphrodite.logger import init_logger
 from aphrodite.logprobs import PromptLogprobs, SampleLogprobs
 from aphrodite.lora.request import LoRARequest
@@ -25,6 +26,13 @@ class RequestError:
     code: str
     message: str
     retryable: bool = False
+
+    def to_exception(self) -> GenerationError | AphroditeValidationError:
+        if self.code == "validation_error":
+            return AphroditeValidationError(self.message)
+        if self.retryable:
+            return RetryableRequestError(self.message)
+        return GenerationError(self.message)
 
 
 @dataclass

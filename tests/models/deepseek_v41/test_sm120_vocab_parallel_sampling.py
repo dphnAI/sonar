@@ -150,7 +150,7 @@ def test_ties_across_shards_pick_lowest_global_id(dtype, use_fp64):
 
 def _config(*, batch_sharded=False, watermark=None, return_sampling_mask=False):
     return SimpleNamespace(
-        parallel_config=SimpleNamespace(enable_batch_sharded_sampling=batch_sharded),
+        parallel_config=SimpleNamespace(enable_batch_sharded_sampling=batch_sharded, prefill_context_parallel_size=1),
         watermark_config=watermark,
         model_config=SimpleNamespace(return_sampling_mask=return_sampling_mask),
     )
@@ -160,7 +160,8 @@ def _speculator(**overrides):
     from aphrodite.v1.worker.gpu.spec_decode.dspark.speculator import DSparkSpeculator
 
     spec = DSparkSpeculator.__new__(DSparkSpeculator)
-    spec.draft_logits = torch.full((2, STEPS, VOCAB), float("-inf"))
+    spec.use_draft_logits = True
+    spec.vocab_size = VOCAB
     spec._d2t_scatter_index = None
     spec.draft_watermarker = None
     spec.use_acceptance_estimator = False
@@ -186,15 +187,16 @@ def test_speculator_enables_vocab_parallel_draft():
     spec = _speculator()
     spec._maybe_enable_vocab_parallel_draft(_model(shard))
     assert spec.draft_vocab_shard == shard
-    assert spec.draft_logits.shape == (2, STEPS, SHARD)
-    assert spec.draft_logits.dtype == torch.float32
-    assert torch.all(spec.draft_logits == float("-inf"))
+    spec._init_draft_logits(SimpleNamespace())
+    assert spec.draft_logits.values.shape == (2, STEPS, SHARD)
+    assert spec.draft_logits.values.dtype == torch.float32
+    assert torch.all(spec.draft_logits.values == float("-inf"))
 
 
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"draft_logits": None},
+        {"use_draft_logits": False},
         {"_d2t_scatter_index": torch.arange(4)},
         {"draft_watermarker": object()},
         {"use_acceptance_estimator": True},
@@ -208,10 +210,8 @@ def test_speculator_enables_vocab_parallel_draft():
 )
 def test_speculator_keeps_gathered_path(overrides):
     spec = _speculator(**overrides)
-    before = spec.draft_logits
     spec._maybe_enable_vocab_parallel_draft(_model(_shards()[0]))
     assert spec.draft_vocab_shard is None
-    assert spec.draft_logits is before
 
 
 def test_speculator_needs_model_shard():

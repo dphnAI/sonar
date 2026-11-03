@@ -334,6 +334,12 @@ class Qwen3ForCausalLM(LocalArgmaxMixin, nn.Module, SupportsLoRA, SupportsPP, Su
         logits = self.logits_processor(self.lm_head, hidden_states)
         return logits
 
+    def compute_logits_local(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        return self.logits_processor(self.lm_head, hidden_states, skip_gather=True)
+
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         loader = AutoWeightsLoader(self)
         return loader.load_weights(weights)

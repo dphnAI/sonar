@@ -92,10 +92,12 @@ class HiSparseConnectorScheduler:
         *,
         async_speculative: bool,
         draft_kv_lookahead: int = 0,
+        import_step_tokens: int = 0,
     ) -> None:
         self.coordinator: HiSparseCoordinator | None = None
         self.async_speculative = async_speculative
         self.draft_kv_lookahead = draft_kv_lookahead
+        self.import_step_tokens = import_step_tokens
         self.requests: dict[str, Request] = {}
 
     def bind_coordinator(self, coordinator: HiSparseCoordinator) -> None:
@@ -221,6 +223,11 @@ class HiSparseConnector(KVConnectorBase_V1, SupportsHMA):
                     aphrodite_config.scheduler_config.async_scheduling and speculative_config is not None
                 ),
                 draft_kv_lookahead=aphrodite_config.num_lookahead_tokens,
+                import_step_tokens=(
+                    1 + aphrodite_config.num_speculative_tokens + aphrodite_config.num_lookahead_tokens
+                    if aphrodite_config.num_speculative_tokens
+                    else 0
+                ),
             )
             max_model_len = aphrodite_config.model_config.max_model_len
             steady_concurrency = get_hisparse_steady_state_concurrency(aphrodite_config, kv_cache_config)
@@ -237,7 +244,12 @@ class HiSparseConnector(KVConnectorBase_V1, SupportsHMA):
 
     def bind_kv_cache_manager(self, kv_cache_manager: KVCacheManager) -> None:
         assert self.connector_scheduler is not None
-        self.connector_scheduler.bind_coordinator(get_hisparse_coordinator(kv_cache_manager))
+        self.connector_scheduler.bind_coordinator(
+            get_hisparse_coordinator(
+                kv_cache_manager,
+                import_step_tokens=self.connector_scheduler.import_step_tokens,
+            )
+        )
 
     @property
     def requires_kv_delivery(self) -> bool:

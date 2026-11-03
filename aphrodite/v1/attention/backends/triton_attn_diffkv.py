@@ -15,7 +15,6 @@ from aphrodite.config import AphroditeConfig
 from aphrodite.config.cache import CacheDType
 from aphrodite.logger import init_logger
 from aphrodite.utils.math_utils import next_power_of_2
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
 from aphrodite.v1.attention.backend import AttentionLayer, AttentionType
 from aphrodite.v1.attention.backends.triton_attn import (
     TritonAttentionBackend,
@@ -29,7 +28,7 @@ from aphrodite.v1.attention.ops.triton_reshape_and_cache_flash import (
 from aphrodite.v1.attention.ops.triton_unified_attention_diffkv import (
     unified_attention_diffkv,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 logger = init_logger(__name__)
 
@@ -69,6 +68,10 @@ class TritonAttentionDiffKVMetadataBuilder(TritonAttentionMetadataBuilder):
 class TritonAttentionDiffKVBackend(TritonAttentionBackend):
     # V head dim — set per layer via ``set_head_size_v`` before instantiation.
     head_size_v: int = 128
+
+    @classmethod
+    def supports_head_size_v(cls, head_size: int, head_size_v: int) -> bool:
+        return True
 
     supported_kv_cache_dtypes: ClassVar[list[CacheDType]] = [
         "auto",

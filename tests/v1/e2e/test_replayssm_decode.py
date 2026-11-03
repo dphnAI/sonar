@@ -5,6 +5,7 @@
 import pytest
 
 import aphrodite.envs as envs
+from aphrodite.platforms import current_platform
 from aphrodite.v1.metrics.reader import Counter
 
 from ...models.utils import check_logprobs_close
@@ -17,8 +18,9 @@ MAMBA2_FLASHINFER_MODEL = "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4"
 MODELS = [
     pytest.param(MAMBA2_MODEL, marks=large_gpu_mark(min_gb=40)),
 ]
+requires_flashinfer = pytest.mark.skipif(not current_platform.is_cuda(), reason="FlashInfer Mamba SSU is CUDA-only")
 FLASHINFER_MODELS = [
-    pytest.param(MAMBA2_FLASHINFER_MODEL, marks=large_gpu_mark(min_gb=40)),
+    pytest.param(MAMBA2_FLASHINFER_MODEL, marks=[large_gpu_mark(min_gb=40), requires_flashinfer]),
 ]
 
 PROMPTS = [
@@ -162,6 +164,7 @@ def test_replayssm_flashinfer_spec_decode_matches_baseline(
 
 @multi_gpu_test(num_gpus=2)
 @large_gpu_mark(min_gb=40)
+@requires_flashinfer
 @pytest.mark.parametrize("use_v2_model_runner", [False, True], ids=["v1", "v2"])
 def test_replayssm_flashinfer_mtp(aphrodite_runner, monkeypatch, use_v2_model_runner):
     common = dict(

@@ -164,6 +164,7 @@ def test_resolve_merges_explicit_over_shorthand():
 
 def test_mxfp6_shorthand_uses_w6a8_and_preserves_routers():
     args = resolve_quantization_config("mxfp6", None)
+    assert args is not None
     expected = QuantSpec(weight=kMxfp6E2M3Static, activation=kMxfp8Dynamic)
     assert args.linear == expected
     assert args.moe == expected
@@ -189,6 +190,7 @@ def test_mxfp6_w6a6_and_ordered_overrides():
             ],
         },
     )
+    assert args is not None
     assert args.linear == QuantSpec(
         weight=kMxfp6E2M3Static,
         activation=kMxfp6E2M3Dynamic,

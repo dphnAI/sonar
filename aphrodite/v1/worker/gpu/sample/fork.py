@@ -7,8 +7,11 @@ Draft prefixes are local to a verification call. Only accepted outputs commit
 Mirostat updates; its checkpoints survive preemption and roll back on readmission.
 """
 
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 
 import numpy as np
 import torch
@@ -19,8 +22,43 @@ from aphrodite.v1.sample.metadata import SamplingMetadata
 from aphrodite.v1.sample.ops import SamplingOps
 from aphrodite.v1.sample.ops.temperatures import apply_all_temperatures
 from aphrodite.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
-from aphrodite.v1.worker.gpu.sample.logits_processor.interface import LogitsContext
-from aphrodite.v1.worker.gpu.states import RequestState
+
+if TYPE_CHECKING:
+    # Annotation-only: the standalone CPU runner reuses this module without
+    # importing GPU worker state.
+    from aphrodite.v1.worker.gpu.states import RequestState
+
+
+class ForkRequestStates(Protocol):
+    """Request-state surface shared by the GPU and standalone CPU runners."""
+
+    @property
+    def device(self) -> torch.device: ...
+
+    @property
+    def vocab_size(self) -> int: ...
+
+    @property
+    def index_to_req_id(self) -> dict[int, str]: ...
+
+    @property
+    def req_id_to_index(self) -> dict[str, int]: ...
+
+
+class ForkLogitsContext(Protocol):
+    """Logits-context fields read by the ordered samplers."""
+
+    @property
+    def expanded_idx_mapping(self) -> torch.Tensor: ...
+
+    @property
+    def pos(self) -> torch.Tensor: ...
+
+    @property
+    def input_ids(self) -> torch.Tensor: ...
+
+
+StatesT = TypeVar("StatesT", bound=ForkRequestStates)
 
 DEFAULT_ORDER = (
     SamplerID.DRY,
@@ -73,8 +111,8 @@ class ForkRequest:
     pending: list[tuple[int, torch.Tensor, float]] = field(default_factory=list)
 
 
-class ForkSamplingState:
-    def __init__(self, req_states: RequestState):
+class ForkSamplingState(ABC, Generic[StatesT]):
+    def __init__(self, req_states: StatesT):
         self.req_states = req_states
         self.requests: dict[int, ForkRequest] = {}
         self.retained: dict[str, ForkRequest] = {}
@@ -83,12 +121,25 @@ class ForkSamplingState:
     def any(self, idx_mapping_np: np.ndarray) -> bool:
         return bool(self.requests) and any(int(idx) in self.requests for idx in idx_mapping_np)
 
+    @abstractmethod
+    def _prompt_len(self, req_idx: int) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _prefill_len(self, req_idx: int) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _token_history(self, req_idx: int, end: int) -> list[int]:
+        """Committed token ids [0, end) of a request slot."""
+        raise NotImplementedError
+
     def add_request(self, req_idx: int, params: SamplingParams, seed: int) -> bool:
         self.requests.pop(req_idx, None)
         if not needs_fork_sampling(params):
             return False
         req_id = self.req_states.index_to_req_id[req_idx]
-        output_len = int(self.req_states.prefill_len.np[req_idx] - self.req_states.prompt_len.np[req_idx])
+        output_len = self._prefill_len(req_idx) - self._prompt_len(req_idx)
         previous = self.retained.pop(req_id, None)
         device = self.req_states.device
 
@@ -192,7 +243,7 @@ class ForkSamplingState:
         if req_idx is not None:
             self.requests.pop(req_idx, None)
 
-    def apply(self, logits: torch.Tensor, ctx: LogitsContext) -> torch.Tensor:
+    def apply(self, logits: torch.Tensor, ctx: ForkLogitsContext) -> torch.Tensor:
         slots = ctx.expanded_idx_mapping.tolist()
         positions = ctx.pos.tolist()
         inputs = ctx.input_ids.tolist()
@@ -202,10 +253,10 @@ class ForkSamplingState:
         for row, (slot, position, token) in enumerate(zip(slots, positions, inputs)):
             state = self.requests[slot]
             params, metadata = state.params, state.metadata
-            prompt_len = int(self.req_states.prompt_len.np[slot])
+            prompt_len = self._prompt_len(slot)
             if slot not in histories:
                 state.pending.clear()
-                histories[slot] = self.req_states.all_token_ids.gpu[slot, : position + 1].tolist()
+                histories[slot] = self._token_history(slot, position + 1)
             else:
                 histories[slot].append(token)
             history = histories[slot]
@@ -318,3 +369,18 @@ class ForkSamplingState:
             for offset_sum, mu_sum, contributors in entries:
                 if contributors:
                     state.checkpoints[round(offset_sum / contributors)] = mu_sum / contributors
+
+
+class GPUForkSamplingState(ForkSamplingState):
+    """Ordered samplers over the GPU runner's UVA-backed RequestState."""
+
+    req_states: RequestState
+
+    def _prompt_len(self, req_idx: int) -> int:
+        return int(self.req_states.prompt_len.np[req_idx])
+
+    def _prefill_len(self, req_idx: int) -> int:
+        return int(self.req_states.prefill_len.np[req_idx])
+
+    def _token_history(self, req_idx: int, end: int) -> list[int]:
+        return self.req_states.all_token_ids.gpu[req_idx, :end].tolist()

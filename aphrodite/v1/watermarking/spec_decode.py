@@ -14,6 +14,7 @@ from aphrodite.v1.watermarking.watermarker import (
     Watermarker,
 )
 from aphrodite.v1.worker.gpu.sample.watermark import draft_watermarking_mask
+from aphrodite.v1.worker.gpu.spec_decode.draft_logits import DraftLogitsCache
 from aphrodite.v1.worker.gpu.spec_decode.rejection_sampler_utils import rejection_sample
 
 
@@ -277,7 +278,7 @@ def speculative_target_watermark_key(
 
 def watermarked_rejection_sample(
     target_logits: torch.Tensor,
-    draft_logits: torch.Tensor | None,
+    draft_logits_cache: DraftLogitsCache | None,
     draft_sampled: torch.Tensor,
     cu_num_logits: torch.Tensor,
     pos: torch.Tensor,
@@ -297,7 +298,7 @@ def watermarked_rejection_sample(
     assert contexts.shape == (target_logits.shape[0], watermarker.context_width)
     return rejection_sample(
         target_logits,
-        draft_logits,
+        draft_logits_cache,
         draft_sampled,
         cu_num_logits,
         pos,

@@ -86,7 +86,9 @@ def _make_runner(
     """Stub model runner exposing only what the warmup entry points read."""
     return SimpleNamespace(
         num_speculative_steps=num_spec_steps,
+        speculative_config=SimpleNamespace() if num_spec_steps else None,
         adaptive_verification=None,
+        speculator=None,
         rejection_sampler=None,
         decode_query_len=num_spec_steps + 1,
         is_pooling_model=False,
@@ -301,6 +303,18 @@ def test_reserved_block_count_matches_real_kv_cache_manager():
     manager.free(request)
 
 
+def _config_without_post_init(
+    speculative_config: SpeculativeConfig | None,
+) -> AphroditeConfig:
+    """A real `AphroditeConfig` built without `__post_init__`, which would otherwise
+    require a resolvable draft model. The lookahead properties only read
+    `speculative_config` and `diffusion_config`."""
+    config = object.__new__(AphroditeConfig)
+    object.__setattr__(config, "speculative_config", speculative_config)
+    object.__setattr__(config, "diffusion_config", None)
+    return config
+
+
 @pytest.mark.parametrize(
     ("method", "draft_hf_config", "expected"),
     [
@@ -328,13 +342,6 @@ def test_num_lookahead_tokens_per_method(method: str, draft_hf_config: dict | No
     `__post_init__` because the speculative methods otherwise require a draft
     model to be resolvable.
     """
-
-    class _Config:
-        speculative_config: SpeculativeConfig | None = None
-        diffusion_config = None
-        num_speculative_tokens = AphroditeConfig.num_speculative_tokens
-        num_lookahead_tokens = AphroditeConfig.num_lookahead_tokens
-
     speculative_config = object.__new__(SpeculativeConfig)
     object.__setattr__(speculative_config, "method", method)
     object.__setattr__(speculative_config, "num_speculative_tokens", NUM_SPEC_STEPS)
@@ -342,22 +349,15 @@ def test_num_lookahead_tokens_per_method(method: str, draft_hf_config: dict | No
     object.__setattr__(
         speculative_config,
         "draft_model_config",
-        SimpleNamespace(hf_config=hf_config),
+        SimpleNamespace(hf_config=hf_config, architectures=[]),
     )
 
-    config = _Config()
-    config.speculative_config = speculative_config
+    config = _config_without_post_init(speculative_config)
 
     assert config.num_lookahead_tokens == expected
 
 
 def test_num_lookahead_tokens_without_speculation():
-    class _Config:
-        speculative_config: SpeculativeConfig | None = None
-        diffusion_config = None
-        num_speculative_tokens = AphroditeConfig.num_speculative_tokens
-        num_lookahead_tokens = AphroditeConfig.num_lookahead_tokens
-
-    config = _Config()
+    config = _config_without_post_init(None)
 
     assert config.num_lookahead_tokens == 0

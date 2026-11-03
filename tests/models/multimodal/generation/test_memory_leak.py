@@ -9,11 +9,13 @@ import weakref
 
 import pytest
 import torch
+from PIL import Image
 
 from aphrodite import LLM, SamplingParams
 from aphrodite.distributed import cleanup_dist_env_and_memory
 from aphrodite.platforms import current_platform
 from aphrodite.renderers.chat_utils import ChatCompletionMessageParam
+from aphrodite.transformers_utils.utils import maybe_model_redirect
 from aphrodite.utils.mem_constants import KiB_bytes, MiB_bytes
 from aphrodite.utils.mem_utils import format_mib
 from tests.models.registry import HF_EXAMPLE_MODELS
@@ -99,7 +101,7 @@ def llm(monkeypatch):
     # pytest caches the fixture so we use weakref.proxy to
     # enable garbage collection
     llm_kwargs = dict(
-        model=MODEL_NAME,
+        model=maybe_model_redirect(MODEL_NAME),
         enforce_eager=True,
         max_model_len=MAX_MODEL_LEN,
         max_num_seqs=REQUESTS_PER_ROUND,
@@ -178,3 +180,40 @@ def test_no_memory_leak(llm, image_urls: list[str]) -> None:
             f"cpu_peak_growth={_format_mib(cpu_peak_growth)}, "
             f"cpu_peak_threshold={CPU_PEAK_GROWTH_THRESHOLD_MIB} MiB"
         )
+
+
+def _live_mm_payloads(worker) -> dict[str, list[bool]]:
+    cache = worker.model_runner.encoder_cache
+    return {
+        req_id: [feature.data is not None for feature in features] for req_id, features in cache.mm_features.items()
+    }
+
+
+@pytest.mark.core_model
+def test_consumed_cpu_inputs_released_during_generation(llm) -> None:
+    """An M-RoPE model must release pixels while its request is still decoding."""
+    assert llm.llm_engine.aphrodite_config.use_v2_model_runner
+    engine = llm.llm_engine
+    engine.add_request(
+        "cpu-input-lifetime",
+        {
+            "prompt": (
+                "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>"
+                "Describe the image.<|im_end|>\n<|im_start|>assistant\n"
+            ),
+            "multi_modal_data": {"image": Image.new("RGB", (64, 64), "red")},
+        },
+        SamplingParams(temperature=0, max_tokens=16, ignore_eos=True),
+    )
+    try:
+        for _ in range(3):
+            engine.step()
+        assert engine.has_unfinished_requests()
+        snapshots = llm.collective_rpc(_live_mm_payloads)
+        assert all(snapshot for snapshot in snapshots)
+        assert all(payloads == [False] for snapshot in snapshots for payloads in snapshot.values()), snapshots
+        while engine.has_unfinished_requests():
+            outputs = engine.step()
+        assert len(outputs[0].outputs[0].token_ids) == 16
+    finally:
+        engine.abort_request(["cpu-input-lifetime"])

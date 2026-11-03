@@ -42,7 +42,6 @@ from aphrodite.model_executor.layers.quantization.base_config import (
     QuantizationConfig,
     QuantizeMethodBase,
 )
-from aphrodite.model_executor.layers.quantization.utils import replace_parameter
 from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
     check_marlin_supported,
     check_marlin_supports_layer,
@@ -59,6 +58,7 @@ from aphrodite.model_executor.parameter import (
     GroupQuantScaleParameter,
     PackedAphroditeParameter,
 )
+from aphrodite.model_executor.utils import replace_parameter
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import scalar_types
 from aphrodite.transformers_utils.config import get_safetensors_params_metadata
@@ -133,7 +133,7 @@ def _convert_awq_to_standard_format(
         packed_factor=pack_factor,
         weight_loader=_noop_loader,
     )
-    setattr(layer, w_q_name, new_param)
+    replace_parameter(layer, w_q_name, new_param)
 
     if w_zp_name is None:
         return
@@ -162,7 +162,7 @@ def _convert_awq_to_standard_format(
         packed_factor=pack_factor,
         weight_loader=_noop_loader,
     )
-    setattr(layer, w_zp_name, new_zp_param)
+    replace_parameter(layer, w_zp_name, new_zp_param)
 
 
 class AutoAWQConfig(QuantizationConfig):
@@ -844,11 +844,6 @@ class AutoAWQLinearMethod(BaseAWQLinearMethod):
         quant_config: The AWQ quantization config.
 
     """
-
-    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        layer.qweight = torch.nn.Parameter(layer.qweight.data, requires_grad=False)
-        layer.qzeros = torch.nn.Parameter(layer.qzeros.data, requires_grad=False)
-        layer.scales = torch.nn.Parameter(layer.scales.data, requires_grad=False)
 
     def apply(
         self,

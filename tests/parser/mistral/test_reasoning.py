@@ -368,6 +368,7 @@ def test_parse_delta_keeps_reasoning_open_after_closed_think_prompt(
         reasoning_parser_name="mistral",
         enable_auto_tools=True,
     )
+    assert parser_cls is not None
     parser = parser_cls(mistral_tokenizer, None)
     request = parser.adjust_request(
         ChatCompletionRequest(
@@ -495,6 +496,7 @@ def test_parse_delta_multi_turn_reason_and_tool(
         reasoning_parser_name="mistral",
         enable_auto_tools=True,
     )
+    assert parser_cls is not None
     request = parser_cls(mistral_tokenizer, None).adjust_request(
         ChatCompletionRequest(
             messages=[],

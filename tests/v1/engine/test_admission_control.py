@@ -26,6 +26,7 @@ import pytest
 from prometheus_client import REGISTRY
 from pydantic import ValidationError
 
+from aphrodite.config import AphroditeConfig
 from aphrodite.config.scheduler import SchedulerConfig
 from aphrodite.entrypoints.serve.exception_handling.error_response import (
     create_error_response,
@@ -70,6 +71,7 @@ def _make_async_llm(
 ) -> AsyncLLM:
     """Create a bare AsyncLLM with just the attributes needed for scheduling."""
     llm = AsyncLLM.__new__(AsyncLLM)
+    llm.aphrodite_config = AphroditeConfig()
     llm.scheduler_config = SimpleNamespace(
         max_num_queued_reqs=max_num_queued_reqs,
         max_num_queued_tokens=max_num_queued_tokens,
@@ -144,7 +146,6 @@ def _make_request_test_llm(
         abort_requests_async=AsyncMock(),
         shutdown=MagicMock(),
     )
-    llm.aphrodite_config = SimpleNamespace(cache_config=SimpleNamespace(kv_sharing_fast_prefill=False))
     llm.output_handler = None
     llm.log_requests = False
     llm._run_output_handler = MagicMock()

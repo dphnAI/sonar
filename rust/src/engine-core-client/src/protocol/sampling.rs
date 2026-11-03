@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_default::DefaultFromSerde;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use crate::protocol::structured_outputs::StructuredOutputsParams;
+use crate::protocol::structured_outputs::EngineCoreStructuredOutputsParams;
 use crate::protocol::tensor::WireNdArray;
 
 fn default_top_p() -> f32 {
@@ -304,7 +304,7 @@ pub struct EngineCoreSamplingParams {
     #[serde(rename = "_bad_words_token_ids")]
     pub bad_words_token_ids: Option<Vec<Vec<u32>>>,
     /// Parameters for configuring structured outputs (guided decoding).
-    pub structured_outputs: Option<StructuredOutputsParams>,
+    pub structured_outputs: Option<EngineCoreStructuredOutputsParams>,
     /// Specific token IDs for which log probabilities should be returned at
     /// each position.
     ///

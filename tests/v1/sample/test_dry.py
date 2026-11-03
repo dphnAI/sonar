@@ -589,7 +589,12 @@ def test_v2_batch_sharded_sampling_matches_unsharded(monkeypatch):
         for rank in range(tp_size):
             group = SimpleNamespace(rank_in_group=rank, world_size=tp_size)
             with mock.patch.object(batch_shard, "get_tp_group", return_value=group):
-                sharder = batch_shard.BatchSharder(max_num_reqs=8, max_num_logits_per_req=1, device=DEVICE)
+                sharder = batch_shard.BatchSharder(
+                    max_num_reqs=8,
+                    max_num_logits_per_req=1,
+                    device=DEVICE,
+                    adaptive_verification_enabled=False,
+                )
             local, _, _, _ = sharder.shard_sampler_inputs(batch, None)
             owned = [int(req_id.split("-")[1]) for req_id in local.req_ids]
             covered += owned

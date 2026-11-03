@@ -26,6 +26,7 @@ from aphrodite.model_executor.layers.quantization.inc.schemes import (
     INCMxfp4Scheme,
     INCMxfp8Scheme,
     INCWna16Scheme,
+    inc_wna16_moe,
     resolve_scheme,
 )
 from aphrodite.model_executor.layers.quantization.inc.schemes.inc_fp8_linear import (
@@ -44,10 +45,6 @@ from aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_linear i
     INCARKLinearMethod,
     INCWNA16LinearScheme,
     INCXPULinearMethod,
-)
-from aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme import (
-    _resolve_awq_moe,
-    _resolve_gptq_moe,
 )
 from aphrodite.model_executor.layers.vocab_parallel_embedding import ParallelLMHead
 from aphrodite.platforms import current_platform
@@ -791,14 +788,19 @@ def test_qwen3_30b_a3b_w4a16_autoround_routes_to_gptq_moe(
     class DummyMoeConfig:
         pass
 
-    def fake_resolve_gptq_moe(layer, layer_config):
-        captured["layer"] = layer
-        captured["layer_config"] = layer_config
-        return expected_method
+    class DummyMoEScheme:
+        def __init__(self, layer_config) -> None:
+            captured["layer_config"] = layer_config
 
+        def get_method(self, layer):
+            captured["layer"] = layer
+            return expected_method
+
+    monkeypatch.setattr(current_platform, "is_xpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._resolve_gptq_moe",
-        fake_resolve_gptq_moe,
+        inc_wna16_moe,
+        "INCWNA16MoEScheme",
+        DummyMoEScheme,
     )
 
     config = make_qwen3_autoround_config("qwen3_30b_a3b_w4a16")
@@ -998,7 +1000,7 @@ def test_inc_mxfp4_linear_method_registers_and_processes_weights(
     method.process_weights_after_loading(layer)
 
     assert layer.weight.data.data_ptr() == packed_data.data_ptr()
-    assert not hasattr(layer, "weight_packed")
+    assert layer.weight_packed is layer.weight
     assert captured["processed_layer"] is layer
 
 
@@ -1079,8 +1081,8 @@ def test_inc_mxfp4_moe_method_preserves_checkpoint_packing(
 
     assert layer.w13_weight.data.data_ptr() == w13_packed_data.data_ptr()
     assert layer.w2_weight.data.data_ptr() == w2_packed_data.data_ptr()
-    assert not hasattr(layer, "w13_weight_packed")
-    assert not hasattr(layer, "w2_weight_packed")
+    assert layer.w13_weight_packed is layer.w13_weight
+    assert layer.w2_weight_packed is layer.w2_weight
     assert captured["quant_config_kwargs"]["w1_scale"] is layer.w13_weight_scale
     assert captured["quant_config_kwargs"]["w2_scale"] is layer.w2_weight_scale
     assert captured["kernel_kwargs"]["moe_quant_config"] is expected_quant_config
@@ -1098,11 +1100,25 @@ def test_wna16_xpu_moe_routes_to_gptq_moe(monkeypatch) -> None:
     class DummyMoeConfig:
         pass
 
+    class DummyMoEScheme:
+        def __init__(self, layer_config) -> None:
+            captured["layer_config"] = layer_config
+
+        def get_method(self, layer):
+            captured["layer"] = layer
+            return expected_method
+
+    monkeypatch.delenv(_BACKEND_ENV, raising=False)
     monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
     monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
     monkeypatch.setattr(
-        "aphrodite.model_executor.layers.quantization.inc.schemes.inc_wna16_scheme._resolve_gptq_moe",
-        lambda layer, layer_config: captured.update({"layer": layer, "layer_config": layer_config}) or expected_method,
+        _ARK_STATE,
+        lambda: (False, "missing", None, None),
+    )
+    monkeypatch.setattr(
+        inc_wna16_moe,
+        "INCWNA16MoEScheme",
+        DummyMoEScheme,
     )
 
     layer = object.__new__(RoutedExperts)
@@ -1117,6 +1133,146 @@ def test_wna16_xpu_moe_routes_to_gptq_moe(monkeypatch) -> None:
     assert method is expected_method
     assert captured["layer"] is layer
     assert captured["layer_config"].is_gptq is True
+
+
+def test_wna16_xpu_moe_prefers_ark_when_moe_kernel_available(monkeypatch) -> None:
+    captured = {}
+
+    class DummyMoeConfig:
+        pass
+
+    class DummyArk:
+        xpu_lib = object()
+
+        class MoeSymmetricGemm:
+            pass
+
+    class DummyArkMethod:
+        def __init__(self, quant_config, moe_config) -> None:
+            captured["quant_config"] = quant_config
+            captured["moe_config"] = moe_config
+
+    monkeypatch.delenv(_BACKEND_ENV, raising=False)
+    monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
+    monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
+    monkeypatch.setattr(_ARK_STATE, lambda: (True, None, DummyArk(), object()))
+    monkeypatch.setattr(
+        inc_wna16_moe,
+        "INCARKWNA16MoEMethod",
+        DummyArkMethod,
+    )
+
+    layer = object.__new__(RoutedExperts)
+    layer.moe_config = DummyMoeConfig()
+
+    method = INCWna16Scheme().get_moe_method(
+        make_config(),
+        layer,
+        "model.layers.0.mlp",
+        make_layer_config(group_size=32),
+    )
+
+    assert isinstance(method, DummyArkMethod)
+    assert captured["quant_config"].weight_bits == 4
+    assert captured["quant_config"].group_size == 32
+    assert captured["moe_config"] is layer.moe_config
+
+
+def test_wna16_xpu_moe_falls_back_when_ark_lacks_moe_kernel(monkeypatch) -> None:
+    expected_method = object()
+
+    class DummyMoeConfig:
+        pass
+
+    class DummyArk:
+        xpu_lib = object()
+
+    class DummyMoEScheme:
+        def __init__(self, layer_config) -> None:
+            self.layer_config = layer_config
+
+        def get_method(self, layer):
+            return expected_method
+
+    monkeypatch.delenv(_BACKEND_ENV, raising=False)
+    monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
+    monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
+    monkeypatch.setattr(_ARK_STATE, lambda: (True, None, DummyArk(), object()))
+    monkeypatch.setattr(
+        inc_wna16_moe,
+        "INCWNA16MoEScheme",
+        DummyMoEScheme,
+    )
+
+    layer = object.__new__(RoutedExperts)
+    layer.moe_config = DummyMoeConfig()
+
+    method = INCWna16Scheme().get_moe_method(
+        make_config(),
+        layer,
+        "model.layers.0.mlp",
+        make_layer_config(group_size=32),
+    )
+
+    assert method is expected_method
+
+
+def test_wna16_xpu_moe_ark_backend_requested_but_unavailable_raises(
+    monkeypatch,
+) -> None:
+    class DummyMoeConfig:
+        pass
+
+    monkeypatch.setenv(_BACKEND_ENV, "ark")
+    monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
+    monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
+    monkeypatch.setattr(_ARK_STATE, lambda: (False, "missing", None, None))
+
+    layer = object.__new__(RoutedExperts)
+    layer.moe_config = DummyMoeConfig()
+
+    with pytest.raises(NotImplementedError, match="ARK MoE kernels are unavailable"):
+        INCWna16Scheme().get_moe_method(
+            make_config(),
+            layer,
+            "model.layers.0.mlp",
+            make_layer_config(group_size=32),
+        )
+
+
+def test_wna16_xpu_moe_w4a16_backend_overrides_available_ark(monkeypatch) -> None:
+    expected_method = object()
+
+    class DummyMoeConfig:
+        pass
+
+    class DummyMoEScheme:
+        def __init__(self, layer_config) -> None:
+            self.layer_config = layer_config
+
+        def get_method(self, layer):
+            return expected_method
+
+    monkeypatch.setenv(_BACKEND_ENV, "w4a16")
+    monkeypatch.setattr(current_platform, "is_xpu", lambda: True)
+    monkeypatch.setattr(current_platform, "is_cpu", lambda: False)
+    monkeypatch.setattr(
+        inc_wna16_moe,
+        "INCWNA16MoEScheme",
+        DummyMoEScheme,
+    )
+
+    layer = object.__new__(RoutedExperts)
+    layer.moe_config = DummyMoeConfig()
+
+    method = INCWna16Scheme().get_moe_method(
+        make_config(),
+        layer,
+        "model.layers.0.mlp",
+        make_layer_config(group_size=32),
+    )
+
+    assert method is expected_method
 
 
 def test_inc_resolve_scheme_selects_mxfp8() -> None:
@@ -1711,7 +1867,7 @@ def test_resolve_gptq_moe_falls_back_to_moe_wna16(monkeypatch) -> None:
         quantized=True,
     )
 
-    _resolve_gptq_moe(DummyLayer(), layer_config)
+    inc_wna16_moe.INCWNA16MoEScheme(layer_config)._build_gptq_method(DummyLayer())
 
     assert captured["from_config"] == {
         "quant_method": "gptq",
@@ -1751,7 +1907,7 @@ def test_resolve_gptq_moe_uses_auto_gptq_when_supported(monkeypatch) -> None:
         DummyMethod,
     )
 
-    _resolve_gptq_moe(DummyLayer(), make_layer_config())
+    inc_wna16_moe.INCWNA16MoEScheme(make_layer_config())._build_gptq_method(DummyLayer())
 
     assert isinstance(captured["cfg"], AutoGPTQConfig)
     assert captured["cfg"].weight_bits == 4
@@ -1801,7 +1957,7 @@ def test_resolve_awq_moe_uses_marlin_when_supported(monkeypatch) -> None:
         quantized=True,
     )
 
-    _resolve_awq_moe(DummyLayer(), layer_config)
+    inc_wna16_moe.INCWNA16MoEScheme(layer_config)._build_awq_method(DummyLayer())
 
     assert captured["cfg"].weight_bits == 4
     assert captured["cfg"].zero_point is True

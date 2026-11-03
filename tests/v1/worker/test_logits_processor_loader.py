@@ -98,6 +98,7 @@ def test_loads_v2_processors(monkeypatch: pytest.MonkeyPatch, source: ProcSource
         assert [type(p) for p in procs] == [DummyV2Processor, AltV2Processor]
     else:
         assert [type(p) for p in procs] == [DummyV2Processor]
+    assert isinstance(procs[0], DummyV2Processor)
     aphrodite_config, req_state = procs[0].ctor_args
     assert aphrodite_config is None
     assert isinstance(req_state, loader.LogitsProcRequestState)

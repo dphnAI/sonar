@@ -9,8 +9,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
 )
 from aphrodite.platforms import current_platform
 from aphrodite.triton_utils import tl, triton
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
-from aphrodite.v1.kv_cache_interface import KVQuantMode
+from aphrodite.v1.kv_cache_interface import KVQuantMode, is_quantized_kv_cache
 
 FP8_MIN, FP8_MAX = get_fp8_min_max()
 

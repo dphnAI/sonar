@@ -24,6 +24,7 @@ from aphrodite.model_executor.layers.quantization.utils.quant_utils import (
     kFp8StaticChannelSym,
     kFp8StaticTensorSym,
     kInt4Static32,
+    kInt8Dynamic32Sym,
     kInt8StaticChannelSym,
     kMxfp4Dynamic,
     kMxfp4Static,
@@ -52,6 +53,8 @@ QUANT_KEY_NAMES: dict[str, QuantKey] = {
     "mxfp6_e3m2_dynamic": kMxfp6E3M2Dynamic,
     "nvfp4_per_token": kNvfp4DynamicToken,
     "int8_per_channel_static": kInt8StaticChannelSym,
+    # Dynamic per-32-element int8 activations (RDNA3 MXFP4 W4A8 GEMV).
+    "int8_per_group_32": kInt8Dynamic32Sym,
     # Load-time MXFP4-to-int4 for Kimi-K3 on gfx942.
     "int4_per_group_32": kInt4Static32,
 }

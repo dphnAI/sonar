@@ -45,6 +45,40 @@ class RetryMask:
         )
 
 
+class CPURetryMask:
+    """RetryMask for the standalone CPU model runner, which runs without Triton.
+
+    Same semantics as `_mask`: at the retry position, block the rejected tokens
+    and, if that leaves no finite logit, reopen the first one.
+    """
+
+    def __init__(self, max_num_reqs):
+        self.positions = np.zeros(max_num_reqs, dtype=np.int64)
+        self.counts = np.zeros(max_num_reqs, dtype=np.int32)
+        self.tokens = np.zeros((max_num_reqs, MAX_RETRIES), dtype=np.int64)
+
+    def add_request(self, index, prompt_len, retry):
+        self.counts[index] = 0
+        if retry is not None:
+            position, tokens = retry
+            self.positions[index] = prompt_len + position - 1
+            self.counts[index] = len(tokens)
+            self.tokens[index, : len(tokens)] = tokens
+
+    def apply(self, logits, expanded_idx_mapping, idx_mapping_np, positions):
+        if not np.any(self.counts[idx_mapping_np]):
+            return
+        for row, (request, position) in enumerate(zip(expanded_idx_mapping.tolist(), positions.tolist())):
+            count = int(self.counts[request])
+            if count == 0 or position != self.positions[request]:
+                continue
+            tokens = torch.from_numpy(self.tokens[request, :count]).to(logits.device)
+            logits[row, tokens] = float("-inf")
+            if logits[row].max() == float("-inf"):
+                # Match V1's blocked-token sentinel.
+                logits[row, int(self.tokens[request, 0])] = 0.0
+
+
 @triton.jit
 def _mask(
     logits,

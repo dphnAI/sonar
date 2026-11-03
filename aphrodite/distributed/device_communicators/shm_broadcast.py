@@ -45,7 +45,6 @@ from aphrodite.utils.network_utils import (
 
 logger = init_logger(__name__)
 
-
 SPINLOOP_EXT_ENABLED = False
 if envs.APHRODITE_USE_SPINLOOP_EXT:
     try:
@@ -68,6 +67,10 @@ APHRODITE_RINGBUFFER_WARNING_INTERVAL = envs.APHRODITE_RINGBUFFER_WARNING_INTERV
 # written-flag. Bounds lost-notify recovery latency to ~5s while the periodic
 # wakeup stays negligible (one flag check per reader every 5s).
 SHM_READER_RECHECK_INTERVAL_MS = 5000
+# How often a busy reader polls its notify socket. CONFLATE keeps one message,
+# but libzmq still queues an internal command per notification until the socket
+# is polled, so a reader that never goes idle would grow without bound.
+SHM_NOTIFY_POLL_INTERVAL_S = 2.0
 
 from_bytes_big = functools.partial(int.from_bytes, byteorder="big")
 
@@ -139,6 +142,8 @@ class SpinCondition:
         if is_reader:
             # Time of last shm buffer read
             self.last_read = time.monotonic()
+            # Time a busy reader last polled the notify socket
+            self.last_notify_poll = self.last_read
 
             # Time to keep busy-looping on the shm buffer before going idle
             self.busy_loop_s = busy_loop_s
@@ -181,6 +186,12 @@ class SpinCondition:
 
     def record_read(self):
         self.last_read = time.monotonic()
+        if self.last_read - self.last_notify_poll >= SHM_NOTIFY_POLL_INTERVAL_S:
+            self.last_notify_poll = self.last_read
+            # poll() makes libzmq process the queued commands; a bare recv()
+            # returns the pending message without doing so.
+            if self.local_notify_socket.poll(timeout=0):
+                self.local_notify_socket.recv(flags=zmq.NOBLOCK, copy=False)
 
     def cancel(self):
         # Sends cancellation ping that will cause the reader to wake up.
@@ -804,6 +815,46 @@ class MessageQueue:
                     return True
             return False
 
+    def _wait_until_readable(
+        self,
+        metadata_buffer,
+        read_timeout: ReadTimeoutWithWarnings,
+    ) -> bool:
+        """Wait for the current block to be readable by this reader."""
+
+        def check_readable():
+            memory_fence()
+            read_flag = metadata_buffer[self.local_reader_rank + 1]
+            written_flag = metadata_buffer[0]
+            return not (not written_flag or read_flag)
+
+        if SPINLOOP_EXT_ENABLED and not check_readable():
+            spinloop(
+                metadata_buffer[0 : self.local_reader_rank + 1],
+                check_readable,
+                timeout=SPINLOOP_TIMEOUT_SECONDS,
+            )
+
+        if check_readable():
+            return True
+
+        # this block is either
+        # (1) not written
+        # (2) already read by this reader
+
+        # for readers, `self.current_idx` is the next block to read
+        # if this block is not ready,
+        # we need to wait until it is written
+        self._spin_condition.wait(timeout_ms=read_timeout.timeout_ms())
+
+        if self.shutting_down:
+            raise RuntimeError("cancelled")
+
+        # if we wait for a long time, log a message
+        if read_timeout.should_warn():
+            logger.info(LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL)
+        return False
+
     @contextmanager
     def acquire_read(
         self,
@@ -814,37 +865,7 @@ class MessageQueue:
         read_timeout = self.ReadTimeoutWithWarnings(timeout=timeout, should_warn=not indefinite)
         with self.buffer.get_metadata(self.current_idx) as metadata_buffer:
             while True:
-
-                def check():
-                    memory_fence()
-                    read_flag = metadata_buffer[self.local_reader_rank + 1]
-                    written_flag = metadata_buffer[0]
-                    return not (not written_flag or read_flag)
-
-                if SPINLOOP_EXT_ENABLED and not check():
-                    spinloop(
-                        metadata_buffer[0 : self.local_reader_rank + 1],
-                        check,
-                        timeout=SPINLOOP_TIMEOUT_SECONDS,
-                    )
-
-                if not check():
-                    # this block is either
-                    # (1) not written
-                    # (2) already read by this reader
-
-                    # for readers, `self.current_idx` is the next block to read
-                    # if this block is not ready,
-                    # we need to wait until it is written
-                    self._spin_condition.wait(timeout_ms=read_timeout.timeout_ms())
-
-                    if self.shutting_down:
-                        raise RuntimeError("cancelled")
-
-                    # if we wait for a long time, log a message
-                    if read_timeout.should_warn():
-                        logger.info(LONG_WAIT_TIME_LOG_MSG, APHRODITE_RINGBUFFER_WARNING_INTERVAL)
-
+                if not self._wait_until_readable(metadata_buffer, read_timeout):
                     continue
                 # found a block that is not read by this reader
                 # let caller read from the buffer

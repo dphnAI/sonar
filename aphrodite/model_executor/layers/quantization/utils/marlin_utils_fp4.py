@@ -21,6 +21,7 @@ from aphrodite.model_executor.layers.quantization.utils.marlin_utils import (
     marlin_unpad_output,
     should_use_atomic_add_reduce,
 )
+from aphrodite.model_executor.utils import replace_parameter
 from aphrodite.platforms import current_platform
 from aphrodite.scalar_type import scalar_types
 from aphrodite.utils.math_utils import round_up
@@ -242,7 +243,7 @@ def prepare_fp4_layer_for_marlin(layer: torch.nn.Module, input_dtype: torch.dtyp
         num_bits=4,
         is_a_8bit=is_a_8bit,
     )
-    layer.weight = torch.nn.Parameter(marlin_qweight, requires_grad=False)
+    replace_parameter(layer, "weight", marlin_qweight)
 
     # WEIGHT SCALES
     # Permute scales
@@ -263,20 +264,20 @@ def prepare_fp4_layer_for_marlin(layer: torch.nn.Module, input_dtype: torch.dtyp
 
     if is_nvfp4:
         weight_scale, scale_factor = nvfp4_marlin_process_scales(weight_scale, a_dtype=param_dtype)
-        layer.weight_scale = torch.nn.Parameter(weight_scale, requires_grad=False)
+        replace_parameter(layer, "weight_scale", weight_scale)
 
         weight_global_scale = layer.weight_global_scale.to(torch.float32)
         weight_global_scale = nvfp4_marlin_process_global_scale(weight_global_scale, param_dtype)
         weight_global_scale = weight_global_scale / scale_factor
-        layer.weight_global_scale = torch.nn.Parameter(weight_global_scale, requires_grad=False)
+        replace_parameter(layer, "weight_global_scale", weight_global_scale)
     else:
         weight_scale = mxfp4_marlin_process_scales(weight_scale, input_dtype=input_dtype)
-        layer.weight_scale = torch.nn.Parameter(weight_scale, requires_grad=False)
+        replace_parameter(layer, "weight_scale", weight_scale)
 
     if hasattr(layer, "bias") and layer.bias is not None:
         assert layer.bias.shape == (part_size_n,)
         bias = marlin_permute_bias(marlin_pad_dim(layer.bias, part_size_n, padded_n))
-        layer.bias = torch.nn.Parameter(bias, requires_grad=False)
+        replace_parameter(layer, "bias", bias)
 
     return
 
@@ -459,9 +460,7 @@ def prepare_moe_fp4_layer_for_marlin(layer: torch.nn.Module, input_dtype: torch.
         assert weight.shape == (e, size_n, size_k // 2)
 
         weight = _repack_marlin_experts(weight, size_n, size_k, is_a_8bit)
-        weight = torch.nn.Parameter(weight, requires_grad=False)
-
-        setattr(layer, name, weight)
+        replace_parameter(layer, name, weight)
 
     # WEIGHT SCALES
     # Permute scales
@@ -505,15 +504,13 @@ def prepare_moe_fp4_layer_for_marlin(layer: torch.nn.Module, input_dtype: torch.
             tensor_list.append(marlin_scales)
 
         scales = torch.cat([x.unsqueeze(0) for x in tensor_list], 0)
-        scales = torch.nn.Parameter(scales, requires_grad=False)
-        setattr(layer, name + "_weight_scale", scales)
+        replace_parameter(layer, name + "_weight_scale", scales)
 
         if is_nvfp4:
             assert combined_scale_factor is not None
             global_scale = nvfp4_marlin_process_global_scale(global_scale, param_dtype)
             global_scale = global_scale / combined_scale_factor
-            global_scale = torch.nn.Parameter(global_scale, requires_grad=False)
-            setattr(layer, name + "_weight_scale_2", global_scale)
+            replace_parameter(layer, name + "_weight_scale_2", global_scale)
 
     # BIAS
     # Permute bias
@@ -529,8 +526,7 @@ def prepare_moe_fp4_layer_for_marlin(layer: torch.nn.Module, input_dtype: torch.
             tensor_list.append(marlin_permute_bias(expert_bias))
 
         bias = torch.cat([x.unsqueeze(0) for x in tensor_list], 0)
-        bias = torch.nn.Parameter(bias, requires_grad=False)
-        setattr(layer, name, bias)
+        replace_parameter(layer, name, bias)
 
 
 def prepare_moe_mxfp4_layer_for_marlin(

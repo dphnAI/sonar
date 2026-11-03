@@ -10,8 +10,8 @@ import pytest
 from aphrodite_add_dummy_endpoint_plugin import DummyAdminEndpointPlugin
 from fastapi import APIRouter, FastAPI
 
+from aphrodite.entrypoints.common.cli_args import make_arg_parser
 from aphrodite.entrypoints.launchers.app import build_app
-from aphrodite.entrypoints.launchers.cli_args import make_arg_parser
 from aphrodite.plugins import load_endpoint_plugins
 from aphrodite.plugins.endpoint_plugins.interface import (
     EndpointPlugin,

@@ -7,9 +7,9 @@ aphrodite run llava-hf/llava-1.5-7b-hf \
     --chat-template template_llava.jinja
 """
 
-import base64
 import os
 
+import pybase64 as base64
 from openai import OpenAI
 
 # Modify OpenAI's API key and API base to use Aphrodite's API server.

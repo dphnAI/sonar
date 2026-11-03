@@ -17,6 +17,7 @@ from aphrodite.parser.granite import GraniteParser
 from aphrodite.parser.granite_thinking import GraniteThinkingParser
 from aphrodite.parser.inkling import InklingParser
 from aphrodite.parser.kimi_k2 import KimiK2Parser
+from aphrodite.parser.llama_json import LlamaJsonParser
 from aphrodite.parser.mimo import MiMoParser
 from aphrodite.parser.minimax_m2 import MinimaxM2Parser
 from aphrodite.parser.minimax_m3 import MinimaxM3Parser
@@ -61,6 +62,11 @@ from aphrodite.parser.step3p5 import Step3p5Parser
     GraniteParserReasoningAdapter,
     GraniteParserToolAdapter,
 ) = make_adapters(GraniteParser)
+
+(
+    LlamaJsonParserReasoningAdapter,
+    LlamaJsonParserToolAdapter,
+) = make_adapters(LlamaJsonParser)
 
 (
     GraniteThinkingParserReasoningAdapter,

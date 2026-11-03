@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from aphrodite.model_executor.models.config import AliceAIForCausalLMConfig
+from tests.v1.spec_decode.utils import fake_speculative_config
 
 
 def _make_config(**overrides) -> SimpleNamespace:
@@ -73,7 +74,14 @@ def test_model_config_rejects_unsupported_alice_contract(overrides, error_type, 
 def test_runtime_config_rejects_unsupported_alice_modes(pipeline_parallel_size, speculative_method, error) -> None:
     aphrodite_config = SimpleNamespace(
         parallel_config=SimpleNamespace(pipeline_parallel_size=pipeline_parallel_size),
-        speculative_config=(None if speculative_method is None else SimpleNamespace(method=speculative_method)),
+        speculative_config=(
+            None
+            if speculative_method is None
+            else fake_speculative_config(
+                method=speculative_method,
+                draft_model_config=SimpleNamespace(hf_config=SimpleNamespace()),
+            )
+        ),
     )
 
     if error is None:

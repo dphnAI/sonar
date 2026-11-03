@@ -6,7 +6,7 @@ import os
 from typing import TYPE_CHECKING, Any
 
 import torch
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 
 from aphrodite import _custom_ops as ops
 from aphrodite.distributed import (
@@ -41,6 +41,8 @@ from aphrodite.platforms import current_platform
 
 logger = init_logger(__name__)
 _EXL3_MOE_DEFAULT_MAX_TOKENS_PER_EXPERT = 128
+# EXL3 transforms outputs in 128-column Hadamard blocks.
+_EXL3_HADAMARD_BLOCK = 128
 _EXL3_MOE_SM110_MAX_TOKENS_PER_EXPERT = 32
 _EXL3_MOE_SM110_SHORT_MAX_TOKENS_PER_EXPERT = 1
 _EXL3_MOE_SM110_SHORT_TOKEN_THRESHOLD = 512
@@ -395,7 +397,7 @@ class Exl3Config(QuantizationConfig):
     def maybe_update_config(
         self,
         model_name: str,
-        hf_config: PretrainedConfig | None = None,
+        hf_config: PreTrainedConfig | None = None,
         revision: str | None = None,
     ):
         del hf_config
@@ -617,6 +619,8 @@ class Exl3LinearMethod(LinearMethodBase):
                 name,
                 Exl3Parameter(weight_loader=_exl3_weight_loader),
             )
+        # Shard id -> (lead, valid, size) for output shards computed on a wider window.
+        layer.exl3_output_windows = {}
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         missing: list[str] = []
@@ -744,15 +748,7 @@ class Exl3LinearMethod(LinearMethodBase):
                 continue
             shard_size = cls._output_shard_size(layer, shard_id)
             start = cls._qkv_output_start(layer, shard_id, shard_size)
-            layer.svh.exl3_tensors[shard_id] = (
-                layer.svh.exl3_tensors[shard_id].narrow(0, start, shard_size).contiguous()
-            )
-            layer.trellis.exl3_tensors[shard_id] = cls._slice_exl3_tensor(
-                layer.trellis.exl3_tensors[shard_id],
-                dim=1,
-                start=start,
-                size=shard_size,
-            )
+            cls._slice_output_shard(layer, shard_id, shard_id, start, shard_size)
 
     @classmethod
     def _expand_tuple_output_shards_for_tensor_parallel(
@@ -783,15 +779,7 @@ class Exl3LinearMethod(LinearMethodBase):
                 local_size = layer.exl3_output_partition_sizes[idx]
                 start = component_full_offsets[idx] + layer.exl3_tp_rank * local_size
                 layer.suh.exl3_tensors[idx] = layer.suh.exl3_tensors[tuple_shard_id]
-                layer.svh.exl3_tensors[idx] = (
-                    layer.svh.exl3_tensors[tuple_shard_id].narrow(0, start, local_size).contiguous()
-                )
-                layer.trellis.exl3_tensors[idx] = cls._slice_exl3_tensor(
-                    layer.trellis.exl3_tensors[tuple_shard_id],
-                    dim=1,
-                    start=start,
-                    size=local_size,
-                )
+                cls._slice_output_shard(layer, tuple_shard_id, idx, start, local_size)
                 if tuple_shard_id in layer.mcg.exl3_tensors:
                     layer.mcg.exl3_tensors[idx] = layer.mcg.exl3_tensors[tuple_shard_id]
                 if tuple_shard_id in layer.mul1.exl3_tensors:
@@ -802,6 +790,36 @@ class Exl3LinearMethod(LinearMethodBase):
 
         layer.exl3_shard_ids = expanded_shard_ids
         return expanded_component_ids
+
+    @classmethod
+    def _slice_output_shard(
+        cls,
+        layer: torch.nn.Module,
+        source_id: str | int | tuple[int, ...] | None,
+        shard_id: str | int | None,
+        start: int,
+        size: int,
+    ) -> None:
+        """Keep this rank's output columns ``[start, start + size)``.
+
+        EXL3 applies its output Hadamard transform to 128-wide column blocks, so a
+        shard boundary inside a block (e.g. a vocab-parallel lm_head) cannot be
+        computed from its own columns. Such shards keep the covering 128-aligned
+        window and narrow the result in ``_apply_one``. Columns past the
+        checkpoint (vocab padding) are zero.
+        """
+        svh = layer.svh.exl3_tensors[source_id]
+        trellis = layer.trellis.exl3_tensors[source_id]
+        full = svh.shape[0]
+        end = min(start + size, full)
+        lo = start // _EXL3_HADAMARD_BLOCK * _EXL3_HADAMARD_BLOCK
+        hi = min(-(-end // _EXL3_HADAMARD_BLOCK) * _EXL3_HADAMARD_BLOCK, full)
+        if end <= start:
+            lo = hi = start = end = min(lo, full)
+        layer.svh.exl3_tensors[shard_id] = svh.narrow(0, lo, hi - lo).contiguous()
+        layer.trellis.exl3_tensors[shard_id] = cls._slice_exl3_tensor(trellis, dim=1, start=lo, size=hi - lo)
+        if (lo, hi) != (start, start + size):
+            layer.exl3_output_windows[shard_id] = (start - lo, end - start, size)
 
     def _apply_one(
         self,
@@ -815,7 +833,14 @@ class Exl3LinearMethod(LinearMethodBase):
         mcg = shard_id in layer.mcg.exl3_tensors
         mul1 = shard_id in layer.mul1.exl3_tensors
 
-        return _exl3_linear_one(x, trellis, suh, svh, mcg, mul1)
+        window = layer.exl3_output_windows.get(shard_id)
+        if window is None:
+            return _exl3_linear_one(x, trellis, suh, svh, mcg, mul1)
+        lead, valid, size = window
+        output = x.new_zeros((x.shape[0], size), dtype=torch.float16)
+        if valid:
+            output[:, :valid] = _exl3_linear_one(x, trellis, suh, svh, mcg, mul1)[:, lead : lead + valid]
+        return output
 
     def _apply_fused_mgemm(
         self,
@@ -912,6 +937,8 @@ class Exl3LinearMethod(LinearMethodBase):
             mgemm_shard_ids = ["k", "v"]
             layer.exl3_mgemm_mode = "qkv_kv"
         else:
+            return
+        if layer.exl3_output_windows:
             return
 
         trellises = [layer.trellis.exl3_tensors[shard_id] for shard_id in mgemm_shard_ids]

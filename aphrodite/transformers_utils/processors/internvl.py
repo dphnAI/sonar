@@ -213,7 +213,7 @@ def video_to_pixel_values_internvl(
     return pixel_values
 
 
-class InternVLImageProcessor(ImageProcessingMixin):
+class InternVLChatImageProcessor(ImageProcessingMixin):
     def __init__(
         self,
         image_size: int,
@@ -310,7 +310,7 @@ class InternVLImageProcessor(ImageProcessingMixin):
         return BatchFeature(image_inputs, tensor_type=return_tensors)
 
 
-class InternVLVideoProcessor(BaseVideoProcessor):
+class InternVLChatVideoProcessor(BaseVideoProcessor):
     def __init__(
         self,
         image_size: int,
@@ -350,7 +350,7 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         return BatchFeature(image_inputs, tensor_type=return_tensors)
 
 
-class InternVLProcessor(ProcessorMixin):
+class InternVLChatProcessor(ProcessorMixin):
     """This model doesn't define its own HF processor,
     so we implement our own one here.
 
@@ -365,9 +365,9 @@ class InternVLProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: InternVLImageProcessor,
+        image_processor: InternVLChatImageProcessor,
         tokenizer: HfTokenizer,
-        video_processor: InternVLVideoProcessor | None = None,
+        video_processor: InternVLChatVideoProcessor | None = None,
         *,
         image_seq_length: int,
         start_image_token: str = "<img>",

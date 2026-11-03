@@ -64,11 +64,14 @@ async def test_completion_stream_options_and_logprobs_with_long_prompts(
         assert chunk.usage.completion_tokens >= 0
         assert chunk.usage.total_tokens == (chunk.usage.prompt_tokens + chunk.usage.completion_tokens)
         if not finished:
-            assert chunk.choices[0].text
-            # Count actual tokens from logprobs since multiple tokens
-            # can be batched into a single chunk
-            assert chunk.choices[0].logprobs and chunk.choices[0].logprobs.tokens
-            tokens_received += len(chunk.choices[0].logprobs.tokens)
+            # A final chunk may carry only the finish_reason with no text and
+            # no logprobs (Rust); every chunk that carries tokens is checked.
+            if chunk.choices[0].finish_reason is None or chunk.choices[0].text:
+                assert chunk.choices[0].text
+                # Count actual tokens from logprobs since multiple tokens
+                # can be batched into a single chunk
+                assert chunk.choices[0].logprobs and chunk.choices[0].logprobs.tokens
+                tokens_received += len(chunk.choices[0].logprobs.tokens)
 
             if chunk.choices[0].finish_reason is not None:
                 finished = True
@@ -109,11 +112,17 @@ async def test_chat_completion_stream_options_and_logprobs_with_long_prompts(
         assert chunk.usage.total_tokens == (chunk.usage.prompt_tokens + chunk.usage.completion_tokens)
 
         if not finished:
-            if chunk.choices[0].delta.content == "":
-                # when there is no tokens generated
+            if chunk.choices[0].delta.content == "" or (
+                chunk.choices[0].delta.content is None and chunk.choices[0].finish_reason is None
+            ):
+                # when there is no tokens generated (the role-only first chunk;
+                # Python sends content="", Rust omits content)
                 assert chunk.usage.completion_tokens == 0
                 assert chunk.choices[0].logprobs is None
                 empty_chunks_received += 1
+            elif chunk.choices[0].delta.content is None:
+                # final chunk with only the finish_reason (Rust)
+                assert chunk.choices[0].logprobs is None
             else:
                 # Count actual tokens from logprobs since multiple tokens
                 # can be batched into a single chunk

@@ -165,6 +165,9 @@ class MooncakeStoreScheduler:
             if isinstance(group.kv_cache_spec, MambaSpec)
         }
         self._boundary_state_group_ids = frozenset(mamba_groups)
+        if self.save_decode_cache and mamba_groups and kv_cache_config.prefix_cache_retention_interval == 0:
+            # Decode checkpoints become reusable Store boundaries.
+            kv_cache_config.prefix_cache_retention_interval = self._block_size
 
         # Mirrors MooncakeStoreConnector._capacity_only.
         self._capacity_only = self.kv_role == "kv_consumer" and not self.enable_lookup and not self.save_decode_cache
@@ -467,7 +470,7 @@ class MooncakeStoreScheduler:
                     meta.add_request(req_meta)
 
         block_state = getattr(scheduler_output, "kv_connector_block_state", None)
-        if block_state is not None and block_state.boundary_state_offloads and not is_consumer:
+        if block_state is not None and block_state.boundary_state_offloads and can_process_cached:
             self._handle_boundary_state_offloads(block_state.boundary_state_offloads, meta)
 
         self._apply_current_save_block_ids(meta, scheduler_output)
@@ -525,11 +528,7 @@ class MooncakeStoreScheduler:
             block_ids = [put.block_id for put in req_meta.boundary_puts or []]
             assert NULL_BLOCK_ID not in block_ids, "A null block cannot back a boundary put"
             if req_meta.token_len_chunk:
-                # Normal prefix save: pin all non-Mamba sources for retries.
-                # Every allocated block is referenced, not just the ones covering
-                # this job's token range: a rank resumes from its own last
-                # successful offset, which lags the scheduler's whenever a save was
-                # skipped or failed, so it may read anywhere below the range.
+                # Each rank may retry from an earlier successful save offset.
                 block_ids.extend(
                     block_id
                     for group_id, group in enumerate(req_meta.block_ids)
@@ -634,12 +633,10 @@ class MooncakeStoreScheduler:
                 continue
             accepted: list[BoundaryPut] = []
             for group_id, block_id, boundary_tokens in entries:
-                # Every other group stops saving at the end of this prefill, so
-                # a mamba-only key past it can never complete a joint hybrid
-                # hit. `prefill_end_tokens` — not the original prompt length —
-                # is the boundary: a resumed request re-prefills and re-saves
-                # its previously generated tokens for every group.
-                if boundary_tokens > tracker.prefill_end_tokens:
+                is_decode_boundary = boundary_tokens > tracker.prefill_end_tokens
+                if is_decode_boundary and not self.save_decode_cache:
+                    continue
+                if not is_decode_boundary and self.kv_role == "kv_consumer":
                     continue
                 if block_id == NULL_BLOCK_ID:
                     continue

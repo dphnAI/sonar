@@ -40,9 +40,8 @@ def main(args: Namespace):
         "They display art and historical collections from around the world.",
         "passage: Kyoto is a city in Japan. Its historic temples attract visitors throughout the year.",
     ]
-    outputs = llm.encode(
+    outputs = llm.embed(
         documents,
-        pooling_task="token_embed",
         pooling_params=pooling_params,
     )
 

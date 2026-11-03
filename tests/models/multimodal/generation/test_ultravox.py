@@ -24,7 +24,7 @@ AUDIO_PROMPTS = AUDIO_ASSETS.prompts(
 
 MULTI_AUDIO_PROMPT = "Describe each of the audios above."
 
-AudioTuple = tuple[np.ndarray, int]
+AudioTuple = tuple[np.ndarray, float]
 
 APHRODITE_PLACEHOLDER = "<|audio|>"
 HF_PLACEHOLDER = "<|audio|>"
@@ -90,7 +90,7 @@ def _get_prompt(audio_count, question, placeholder):
 
 def run_multi_audio_test(
     aphrodite_runner: type[AphroditeRunner],
-    prompts_and_audios: list[tuple[str, list[AudioTuple]]],
+    prompts_and_audios: list[tuple[str | list[int], list[AudioTuple]]],
     model: str,
     *,
     dtype: str,

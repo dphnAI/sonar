@@ -51,6 +51,7 @@ from .interfaces import (
     requires_raw_input_tokens,
     supports_hc_sp,
     supports_kv_cache_grouping,
+    supports_lora,
     supports_multimodal,
     supports_multimodal_encoder_tp_data,
     supports_multimodal_raw_input_only,
@@ -79,6 +80,7 @@ _TEXT_GENERATION_MODELS = {
     "BailingMoeV2ForCausalLM": ("bailing_moe", "BailingMoeV2ForCausalLM"),
     "BailingMoeV2_5ForCausalLM": ("bailing_moe_linear", "BailingMoeV25ForCausalLM"),
     "BailingMoeV3ForCausalLM": ("bailing_moe_v3", "BailingMoeV3ForCausalLM"),
+    "BeamForCausalLM": ("aphrodite.models.beam", "BeamForCausalLM"),
     "BloomForCausalLM": ("bloom", "BloomForCausalLM"),
     "ChatGLMModel": ("chatglm", "ChatGLMForCausalLM"),
     "ChatGLMForConditionalGeneration": ("chatglm", "ChatGLMForCausalLM"),
@@ -96,6 +98,8 @@ _TEXT_GENERATION_MODELS = {
         "DeepseekV32ForCausalLM",
     ),
     "DeepseekV4ForCausalLM": ("aphrodite.models.deepseek_v4", "DeepseekV4ForCausalLM"),
+    "DomynEdgeForCausalLM": ("domyn_edge", "DomynEdgeForCausalLM"),
+    "DoryForCausalLM": ("dory", "DoryForCausalLM"),
     "Ernie4_5ForCausalLM": ("ernie45", "Ernie4_5ForCausalLM"),
     "Ernie4_5_MoeForCausalLM": ("ernie45_moe", "Ernie4_5_MoeForCausalLM"),
     "ExaoneForCausalLM": ("exaone", "ExaoneForCausalLM"),
@@ -105,6 +109,7 @@ _TEXT_GENERATION_MODELS = {
     "FalconForCausalLM": ("falcon", "FalconForCausalLM"),
     "FalconMambaForCausalLM": ("mamba", "MambaForCausalLM"),
     "FalconH1ForCausalLM": ("falcon_h1", "FalconH1ForCausalLM"),
+    "FlintForCausalLM": ("aphrodite.models.flint", "FlintForCausalLM"),
     "GemmaForCausalLM": ("gemma", "GemmaForCausalLM"),
     "Gemma2ForCausalLM": ("gemma2", "Gemma2ForCausalLM"),
     "Gemma3ForCausalLM": ("gemma3", "Gemma3ForCausalLM"),
@@ -183,7 +188,6 @@ _TEXT_GENERATION_MODELS = {
     "NemotronHPuzzleForCausalLM": ("nemotron_h", "NemotronHForCausalLM"),
     "MuseGlimmerForCausalLM": ("muse_glimmer", "MuseGlimmerForCausalLM"),
     "OlmoHybridForCausalLM": ("olmo_hybrid", "OlmoHybridForCausalLM"),
-    "OlmoeForCausalLM": ("olmoe", "OlmoeForCausalLM"),
     "OPTForCausalLM": ("opt", "OPTForCausalLM"),
     "OrionForCausalLM": ("orion", "OrionForCausalLM"),
     "PanguEmbeddedForCausalLM": ("openpangu", "PanguEmbeddedForCausalLM"),
@@ -197,13 +201,14 @@ _TEXT_GENERATION_MODELS = {
     "Qwen2MoeForCausalLM": ("qwen2_moe", "Qwen2MoeForCausalLM"),
     "Qwen3ForCausalLM": ("qwen3", "Qwen3ForCausalLM"),
     "Qwen3MoeForCausalLM": ("qwen3_moe", "Qwen3MoeForCausalLM"),
-    "Qwen3_5ForCausalLM": ("qwen3_5", "Qwen3_5ForCausalLM"),
-    "Qwen3_5MoeForCausalLM": ("qwen3_5", "Qwen3_5MoeForCausalLM"),
+    "Qwen3_5ForCausalLM": ("aphrodite.models.qwen3_5", "Qwen3_5ForCausalLM"),
+    "Qwen3_5MoeForCausalLM": ("aphrodite.models.qwen3_5", "Qwen3_5MoeForCausalLM"),
     "SarvamMoEForCausalLM": ("sarvam", "SarvamMoEForCausalLM"),
     "SarvamMLAForCausalLM": ("sarvam", "SarvamMLAForCausalLM"),
     "Step1ForCausalLM": ("step1", "Step1ForCausalLM"),
     "Step3TextForCausalLM": ("step3_text", "Step3TextForCausalLM"),
     "Step3p5ForCausalLM": ("step3p5", "Step3p5ForCausalLM"),
+    "Step5ForCausalLM": ("aphrodite.models.step5", "Step5ForCausalLM"),
     "StableLmForCausalLM": ("stablelm", "StablelmForCausalLM"),
     "SolarForCausalLM": ("solar", "SolarForCausalLM"),
     "TeleChat2ForCausalLM": ("telechat2", "TeleChat2ForCausalLM"),
@@ -225,6 +230,7 @@ _EMBEDDING_MODELS = {
     "GteModel": ("bert_with_rope", "SnowflakeGteNewModel"),
     "GteNewModel": ("bert_with_rope", "GteNewModel"),
     "JinaEmbeddingsV5Model": ("jina", "JinaEmbeddingsV5Model"),
+    "Lfm2BidirectionalModel": ("lfm2", "Lfm2BidirectionalModel"),
     "LlamaBidirectionalModel": ("llama", "LlamaBidirectionalModel"),
     "LlamaModel": ("llama", "LlamaForCausalLM"),
     **{
@@ -274,7 +280,10 @@ _LATE_INTERACTION_MODELS = {
     "JinaForRanking": ("jina", "JinaForRanking"),
     # [Multimodal]
     "ColModernVBertForRetrieval": ("colmodernvbert", "ColModernVBertForRetrieval"),
+    "ColUltraVBertForRetrieval": ("colultravbert", "ColUltraVBertForRetrieval"),
     "ColPaliForRetrieval": ("colpali", "ColPaliModel"),
+    # Inferred by Transformers for ModernVBERT checkpoints without `architectures`
+    "ModernVBertModel": ("colmodernvbert", "ColModernVBertForRetrieval"),
     "ColQwen3": ("colqwen3", "ColQwen3Model"),
     "OpsColQwen3Model": ("colqwen3", "ColQwen3Model"),
     "ColQwen3_5": ("colqwen3_5", "ColQwen3_5Model"),
@@ -342,6 +351,7 @@ _SEQUENCE_CLASSIFICATION_MODELS = {
 
 _MULTIMODAL_MODELS = {
     # [Decoder-only]
+    "Alpamayo2Super": ("alpamayo2_super", "Alpamayo2SuperForConditionalGeneration"),
     "AriaForConditionalGeneration": ("aria", "AriaForConditionalGeneration"),
     "AudioFlamingo3ForConditionalGeneration": (
         "audioflamingo3",
@@ -468,11 +478,6 @@ _MULTIMODAL_MODELS = {
     ),
     "IsaacForConditionalGeneration": ("isaac", "IsaacForConditionalGeneration"),
     "KananaVForConditionalGeneration": ("kanana_v", "KananaVForConditionalGeneration"),
-    "KeyeForConditionalGeneration": ("keye", "KeyeForConditionalGeneration"),
-    "KeyeVL1_5ForConditionalGeneration": (
-        "keye_vl1_5",
-        "KeyeVL1_5ForConditionalGeneration",
-    ),
     "KimiVLForConditionalGeneration": ("kimi_vl", "KimiVLForConditionalGeneration"),
     "KimiK25ForConditionalGeneration": ("kimi_k25", "KimiK25ForConditionalGeneration"),
     "KimiK3ForConditionalGeneration": (
@@ -506,11 +511,19 @@ _MULTIMODAL_MODELS = {
     ),
     "MiDashengLMModel": ("midashenglm", "MiDashengLMModel"),
     "MiMoV2OmniForCausalLM": ("mimo_v2_omni", "MiMoV2OmniForCausalLM"),
+    "MingV3ASRForConditionalGeneration": (
+        "ming_v3_asr",
+        "MingV3ASRForConditionalGeneration",
+    ),
     "MiniMaxM3SparseForConditionalGeneration": (
         "aphrodite.models.minimax_m3",
         "MiniMaxM3SparseForConditionalGeneration",
     ),
     "MiniCPMO": ("minicpmo", "MiniCPMO"),
+    "MiniCPMOcrForConditionalGeneration": (
+        "minicpm_ocr",
+        "MiniCPMOcrForConditionalGeneration",
+    ),
     "MiniCPMV": ("minicpmv", "MiniCPMV"),
     "MiniCPMV4_6ForConditionalGeneration": (
         "minicpmv4_6",
@@ -537,8 +550,16 @@ _MULTIMODAL_MODELS = {
     "NemotronH_Nano_Omni_Reasoning_V3": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
     "NemotronH_Super_Omni_Reasoning_V3": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
     "NemotronH_Omni_Reasoning_V3": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
+    "Nemotron3_5TranscribeForConditionalGeneration": (
+        "nemotron3_5_transcribe",
+        "Nemotron3_5TranscribeForConditionalGeneration",
+    ),
     "NVLM_D": ("nvlm_d", "NVLM_D_Model"),
     "MuseGlimmerForConditionalGeneration": ("muse_glimmer", "MuseGlimmerForCausalLM"),
+    "MuseSparkForConditionalGeneration": (
+        "aphrodite.models.muse_spark",
+        "MuseSparkForConditionalGeneration",
+    ),
     "OpenCUAForConditionalGeneration": ("opencua", "OpenCUAForConditionalGeneration"),
     "OpenPanguVLForConditionalGeneration": (
         "openpangu_vl",
@@ -596,9 +617,12 @@ _MULTIMODAL_MODELS = {
         "qwen3_vl_moe",
         "Qwen3VLMoeForConditionalGeneration",
     ),
-    "Qwen3_5ForConditionalGeneration": ("qwen3_5", "Qwen3_5ForConditionalGeneration"),
+    "Qwen3_5ForConditionalGeneration": (
+        "aphrodite.models.qwen3_5",
+        "Qwen3_5ForConditionalGeneration",
+    ),
     "Qwen3_5MoeForConditionalGeneration": (
-        "qwen3_5",
+        "aphrodite.models.qwen3_5",
         "Qwen3_5MoeForConditionalGeneration",
     ),
     "Qwen4ExpForConditionalGeneration": (
@@ -611,10 +635,15 @@ _MULTIMODAL_MODELS = {
     "StepVLForConditionalGeneration": ("step_vl", "StepVLForConditionalGeneration"),
     "Step3VLForConditionalGeneration": ("step3_vl", "Step3VLForConditionalGeneration"),
     "Step3p7ForConditionalGeneration": ("step3p7", "Step3p7ForConditionalGeneration"),
+    "Step5ForConditionalGeneration": (
+        "aphrodite.models.step5",
+        "Step5ForConditionalGeneration",
+    ),
     "UltravoxModel": ("ultravox", "UltravoxModel"),
     "VoxtralForConditionalGeneration": ("voxtral", "VoxtralForConditionalGeneration"),
     "VoxtralRealtimeGeneration": ("voxtral_realtime", "VoxtralRealtimeGeneration"),
     # [Encoder-decoder]
+    "CanaryForConditionalGeneration": ("canary", "CanaryForConditionalGeneration"),
     "CohereAsrForConditionalGeneration": (
         "cohere_asr",
         "CohereAsrForConditionalGeneration",
@@ -622,6 +651,10 @@ _MULTIMODAL_MODELS = {
     "NemotronParseForConditionalGeneration": (
         "nemotron_parse",
         "NemotronParseForConditionalGeneration",
+    ),
+    "RadioMBartPrefixForCausalLM": (
+        "nemotron_parse3_5",
+        "RadioMBartPrefixForCausalLM",
     ),
     "WhisperForConditionalGeneration": ("whisper", "WhisperForConditionalGeneration"),
 }
@@ -639,6 +672,7 @@ _SPECULATIVE_DECODING_MODELS = {
     "DFlashLagunaForCausalLM": ("laguna_dflash", "DFlashLagunaForCausalLM"),
     "LiLiCorrDraftModel": ("lilicorr", "LiLiCorrForCausalLM"),
     "DFlash2DraftModel": ("qwen3_dflash2", "DFlash2Qwen3ForCausalLM"),
+    "DFlash2BeamDraftModel": ("aphrodite.models.beam", "DFlash2BeamForCausalLM"),
     # Muse Glimmer's DFlash draft head, reusing the generic qwen3_dflash
     # implementation. EAGLEConfig rewrites a dflash draft's architecture to
     # DFlash{arch} unless it already starts or ends with "DFlash" (see
@@ -652,11 +686,24 @@ _SPECULATIVE_DECODING_MODELS = {
         "aphrodite.models.deepseek_v41",
         "DSparkDeepseekV4ForCausalLM",
     ),
+    "DSparkMiniMaxDraftModel": (
+        "aphrodite.models.minimax_m3.common.dspark",
+        "MiniMaxM3DSparkForCausalLM",
+    ),
     "Qwen3DSparkModel": ("qwen3_dspark", "Qwen3DSparkForCausalLM"),
     "Qwen3OmniDSparkModel": ("qwen3_dspark", "Qwen3DSparkForCausalLM"),
+    # Serving under method="dflash" means EAGLEConfig rewrites the draft
+    # architecture to DFlash{arch}, so that is the name the registry is asked
+    # for. The bare name is kept as a defensive alias, as for MuseGlimmer.
+    "Qwen3XPressModel": ("qwen3_xpress", "Qwen3XPressForCausalLM"),
+    "DFlashQwen3XPressModel": ("qwen3_xpress", "Qwen3XPressForCausalLM"),
     "K3DSparkModel": (
         "aphrodite.models.kimi_k3.nvidia.dspark_mla",
         "K3DSparkForCausalLM",
+    ),
+    "MuseSparkDSparkModel": (
+        "aphrodite.models.muse_spark.common.dspark",
+        "MuseSparkDSparkForCausalLM",
     ),
     "Gemma4DSparkModel": ("gemma4_dspark", "Gemma4DSparkForCausalLM"),
     "PEagleDraftModel": ("llama_eagle3", "Eagle3LlamaForCausalLM"),
@@ -689,17 +736,23 @@ _SPECULATIVE_DECODING_MODELS = {
     "ExaoneMoeMTP": ("exaone_moe_mtp", "ExaoneMoeMTP"),
     "Exaone4_5_MTP": ("exaone4_5_mtp", "Exaone4_5_MTP"),
     "NemotronHMTPModel": ("nemotron_h_mtp", "NemotronHMTP"),
+    "Nemotron3_5TranscribeMTPModel": (
+        "nemotron3_5_transcribe",
+        "Nemotron3_5TranscribeMTP",
+    ),
     "LongCatFlashMTPModel": ("longcat_flash_mtp", "LongCatFlashMTP"),
     "Glm4MoeMTPModel": ("glm4_moe_mtp", "Glm4MoeMTP"),
     "Glm4MoeLiteMTPModel": ("glm4_moe_lite_mtp", "Glm4MoeLiteMTP"),
     "GlmOcrMTPModel": ("glm_ocr_mtp", "GlmOcrMTP"),
     "Glm5NextMTPModel": ("aphrodite.models.glm5next", "Glm5NextMTP"),
     "OpenPanguMTPModel": ("openpangu_mtp", "OpenPanguMTP"),
+    "ParseAuxMTPModel": ("nemotron_parse3_5_mtp", "ParseAuxMTPModel"),
     "Qwen3NextMTP": ("qwen3_next_mtp", "Qwen3NextMTP"),
+    "Step5MTP": ("aphrodite.models.step5", "Step5MTP"),
     "Qwen4ExpMTP": ("aphrodite.models.qwen4_exp", "Qwen4ExpMTP"),
     "Step3p5MTP": ("step3p5_mtp", "Step3p5MTP"),
-    "Qwen3_5MTP": ("qwen3_5_mtp", "Qwen3_5MTP"),
-    "Qwen3_5MoeMTP": ("qwen3_5_mtp", "Qwen3_5MoeMTP"),
+    "Qwen3_5MTP": ("aphrodite.models.qwen3_5", "Qwen3_5MTP"),
+    "Qwen3_5MoeMTP": ("aphrodite.models.qwen3_5", "Qwen3_5MoeMTP"),
     "InternS2MobiusMTP": ("interns2_mobius", "InternS2MobiusMTP"),
     "HYV3MTPModel": ("hy_v3_mtp", "HYV3MTP"),
     "HYV4MTPModel": ("aphrodite.models.hy_v4", "HYV4MTP"),
@@ -723,6 +776,7 @@ _TRANSFORMERS_SUPPORTED_MODELS = {
     "OlmoForCausalLM": ("transformers", "TransformersForCausalLM"),
     "Olmo2ForCausalLM": ("transformers", "TransformersForCausalLM"),
     "Olmo3ForCausalLM": ("transformers", "TransformersForCausalLM"),
+    "OlmoeForCausalLM": ("transformers", "TransformersMoEForCausalLM"),
     "PhiForCausalLM": ("transformers", "TransformersForCausalLM"),
     "SeedOssForCausalLM": ("transformers", "TransformersForCausalLM"),
     "SmolLM3ForCausalLM": ("transformers", "TransformersForCausalLM"),
@@ -747,6 +801,9 @@ _TRANSFORMERS_BACKEND_MODELS = {
     # Text generation models
     "TransformersForCausalLM": ("transformers", "TransformersForCausalLM"),
     "TransformersMoEForCausalLM": ("transformers", "TransformersMoEForCausalLM"),
+    # Multi-token prediction draft models
+    "TransformersForMTP": ("transformers", "TransformersForMTP"),
+    "TransformersMoEForMTP": ("transformers", "TransformersMoEForMTP"),
     # Multimodal models
     "TransformersMultiModalForCausalLM": (
         "transformers",
@@ -851,6 +908,8 @@ _PREVIOUSLY_SUPPORTED_MODELS = {
     "StableLMEpochForCausalLM": "0.28.0",
     # Superseded by the generic "Terratorch" architecture
     "PrithviGeoSpatialMAE": "0.28.0",
+    "KeyeForConditionalGeneration": "0.33.0",
+    "KeyeVL1_5ForConditionalGeneration": "0.33.0",
 }
 
 _OOT_SUPPORTED_MODELS = {
@@ -876,6 +935,7 @@ class _ModelInfo:
     requires_raw_input_tokens: bool
     supports_multimodal_encoder_tp_data: bool
     supports_pp: bool
+    supports_lora: bool
     supports_hc_sp: bool
     has_inner_state: bool
     is_attention_free: bool
@@ -887,6 +947,10 @@ class _ModelInfo:
     supports_kv_cache_grouping: bool
     supported_video_pruning_methods: tuple[str, ...]
     supports_mm_device_do_normalize: bool
+    # Fully-qualified name of `SpeculativeDraftModel.speculator_config_class`.
+    speculator_config_class: str | None
+    # Whether a draft model may reuse the target's input embedding under PP.
+    may_use_target_embed: bool
 
     @staticmethod
     def from_model_cls(model: type[nn.Module]) -> "_ModelInfo":
@@ -903,6 +967,7 @@ class _ModelInfo:
             requires_raw_input_tokens=requires_raw_input_tokens(model),
             supports_multimodal_encoder_tp_data=supports_multimodal_encoder_tp_data(model),
             supports_pp=supports_pp(model),
+            supports_lora=supports_lora(model),
             supports_hc_sp=supports_hc_sp(model),
             has_inner_state=has_inner_state(model),
             is_attention_free=is_attention_free(model),
@@ -914,6 +979,12 @@ class _ModelInfo:
             has_noops=has_noops(model),
             supported_video_pruning_methods=getattr(model, "supported_video_pruning_methods", ()),
             supports_mm_device_do_normalize=getattr(model, "supports_mm_device_do_normalize", False),
+            speculator_config_class=(
+                f"{config_cls.__module__}.{config_cls.__qualname__}"
+                if (config_cls := getattr(model, "speculator_config_class", None))
+                else None
+            ),
+            may_use_target_embed=hasattr(model, "has_own_embed_tokens"),
         )
 
 

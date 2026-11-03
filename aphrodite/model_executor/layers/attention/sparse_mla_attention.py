@@ -33,7 +33,6 @@ from aphrodite.triton_utils import tl, triton
 from aphrodite.utils.flashinfer import has_flashinfer
 from aphrodite.utils.torch_utils import (
     PIN_MEMORY,
-    is_quantized_kv_cache,
     np_to_pinned_tensor,
 )
 from aphrodite.v1.attention.backend import AttentionLayer, AttentionMetadataBuilder
@@ -55,6 +54,7 @@ from aphrodite.v1.hisparse.runtime import (
     HiSparsePrefillStagingPlan,
     build_hisparse_prefill_staging_plan,
 )
+from aphrodite.v1.kv_cache_interface import is_quantized_kv_cache
 
 if TYPE_CHECKING:
     from aphrodite.config import AphroditeConfig
@@ -645,7 +645,7 @@ class SparseMLACommonImpl(MLACommonBaseImpl[T], SharedTopkIndicesBuffer, Generic
             self.index_group, self.index_group_index = index_group_builder.register_layer(
                 indexer is not None,
                 aphrodite_config,
-                head_size=head_size,
+                row_width=(self.get_fp8_ds_mla_row_bytes() if kv_cache_dtype == "fp8_ds_mla" else head_size),
                 kv_cache_dtype=kv_cache_dtype,
             )
 

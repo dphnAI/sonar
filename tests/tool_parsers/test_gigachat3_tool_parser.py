@@ -4,7 +4,7 @@
 import json
 
 import pytest
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from aphrodite.entrypoints.generate.base.protocol import FunctionCall
 from aphrodite.tokenizers import TokenizerLike
@@ -16,7 +16,7 @@ from tests.tool_parsers.utils import (
 
 
 @pytest.fixture(scope="function")
-def default_tokenizer() -> TokenizerLike:
+def default_tokenizer() -> PreTrainedTokenizerBase:
     """Override module-scoped default_tokenizer because gigachat tests
     mutate the tokenizer via ``add_tokens``."""
     return AutoTokenizer.from_pretrained("gpt2")
@@ -94,7 +94,7 @@ MIXED_OUTPUT_GIGACHAT31 = f"{CONTENT_TEXT}{SIMPLE_FUNCTION_OUTPUT_GIGACHAT31}"
 
 
 @pytest.fixture(name="gigachat_tokenizer")
-def fixture_gigachat_tokenizer(default_tokenizer: TokenizerLike):
+def fixture_gigachat_tokenizer(default_tokenizer: PreTrainedTokenizerBase):
     default_tokenizer.add_tokens(
         [
             MSG_SEP_TOKEN,

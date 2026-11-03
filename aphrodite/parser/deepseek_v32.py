@@ -28,6 +28,7 @@ from aphrodite.parser.deepseek_v4 import (
     DSML_PARAM_CLOSE,
     DSML_PARAM_START,
     _dsml_arg_converter,
+    _dsml_arg_value_extender,
     _unwrap_wrapper_args,
 )
 from aphrodite.parser.engine.events import EventType
@@ -114,6 +115,7 @@ def deepseek_v32_config() -> ParserEngineConfig:
         },
         arg_converter=_dsml_arg_converter,
         arg_structural_chars=frozenset(">"),
+        arg_value_extender=_dsml_arg_value_extender,
         strip_content_whitespace_with_tools=False,
         tool_args_json=False,
     )

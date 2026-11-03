@@ -11,6 +11,7 @@ import torch
 import aphrodite.v1.hisparse.binding as hisparse_binding
 import aphrodite.v1.worker.gpu.attn_utils as attn_utils
 import aphrodite.v1.worker.gpu_model_runner as gpu_model_runner
+from aphrodite.v1.hisparse.backend import CUDAHiSparseBackend
 from aphrodite.v1.worker.gpu_worker import Worker
 
 
@@ -60,6 +61,7 @@ def test_mrv2_kv_pool_only_wraps_backing_allocation(monkeypatch, hisparse) -> No
                 )
             ]
 
+        monkeypatch.setattr(hisparse_binding, "get_hisparse_backend", CUDAHiSparseBackend)
         monkeypatch.setattr(
             hisparse_binding,
             "get_hisparse_host_pool",

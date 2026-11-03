@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 
 from typing import cast
@@ -9,6 +10,7 @@ from aphrodite.entrypoints.generate.base.protocol import DeltaMessage
 from aphrodite.entrypoints.openai.chat_completion.protocol import (
     ChatCompletionRequest,
 )
+from aphrodite.entrypoints.openai.responses.protocol import ResponsesRequest
 from aphrodite.parser.kimi_k3 import KimiK3Parser
 from aphrodite.parser.parser_manager import ParserManager
 from aphrodite.reasoning.kimi_k3_reasoning_parser import KimiK3ReasoningParser
@@ -295,15 +297,20 @@ def test_delegating_parser_thinking_false_streams_response_content():
     assert closed is None
 
 
-def test_adjust_request_keeps_xtml_markers_contiguous():
+@pytest.mark.parametrize(
+    "req",
+    [
+        ChatCompletionRequest(model="test-model", messages=[]),
+        ResponsesRequest(model="test-model", input="hi"),
+    ],
+)
+def test_adjust_request_keeps_xtml_markers_contiguous(req):
     parser = KimiK3ReasoningParser(DummyTokenizer())
-    request = ChatCompletionRequest(model="test-model", messages=[])
 
-    adjusted = parser.adjust_request(request)
+    adjusted = parser.adjust_request(req)
 
     assert adjusted.skip_special_tokens is False
-    if hasattr(adjusted, "spaces_between_special_tokens"):
-        assert adjusted.spaces_between_special_tokens is False
+    assert adjusted.spaces_between_special_tokens is False
 
 
 def _reference_is_reasoning_end(input_ids: list[int]) -> bool:

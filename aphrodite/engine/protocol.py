@@ -19,7 +19,7 @@ from aphrodite.pooling_params import PoolingParams
 from aphrodite.renderers import BaseRenderer
 from aphrodite.sampling_params import SamplingParams
 from aphrodite.tasks import SupportedTask
-from aphrodite.v1.engine import EngineCoreRequest
+from aphrodite.v1.engine import CheckpointState, EngineCoreRequest
 from aphrodite.v1.engine.input_processor import InputProcessor
 from aphrodite.v1.fault_tolerance.utils import FaultToleranceRequest, FaultToleranceResult
 from aphrodite.v1.kv_hints import KvHintsEnvelope
@@ -36,7 +36,7 @@ class StreamingInput:
     where inputs are provided via an async generator.
     """
 
-    prompt: EngineInput
+    prompt: PromptType | EngineInput
     sampling_params: SamplingParams | None = None
 
 
@@ -169,6 +169,7 @@ class EngineClient(ABC):
         *,
         delay_iterations: int | None = None,
         max_iterations: int | None = None,
+        profiler_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """Start profiling with optional per-session overrides."""
         ...
@@ -211,6 +212,22 @@ class EngineClient(ABC):
     @abstractmethod
     async def is_sleeping(self) -> bool:
         """Check whether the engine is sleeping."""
+        ...
+
+    @abstractmethod
+    async def checkpoint_prepare(self, mode: "PauseMode" = "wait") -> str | None:
+        """Drain with `mode`, then release what a checkpoint must not contain.
+        Returns why the engine cannot prepare, with nothing changed, or None."""
+        ...
+
+    @abstractmethod
+    async def checkpoint_restore(self) -> None:
+        """Bring back what preparing released, in the restored process or in place."""
+        ...
+
+    @abstractmethod
+    async def checkpoint_state(self) -> tuple[CheckpointState, str | None]:
+        """Return the checkpoint lifecycle state and the error that failed it."""
         ...
 
     @abstractmethod
@@ -273,6 +290,14 @@ class EngineClient(ABC):
         kwargs: dict | None = None,
     ):
         """Perform a collective RPC call to the given path."""
+        raise NotImplementedError
+
+    async def dphn_prove(self, request_id: str, nonce: str, output_token_ids: list[int]) -> list[dict[str, Any]]:
+        """Return sampled runtime-weight receipts, not inference provenance."""
+        raise NotImplementedError
+
+    async def dphn_snapshot(self, output_dir: str) -> list[dict[str, Any]]:
+        """Export actual runtime-weight snapshots from every managed worker."""
         raise NotImplementedError
 
     async def compute_weight_checksums(self) -> list[dict[str, str]]:

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+
 import logging
 from typing import Literal
 
@@ -14,6 +15,10 @@ from aphrodite.config.speculative import SpeculativeConfig
 EAGLE3_DRAFT = "yuhuili/EAGLE3-LLaMA3.1-Instruct-8B"
 LLAMA3_TARGET = "unsloth/Meta-Llama-3.1-8B-Instruct"
 AR_MODEL = "JackFram/llama-68m"
+DFLASH_DRAFT = "z-lab/Qwen3-4B-DFlash-b16"
+DFLASH_TARGET = "Qwen/Qwen3-4B"
+DSPARK_DRAFT = "deepseek-ai/dspark_qwen3_8b_block7"
+DSPARK_TARGET = "Qwen/Qwen3-8B"
 
 _LOGGER = "aphrodite.config.speculative"
 _OVERRIDE_MSG = "Overriding draft model max_position_embeddings"
@@ -56,6 +61,65 @@ def test_override_ignores_missing_attribute(aphrodite_caplog: pytest.LogCaptureF
 
 
 @pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    "rope_parameters",
+    [
+        {"rope_type": "default", "rope_theta": 10000.0},
+        {
+            "rope_type": "llama3",
+            "factor": 8.0,
+            "low_freq_factor": 1.0,
+            "high_freq_factor": 4.0,
+            "original_max_position_embeddings": 1024,
+        },
+        {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "proportional"},
+        },
+    ],
+)
+def test_override_raises_cache_only_rope_types(rope_parameters: dict, aphrodite_caplog: pytest.LogCaptureFixture):
+    hf_config = PreTrainedConfig(max_position_embeddings=2048)
+    hf_config.rope_parameters = rope_parameters
+    SpeculativeConfig._maybe_override_draft_max_position_embeddings(hf_config, target_max_model_len=8192)
+    assert hf_config.max_position_embeddings == 8192
+    assert _override_logged(aphrodite_caplog)
+
+
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    "rope_parameters",
+    [
+        # Cache sized from original_max_position_embeddings * factor.
+        {
+            "rope_type": "yarn",
+            "factor": 4.0,
+            "original_max_position_embeddings": 512,
+        },
+        # Frequencies derived from max_position_embeddings.
+        {"rope_type": "dynamic", "factor": 2.0},
+        {
+            "rope_type": "longrope",
+            "short_factor": [1.0],
+            "long_factor": [2.0],
+            "original_max_position_embeddings": 1024,
+        },
+        # One unsupported layer type is enough to skip.
+        {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "dynamic", "factor": 2.0},
+        },
+    ],
+)
+def test_override_skips_other_rope_types(rope_parameters: dict, aphrodite_caplog: pytest.LogCaptureFixture):
+    hf_config = PreTrainedConfig(max_position_embeddings=2048)
+    hf_config.rope_parameters = rope_parameters
+    SpeculativeConfig._maybe_override_draft_max_position_embeddings(hf_config, target_max_model_len=8192)
+    assert hf_config.max_position_embeddings == 2048
+    assert not _override_logged(aphrodite_caplog)
+
+
+@pytest.mark.cpu_test
 @pytest.mark.parametrize("method", ["eagle", "eagle3"])
 def test_eagle_draft_inherits_target_max_model_len(
     method: Literal["eagle", "eagle3"],
@@ -72,6 +136,38 @@ def test_eagle_draft_inherits_target_max_model_len(
     )
     draft_hf_config = speculative_config.draft_model_config.hf_config
     assert draft_hf_config.max_position_embeddings == target_model_config.max_model_len
+    assert _override_logged(aphrodite_caplog)
+
+
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    ("method", "target", "draft"),
+    [
+        ("dflash", DFLASH_TARGET, DFLASH_DRAFT),
+        ("dspark", DSPARK_TARGET, DSPARK_DRAFT),
+    ],
+)
+def test_dflash_draft_inherits_target_max_model_len(
+    method: Literal["dflash", "dspark"],
+    target: str,
+    draft: str,
+    aphrodite_caplog: pytest.LogCaptureFixture,
+):
+    """A DFlash or DSpark draft is published against its target's native
+    context; when the target is served with a longer one (here via
+    hf_overrides, as with YaRN), the draft's rotary cache must grow with it
+    (#57941)."""
+    target_model_config = ModelConfig(target, hf_overrides={"max_position_embeddings": 65536})
+    assert target_model_config.max_model_len == 65536
+    speculative_config = SpeculativeConfig(
+        target_model_config=target_model_config,
+        target_parallel_config=ParallelConfig(),
+        model=draft,
+        method=method,
+        num_speculative_tokens=3,
+    )
+    draft_hf_config = speculative_config.draft_model_config.hf_config
+    assert draft_hf_config.max_position_embeddings == 65536
     assert _override_logged(aphrodite_caplog)
 
 

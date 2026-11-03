@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import cast
 
 import mlx.core as mx
 import numpy as np
+import regex as re
 from transformers import WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import LANGUAGES, TO_LANGUAGE_CODE
 

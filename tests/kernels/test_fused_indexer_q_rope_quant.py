@@ -219,6 +219,7 @@ def test_fused_indexer_q_rope_quant_matches_unfused(num_tokens, cache_dtype, use
             assert q_quant_fused[0].data_ptr() == output_buffers[0].data_ptr()
             assert q_quant_fused[1].data_ptr() == output_buffers[1].data_ptr()
         else:
+            assert not isinstance(q_quant_fused, tuple)
             assert q_quant_fused.data_ptr() == output_buffers[0].data_ptr()
         assert weights_fused.data_ptr() == output_buffers[-1].data_ptr()
 
@@ -231,6 +232,7 @@ def test_fused_indexer_q_rope_quant_matches_unfused(num_tokens, cache_dtype, use
         )
 
     # fp8 tensors aren't directly comparable via torch.equal — reinterpret as int8.
+    assert isinstance(q_quant_fused, torch.Tensor)
     ref_bits = q_quant_ref.view(torch.int8)
     fused_bits = q_quant_fused.view(torch.int8)
     assert torch.equal(ref_bits, fused_bits), (

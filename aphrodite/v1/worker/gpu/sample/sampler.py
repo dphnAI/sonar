@@ -22,7 +22,7 @@ from aphrodite.v1.sample.ops.topk_topp_sampler import (
 from aphrodite.v1.worker.gpu.input_batch import InputBatch, get_num_sampled_and_rejected
 from aphrodite.v1.worker.gpu.metrics.logits import get_num_nans
 from aphrodite.v1.worker.gpu.sample.bad_words import BadWordsState
-from aphrodite.v1.worker.gpu.sample.fork import ForkSamplingState, needs_fork_sampling
+from aphrodite.v1.worker.gpu.sample.fork import GPUForkSamplingState, needs_fork_sampling
 from aphrodite.v1.worker.gpu.sample.gumbel import gumbel_sample
 from aphrodite.v1.worker.gpu.sample.logit_bias import LogitBiasState
 from aphrodite.v1.worker.gpu.sample.logits_processor.interface import (
@@ -90,7 +90,7 @@ class Sampler:
         self.temperature_only_processing = np.zeros(max_num_reqs, dtype=bool)
         self.num_speculative_tokens = num_speculative_tokens
         self.return_sampling_mask = return_sampling_mask
-        self.fork_state: ForkSamplingState | None = None
+        self.fork_state: GPUForkSamplingState | None = None
         self.use_flashinfer = not return_sampling_mask and flashinfer_sampler_supported()
         # The XPU kernel draws fp32 exponential noise, so it can't honor fp64.
         self.use_xpu_sampler = not return_sampling_mask and not use_fp64_gumbel and xpu_sampler_supported()
@@ -100,7 +100,7 @@ class Sampler:
         other_needs = self.thinking_budget_state.add_request(req_idx, sampling_params)
         is_custom = needs_fork_sampling(sampling_params)
         if is_custom and self.fork_state is None:
-            self.fork_state = ForkSamplingState(self.req_states)
+            self.fork_state = GPUForkSamplingState(self.req_states)
         if self.fork_state is not None:
             other_needs |= self.fork_state.add_request(
                 req_idx, sampling_params, int(self.sampling_states.seeds.np[req_idx])

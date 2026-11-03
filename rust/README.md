@@ -81,7 +81,7 @@ other inference routes, and supports the frontend's HTTP/TLS configuration.
 ### RL weight synchronization
 
 With `APHRODITE_SERVER_DEV_MODE=1`, the Rust frontend supports the HTTP weight-transfer
-lifecycle used by `HTTPAPHRODITEWeightSyncClient`: initialization, starting an update,
+lifecycle used by `HTTPAphroditeWeightSyncClient`: initialization, starting an update,
 transferring weights, and finishing the update. It also supports draft-model
 updates and `/update_weight_version` and `/weight_info` for version tracking.
 
@@ -128,6 +128,23 @@ To build the `aphrodite-rs` in isolation:
 # from the local checkout
 ./tools/build_rust.sh
 ```
+
+### Hybrid and External DP Load Balancing
+
+Like `aphrodite serve` (see [Data Parallel Deployment](../docs/serving/data_parallel_deployment.md)), `aphrodite-rs serve` can run one Rust frontend per node that serves only the node's data parallel ranks, with an upstream load balancer spreading requests across nodes. Every node passes the global `--data-parallel-size`, the address of the node that owns rank 0 as `--data-parallel-address`, and the same explicit `--data-parallel-rpc-port`, because all engines join the handshake of the rank-0 frontend. For MoE models, the rank-0 frontend also runs the DP coordinator.
+
+```bash
+# Node 0: ranks 0-1
+aphrodite-rs serve <moe-model> \
+  --data-parallel-size 4 --data-parallel-size-local 2 --data-parallel-hybrid-lb \
+  --data-parallel-address 10.0.0.1 --data-parallel-rpc-port 13345
+# Node 1: ranks 2-3
+aphrodite-rs serve <moe-model> \
+  --data-parallel-size 4 --data-parallel-size-local 2 --data-parallel-start-rank 2 \
+  --data-parallel-address 10.0.0.1 --data-parallel-rpc-port 13345
+```
+
+For external load balancing, start one `aphrodite-rs serve` per rank with `--data-parallel-rank <rank>`. A request can be pinned to one of a frontend's ranks with the `X-data-parallel-rank` header, which takes the global rank. Unlike `aphrodite serve`, `--data-parallel-rpc-port` has no default here and ranks are not inferred from `--nnodes`/`--node-rank`.
 
 ### Engine-free renderer
 

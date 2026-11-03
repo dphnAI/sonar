@@ -8,9 +8,11 @@ use std::sync::Arc;
 use aphrodite_engine_core_client::protocol::sampling::{
     AphroditeSamplingParams, RepetitionDetectionParams,
 };
+use aphrodite_llm::WeightVersionSpan;
 use aphrodite_text::{Prompt, TruncationSide};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use serde_with::DefaultOnNull;
 use validator::Validate;
 
 use crate::routes::openai::utils::metrics::{PerRequestMetrics, StreamPerRequestMetrics};
@@ -32,6 +34,7 @@ fn default_completion_max_tokens() -> Option<u32> {
 /// [`aphrodite_text::Prompt`] and add Aphrodite-only fields directly instead of layering
 /// wrapper deserializers on top.
 #[serde_with::skip_serializing_none]
+#[serde_with::serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize, Validate)]
 pub struct CompletionRequest {
     // -------- Standard OpenAI API Parameters --------
@@ -45,6 +48,7 @@ pub struct CompletionRequest {
 
     /// Echo back the prompt in addition to the completion
     #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
     pub echo: bool,
 
     /// Number between -2.0 and 2.0. Positive values penalize new tokens based
@@ -79,10 +83,14 @@ pub struct CompletionRequest {
 
     /// Whether to stream back partial progress
     #[serde(default)]
+    #[serde_as(as = "DefaultOnNull")]
     pub stream: bool,
 
     /// The suffix that comes after a completion of inserted text
     pub suffix: Option<String>,
+
+    /// Prompt embeddings to generate from. Not supported yet.
+    pub prompt_embeds: Option<Value>,
 
     /// What sampling temperature to use, between 0 and 2
     pub temperature: Option<f32>,
@@ -99,8 +107,8 @@ pub struct CompletionRequest {
     pub aphrodite_sampling: AphroditeSamplingParams,
 
     /// Whether to apply the engine's configured watermark to this request.
-    #[serde(default = "default_true")]
-    pub watermarking: bool,
+    /// `None` requests it like `true`.
+    pub watermarking: Option<bool>,
 
     /// Options for streaming response
     pub stream_options: Option<StreamOptions>,
@@ -162,6 +170,9 @@ pub struct CompletionRequest {
     /// Restrict output to these token IDs only
     pub allowed_token_ids: Option<Vec<u32>>,
 
+    /// List of bad words to avoid during generation
+    pub bad_words: Option<Vec<String>>,
+
     /// Number of prompt logprobs to return
     pub prompt_logprobs: Option<i32>,
 
@@ -203,6 +214,10 @@ pub struct CompletionRequest {
     /// Include token IDs alongside generated text
     pub return_token_ids: Option<bool>,
 
+    /// Include the weight-version spans that sampled each choice's output
+    /// tokens.
+    pub return_weight_versions: Option<bool>,
+
     /// Salt for prefix cache isolation in multi-user environments
     #[validate(length(min = 1))]
     pub cache_salt: Option<String>,
@@ -239,12 +254,14 @@ impl Normalizable for CompletionRequest {
 /// Do not skip serializing `None` fields here: non-streaming response types
 /// should serialize `None` as explicit `null`.
 #[derive(Debug, Clone, Serialize)]
-pub(super) struct CompletionResponse {
+pub(crate) struct CompletionResponse {
     pub id: String,
     pub object: String,
     pub created: u64,
     pub model: String,
     pub choices: Vec<CompletionChoice>,
+    /// Always `None`: the Rust frontend does not implement service tiers.
+    pub service_tier: Option<String>,
     pub usage: Option<Usage>,
     pub metrics: Option<PerRequestMetrics>,
     pub system_fingerprint: Option<String>,
@@ -254,7 +271,7 @@ pub(super) struct CompletionResponse {
 
 /// Mirrors the Python Aphrodite `CompletionResponseChoice` class.
 #[derive(Debug, Clone, Serialize)]
-pub(super) struct CompletionChoice {
+pub(crate) struct CompletionChoice {
     pub index: u32,
     pub text: String,
     pub logprobs: Option<LogProbs>,
@@ -263,17 +280,24 @@ pub(super) struct CompletionChoice {
     pub prompt_logprobs: Option<PromptLogprobs>,
     pub token_ids: Option<Vec<u32>>,
     pub prompt_token_ids: Option<Vec<u32>>,
+    /// Always `None`.
+    /// TODO: return routed experts when `--enable-return-routed-experts` is set.
+    pub routed_experts: Option<String>,
+    /// Contiguous weight-version spans over output-token indexes.
+    pub weight_versions: Option<Vec<WeightVersionSpan>>,
 }
 
 /// Mirrors the Python Aphrodite `CompletionStreamResponse` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Serialize)]
-pub(super) struct CompletionStreamResponse {
+pub(crate) struct CompletionStreamResponse {
     #[serde(flatten)]
     pub envelope: Arc<StreamResponseEnvelope>,
     pub choices: Vec<CompletionStreamChoice>,
     pub usage: Option<Usage>,
     pub metrics: Option<StreamPerRequestMetrics>,
+    /// Set only on the chunk carrying the finish reason.
+    pub kv_transfer_params: Option<Value>,
 }
 
 impl CompletionStreamResponse {
@@ -284,6 +308,7 @@ impl CompletionStreamResponse {
             choices: Vec::new(),
             usage: None,
             metrics: None,
+            kv_transfer_params: None,
         }
     }
 }
@@ -291,7 +316,7 @@ impl CompletionStreamResponse {
 /// Mirrors the Python Aphrodite `CompletionResponseStreamChoice` class.
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Default, Serialize)]
-pub(super) struct CompletionStreamChoice {
+pub(crate) struct CompletionStreamChoice {
     pub index: u32,
     pub text: String,
     pub logprobs: Option<LogProbs>,
@@ -299,13 +324,41 @@ pub(super) struct CompletionStreamChoice {
     pub stop_reason: Option<Value>,
     pub token_ids: Option<Vec<u32>>,
     pub prompt_token_ids: Option<Vec<u32>>,
+    /// Set on the final chunk only; covers the whole output.
+    pub weight_versions: Option<Vec<WeightVersionSpan>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
-pub(super) enum CompletionSseChunk {
+pub(crate) enum CompletionSseChunk {
     /// Ordinary OpenAI completions delta/final chunk.
     Chunk(CompletionStreamResponse),
     /// Final usage chunk emitted before `[DONE]` when `include_usage=true`.
     Usage(CompletionStreamResponse),
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Value, json};
+
+    use super::CompletionRequest;
+
+    /// Python declares these fields `bool | None`, so an explicit `null` means
+    /// the same as omitting the field.
+    #[test]
+    fn nullable_booleans_treat_null_as_omitted() {
+        let base = json!({"prompt": "hi"});
+        let omitted: CompletionRequest = serde_json::from_value(base.clone()).unwrap();
+        for field in ["echo", "stream", "watermarking"] {
+            let mut body = base.clone();
+            body[field] = Value::Null;
+            let request: CompletionRequest = serde_json::from_value(body)
+                .unwrap_or_else(|error| panic!("`{field}: null` rejected: {error}"));
+            assert_eq!(
+                serde_json::to_value(&request).unwrap(),
+                serde_json::to_value(&omitted).unwrap(),
+                "`{field}: null`"
+            );
+        }
+    }
 }

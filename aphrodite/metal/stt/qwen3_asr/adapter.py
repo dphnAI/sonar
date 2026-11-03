@@ -15,8 +15,8 @@ from .transcriber import Qwen3ASRTranscriber
 class Qwen3ASRRuntimeAdapter(STTRuntimeAdapter):
     model: Qwen3ASRModel
 
-    def __init__(self, model: Qwen3ASRModel, model_path: str) -> None:
-        super().__init__(model, model_path)
+    def __init__(self, model: Qwen3ASRModel, model_path: str, trust_remote_code: bool) -> None:
+        super().__init__(model, model_path, trust_remote_code)
         self._transcriber: Qwen3ASRTranscriber | None = None
         self._asr_text_token_id: int | None = None
         self._im_end_token_id: int | None = None
@@ -24,7 +24,11 @@ class Qwen3ASRRuntimeAdapter(STTRuntimeAdapter):
     @property
     def transcriber(self) -> Qwen3ASRTranscriber:
         if self._transcriber is None:
-            self._transcriber = Qwen3ASRTranscriber(self.model, model_path=self._model_path)
+            self._transcriber = Qwen3ASRTranscriber(
+                self.model,
+                model_path=self._model_path,
+                trust_remote_code=self._trust_remote_code,
+            )
         return self._transcriber
 
     @property

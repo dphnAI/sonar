@@ -5,9 +5,9 @@ Launch the aphrodite server with the following command:
 aphrodite run fixie-ai/ultravox-v0_3
 """
 
-import base64
 import os
 
+import pybase64 as base64
 from openai import OpenAI
 
 # Get path to the audio file in ../audio directory

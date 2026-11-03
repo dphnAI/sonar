@@ -151,10 +151,17 @@ class OpenAIServingKobold(GenerateBaseServing):
         top_p = kai_payload.top_p or 1.0
         n = kai_payload.n or 1
 
-        if (kai_payload.temperature or 0.0) < _SAMPLING_EPS:
+        temperature = 1.0 if kai_payload.temperature is None else kai_payload.temperature
+        dynatemp_min = dynatemp_max = 0.0
+        if temperature < _SAMPLING_EPS:
+            # Greedy, as in KoboldCpp.
             n = 1
             top_p = 1.0
             top_k = -1
+        elif kai_payload.dynatemp_range:
+            # KoboldCpp's dynatemp_range spans temperature +/- range.
+            dynatemp_min = max(0.0, temperature - kai_payload.dynatemp_range)
+            dynatemp_max = temperature + kai_payload.dynatemp_range
 
         logit_bias = None
         if getattr(kai_payload, "use_default_badwordsids", True) and self.badwordsids:
@@ -163,7 +170,10 @@ class OpenAIServingKobold(GenerateBaseServing):
         sampling_params = SamplingParams(
             n=n,
             repetition_penalty=kai_payload.rep_pen or 1.0,
-            temperature=kai_payload.temperature or 1.0,
+            temperature=temperature,
+            dynatemp_min=dynatemp_min,
+            dynatemp_max=dynatemp_max,
+            dynatemp_exponent=1.0 if kai_payload.dynatemp_exponent is None else kai_payload.dynatemp_exponent,
             smoothing_factor=kai_payload.smoothing_factor or 0.0,
             smoothing_curve=kai_payload.smoothing_curve or 1.0,
             tfs=tfs,

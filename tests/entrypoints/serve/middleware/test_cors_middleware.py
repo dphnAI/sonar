@@ -4,7 +4,7 @@
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from aphrodite.entrypoints.launchers.cli_args import FrontendArgs
+from aphrodite.entrypoints.common.cli_args import FrontendArgs
 from aphrodite.entrypoints.serve.middleware.register import init_entrypoints_middleware
 
 

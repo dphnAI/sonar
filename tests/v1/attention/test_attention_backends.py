@@ -21,13 +21,13 @@ from aphrodite.platforms import current_platform
 from aphrodite.utils.math_utils import cdiv
 from aphrodite.utils.torch_utils import (
     STR_DTYPE_TO_TORCH_DTYPE,
-    is_quantized_kv_cache,
     is_torch_equal_or_newer,
     nvfp4_kv_cache_full_dim,
     set_random_seed,
 )
 from aphrodite.v1.attention.backend import (
     AttentionCGSupport,
+    AttentionImpl,
     AttentionMetadataBuilder,
     AttentionType,
     CommonAttentionMetadata,
@@ -35,7 +35,12 @@ from aphrodite.v1.attention.backend import (
 )
 from aphrodite.v1.attention.backends.registry import AttentionBackendEnum
 from aphrodite.v1.attention.backends.utils import PerLayerParameters
-from aphrodite.v1.kv_cache_interface import FullAttentionSpec, KVCacheLayout, KVQuantMode
+from aphrodite.v1.kv_cache_interface import (
+    FullAttentionSpec,
+    KVCacheLayout,
+    KVQuantMode,
+    is_quantized_kv_cache,
+)
 from tests.v1.attention.utils import (
     BatchSpec,
     create_aphrodite_config,
@@ -294,6 +299,8 @@ def run_attention_backend(
     backend = _actual_backend(backend)
 
     builder_cls, impl_cls = try_get_attention_backend(backend)
+    # Every dense backend's impl derives from AttentionImpl.
+    assert issubclass(impl_cls, AttentionImpl)
 
     # Mock flashinfer's get_per_layer_parameters if needed
     if backend == AttentionBackendEnum.FLASHINFER:
@@ -327,6 +334,11 @@ def run_attention_backend(
         # Build metadata
         builder = builder_cls(kv_cache_spec, layer_names, aphrodite_config, device)
         if backend == AttentionBackendEnum.FLEX_ATTENTION:
+            from aphrodite.v1.attention.backends.flex_attention import (
+                FlexAttentionMetadataBuilder,
+            )
+
+            assert isinstance(builder, FlexAttentionMetadataBuilder)
             builder.direct_build = use_direct_block_mask
         attn_metadata = builder.build(
             common_prefix_len=0,
@@ -363,7 +375,10 @@ def run_attention_backend(
     # NOTE: The query, key, and value are already shaped correctly
     # in the calling test function.
     if not try_backend_includes_kv_cache_update(backend):
-        impl.do_kv_cache_update(mock_layer, key, value, kv_cache, attn_metadata.slot_mapping)
+        # only impls whose backend sets forward_includes_kv_cache_update=False define it
+        impl.do_kv_cache_update(  # type: ignore[attr-defined]
+            mock_layer, key, value, kv_cache, attn_metadata.slot_mapping
+        )
     if use_cuda_graph:
         impl.forward(mock_layer, query, key, value, kv_cache, attn_metadata, output=output)
         graph = torch.cuda.CUDAGraph()
@@ -457,7 +472,9 @@ def _test_backend_correctness(
     if max_num_batched_tokens is not None:
         aphrodite_config.scheduler_config.max_num_batched_tokens = max_num_batched_tokens
     if num_speculative_tokens > 0:
-        aphrodite_config.speculative_config = SimpleNamespace(num_speculative_tokens=num_speculative_tokens)
+        aphrodite_config.speculative_config = SpeculativeConfig(
+            method="ngram", num_speculative_tokens=num_speculative_tokens
+        )
     aphrodite_config.cache_config.cache_dtype = kv_cache_dtype
     device = torch.device(f"{DEVICE_TYPE}:0")
 
@@ -784,22 +801,36 @@ def test_flashinfer_forward_uses_metadata_layout():
     from unittest.mock import Mock
 
     from aphrodite.config import CacheConfig
-    from aphrodite.config.utils import replace
-    from aphrodite.v1.attention.backends.flashinfer import FlashInferImpl, FlashInferMetadata
+    from aphrodite.v1.attention.backends.flashinfer import (
+        FIDecode,
+        FlashInferImpl,
+        FlashInferMetadata,
+    )
 
+    # The impl holds no cache config: the builder resolves the layout into the
+    # metadata, so a draft's unresolved construction-time config is never read.
     target_cache = CacheConfig()
-    draft_cache = replace(target_cache, cache_dtype="fp8")
-    target_cache.kv_cache_layout = "LBHNC"
-    assert draft_cache.kv_cache_layout is None
+    target_cache.kv_cache_layout = "LBNHC"
 
     impl = object.__new__(FlashInferImpl)
-    impl.cache_config = draft_cache
     impl.bmm1_scale = impl.bmm2_scale = 1.0
+    impl.scale = 1.0
+    impl.window_left = -1
+    impl.logits_soft_cap = None
+    impl.sinks = None
     impl.is_kvcache_nvfp4 = False
+    impl.nvfp4_trtllm = False
+    impl.kv_cache_dtype = "auto"
     impl.head_size = 4
-    query = torch.ones(1, 1, 4)
-    wrapper = Mock()
-    wrapper.run.return_value = query
+    impl.num_kv_heads = 2
+    impl.dcp_world_size = 1
+    query = torch.ones(1, 2, 4)
+
+    def run(decode_query, kv_cache, **kwargs):
+        kwargs["out"].copy_(decode_query)
+
+    wrapper = Mock(_window_left=-1, _logits_soft_cap=0.0, _sm_scale=1.0)
+    wrapper.run.side_effect = run
     metadata = FlashInferMetadata(
         num_actual_tokens=1,
         slot_mapping=torch.zeros(1, dtype=torch.int64),
@@ -812,14 +843,18 @@ def test_flashinfer_forward_uses_metadata_layout():
         causal=True,
         kv_cache_layout=target_cache.get_resolved_kv_cache_layout(),
         prefill=None,
-        decode=None,
-        use_cascade=True,
-        cascade_wrapper=wrapper,
+        decode=FIDecode(wrapper=wrapper),
     )
+    # Physical [B, N, H, C] storage seen through the logical [B, H, N, C] view.
+    physical = torch.arange(16 * 2 * 8, dtype=torch.float32).view(1, 16, 2, 8)
+    layer = Mock(_q_scale=torch.ones(()), _q_scale_float=1.0, _k_scale_float=1.0, _v_scale_float=1.0)
     output = torch.empty_like(query)
-    impl.forward(None, query, query, query, torch.zeros(1, 1, 16, 8), metadata, output)
+    impl.forward(layer, query, query, query, physical.permute(0, 2, 1, 3), metadata, output)
     torch.testing.assert_close(output, query)
     wrapper.run.assert_called_once()
+    k_cache, v_cache = wrapper.run.call_args.args[1]
+    torch.testing.assert_close(k_cache, physical[..., :4])
+    torch.testing.assert_close(v_cache, physical[..., 4:])
 
 
 def test_flashinfer_xqa_bmm1_scale_matches_decode_q_dtype():
@@ -972,6 +1007,105 @@ def test_flashinfer_xqa_single_token_decode_preserves_cudagraph_padding(monkeypa
         "out": torch.Size([4, 1, 16]),
         "block_tables": torch.Size([4, 1]),
     }
+
+
+@pytest.mark.skipif(
+    AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST,
+    reason="FlashInfer is not available.",
+)
+@pytest.mark.parametrize(
+    "global_dtype, checkpoint_dtype, expected",
+    [
+        ("auto", "fp8_e4m3", "fp8_e4m3"),
+        ("auto", "nvfp4", "nvfp4"),
+        ("fp8_e4m3", "nvfp4", "fp8_e4m3"),
+        ("auto", None, "auto"),
+    ],
+)
+def test_flashinfer_resolves_layerwise_cache_dtype(dist_init, global_dtype, checkpoint_dtype, expected):
+    from aphrodite.model_executor.layers.attention import Attention
+    from aphrodite.model_executor.layers.quantization.fp8 import Fp8Config
+    from aphrodite.utils.torch_utils import set_default_torch_dtype
+    from aphrodite.v1.attention.backends.flashinfer import FlashInferMetadataBuilder
+
+    class LayerwiseKVConfig(Fp8Config):
+        def get_kv_cache_dtype(self, prefix):
+            return {"layer": checkpoint_dtype}.get(prefix)
+
+    config = create_aphrodite_config(dtype="bfloat16", block_size=64, max_num_seqs=1, max_num_batched_tokens=128)
+    config.cache_config.cache_dtype = global_dtype
+    config.attention_config.backend = AttentionBackendEnum.FLASHINFER
+    quant_config = Fp8Config() if checkpoint_dtype is None else LayerwiseKVConfig()
+    with set_current_aphrodite_config(config), set_default_torch_dtype(torch.bfloat16):
+        layer = Attention(
+            num_heads=16,
+            head_size=128,
+            scale=128**-0.5,
+            num_kv_heads=8,
+            cache_config=config.cache_config,
+            quant_config=quant_config,
+            prefix="layer",
+        )
+        spec = layer.get_kv_cache_spec(config)
+        assert spec is not None
+        builder = FlashInferMetadataBuilder(spec, ["layer"], config, torch.device(DEVICE_TYPE))
+
+    assert layer.kv_cache_dtype == expected
+    assert builder.cache_dtype == expected
+    assert config.cache_config.cache_dtype == global_dtype
+
+
+@pytest.mark.skipif(
+    AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST,
+    reason="FlashInfer is not available.",
+)
+def test_flashinfer_rejects_unresolved_quantized_layer(dist_init):
+    from aphrodite.v1.attention.backends.flashinfer import FlashInferMetadataBuilder
+
+    config = create_aphrodite_config(dtype="bfloat16", block_size=64)
+    spec = FullAttentionSpec(
+        block_size=64,
+        num_kv_heads=8,
+        head_size=128,
+        dtype=torch.uint8,
+        kv_quant_mode=KVQuantMode.FP8_PER_TENSOR,
+    )
+    with (
+        set_current_aphrodite_config(config),
+        pytest.raises(ValueError, match="requires a resolved KV cache dtype"),
+    ):
+        FlashInferMetadataBuilder(spec, [], config, torch.device(DEVICE_TYPE))
+
+
+@pytest.mark.parametrize(
+    "cache_dtypes, expected",
+    [
+        ([], None),
+        ([None], None),
+        (["auto"], "auto"),
+        (["fp8_e4m3"], "fp8_e4m3"),
+        (["fp8", "fp8_e4m3"], "fp8_e4m3"),
+        (["nvfp4", "nvfp4_4over6"], "nvfp4"),
+    ],
+)
+def test_runtime_cache_dtype_resolution(monkeypatch, cache_dtypes, expected):
+    from aphrodite.v1.attention.backends import utils as backend_utils
+
+    layers = {str(index): SimpleNamespace(kv_cache_dtype=dtype) for index, dtype in enumerate(cache_dtypes)}
+    monkeypatch.setattr(backend_utils, "get_layers_from_aphrodite_config", lambda *_: layers)
+    assert backend_utils.get_kv_cache_dtype_from_layers(SimpleNamespace(), list(layers)) == expected
+
+
+def test_runtime_cache_dtype_resolution_rejects_incompatible_layers(monkeypatch):
+    from aphrodite.v1.attention.backends import utils as backend_utils
+
+    layers = {
+        "layer0": SimpleNamespace(kv_cache_dtype="fp8_e4m3"),
+        "layer1": SimpleNamespace(kv_cache_dtype="fp8_e5m2"),
+    }
+    monkeypatch.setattr(backend_utils, "get_layers_from_aphrodite_config", lambda *_: layers)
+    with pytest.raises(ValueError, match="must share the same KV cache dtype"):
+        backend_utils.get_kv_cache_dtype_from_layers(SimpleNamespace(), list(layers))
 
 
 @pytest.mark.skipif(
@@ -1142,6 +1276,7 @@ def test_flashinfer_varlen_cudagraph_capability(monkeypatch, adaptive, decode_ke
         use_v2_model_runner=True,
     )
     monkeypatch.setattr(fi, "can_use_trtllm_attention", lambda *_, **__: True)
+    monkeypatch.setattr(fi.current_platform, "has_device_capability", lambda _: True)
     monkeypatch.setattr(
         fi.FlashInferMetadataBuilder,
         "_get_flashinfer_trtllm_api_decode_kernel",
@@ -1354,6 +1489,7 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
         builder = fi.FlashInferMetadataBuilder(spec, ["layer"], config, device)
         metadata = builder.build(0, common)
         assert metadata.num_prefills == 0
+        assert isinstance(metadata.decode, fi.FlashInferTrtllmAPIDecode)
         assert metadata.decode.q_len_per_req == 8
         impl = fi.FlashInferImpl(
             num_heads=num_heads,
@@ -1430,6 +1566,7 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
         common.query_start_loc_cpu[6:] = 40
 
         def mixed_forward():
+            assert common.seq_lens_cpu_upper_bound is not None
             with set_current_aphrodite_config(config):
                 metadata = builder.build(
                     0,
@@ -1444,6 +1581,7 @@ def test_flashinfer_varlen_decode_graph_replays_changed_layout(
                 )
             assert metadata.num_decodes == 4
             assert metadata.num_prefills == 1
+            assert isinstance(metadata.decode, fi.FlashInferTrtllmAPIDecode)
             assert metadata.decode.q_len_per_req == 8
             forward(metadata)
 
@@ -1611,14 +1749,16 @@ def test_flashinfer_xqa_decode_correctness(default_aphrodite_config):
 
 
 @pytest.mark.skipif(
-    AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST or not current_platform.is_device_capability_family(120),
-    reason="NVFP4 XQA decode requires SM12x.",
+    AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST
+    or not any(current_platform.is_device_capability_family(f) for f in (80, 120)),
+    reason="FlashInfer decodes an NVFP4 cache with XQA on SM12x and fa2 on SM8x.",
 )
 @pytest.mark.parametrize("use_cuda_graph", [False, True])
 @pytest.mark.parametrize("q_len", [1, 4])
-def test_flashinfer_xqa_nvfp4_decode_correctness(default_aphrodite_config, q_len, use_cuda_graph):
+def test_flashinfer_nvfp4_decode_correctness(default_aphrodite_config, q_len, use_cuda_graph):
     """Single-token and spec-decode queries over an NVFP4 cache decode with
-    XQA, eager and replayed, and match the fa2 prefill that wrote the cache."""
+    XQA on SM12x and fa2 on SM8x, eager and replayed, and match the fa2
+    prefill that wrote the cache."""
     import unittest.mock
 
     from aphrodite.v1.attention.backends import flashinfer as fi
@@ -1691,11 +1831,43 @@ def test_flashinfer_xqa_nvfp4_decode_correctness(default_aphrodite_config, q_len
     # The full prefill writes every token through the NVFP4 writer; its fa2
     # output for the last q_len tokens of each request is the reference.
     _, reference = run(seq_lens)
-    xqa_fn = fi.flashinfer_xqa_batch_decode_with_kv_cache
-    with unittest.mock.patch.object(fi, "flashinfer_xqa_batch_decode_with_kv_cache", wraps=xqa_fn) as xqa:
+    xqa = current_platform.is_device_capability_family(120)
+    name = "flashinfer_xqa_batch_decode_with_kv_cache" if xqa else "fast_plan_decode"
+    with unittest.mock.patch.object(fi, name, wraps=getattr(fi, name)) as decode:
         rows, output = run([q_len] * len(seq_lens), use_cuda_graph)
-    assert xqa.called
+    assert decode.called
+    assert xqa or decode.call_args.kwargs["q_len_per_req"] == q_len
     torch.testing.assert_close(output, reference[rows], atol=2e-2, rtol=2e-2)
+
+
+@pytest.mark.skipif(
+    AttentionBackendEnum.FLASHINFER not in BACKENDS_TO_TEST or current_platform.has_device_capability(90),
+    reason="FlashInfer fa2 spec decode runs before SM90.",
+)
+@pytest.mark.parametrize("use_cuda_graph", [False, True])
+def test_flashinfer_fa2_spec_decode_correctness(default_aphrodite_config, use_cuda_graph):
+    """Uniform spec-decode queries take fa2 decode and match SDPA."""
+    import unittest.mock
+
+    from aphrodite.v1.attention.backends import flashinfer as flashinfer_backend
+
+    def causal_mask_mod(b, h, q_idx, kv_idx, *, context_len):
+        return (q_idx + context_len) >= kv_idx
+
+    with unittest.mock.patch.object(
+        flashinfer_backend,
+        "fast_plan_decode",
+        wraps=flashinfer_backend.fast_plan_decode,
+    ) as plan:
+        _test_backend_correctness(
+            BatchSpec(seq_lens=[32, 40, 1024], query_lens=[4, 4, 4]),
+            "meta-llama/Meta-Llama-3-8B",
+            [AttentionBackendEnum.FLASHINFER],
+            causal_mask_mod,
+            use_cuda_graph=use_cuda_graph,
+            num_speculative_tokens=3,
+        )
+    assert plan.call_args.kwargs["q_len_per_req"] == 4
 
 
 if current_platform.is_rocm():

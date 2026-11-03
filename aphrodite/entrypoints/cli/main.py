@@ -14,6 +14,13 @@ logger = init_logger(__name__)
 
 
 def main():
+    # Keep the CPU verifier out of public help and avoid loading serving modules.
+    if sys.argv[1:2] == ["verify"]:
+        from aphrodite.proof.cli import main as verify_main
+
+        verify_main(sys.argv[2:])
+        return
+
     import aphrodite.entrypoints.cli.benchmark.main
     import aphrodite.entrypoints.cli.collect_env
     import aphrodite.entrypoints.cli.download_kernels
@@ -25,10 +32,7 @@ def main():
     import aphrodite.entrypoints.cli.serve
     import aphrodite.entrypoints.cli.snapshot
     import aphrodite.entrypoints.cli.tokenizer
-    from aphrodite.entrypoints.serve.utils.api_utils import (
-        APHRODITE_SUBCMD_PARSER_EPILOG,
-        cli_env_setup,
-    )
+    from aphrodite.entrypoints.common.startup import APHRODITE_SUBCMD_PARSER_EPILOG, cli_env_setup
     from aphrodite.utils.argparse_utils import FlexibleArgumentParser
 
     CMD_MODULES = [

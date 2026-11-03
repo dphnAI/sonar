@@ -10,7 +10,9 @@ shared memory, rather than independently in QK and PV. Indexed page mapping is
 performed at gather time. This route is deliberately separate from decode.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import cuda.bindings.driver as cuda
 import cutlass
@@ -229,7 +231,10 @@ class _Prefill:
         self, q, swa, indices, lengths, extra, extra_indices, extra_lengths, table, sink, out, lse, scale, rows, stream
     ):
         self.kernel(q, swa, indices, lengths, extra, extra_indices, extra_lengths, table, sink, out, lse, scale).launch(
-            grid=(rows * (self.heads // 16), 1, 1), block=(256, 1, 1), smem=_Storage.size_in_bytes(), stream=stream
+            grid=(rows * (self.heads // 16), 1, 1),
+            block=(256, 1, 1),
+            smem=_Storage.size_in_bytes(),  # type: ignore[attr-defined]  # added by @cute.struct
+            stream=stream,
         )
 
     @cute.kernel
@@ -450,7 +455,7 @@ class _Prefill:
 class PreparedPrefill:
     """Row-dynamic program; no retained query, cache, output or scratch tensors."""
 
-    compiled: object
+    compiled: Callable[..., Any]
     kernel: _Prefill
 
     def run(

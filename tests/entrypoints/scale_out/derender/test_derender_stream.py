@@ -33,6 +33,7 @@ from aphrodite.entrypoints.generate.base.protocol import (
     DeltaFunctionCall,
     DeltaMessage,
     DeltaToolCall,
+    FunctionCall,
     PerRequestMetrics,
     SpeculativeDecodingMetrics,
 )
@@ -53,6 +54,7 @@ from aphrodite.entrypoints.scale_out.token_in_token_out.protocol import (
     GenerateTokensResponse,
     GenerateTokensStreamChoice,
     GenerateTokensStreamResponse,
+    ParseContext,
 )
 from aphrodite.entrypoints.serve.engine.protocol import ErrorResponse, UsageInfo
 from aphrodite.parser import Parser
@@ -100,6 +102,15 @@ def _merge_fake_deltas(accumulated: DeltaMessage | None, new: DeltaMessage | Non
     return accumulated
 
 
+class _FakeToolParser:
+    """Tool parser slot filler so `tool_choice="auto"` keeps tool calls."""
+
+    engine_based_streaming = True
+
+    def __init__(self, tokenizer, tools):
+        pass
+
+
 class _FakeParser(Parser):
     """Deterministic `Parser` stub for unit testing the replay/merge/pin
     mechanics of `OnlineDerenderer._derender_chat_stream_parsed` in
@@ -119,6 +130,8 @@ class _FakeParser(Parser):
       it happened.
     - Anything else emits nothing.
     """
+
+    tool_parser_cls = _FakeToolParser  # type: ignore[assignment]
 
     TOOL_START = 9
     TOOL_ARG = 10
@@ -283,6 +296,7 @@ def parsed_derenderer(tokenizer):
         request_logger=None,
         chat_template=None,
         chat_template_content_format="string",
+        enable_auto_tools=True,
     )
     dr.parser = _FakeParser
     return dr
@@ -301,6 +315,7 @@ def test_non_streaming_derender_initializes_parser_prefix(derenderer, tokenizer,
         [FunctionCall(name="tool", arguments="{}")],
     )
     monkeypatch.setattr(derenderer, "parser", MagicMock(return_value=parser))
+    monkeypatch.setattr(derenderer, "enable_auto_tools", True)
     generated_ids = tokenizer.encode("answer", add_special_tokens=False)
     response = GenerateTokensResponse(
         request_id="test",
@@ -316,9 +331,10 @@ def test_non_streaming_derender_initializes_parser_prefix(derenderer, tokenizer,
     request = ChatCompletionRequest(
         model=MODEL_NAME,
         messages=[{"role": "user", "content": "question"}],
+        tools=_WEATHER_TOOLS,
     )
 
-    choices = derenderer._derender_chat(response, request)
+    choices, _ = derenderer._derender_chat(response, request)
 
     parser.set_prompt_token_ids.assert_called_once_with([11, 12])
     assert choices[0].message.tool_calls[0].function.name == "tool"
@@ -331,7 +347,6 @@ def test_non_streaming_derender_initializes_parser_prefix(derenderer, tokenizer,
     [
         ("eos", False, True),
         ("stop_token_id", False, True),
-        ("stop_string", False, False),
         ("eos", True, False),
     ],
 )
@@ -344,12 +359,11 @@ async def test_parsed_derender_leaves_out_stop_token_like_engine(tokenizer, stop
     last_id, stop_reason = {
         "eos": (eos, None),
         "stop_token_id": (bang, bang),
-        "stop_string": (bang, "!"),
     }[stop]
 
     parser = MagicMock()
     parser.parse.side_effect = lambda text, *args, **kwargs: (None, text, [])
-    parser.parse_delta.side_effect = lambda text, *args, **kwargs: DeltaMessage(content=text)
+    parser.parse_delta.side_effect = lambda delta_text, *args, **kwargs: DeltaMessage(content=delta_text)
     request = _chat_request(include_stop_str_in_output=include_stop_str_in_output)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -378,7 +392,7 @@ async def test_parsed_derender_leaves_out_stop_token_like_engine(tokenizer, stop
                 stop_reason=stop_reason if finish_reason == "stop" else None,
             )
             response = GenerateTokensResponse(request_id="test", prompt_token_ids=[11, 12], choices=[choice])
-            return derenderer._derender_chat(response, request)[0].message.content
+            return derenderer._derender_chat(response, request)[0][0].message.content
 
         # Same decode window and seeding; "length" never drops a token.
         expected = batch_content(answer_ids if dropped else answer_ids + [last_id], "length")
@@ -392,6 +406,74 @@ async def test_parsed_derender_leaves_out_stop_token_like_engine(tokenizer, stop
 
     assert batch == expected
     assert stream.choices[0].delta.content == expected
+
+
+_WEATHER_TOOLS = [
+    {
+        "type": "function",
+        "function": {"name": "get_weather", "parameters": {"type": "object"}},
+    }
+]
+
+
+@pytest.mark.parametrize(
+    "tool_choice",
+    ["auto", "required", {"type": "function", "function": {"name": "get_weather"}}],
+)
+def test_derender_text_choices_builds_request_from_parse_context(derenderer, monkeypatch, tool_choice):
+    """Every tool_choice survives the synthetic request validators, the
+    history count is seeded and parallel_tool_calls=false keeps one call."""
+    parser = MagicMock()
+    parser.parse.return_value = (
+        None,
+        None,
+        [
+            FunctionCall(name="get_weather", arguments="{}"),
+            FunctionCall(name="get_weather", arguments="{}"),
+        ],
+    )
+    monkeypatch.setattr(derenderer, "parser", MagicMock(return_value=parser))
+    monkeypatch.setattr(derenderer, "enable_auto_tools", True)
+    parse_context = ParseContext.model_validate(
+        {
+            "tools": _WEATHER_TOOLS,
+            "tool_choice": tool_choice,
+            "parallel_tool_calls": False,
+            "history_tool_call_cnt": 3,
+        }
+    )
+    output = MagicMock(text="raw", token_ids=[1, 2], finish_reason="stop")
+
+    ((message, finish_reason),) = derenderer._derender_text_choices([output], parse_context.to_chat_request(), 3, [11])
+
+    chat_request = parser.parse.call_args.args[1]
+    assert chat_request.tool_choice == parse_context.tool_choice
+    parser.set_prompt_token_ids.assert_called_once_with([11])
+    parser.set_history_tool_call_count.assert_called_once_with(3)
+    assert len(message.tool_calls) == 1
+    # A forced named tool reports "stop", like coupled chat.
+    assert finish_reason == ("stop" if isinstance(tool_choice, dict) else "tool_calls")
+
+
+@pytest.mark.parametrize("tool_choice", ["none", None])
+def test_derender_text_choices_drops_tool_calls_without_tool_choice(derenderer, monkeypatch, tool_choice):
+    """Generate output_mode="derender" drops tool calls a parser returned
+    for tool_choice "none" (Harmony ignores it) or null, like coupled chat."""
+    parser = MagicMock()
+    parser.parse.return_value = (
+        None,
+        None,
+        [FunctionCall(name="get_weather", arguments="{}")],
+    )
+    monkeypatch.setattr(derenderer, "parser", MagicMock(return_value=parser))
+    monkeypatch.setattr(derenderer, "enable_auto_tools", True)
+    parse_context = ParseContext.model_validate({"tools": _WEATHER_TOOLS, "tool_choice": tool_choice})
+    output = MagicMock(text="raw", token_ids=[1, 2], finish_reason="stop")
+
+    ((message, finish_reason),) = derenderer._derender_text_choices([output], parse_context.to_chat_request(), 0, None)
+
+    assert not message.tool_calls
+    assert finish_reason == "stop"
 
 
 class TestDetokenizeDelta:
@@ -505,6 +587,9 @@ class TestDetokenizeDelta:
             (False, False, True, True, (False, False)),
             (True, False, True, True, (False, False)),
             (True, True, True, True, (False, True)),
+            (None, False, False, True, (True, True)),
+            (None, False, False, False, (True, False)),
+            (None, False, True, True, (False, False)),
         ],
     )
     def test_decode_params_mirror_engine(self, monkeypatch, skip, spaces, preserve, fast, expected):
@@ -588,7 +673,7 @@ class TestPromptSeededLeadingSpace:
     @pytest.mark.asyncio
     async def test_chat_batch_seeded_via_explicit_prompt_token_ids(self, derenderer, leading_space_ids):
         prompt_ids, output_ids, expected = leading_space_ids
-        choices = await derenderer.derender_chat(
+        choices, _ = await derenderer.derender_chat(
             GenerateTokensResponse(
                 request_id="t",
                 choices=[GenerateTokensChoice(index=0, token_ids=output_ids, finish_reason="stop")],
@@ -600,7 +685,7 @@ class TestPromptSeededLeadingSpace:
     @pytest.mark.asyncio
     async def test_chat_batch_seeded_via_generate_response_fallback(self, derenderer, leading_space_ids):
         prompt_ids, output_ids, expected = leading_space_ids
-        choices = await derenderer.derender_chat(
+        choices, _ = await derenderer.derender_chat(
             GenerateTokensResponse(
                 request_id="t",
                 choices=[GenerateTokensChoice(index=0, token_ids=output_ids, finish_reason="stop")],
@@ -613,7 +698,7 @@ class TestPromptSeededLeadingSpace:
     async def test_chat_batch_explicit_takes_precedence_over_fallback(self, derenderer, tokenizer, leading_space_ids):
         prompt_ids, output_ids, expected = leading_space_ids
         wrong_ids = tokenizer.encode("a different prompt", add_special_tokens=False)
-        choices = await derenderer.derender_chat(
+        choices, _ = await derenderer.derender_chat(
             GenerateTokensResponse(
                 request_id="t",
                 choices=[GenerateTokensChoice(index=0, token_ids=output_ids, finish_reason="stop")],
@@ -626,7 +711,7 @@ class TestPromptSeededLeadingSpace:
     @pytest.mark.asyncio
     async def test_chat_batch_without_prompt_context_stays_unseeded(self, derenderer, leading_space_ids):
         _, output_ids, _ = leading_space_ids
-        choices = await derenderer.derender_chat(
+        choices, _ = await derenderer.derender_chat(
             GenerateTokensResponse(
                 request_id="t",
                 choices=[GenerateTokensChoice(index=0, token_ids=output_ids, finish_reason="stop")],
@@ -912,7 +997,7 @@ class TestStreamLogprobs:
     @pytest.mark.asyncio
     async def test_completion_stream_logprobs_text_offset_absolute(self, derenderer, tokenizer):
         """text_offset continues across chunks instead of restarting at 0."""
-        token_ids = tokenizer.encode("hello world")[:6]
+        token_ids = tokenizer.encode("hello world", add_special_tokens=False)[:6]
         mid = len(token_ids) // 2
 
         chunk1, state = await derenderer.derender_completion_stream(
@@ -925,8 +1010,65 @@ class TestStreamLogprobs:
             state=state,
         )
 
-        assert chunk1.choices[0].logprobs.text_offset[0] == 0
-        assert chunk2.choices[0].logprobs.text_offset[0] == len(chunk1.choices[0].text)
+        logprobs1 = chunk1.choices[0].logprobs
+        logprobs2 = chunk2.choices[0].logprobs
+        assert logprobs1 is not None and logprobs2 is not None
+        assert logprobs1.text_offset[0] == 0
+        # Logprob tokens may retain a leading space absent from response text.
+        assert logprobs2.text_offset[0] == sum(len(token) for token in logprobs1.tokens)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("skip_special_tokens", [False, True])
+    @pytest.mark.parametrize("chunk_size", [1, 2])
+    async def test_completion_offsets_include_skipped_special_tokens(
+        self, derenderer, tokenizer, skip_special_tokens, chunk_size
+    ):
+        """Offsets track reported logprob tokens, not filtered response text."""
+        token_ids = [
+            *tokenizer.encode("hello", add_special_tokens=False),
+            tokenizer.eos_token_id,
+            *tokenizer.encode(" world", add_special_tokens=False),
+        ]
+        request = CompletionRequest(
+            model=MODEL_NAME,
+            prompt="Hi",
+            logprobs=1,
+            ignore_eos=True,
+            skip_special_tokens=skip_special_tokens,
+        )
+        batch_choices, _, _ = await derenderer.derender_completion(
+            [
+                GenerateTokensResponse(
+                    request_id="test-offset-parity",
+                    choices=[
+                        GenerateTokensChoice(
+                            index=0,
+                            token_ids=token_ids,
+                            logprobs=_generate_logprobs(token_ids),
+                            finish_reason="stop",
+                        )
+                    ],
+                )
+            ],
+            completion_request=request,
+        )
+        batch_logprobs = batch_choices[0].logprobs
+        assert batch_logprobs is not None
+        stream_offsets = []
+        state = None
+        for start in range(0, len(token_ids), chunk_size):
+            ids = token_ids[start : start + chunk_size]
+            chunk, state = await derenderer.derender_completion_stream(
+                model=MODEL_NAME,
+                generate_chunk=_make_stream_chunk(ids, logprobs=_generate_logprobs(ids)),
+                state=state,
+                completion_request=request,
+            )
+            logprobs = chunk.choices[0].logprobs
+            assert logprobs is not None
+            assert len(logprobs.tokens) == len(ids)
+            stream_offsets.extend(logprobs.text_offset)
+        assert stream_offsets == batch_logprobs.text_offset
 
     @pytest.mark.asyncio
     async def test_stream_logprob_state_stays_bounded(self, derenderer, tokenizer):
@@ -1289,7 +1431,10 @@ class TestDerenderChatStreamParsed:
                 model=MODEL_NAME,
                 generate_chunk=_make_stream_chunk(ids, logprobs=_generate_logprobs(ids)),
                 state=state,
-                chat_request=_chat_request(),
+                chat_request=_chat_request(
+                    tools=[{"type": "function", "function": {"name": "get_weather"}}],
+                    tool_choice="auto",
+                ),
                 prompt_token_ids=[1, 2],
             )
             choice = chunk.choices[0]
@@ -1558,7 +1703,7 @@ class TestDerenderChatStreamHarmony:
         reasoning = "".join(d.reasoning or "" for d in deltas)
         content = "".join(d.content or "" for d in deltas)
 
-        batch_choices = await harmony_derenderer.derender_chat(
+        batch_choices, _ = await harmony_derenderer.derender_chat(
             GenerateTokensResponse(
                 request_id="test-harmony-batch",
                 choices=[GenerateTokensChoice(index=0, token_ids=output_ids, finish_reason="stop")],
@@ -1723,6 +1868,40 @@ class TestServingDerenderStreamValidation:
         )
         result = await serving.derender_chat_stream_response(request)
         assert not isinstance(result, ErrorResponse)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("parser_configured", [False, True])
+    async def test_chat_stop_strings_rejected(self, parser_configured):
+        """A stop string can complete after its start was already streamed,
+        so streaming derender rejects stop strings instead of leaking them."""
+        serving = self._make_serving(parser_configured=parser_configured)
+        request = DerenderChatStreamRequest(
+            stream=True,
+            model=MODEL_NAME,
+            generate_chunk=_make_stream_chunk([1, 2]),
+            chat_request=_chat_request(stop=["three"]),
+            prompt_token_ids=[1],
+        )
+        result = await serving.derender_chat_stream_response(request)
+        assert isinstance(result, ErrorResponse)
+        assert result.error.code == 400
+        assert "output_mode=text" in result.error.message
+        serving.online_derenderer.derender_chat_stream.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_completion_stop_strings_rejected(self):
+        serving = self._make_serving(parser_configured=False)
+        request = DerenderCompletionStreamRequest(
+            stream=True,
+            model=MODEL_NAME,
+            generate_chunk=_make_stream_chunk([1, 2]),
+            completion_request=CompletionRequest(model=MODEL_NAME, prompt="hi", stop="three"),
+        )
+        result = await serving.derender_completion_stream_response(request)
+        assert isinstance(result, ErrorResponse)
+        assert result.error.code == 400
+        assert "output_mode=text" in result.error.message
+        serving.online_derenderer.derender_completion_stream.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_missing_prompt_token_ids_with_parser_rejected(self):
@@ -2214,7 +2393,7 @@ async def test_stream_parsed_matches_batch_tool_call(parser_client, parser_token
     )
     assert batch_resp.status_code == 200, batch_resp.text
     batch_choice = batch_resp.json()["choices"][0]
-    if not batch_choice["message"]["tool_calls"]:
+    if not batch_choice["message"].get("tool_calls"):
         pytest.skip("Model did not emit a tool call")
 
     for chunk_sizes in ([len(output_ids)], [1] * len(output_ids)):

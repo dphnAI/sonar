@@ -8,6 +8,7 @@ import os
 import pathlib
 import subprocess
 import sys
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
@@ -16,6 +17,7 @@ import torch
 
 import aphrodite.model_executor.model_loader.tensorizer
 from aphrodite import SamplingParams
+from aphrodite.config.load import LoadConfig
 from aphrodite.engine.arg_utils import EngineArgs
 from aphrodite.model_executor.model_loader.tensorizer import (
     TensorizerConfig,
@@ -26,6 +28,7 @@ from aphrodite.model_executor.model_loader.tensorizer import (
 )
 from aphrodite.model_executor.model_loader.tensorizer_loader import (
     BLACKLISTED_TENSORIZER_ARGS,
+    TensorizerLoader,
 )
 from aphrodite.utils.import_utils import PlaceholderModule
 from tests.utils import APHRODITE_PATH, RemoteOpenAIServer
@@ -281,6 +284,62 @@ def test_aphrodite_tensorized_model_has_same_outputs(model_ref, aphrodite_runner
         # noqa: E501
 
         assert outputs == deserialized_outputs
+
+
+@torch.inference_mode()
+def test_deserialized_hf_weights_are_ready_for_forward(tmp_path, monkeypatch):
+    """Raw weights need CPU linear post-processing before the first forward."""
+    from aphrodite.model_executor.layers import linear
+    from aphrodite.model_executor.layers import utils as layer_utils
+    from aphrodite.model_executor.model_loader import base_loader
+    from aphrodite.platforms.cpu import CpuPlatform
+
+    # Exercise the CPU method on accelerator CI hosts too.
+    for module in (linear, layer_utils, base_loader):
+        monkeypatch.setattr(module, "current_platform", CpuPlatform())
+
+    class TinyModel(torch.nn.Sequential):
+        def __init__(self):
+            super().__init__(torch.nn.Linear(3, 2, bias=False))
+            self[0].quant_method = linear.UnquantizedLinearMethod()
+            self[0]._cpu_skip_gemm_dispatch = True
+
+        def load_weights(self, weights):
+            self.load_state_dict(dict(weights))
+
+        def forward(self, inputs):
+            return self[0].quant_method.apply(self[0], inputs)
+
+    source = torch.nn.Sequential(torch.nn.Linear(3, 2, bias=False))
+    source[0].weight.copy_(torch.tensor([[1.0, 2.0, 3.0], [-2.0, 0.5, 4.0]]))
+    inputs = torch.tensor([[1.0, 2.0, 3.0], [-1.0, 0.0, 2.0]])
+    checkpoint = tmp_path / "raw.tensors"
+    with open_stream(checkpoint, "wb+") as stream:
+        serializer = TensorSerializer(stream)
+        serializer.write_module(source)
+        serializer.close()
+
+    load_config = LoadConfig(
+        load_format="tensorizer",
+        model_loader_extra_config={"tensorizer_config": {"tensorizer_uri": str(checkpoint)}},
+    )
+    model_config = SimpleNamespace(
+        dtype=torch.float32,
+        quantization=None,
+        word_embeddings_untied_by_checkpoint=False,
+    )
+    config = SimpleNamespace(
+        model_config=model_config,
+        load_config=load_config,
+        device_config=SimpleNamespace(device=torch.device("cpu")),
+        parallel_config=SimpleNamespace(tensor_parallel_size=1),
+        quant_config=None,
+    )
+    monkeypatch.setattr(base_loader, "initialize_model", lambda **kwargs: TinyModel())
+
+    loaded = TensorizerLoader(load_config).load_model(config, model_config)
+
+    torch.testing.assert_close(loaded(inputs), source(inputs))
 
 
 def test_load_with_just_model_tensors(just_serialize_model_tensors, model_ref):

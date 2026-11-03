@@ -4,6 +4,7 @@
 
 from collections import Counter
 from dataclasses import dataclass
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -61,6 +62,7 @@ def make_decode_worker(*, world_size: int, tp_rank: int, dp_rank: int):
     worker.tp_rank = tp_rank
     worker.dp_rank = dp_rank
     worker.use_mla = True
+    worker.moriio_config = SimpleNamespace(backend="rdma")
     return worker
 
 

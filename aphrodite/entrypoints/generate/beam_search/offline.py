@@ -27,6 +27,7 @@ from .utils import (
     BeamSearchOutput,
     BeamSearchSequence,
     create_sort_beams_key_function,
+    get_beam_search_eos_token_ids,
 )
 
 logger = init_logger(__name__)
@@ -63,6 +64,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         lora_request: list[LoRARequest] | LoRARequest | None = None,
         use_tqdm: bool = False,
         concurrency_limit: int | None = None,
+        priority: int | Sequence[int] | None = None,
     ) -> list[BeamSearchOutput]:
         """Generate sequences using beam search.
 
@@ -74,6 +76,8 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
             use_tqdm: Whether to use tqdm to display the progress bar.
             concurrency_limit: The maximum number of concurrent requests.
                 If None, the number of concurrent requests is unlimited.
+            priority: Scheduling priority, either shared or one per prompt.
+                Lower values have higher priority. Defaults to 0.
 
         """
         # TODO: how does beam search work together with length penalty,
@@ -86,11 +90,10 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         self.llm_engine.input_processor.resolve_watermarking(params)
 
         tokenizer = self.renderer.get_tokenizer()
-        eos_token_id = tokenizer.eos_token_id
-        sort_beams_key = create_sort_beams_key_function(eos_token_id, length_penalty)
 
         engine_inputs = self._preprocess_cmpl(prompts)
         lora_requests = self._lora_request_to_seq(lora_request, len(engine_inputs))
+        priorities = self._priority_to_seq(priority, len(engine_inputs))
 
         if use_tqdm and concurrency_limit is not None:
             logger.warning("Progress bar is not supported when using concurrency_limit. Disabling progress bar.")
@@ -122,9 +125,14 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
                 structured_output_bitmask,
             ) = self._init_beam_search_structured_output(params.structured_outputs, tokenizer)
 
+        eos_token_ids = get_beam_search_eos_token_ids(
+            self.llm_engine.input_processor.generation_config_fields,
+            tokenizer.eos_token_id,
+        )
+        sort_beams_key = create_sort_beams_key_function(length_penalty)
         instances: list[BeamSearchInstance] = []
 
-        for lora_req, prompt in zip(lora_requests, engine_inputs):
+        for lora_req, prompt, prompt_priority in zip(lora_requests, engine_inputs, priorities):
             if prompt["type"] == "embeds":
                 raise NotImplementedError("Embedding prompt not supported for beam search")
 
@@ -133,6 +141,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
                     prompt,
                     lora_request=lora_req,
                     logprobs=None,
+                    priority=prompt_priority,
                 ),
             )
 
@@ -158,7 +167,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
                     should_stop = self._beam_search_step(
                         instances_batch=instances_batch,
                         base_sampling_params=base_sampling_params,
-                        eos_token_id=eos_token_id,
+                        eos_token_ids=eos_token_ids,
                         ignore_eos=ignore_eos,
                         beam_width=beam_width,
                         sort_beams_key=sort_beams_key,
@@ -189,7 +198,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         self,
         instances_batch: list[BeamSearchInstance],
         base_sampling_params: SamplingParams,
-        eos_token_id: int | None,
+        eos_token_ids: set[int],
         ignore_eos: bool,
         beam_width: int,
         sort_beams_key: Callable,
@@ -204,6 +213,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
         all_beams: list[BeamSearchSequence] = list(
             itertools.chain.from_iterable(instance.beams for instance in instances_batch)
         )
+        priorities = [instance.priority for instance in instances_batch for _ in instance.beams]
         pos = [0] + list(itertools.accumulate(len(instance.beams) for instance in instances_batch))
         instance_start_and_end: list[tuple[int, int]] = list(zip(pos[:-1], pos[1:]))
 
@@ -256,6 +266,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
             params=active_params,
             output_type=RequestOutput,
             lora_requests=[beam.lora_request for beam in active_beams],
+            priorities=[priorities[i] for i in active_indices],
             use_tqdm=False,
         )
 
@@ -321,7 +332,7 @@ class BeamSearchOfflineMixin(OfflineInferenceMixin):
                             cum_logprob=current_beam.cum_logprob + logprob_obj.logprob,
                         )
 
-                        if token_id == eos_token_id and not ignore_eos:
+                        if token_id in eos_token_ids and not ignore_eos:
                             instance.completed.append(new_beam)
                         else:
                             instance_new_beams.append(new_beam)

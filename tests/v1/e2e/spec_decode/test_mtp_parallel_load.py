@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 # SPDX-FileCopyrightText: Copyright contributors to the Aphrodite project
 
 import asyncio
@@ -16,7 +17,7 @@ from aphrodite.engine.arg_utils import AsyncEngineArgs
 from aphrodite.platforms import current_platform
 from aphrodite.sampling_params import RequestOutputKind
 from aphrodite.v1.engine.async_llm import AsyncLLM
-from aphrodite.v1.metrics.reader import Metric
+from aphrodite.v1.metrics.reader import Counter, Metric
 from tests.utils import multi_gpu_marks
 
 DEEPSEEK_MTP_MAIN_RANDOM = "luccafong/deepseek_mtp_main_random"
@@ -112,6 +113,7 @@ def _spec_decode_num_drafts(metrics: list[Metric]) -> int:
     name2metric = {m.name: m for m in metrics}
     counter = name2metric.get("aphrodite:spec_decode_num_drafts")
     assert counter is not None, "spec_decode_num_drafts metric missing; check disable_log_stats=False"
+    assert isinstance(counter, Counter)
     return int(counter.value)
 
 

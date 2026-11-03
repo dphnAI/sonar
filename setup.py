@@ -213,7 +213,7 @@ class cmake_build_ext(build_ext):
         # `num_jobs` is either the value of the MAX_JOBS environment variable
         # (if defined) or the number of CPUs available.
         num_jobs = envs.MAX_JOBS
-        if num_jobs is not None:
+        if isinstance(num_jobs, str) and num_jobs.isnumeric():
             num_jobs = int(num_jobs)
             logger.info("Using MAX_JOBS=%d as the number of jobs.", num_jobs)
         else:
@@ -707,6 +707,7 @@ def get_requirements() -> list[str]:
         requirements = _read_requirements("rocm.txt")
         if "develop" in sys.argv[1:] and "--no-deps" not in sys.argv[1:]:
             _check_requirements_preinstalled(requirements)
+        requirements += get_rocm_device_requirements()
     elif _is_tpu():
         requirements = _read_requirements("tpu.txt")
     elif _is_cpu():
@@ -723,9 +724,24 @@ def get_requirements() -> list[str]:
     return requirements
 
 
+def get_rocm_device_requirements() -> list[str]:
+    """GPU kernel packages for TheRock builds.
+
+    TheRock ships GPU kernels as separate per-arch wheels selected through
+    ``[device-<arch>]`` extras on torch, torchvision and rocm. Require them for
+    every arch this wheel was compiled for, so ``pip install aphrodite`` works on
+    any supported GPU.
+    """
+    if not _is_hip() or importlib.util.find_spec("rocm_sdk") is None:
+        return []
+    arches = [a for a in os.getenv("PYTORCH_ROCM_ARCH", "").split(";") if a]
+    return [f"{pkg}[device-{arch}]" for pkg in ("torch", "torchvision", "rocm") for arch in arches]
+
+
 ext_modules = []
 
 ext_modules.append(CMakeExtension(name="aphrodite._phrase_matcher"))
+ext_modules.append(CMakeExtension(name="aphrodite._proof_C"))
 
 if _is_cuda() or _is_hip():
     ext_modules.append(CMakeExtension(name="aphrodite.cumem_allocator"))
@@ -793,7 +809,12 @@ package_data = {
         "py.typed",
         "libs/*.so*",
         "model_executor/layers/fused_moe/configs/*.json",
+        # Tuned kernel configs must be explicit: the setuptools-scm git
+        # file-finder is inactive when building from a .git-less tree
+        # (e.g. tarball/sdist builds), which silently drops them from
+        # the wheel and forces fallback to default launch configs.
         "model_executor/layers/mamba/ops/configs/selective_state_update/*.json",
+        "kernels/helion/configs/*/*.json",
         "model_executor/layers/quantization/utils/configs/*.json",
         "entrypoints/serve/instrumentator/static/*.js",
         "entrypoints/serve/instrumentator/static/*.css",
@@ -878,6 +899,12 @@ else:
 setup(
     # static metadata should rather go in pyproject.toml
     version=aphrodite_version,
+    license_files=[
+        "LICENSE",
+        "csrc/proof/licenses/BLAKE3-Apache-2.0.txt",
+        "csrc/proof/licenses/BLAKE3-CC0.txt",
+        "csrc/proof/licenses/Monocypher.txt",
+    ],
     ext_modules=ext_modules,
     rust_extensions=rust_extensions,
     install_requires=get_requirements(),
@@ -888,7 +915,7 @@ setup(
         "tensorizer": ["tensorizer==2.10.1"],
         "fastsafetensors": ["fastsafetensors >= 0.3.3"],
         "instanttensor": ["instanttensor >= 0.2.2"],
-        "runai": ["runai-model-streamer[s3,gcs,azure] >= 0.15.7"],
+        "runai": ["runai-model-streamer[s3,gcs,azure] >= 0.17.1"],
         "audio": [
             "av",
             "scipy",

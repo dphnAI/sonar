@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import torch
+import torch.distributed as dist
 
 from aphrodite.platforms import current_platform
 
@@ -51,6 +52,7 @@ from aphrodite.v1.simple_kv_offload.metadata import (
     SimpleCPUOffloadMetadata,
     SimpleCPUOffloadWorkerMetadata,
 )
+from aphrodite.v1.simple_kv_offload.sizing import sync_num_offload_blocks_across_workers
 from aphrodite.v1.simple_kv_offload.worker import SimpleCPUOffloadWorker
 from aphrodite.v1.worker.gpu.kv_connector import ActiveKVConnector
 from aphrodite.v1.worker.kv_connector_model_runner_mixin import KVConnectorModelRunnerMixin
@@ -472,6 +474,59 @@ def test_register_separate_kv_head_groups(monkeypatch):
     assert len(worker.gpu_kv_caches) == num_layers * spec.num_heads
     per_group_block_bytes = spec.num_kv_heads * spec.block_size * spec.head_size * spec.dtype.itemsize
     assert {cache.shape for cache in worker.gpu_kv_caches.values()} == {(num_blocks, per_group_block_bytes)}
+
+
+def test_sync_num_cpu_blocks_across_workers_noop_when_dist_uninitialized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "aphrodite.v1.simple_kv_offload.sizing.dist.is_initialized",
+        lambda: False,
+    )
+    assert sync_num_offload_blocks_across_workers(42) == 42
+
+
+def test_sync_num_cpu_blocks_across_workers_noop_when_world_size_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGroup:
+        world_size = 1
+
+    monkeypatch.setattr(
+        "aphrodite.v1.simple_kv_offload.sizing.dist.is_initialized",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "aphrodite.distributed.parallel_state.get_world_group",
+        lambda: FakeGroup(),
+    )
+    assert sync_num_offload_blocks_across_workers(42) == 42
+
+
+def test_sync_num_cpu_blocks_across_workers_all_reduce_min(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGroup:
+        world_size = 4
+        cpu_group = object()
+
+    def fake_all_reduce(tensor, group, op) -> None:
+        assert op is dist.ReduceOp.MIN
+        tensor.fill_(5)
+
+    monkeypatch.setattr(
+        "aphrodite.v1.simple_kv_offload.sizing.dist.is_initialized",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "aphrodite.distributed.parallel_state.get_world_group",
+        lambda: FakeGroup(),
+    )
+    monkeypatch.setattr(
+        "aphrodite.v1.simple_kv_offload.sizing.dist.all_reduce",
+        fake_all_reduce,
+    )
+    assert sync_num_offload_blocks_across_workers(10) == 5
 
 
 def _dsa_specs(num_layers: int, block_size: int) -> dict[str, KVCacheSpec]:

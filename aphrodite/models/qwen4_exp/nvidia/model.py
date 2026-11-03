@@ -13,9 +13,6 @@ from aphrodite import envs
 from aphrodite.config import AphroditeConfig
 from aphrodite.distributed import get_pp_group
 from aphrodite.forward_context import get_forward_context, is_forward_context_available
-from aphrodite.model_executor.layers.fused_moe.utils import (
-    is_model_fused_shared_expert_compatible,
-)
 from aphrodite.model_executor.layers.fusion.mm_input_norm import build_mm_input_norm
 from aphrodite.model_executor.layers.logits_processor import LogitsProcessor
 from aphrodite.model_executor.layers.mamba.gdn.qwen_gdn_linear_attn import (
@@ -60,10 +57,12 @@ from aphrodite.model_executor.models.qwen3_vl import (
 )
 from aphrodite.model_executor.models.utils import (
     AutoWeightsLoader,
+    PPMissingLayer,
     StageMissingLayer,
     WeightsMapper,
     _merge_multimodal_embeddings,
     extract_layer_index,
+    get_fused_shared_expert_layers,
     make_empty_intermediate_tensors_factory,
     make_layers,
     maybe_fuse_shared_experts,
@@ -407,7 +406,11 @@ class Qwen4ExpModel(nn.Module):
             for layer_idx, layer_type in enumerate(config.layer_types)
             if layer_type in _QSA_LAYER_TYPES and getattr(config, "indexer_n_heads", None) is not None
         )
-        self.embed_tokens = VocabParallelEmbedding(self.vocab_size, config.hidden_size)
+        self.embed_tokens: VocabParallelEmbedding | PPMissingLayer
+        if get_pp_group().is_first_rank:
+            self.embed_tokens = VocabParallelEmbedding(self.vocab_size, config.hidden_size)
+        else:
+            self.embed_tokens = PPMissingLayer()
 
         def get_layer(prefix: str) -> Qwen4ExpDecoderLayer:
             layer_idx = extract_layer_index(prefix)
@@ -420,10 +423,10 @@ class Qwen4ExpModel(nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers, get_layer, prefix=f"{prefix}.layers"
         )
-        self.is_fused_shared_expert_enabled = is_model_fused_shared_expert_compatible(
-            self.layers,
+        self.fused_shared_expert_layers = get_fused_shared_expert_layers(
+            self,
             Qwen4ExpSparseMoeBlock,
-            "mlp",
+            enable_eplb=aphrodite_config.parallel_config.enable_eplb,
         )
         intermediate_size = config.hidden_size * config.hc_count
         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
@@ -604,7 +607,7 @@ class Qwen4ExpModel(nn.Module):
         )
         weights = maybe_fuse_shared_experts(
             weights,
-            enabled=self.is_fused_shared_expert_enabled,
+            fused_shared_expert_layers=self.fused_shared_expert_layers,
             n_routed_experts=getattr(self.config, "num_experts", 0) or 0,
             n_shared_experts=1,
             ckpt_prefix="mlp.shared_expert",
@@ -644,8 +647,11 @@ class Qwen4ExpForCausalLM(
     Qwen4ExpMixtureOfExperts,
     IsHybrid,
 ):
+    # The QSA indexer is not listed: quant configs read this mapping before the
+    # model is built, and `Qwen4ExpQSAAttention` fuses `indexer.index_qk_proj`
+    # into `qkv_proj` only when it is quantized like q/k/v.
     packed_modules_mapping = {
-        "qkv_proj": ["q_proj", "k_proj", "v_proj", "indexer.index_qk_proj"],
+        "qkv_proj": ["q_proj", "k_proj", "v_proj"],
         "gate_up_proj": ["gate_proj", "up_proj"],
         "kv_proj": ["key_proj", "value_proj"],
         "in_proj_qkvz": ["in_proj_qkv", "in_proj_z"],
@@ -662,23 +668,21 @@ class Qwen4ExpForCausalLM(
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "") -> None:
         super().__init__()
         config: Qwen4ExpTextConfig = aphrodite_config.model_config.hf_text_config
-        if aphrodite_config.lora_config is not None:
-            # LoRA does not support the merged QKV/indexer projection, so its
-            # packed mapping must keep the indexer separate.
-            self.packed_modules_mapping = self.packed_modules_mapping | {
-                "qkv_proj": ["q_proj", "k_proj", "v_proj"],
-            }
         self.aphrodite_config = aphrodite_config
         self.model_config = aphrodite_config.model_config
         self.quant_config = aphrodite_config.quant_config
         self.config = config
         self.scheduler_config = aphrodite_config.scheduler_config
         self.model = Qwen4ExpModel(aphrodite_config=aphrodite_config, prefix=maybe_prefix(prefix, "model"))
-        self.lm_head = ParallelLMHead(
-            config.vocab_size,
-            config.hidden_size,
-            prefix=maybe_prefix(prefix, "lm_head"),
-        )
+        self.lm_head: ParallelLMHead | PPMissingLayer
+        if get_pp_group().is_last_rank:
+            self.lm_head = ParallelLMHead(
+                config.vocab_size,
+                config.hidden_size,
+                prefix=maybe_prefix(prefix, "lm_head"),
+            )
+        else:
+            self.lm_head = PPMissingLayer()
         self.logits_processor = LogitsProcessor(config.vocab_size)
         self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
         self.set_moe_parameters(self.model.layers)
@@ -894,12 +898,6 @@ class Qwen4ExpForConditionalGeneration(
     def __init__(self, *, aphrodite_config: AphroditeConfig, prefix: str = "model") -> None:
         nn.Module.__init__(self)
         config: Qwen4ExpConfig = aphrodite_config.model_config.hf_config
-        if aphrodite_config.lora_config is not None:
-            # LoRA does not support the merged QKV/indexer projection, so its
-            # packed mapping must keep the indexer separate.
-            self.packed_modules_mapping = self.packed_modules_mapping | {
-                "qkv_proj": ["q_proj", "k_proj", "v_proj"],
-            }
         quant_config = aphrodite_config.quant_config
         multimodal_config = aphrodite_config.model_config.multimodal_config
         if multimodal_config is None:
@@ -957,7 +955,7 @@ class Qwen4ExpForConditionalGeneration(
             )
 
         self.make_empty_intermediate_tensors = self.language_model.make_empty_intermediate_tensors
-        if not get_pp_group().is_first_rank and self.use_deepstack:
+        if not get_pp_group().is_first_rank and hasattr(config.vision_config, "deepstack_visual_indexes"):
             assert self.language_model.model.start_layer >= len(config.vision_config.deepstack_visual_indexes), (
                 "start_layer should be greater than or equal to len(deepstack_visual_indexes)"
             )

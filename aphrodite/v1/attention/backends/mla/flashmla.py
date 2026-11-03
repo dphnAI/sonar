@@ -20,7 +20,6 @@ from aphrodite.model_executor.layers.attention.mla_attention import (
 )
 from aphrodite.platforms.interface import DeviceCapability
 from aphrodite.utils.platform_utils import num_compute_units
-from aphrodite.utils.torch_utils import is_quantized_kv_cache
 from aphrodite.v1.attention.backend import (
     AttentionCGSupport,
     AttentionLayer,
@@ -39,7 +38,7 @@ from aphrodite.v1.attention.ops.flashmla import (
     get_mla_metadata_dense_fp8,
     is_flashmla_dense_supported,
 )
-from aphrodite.v1.kv_cache_interface import AttentionSpec
+from aphrodite.v1.kv_cache_interface import AttentionSpec, is_quantized_kv_cache
 
 logger = init_logger(__name__)
 

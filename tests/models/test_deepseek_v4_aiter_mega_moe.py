@@ -6,15 +6,22 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from aphrodite.config.quantization import QuantizationConfigArgs
 from aphrodite.model_executor.layers.fused_moe import (
     fused_moe_make_expert_params_mapping,
+)
+from aphrodite.model_executor.layers.quantization.online.base import OnlineQuantizationConfig
+from aphrodite.model_executor.layers.quantization.utils.config_utils import (
+    is_shared_expert_quant_fse_compatible,
 )
 from aphrodite.models.deepseek_v4.amd import mega_moe as mega_moe_module
 from aphrodite.models.deepseek_v4.amd.mega_moe import (
     DeepseekV4AiterMegaMoEExperts,
 )
 from aphrodite.models.deepseek_v4.amd.model import DeepseekV4MoE
+from aphrodite.models.deepseek_v41.quant_config import DeepseekV4FP8Config
 from aphrodite.platforms import current_platform
+from aphrodite.utils.torch_utils import aux_stream
 
 HIDDEN = 64
 INTER = 64
@@ -123,6 +130,31 @@ def test_runtime_selected_by_max_tokens_across_dp(monkeypatch, tokens_across_dp,
     assert experts.select_runtime(4) == expected
 
 
+@pytest.mark.cpu_test
+@pytest.mark.parametrize(
+    "moe_backend, targets, fused",
+    [
+        ("aiter_mega_moe", None, False),
+        ("aiter_mega_moe", {"*shared_experts*": "mxfp8"}, False),
+        ("aiter_mega_moe", {"*shared_experts*": "mxfp4"}, True),
+        ("aiter", {"*shared_experts*": "mxfp4"}, False),
+    ],
+)
+def test_mega_moe_shared_expert_fusion_requires_mxfp4_target(moe_backend, targets, fused):
+    quant_config = DeepseekV4FP8Config(is_checkpoint_fp8_serialized=True, weight_block_size=[128, 128])
+    quant_config._resolved_expert_dtype = "fp4"
+    quant_config.packed_modules_mapping = {"gate_up_proj": ["w1", "w3"]}
+    if targets is not None:
+        quant_config.online_quantization_config = OnlineQuantizationConfig(QuantizationConfigArgs(targets=targets))
+    compatible, _ = is_shared_expert_quant_fse_compatible(
+        quant_config,
+        "model.layers.3.ffn.experts",
+        "model.layers.3.ffn.shared_experts",
+        moe_backend=moe_backend,
+    )
+    assert compatible is fused
+
+
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Requires ROCm")
 def test_shared_expert_route_appended(monkeypatch):
     experts = _make_experts(monkeypatch, ep_rank=3, ep_size=8, num_experts=384, fuse_shared_expert=True)
@@ -140,7 +172,8 @@ def test_shared_expert_route_appended(monkeypatch):
 @pytest.mark.skipif(not current_platform.is_rocm(), reason="Requires ROCm")
 @pytest.mark.parametrize("hash_routing", [False, True])
 @pytest.mark.parametrize("num_tokens", [1, 37])
-def test_mega_moe_routing_matches_reference(monkeypatch, hash_routing, num_tokens):
+@pytest.mark.parametrize("shared_stream", [False, True])
+def test_mega_moe_routing_matches_reference(monkeypatch, hash_routing, num_tokens, shared_stream):
     num_experts, top_k, vocab = 16, 4, 64
     scaling = 2.5
     device = "cuda"
@@ -172,6 +205,8 @@ def test_mega_moe_routing_matches_reference(monkeypatch, hash_routing, num_token
     moe.gate = Gate()
     moe.experts = experts
     moe.shared_experts = lambda x: 3 * x
+    moe.shared_experts_stream = aux_stream() if shared_stream else None
+    moe.shared_experts_events = (torch.cuda.Event(), torch.cuda.Event()) if shared_stream else None
     moe.scoring_func = "sqrtsoftplus"
     moe.n_activated_experts = top_k
     moe.renormalize = True

@@ -8,6 +8,7 @@ from PIL import Image
 from aphrodite import LLM, SamplingParams
 from aphrodite.assets.image import ImageAsset
 from aphrodite.config import AttentionConfig, KVTransferConfig
+from aphrodite.inputs import TextPrompt
 from aphrodite.multimodal.utils import encode_image_url
 from aphrodite.platforms import current_platform
 
@@ -88,13 +89,11 @@ def process_prompt(processor, llm: LLM, question: str, image_urls: list[Image]):
 
     prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
-    outputs = llm.generate(
-        {
-            "prompt": prompt,
-            **({"multi_modal_data": {"image": [*image_urls]}} if image_urls else {}),
-        },
-        sampling_params=SAMPLING_PARAMS,
-    )
+    prompt_input: TextPrompt = {"prompt": prompt}
+    if image_urls:
+        prompt_input["multi_modal_data"] = {"image": image_urls}
+
+    outputs = llm.generate(prompt_input, sampling_params=SAMPLING_PARAMS)
 
     print("-" * 50)
     print("Output:")
