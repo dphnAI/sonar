@@ -1,2 +1,4 @@
 [toolchain]
 channel = "1.95"
+# Hosted CI auto-installs this toolchain; the pre-commit cargo fmt hook needs rustfmt.
+components = ["rustfmt"]
