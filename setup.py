@@ -928,9 +928,6 @@ setup(
         "flashinfer": [],  # Kept for backwards compatibility
         "b12x": ["flashinfer-python==0.7.2"],
         # Optional deps for Helion kernel development
-        # NOTE: When updating helion version, also update CI files:
-        #   - .buildkite/test_areas/kernels.yaml
-        #   - .buildkite/test-amd.yaml
         "helion": ["helion==1.4.0"],
         # Optional deps for gRPC server (sonar serve --grpc)
         "grpc": [

@@ -354,66 +354,6 @@ def test_snapshot_create_config_preserves_cli_precedence(tmp_path, monkeypatch, 
     assert args.dtype == child.dtype == "float16"
 
 
-@pytest.mark.parametrize(
-    ("probe", "status", "output"),
-    [
-        (None, 0, ""),
-        ("nvidia-smi", 1, ""),
-        ("find", 1, ""),
-        ("ss", 1, ""),
-        ("nvidia-smi", 0, "12345"),
-        ("find", 0, "link_remap.fixture"),
-        ("ss", 0, "LISTEN"),
-    ],
-)
-def test_snapshot_e2e_cleanup_requires_successful_empty_probes(probe, status, output):
-    script = Path(__file__).resolve().parents[3] / ".buildkite/scripts/initialized-snapshot-e2e.sh"
-    if not script.exists():
-        pytest.skip("snapshot E2E script is not packaged in this test image")
-    source = script.read_text()
-    # Exercise the real probes without entering Docker/CRIU setup.
-    functions = source[source.index("link_remaps() {") : source.index("wait_clean() {")]
-    shell = (
-        """set -Eeuo pipefail
-GPU_UUID=fixture PORT_ONE=18001 PORT_TWO=18002 LINK_REMAP_BASELINE=''
-SNAPSHOT_PIDS=(999999999)
-nvidia-smi() { :; }
-find() { :; }
-ss() { :; }
-"""
-        + functions
-    )
-    if probe:
-        shell += f'\n{probe}() {{ printf %s "{output}"; return {status}; }}\n'
-    shell += "\nif state_clean; then exit 0; else exit 1; fi\n"
-
-    result = subprocess.run(["bash", "-c", shell], capture_output=True, timeout=10)
-
-    assert result.returncode == (0 if probe is None else 1), result.stderr
-
-
-@pytest.mark.parametrize("container_attempted", [False, True])
-def test_snapshot_e2e_cleanup_checks_state_only_after_container_attempt(
-    container_attempted: bool,
-):
-    script = Path(__file__).resolve().parents[3] / ".buildkite/scripts/initialized-snapshot-e2e.sh"
-    if not script.exists():
-        pytest.skip("snapshot E2E script is not packaged in this test image")
-    source = script.read_text()
-    cleanup = source[source.index("cleanup() {") : source.index("on_exit() {")]
-    shell = (
-        "set -Eeuo pipefail\n"
-        "CONTAINER_NAME='' PORT_TWO=18002\n"
-        f"CHECK_CLEANUP_STATE={int(container_attempted)}\n"
-        "wait_clean() { echo checked-state; return 1; }\n" + cleanup + "\nif cleanup; then exit 0; else exit 1; fi\n"
-    )
-
-    result = subprocess.run(["bash", "-c", shell], capture_output=True, timeout=10)
-
-    assert result.returncode == int(container_attempted), result.stderr
-    assert (b"checked-state" in result.stdout) == container_attempted
-
-
 def test_snapshot_create_cli_accepts_only_pinned_compact_mode(
     monkeypatch: pytest.MonkeyPatch,
 ):

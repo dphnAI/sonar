@@ -248,7 +248,6 @@ COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/tests /tests
 COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/examples /examples
 COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/tools/install_torchcodec_rocm.sh /tools/install_torchcodec_rocm.sh
 COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/docker/Dockerfile.rocm /docker/
-COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/.buildkite /.buildkite
 COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/pyproject.toml /pyproject.toml
 COPY --from=build_sonar ${COMMON_WORKDIR}/sonar/sonar/v1 /sonar_v1
 
@@ -534,7 +533,6 @@ COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/tests /tests
 COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/examples /examples
 COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/tools/install_torchcodec_rocm.sh /tools/install_torchcodec_rocm.sh
 COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/docker/Dockerfile.rocm /docker/
-COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/.buildkite /.buildkite
 COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/pyproject.toml /pyproject.toml
 COPY --from=build_sonar_wheel_release ${COMMON_WORKDIR}/sonar/sonar/v1 /sonar_v1
 

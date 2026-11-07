@@ -4,7 +4,7 @@ This directory contains GPQA evaluation tests using the GPT-OSS evaluation packa
 
 ## Usage
 
-### Run tests with pytest (like buildkite)
+### Run tests with pytest
 
 ```bash
 # H200

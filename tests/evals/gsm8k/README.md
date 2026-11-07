@@ -4,7 +4,7 @@ This directory contains a replacement for the lm-eval-harness GSM8K evaluation, 
 
 ## Usage
 
-### Run tests with pytest (like buildkite)
+### Run tests with pytest
 
 ```bash
 pytest -s -v tests/evals/gsm8k/test_gsm8k_correctness.py \

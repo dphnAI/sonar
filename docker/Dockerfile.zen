@@ -11,7 +11,7 @@
 #   sonar-openai-zen (default): Sonar + zentorch for serving
 #   sonar-zen-test            : sonar-openai-zen + test deps for CI
 #
-# Build workflow (see .buildkite/image_build/image_build_zen_cpu.sh):
+# Build workflow:
 #   1. Obtain a CPU base image that already has Sonar installed. In CI this is the
 #      shared `<repo>:<commit>-cpu` image (docker/Dockerfile.cpu --target
 #      sonar-test); either the sonar-test or sonar-openai target works as the base
@@ -91,7 +91,6 @@ ADD ./examples/ ./examples/
 ADD ./benchmarks/ ./benchmarks/
 ADD ./sonar/collect_env.py .
 ADD ./docker/ ./docker/
-ADD ./.buildkite/ ./.buildkite/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -e tests/sonar_test_utils

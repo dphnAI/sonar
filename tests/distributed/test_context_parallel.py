@@ -42,9 +42,7 @@ FILTER = "exact_match,strict-match"
 NUM_CONCURRENT = 128
 # tp accuracy with 2% buffer
 MIN_ACCURACY = {
-    # .buildkite/lm-eval-harness/configs/DeepSeek-V2-Lite-Chat.yaml
     "deepseek-ai/DeepSeek-V2-Lite-Chat": 0.64,
-    # .buildkite/lm-eval-harness/configs/Qwen2.5-1.5B-Instruct.yaml
     "Qwen/Qwen2.5-1.5B-Instruct": 0.52,
     "Qwen/Qwen3.5-0.8B": 0.33,
 }

@@ -98,8 +98,6 @@ botocore==1.42.74
     #   s3transfer
 bounded-pool-executor==0.0.3
     # via pqdm
-buildkite-test-collector==0.1.9
-    # via -r requirements/test/rocm.in
 cachetools==7.0.5
     # via -r requirements/test/../common.txt
 cbor2==5.9.0
@@ -940,7 +938,6 @@ pytablewriter==1.2.1
 pytest==9.1.0
     # via
     #   -r requirements/test/rocm.in
-    #   buildkite-test-collector
     #   genai-perf
     #   pytest-asyncio
     #   pytest-cov
@@ -1043,7 +1040,6 @@ requests==2.34.2
     #   -c requirements/common.txt
     #   -r requirements/test/../common.txt
     #   azure-core
-    #   buildkite-test-collector
     #   cohere
     #   datasets
     #   docker

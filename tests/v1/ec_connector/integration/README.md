@@ -107,17 +107,9 @@ correctness suite, not a performance benchmark or failure-injection suite.
 `SKIP_BASELINE=1` reuses a reference generated with the same model and test
 configuration. `USE_MM_PROMPTS=0` only checks text routing, not EC transfer.
 
-Buildkite runs this script as `mooncake-ec-tcp-e2e-2-gpus` on two L4 GPUs.
-The job is defined in `.buildkite/test_areas/disaggregated_mooncake.yaml` and
-selected for changes to EC, multimodal processing, scheduler/model-runner
-integration, the proxy, or these tests (subject to normal PR CI approval).
-It reuses the CI image's Python packages through a system-site-packages venv
-and installs the CUDA-compatible Mooncake wheel. It uses loopback networking
-and TCP only, without RDMA devices or peer-memory setup.
-
-The job fails on startup errors, request errors, or answer mismatches. On
-failure, the script prints the last 100 lines of each server/proxy log to
-the CI job log; full files remain under `LOG_PATH` while the container exists.
+The script fails on startup errors, request errors, or answer mismatches. On
+failure, it prints the last 100 lines of each server/proxy log.
+Full files remain under `LOG_PATH`.
 
 ### Step 1: Baseline
 

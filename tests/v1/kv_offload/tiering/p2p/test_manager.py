@@ -1294,8 +1294,7 @@ class TestShutdownDrain:
         monkeypatch.setattr(manager_module, "_DRAIN_SLEEP_S", 0.0)
         times = iter([100.0, 100.0, 100.06])
         # Patch via a fake module on `manager_module.time` so we do not mutate
-        # the global `time` module — other code in the process (e.g. the
-        # buildkite test collector's pytest_runtest_logreport hook) calls
+        # the global `time` module. Other code in the process may call
         # time.monotonic() before monkeypatch teardown.
         fake_time = SimpleNamespace(monotonic=lambda: next(times), sleep=time.sleep)
         monkeypatch.setattr(manager_module, "time", fake_time)
@@ -2102,8 +2101,7 @@ class TestDrainJobs:
             sess._server._inflight = {}
 
         # Patch via a fake module on `manager_module.time` so we do not mutate
-        # the global `time` module — other code in the process (e.g. the
-        # buildkite test collector's pytest_runtest_logreport hook) calls
+        # the global `time` module. Other code in the process may call
         # time.monotonic() before monkeypatch teardown.
         fake_time = SimpleNamespace(monotonic=fake_monotonic, sleep=clearing_sleep)
         monkeypatch.setattr(manager_module, "time", fake_time)

@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Conservative native ROCm source attribution, without requiring a GPU."""
+"""GPU kernel source attribution and commit metadata, without requiring a GPU."""
 
+import gzip
 import importlib.util
 import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,6 +31,50 @@ amdhsa.kernels:
   - .name: {SYMBOL}
     .symbol: {SYMBOL}.kd
 """
+
+
+@pytest.mark.parametrize(
+    ("script", "backend_args"),
+    [
+        ("kernel_symbol_map.py", ["--backend", "cuda"]),
+        ("kernel_symbol_map.py", ["--backend", "rocm"]),
+        ("rocm_kernel_symbol_map.py", []),
+    ],
+)
+@pytest.mark.parametrize(
+    ("environment_commit", "explicit_commit", "expected"),
+    [
+        (None, None, ""),
+        ("environment-commit", None, "environment-commit"),
+        ("environment-commit", "explicit-commit", "explicit-commit"),
+    ],
+)
+def test_cli_commit_metadata(tmp_path, script, backend_args, environment_commit, explicit_commit, expected):
+    environment = os.environ.copy()
+    environment.pop("SONAR_BUILD_COMMIT", None)
+    if environment_commit is not None:
+        environment["SONAR_BUILD_COMMIT"] = environment_commit
+    output = tmp_path / "map.json.gz"
+    command = [
+        sys.executable,
+        str(TOOLS / script),
+        "--build-root",
+        str(tmp_path / "missing-build"),
+        "--source-root",
+        str(tmp_path),
+        "--rocm-path",
+        str(tmp_path / "missing-rocm"),
+        "--out",
+        str(output),
+        *backend_args,
+    ]
+    if explicit_commit is not None:
+        command.extend(["--commit", explicit_commit])
+
+    subprocess.run(command, env=environment, check=True, capture_output=True, text=True, timeout=30)
+
+    with gzip.open(output, "rt", encoding="utf-8") as stream:
+        assert json.load(stream)["commit"] == expected
 
 
 def test_descriptor_suffix_matches_mangled_dispatch_name():
